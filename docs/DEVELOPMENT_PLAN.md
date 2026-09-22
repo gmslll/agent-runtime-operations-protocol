@@ -30,9 +30,9 @@ updated: 2026-09-22
 - **Status:** complete
 - **Capability owner:** spec-governance
 - **Components:** governance
-- **Artifacts owned:** spec-index-validation, check-report-meta-schema, machine-report-writer, machine-report-verifier, machine-report-verifier-tests, evidence-lineage-tests, planning-audit-evidence-schema, user-gate-evidence-schema, evidence-validation-library, planning-audit-validation, user-gate-validation
+- **Artifacts owned:** spec-index-validation, spec-index-report-orchestrator, go-structured-file-tools, check-report-meta-schema, machine-report-writer, machine-report-verifier, machine-report-verifier-tests, evidence-lineage-tests, planning-audit-evidence-schema, user-gate-evidence-schema, evidence-validation-library, planning-audit-validation, user-gate-validation
 - **Goal:** 建立 Decision 权威链、14 条不可变 `statement_original_zh`、冲突台账、制品 DAG 和规划 Meta-Schema 候选。
-- **Scope:** `docs/DECISIONS.md`、`spec/*`、`scripts/spec-index-check.mjs`、公共 report writer/schema/verifier；不改业务实现。
+- **Scope:** `docs/DECISIONS.md`、`spec/*`、Node 仅执行 Schema/spec/manifest 校验，Go 编排并生成公共 report、evidence、planning/Gate 验证；不改业务实现。
 - **Dependencies:** none
 - **First-path invariants:** Authoring strict/Consumer forward compatible；离线 `$ref`；先校验再 Digest；制品路径唯一、DAG 无环、语言派生正确。
 - **Machine acceptance:** `make spec-index-check` → `build/reports/P01/report.json` 和 `junit.xml`。
@@ -47,7 +47,7 @@ updated: 2026-09-22
 - **Components:** planning
 - **Artifacts owned:** blueprint-validation
 - **Goal:** 形成双 Go Module、组件边界、单 Agent 阶段 DAG、API 归属、机器验收和 v1 发布闭环候选。
-- **Scope:** `DIRECTORY_STRUCTURE.md`、`IMPLEMENTATION_BLUEPRINT.md`、本计划、README/AGENTS/ARCHITECTURE/SDK 交叉引用和 blueprint checker。
+- **Scope:** `DIRECTORY_STRUCTURE.md`、`IMPLEMENTATION_BLUEPRINT.md`、本计划、README/AGENTS/ARCHITECTURE/SDK 交叉引用和 Go blueprint checker；执行 `implementation_runtime + tool_scope` 边界及恶意别名/路径负例。
 - **Dependencies:** P01
 - **First-path invariants:** 根公共 module + 唯一 Reference CP 嵌套 module；Conformance 语言中立；Console/厂商 Adapter 隔离。
 - **Machine acceptance:** `make blueprint-check` → `build/reports/P02/report.json` 和 `junit.xml`。
@@ -651,7 +651,7 @@ updated: 2026-09-22
 - **Components:** release, governance
 - **Artifacts owned:** public-namespace-regeneration, rc-source-freeze-checker, final-equivalence-attestation-schema, freeze-overlay-checker, payload-equivalence-checker, final-delivery-checker
 - **Goal:** 实现唯一 deterministic public namespace/版本冻结器、final overlay candidate、A→B equivalence 验签、单父 commit 与 final delivery 检查器。
-- **Scope:** `scripts/regenerate-public.mjs` 接受已验证配置与无 `v` 逻辑版本，统一生成 public namespace、跨生态版本和 nested root 依赖；final overlay 仅允许 `VERSION`、Python/npm/OCI/CLI/package metadata、locks/checksums、nested `go.mod` 的 RC→final 变化；工具可生成 unsigned canonical candidate，绝不自签或创建正式 B。
+- **Scope:** `internal/tooling/release/finalize/regenerate.go` 接受已验证配置与无 `v` 逻辑版本，统一生成 public namespace、跨生态版本和 nested root 依赖；final overlay 仅允许 `VERSION`、Python/npm/OCI/CLI/package metadata、locks/checksums、nested `go.mod` 的 RC→final 变化；工具可生成 unsigned canonical candidate，绝不自签或创建正式 B。
 - **Dependencies:** P41
 - **First-path invariants:** public freeze 二次执行零 diff，禁止 placeholder/非法配置；attestation payload 绑定 A commit/tree、canonical overlay digest、expected B tree、version-policy digest、payload policy/version、equivalence normalizer/version、phase-policy digest、validity window 和 `bridged_reports[{phase,report_digest,claimed_commit,input_closure_digest}]`；B 必须是直接单父 `parent=A`；Schema/API/Runner/生成模型/逻辑差异失败闭合；必须通过 P40 pinned trust root 验 `release_approver` 且与 publisher 分离。
 - **Machine acceptance:** `make test-release-finalization-tooling` → `build/reports/P42/report.json` 和 `junit.xml`。

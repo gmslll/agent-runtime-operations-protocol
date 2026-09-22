@@ -8,25 +8,25 @@ validate: spec-index-check blueprint-check test-report-verifier test-evidence-li
 	go test ./...
 
 spec-index-check:
-	AROP_CHECK_COMMAND="make spec-index-check" node scripts/spec-index-check.mjs
+	AROP_CHECK_COMMAND="make spec-index-check" go run ./internal/tooling/cmd/arop-spec-index-check
 
 blueprint-check:
-	AROP_CHECK_COMMAND="make blueprint-check" node scripts/blueprint-check.mjs
+	AROP_CHECK_COMMAND="make blueprint-check" go run ./internal/tooling/cmd/arop-blueprint-check
 
 verify-report:
-	ALLOW_ANCESTOR="$(ALLOW_ANCESTOR)" node scripts/verify-report.mjs "$(REPORT)"
+	ALLOW_ANCESTOR="$(ALLOW_ANCESTOR)" go run ./internal/tooling/cmd/arop-verify-report "$(REPORT)"
 
 test-report-verifier: spec-index-check blueprint-check
-	node scripts/test-report-verifier.mjs
+	AROP_VERIFY_CURRENT=1 go test -count=1 -run TestVerifier ./internal/tooling/report
 
 test-evidence-lineage:
-	node scripts/test-evidence-lineage.mjs
+	go test -count=1 -run TestEvidenceLineage -v ./internal/tooling/evidence
 
 planning-audit:
-	AROP_CHECK_COMMAND="make planning-audit EVIDENCE=$(EVIDENCE) TRUSTED_KEYS=$(TRUSTED_KEYS) TRUSTED_CHANNEL_CONFIRMATION=$(TRUSTED_CHANNEL_CONFIRMATION)" EVIDENCE="$(EVIDENCE)" TRUSTED_KEYS="$(TRUSTED_KEYS)" TRUSTED_CHANNEL_CONFIRMATION="$(TRUSTED_CHANNEL_CONFIRMATION)" node scripts/planning-audit.mjs
+	AROP_CHECK_COMMAND="make planning-audit EVIDENCE=<external>" EVIDENCE="$(EVIDENCE)" TRUSTED_KEYS="$(TRUSTED_KEYS)" TRUSTED_CHANNEL_CONFIRMATION="$(TRUSTED_CHANNEL_CONFIRMATION)" go run ./internal/tooling/cmd/arop-planning-audit
 
 gate-check:
-	AROP_CHECK_COMMAND="make gate-check GATE=$(GATE) EVIDENCE=$(EVIDENCE) TRUSTED_KEYS=$(TRUSTED_KEYS) TRUSTED_CHANNEL_CONFIRMATION=$(TRUSTED_CHANNEL_CONFIRMATION)" GATE="$(GATE)" EVIDENCE="$(EVIDENCE)" TRUSTED_KEYS="$(TRUSTED_KEYS)" TRUSTED_CHANNEL_CONFIRMATION="$(TRUSTED_CHANNEL_CONFIRMATION)" node scripts/gate-check.mjs
+	AROP_CHECK_COMMAND="make gate-check GATE=$(GATE) EVIDENCE=<external>" GATE="$(GATE)" EVIDENCE="$(EVIDENCE)" TRUSTED_KEYS="$(TRUSTED_KEYS)" TRUSTED_CHANNEL_CONFIRMATION="$(TRUSTED_CHANNEL_CONFIRMATION)" go run ./internal/tooling/cmd/arop-gate-check
 
 test-go:
 	go test ./...

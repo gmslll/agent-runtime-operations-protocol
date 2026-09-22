@@ -101,6 +101,14 @@ requirements:
       - go-consumer-sdk
       - python-runtime-registration-client
       - python-worker-client
+      - blueprint-validation
+      - machine-report-writer
+      - evidence-validation-library
+      - go-structured-file-tools
+      - go-module-proxy-bootstrap
+      - go-release-primitive
+      - container-build-primitive
+      - release-engineering-toolchain
     phases:
       - P02
       - P05

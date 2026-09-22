@@ -300,7 +300,7 @@ Protocol v1 不承担：
 
 Reference Control Plane 只验证协议，不复制金运 Console 的组织、飞书、业务审批和运营后台。公共项目定位、治理和采用要求见 [PUBLIC_PROJECT_AND_ADOPTION.md](PUBLIC_PROJECT_AND_ADOPTION.md)。
 
-Reference Control Plane、Registry、Dispatcher、Run/Event Ledger 和服务端 Conformance Harness 统一使用 Go 实现。Node.js 只可用于仓库 Schema/TypeScript 工具链，Python 主要用于 Agent Provider SDK；二者都不是参考后端运行依赖。
+Reference Control Plane、Registry、Dispatcher、Run/Event Ledger 和服务端 Conformance Harness 统一使用 Go 实现。通用 report/evidence/planning/Gate/blueprint、Go proxy、Go/Container build 以及 P39–P42 release/lineage/finalization 工具也统一使用根 module 的 `internal/tooling/` Go 包与私有命令。Node.js 只可用于 Schema/spec/manifest validation、Schema-driven codegen、TypeScript SDK 和 npm packaging；Python 主要用于 Agent Provider SDK，并用原生 Python/PEP 517 完成 Python package primitive。Node/Python 均不是参考后端或通用发布治理运行依赖。机器制品以 `implementation_runtime + tool_scope` 显式声明边界，Checker 同时扫描当前/规划路径、依赖、package scripts、Make/workflow 与生产镜像入口。
 
 # 11. 实施边界
 

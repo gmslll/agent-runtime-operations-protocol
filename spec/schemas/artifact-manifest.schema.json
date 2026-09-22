@@ -50,6 +50,15 @@
           "kind": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
           "authority": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
           "language": {"enum": ["go", "python", "typescript", "language-neutral"]},
+          "implementation_runtime": {"enum": ["go", "node", "python", "declarative"]},
+          "tool_scope": {
+            "enum": [
+              "schema-validation", "schema-codegen", "typescript-sdk", "npm-packaging",
+              "report", "evidence", "planning", "gate",
+              "blueprint", "go-proxy", "python-package", "go-build", "container-build",
+              "release", "release-evidence", "release-lineage", "release-finalization"
+            ]
+          },
           "owner": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
           "owner_phase": {"type": "string", "pattern": "^P(?:0[1-9]|[1-9][0-9])$"},
           "completion_phase": {"type": "string", "pattern": "^P(?:0[1-9]|[1-9][0-9])$"},
@@ -81,6 +90,36 @@
                 {"properties": {"producer_phase": {}}, "required": ["producer_phase"]}
               ]
             }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {"type": "string", "pattern": "(?:tooling|validator|aggregator|build-primitive)"}
+              },
+              "required": ["kind"]
+            },
+            "then": {
+              "properties": {"implementation_runtime": {}, "tool_scope": {}},
+              "required": ["implementation_runtime", "tool_scope"]
+            }
+          },
+          {
+            "if": {
+              "properties": {"implementation_runtime": {"const": "node"}},
+              "required": ["implementation_runtime"]
+            },
+            "then": {
+              "properties": {
+                "tool_scope": {"enum": ["schema-validation", "schema-codegen", "typescript-sdk", "npm-packaging"]}
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {"implementation_runtime": {"const": "python"}},
+              "required": ["implementation_runtime"]
+            },
+            "then": {"properties": {"tool_scope": {"const": "python-package"}}}
           }
         ],
         "additionalProperties": false

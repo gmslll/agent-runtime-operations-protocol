@@ -192,7 +192,9 @@ P44 等混合 commit 聚合不要求所有报告来自同一 commit，但每份�
 
 聚合器不允许“就近使用旧报告”。普通 ancestor 报告只证明其 claimed commit，必须通过受控 input closure、隔离重跑或受信 provenance 后才可复用；任何对应输入变化都必须重跑。RC commit A 到 metadata-only commit B 必须由 P52 专用 equivalence attestation 桥接，不得用普通 ancestor 复用规则代替。
 
-P05–P38 每个 implement/refactor 报告的静态 `derives_from` 必须覆盖本阶段全部 `Artifacts owned`。P17/P23/P26/P38 的 `runtime_inputs` 必须分别精确等于上述 3/5/12/15 份报告；P44 静态依赖 P41 聚合/provenance 工具，运行时精确接收 P01–P43 共 43 份报告，不得把 P43 当作前 42 份的代理。Checker 对 `derives_from + runtime_inputs` 联合图做时序与无环校验，并以缺 P05、增加 P45、引用未来报告和构造 runtime cycle 的负例证明失败闭合。
+所有 `type=implement|refactor` 阶段（含 P01/P02 与 P39–P42）的报告静态 `derives_from` 必须覆盖本阶段全部 `Artifacts owned` 和 `Baselines transitioned`；machine report 不得把另一份 report/canonical evidence 放进静态 `derives_from`。P04 运行时精确读取 promoted P03 report+canonical summary；P17/P23/P26/P38 精确接收 3/5/12/15 份报告；P43 精确接收 P39–P42 且静态工具集固定为 7 项；P44 静态工具集固定为 3 项，运行时精确接收 P01–P43 共 43 份报告；P45–P53 各精确接收直接前一阶段报告；其余 report runtime input 必须为空。Checker 对 `derives_from + runtime_inputs` 联合图做时序与无环校验，并覆盖 P01/P40/P41 missing-owned、P04 static/runtime 误分类、缺 P05、增加 P45、未来输入与 runtime cycle 负例。
+
+`implementation_runtime` 与 `tool_scope` 是可执行工具的必填目录字段。Go 拥有通用 report/evidence/planning/Gate/blueprint、Go proxy、Go/Container build 和 P39–P42 release/lineage/finalization；Python package primitive 只通过原生 Python/PEP 517；Node 只允许 `schema-validation|schema-codegen|typescript-sdk|npm-packaging`。Checker 扫描 present+planned path、扩展名/shebang、依赖与 helper/consumer、`package.json` 间接 alias、Make/workflow、生产镜像及大小写/软链接，并用恶意 `.mjs` release path、伪 Go/Python scope、无 metadata、package alias、`node -e`/`npx`/`tsx`/`bun`/`deno` 等负例失败闭合。
 
 P03/P04 验证成功时，工具先在忽略的 `build/reports/<phase>/canonical-summary.json` 产生脱敏候选；经评审后才可将候选提升为 `spec/evidence/` 内的 canonical 内容摘要，并在确实存在时附带 Ed25519 attestation。canonical summary 的逻辑字段顺序为 P03 `schema_version, kind, subject, reviewer, result, attested_at`，P04 `schema_version, kind, gate, subject, approver, result, attested_at`；实际序列化按 RFC 8785/JCS 确定键顺序，`summary_sha256` 和 `attestation` 不进入被摘要内容。任何原始评审正文、账户证明、凭据或私密联系信息都不得进入 Git。
 

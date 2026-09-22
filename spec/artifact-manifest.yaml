@@ -1097,10 +1097,12 @@ artifacts:
     acceptance_test: make-test-server-conformance
     exposure: reference-only
   - id: go-module-proxy-bootstrap
-    path: scripts/go-proxy-bootstrap.mjs
+    path: internal/tooling/cmd/arop-go-proxy-bootstrap/main.go
     status: planned
     kind: release-tooling
     authority: implementation
+    implementation_runtime: go
+    tool_scope: go-proxy
     path_role: concrete
     derives_from:
       - repository-layout
@@ -1462,10 +1464,12 @@ artifacts:
     acceptance_test: make-test-python-provider
     exposure: reference-only
   - id: python-package-primitive
-    path: sdk/python/scripts/build-package.mjs
+    path: sdk/python/scripts/build_package.py
     status: planned
     kind: build-primitive
     authority: implementation
+    implementation_runtime: python
+    tool_scope: python-package
     path_role: concrete
     derives_from:
       - python-package-metadata
@@ -1483,6 +1487,8 @@ artifacts:
     status: planned
     kind: build-primitive
     authority: implementation
+    implementation_runtime: node
+    tool_scope: npm-packaging
     path_role: concrete
     derives_from:
       - typescript-package-metadata
@@ -1621,10 +1627,12 @@ artifacts:
     acceptance_test: make-test-fault-ha-drivers
     exposure: repository-internal
   - id: container-build-primitive
-    path: scripts/build-production-container.mjs
+    path: internal/tooling/cmd/arop-build-container/main.go
     status: planned
     kind: build-primitive
     authority: implementation
+    implementation_runtime: go
+    tool_scope: container-build
     path_role: concrete
     derives_from:
       - production-reference-manifests
@@ -1637,7 +1645,10 @@ artifacts:
     status: present
     kind: tooling
     authority: derived
+    implementation_runtime: node
+    tool_scope: schema-validation
     derives_from:
+      - structured-file-tools
       - schema-identifiers
       - schema-error
       - schema-trace
@@ -1653,18 +1664,38 @@ artifacts:
     status: present
     kind: tooling
     authority: derived
+    implementation_runtime: node
+    tool_scope: schema-validation
     derives_from:
       - artifact-catalog-meta-schema
       - immutable-requirements-meta-schema
       - conflict-ledger-meta-schema
     path_role: concrete
-  - id: machine-report-writer
-    path: scripts/lib/report.mjs
+  - id: go-structured-file-tools
+    path: internal/tooling/structuredfile/files.go
     status: present
     kind: tooling
     authority: derived
+    implementation_runtime: go
+    tool_scope: planning
     derives_from:
-      - structured-file-tools
+      - artifact-catalog-meta-schema
+      - immutable-requirements-meta-schema
+      - conflict-ledger-meta-schema
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+  - id: machine-report-writer
+    path: internal/tooling/report/writer.go
+    status: present
+    kind: tooling
+    authority: derived
+    implementation_runtime: go
+    tool_scope: report
+    derives_from:
+      - go-structured-file-tools
       - check-report-meta-schema
     path_role: concrete
     owner: spec-governance
@@ -1672,38 +1703,45 @@ artifacts:
     acceptance_test: make-spec-index-check
     exposure: repository-internal
   - id: evidence-validation-library
-    path: scripts/lib/evidence.mjs
+    path: internal/tooling/evidence/validation.go
     status: present
     kind: tooling
     authority: derived
+    implementation_runtime: go
+    tool_scope: evidence
     derives_from:
       - planning-audit-evidence-schema
       - user-gate-evidence-schema
       - machine-report-writer
+      - go-structured-file-tools
     path_role: concrete
     owner: spec-governance
     owner_phase: P01
     acceptance_test: make-spec-index-check
     exposure: repository-internal
   - id: machine-report-verifier
-    path: scripts/verify-report.mjs
+    path: internal/tooling/cmd/arop-verify-report/main.go
     status: present
     kind: tooling
     authority: derived
+    implementation_runtime: go
+    tool_scope: report
     owner: spec-governance
     owner_phase: P01
     acceptance_test: make-spec-index-check
     exposure: repository-internal
     derives_from:
       - check-report-meta-schema
-      - structured-file-tools
+      - go-structured-file-tools
       - machine-report-writer
     path_role: concrete
   - id: machine-report-verifier-tests
-    path: scripts/test-report-verifier.mjs
+    path: internal/tooling/report/verifier_test.go
     status: present
     kind: tooling-test
     authority: derived
+    implementation_runtime: go
+    tool_scope: report
     exposure: repository-internal
     derives_from:
       - machine-report-verifier
@@ -1736,7 +1774,10 @@ artifacts:
     status: present
     kind: tooling-baseline
     authority: implementation
+    implementation_runtime: node
+    tool_scope: schema-validation
     derives_from:
+      - structured-file-tools
       - schema-manifest
       - manifest-digest-vectors
     path_role: concrete
@@ -1769,8 +1810,11 @@ artifacts:
     status: planned
     kind: tooling
     authority: derived
+    implementation_runtime: node
+    tool_scope: schema-codegen
     path_role: concrete
     derives_from:
+      - structured-file-tools
       - decisions
       - schema-manifest
       - schema-error
@@ -1780,10 +1824,12 @@ artifacts:
     acceptance_test: make-test-codegen-pipeline
     exposure: repository-internal
   - id: release-engineering-toolchain
-    path: scripts/release
+    path: internal/tooling/release
     status: planned
     kind: release-tooling-bundle
     authority: derived
+    implementation_runtime: go
+    tool_scope: release
     path_role: aggregate
     derives_from:
       - release-package-orchestrator
@@ -1819,10 +1865,12 @@ artifacts:
     acceptance_test: make-test-release-evidence-tooling
     exposure: repository-internal
   - id: external-config-validator
-    path: scripts/release/external-config-gate.mjs
+    path: internal/tooling/release/evidence/config.go
     status: planned
     kind: release-validator
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release-evidence
     path_role: concrete
     derives_from:
       - external-config-evidence-schema
@@ -1835,10 +1883,12 @@ artifacts:
     runtime_inputs:
       - trusted-release-role-registry-schema
   - id: public-release-aggregator
-    path: scripts/release/aggregate-reports.mjs
+    path: internal/tooling/release/lineage/aggregate.go
     status: planned
     kind: release-aggregator
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release-lineage
     path_role: concrete
     derives_from:
       - report-provenance-verifier
@@ -1864,10 +1914,12 @@ artifacts:
     acceptance_test: make-test-release-evidence-tooling
     exposure: repository-internal
   - id: external-conformance-validator
-    path: scripts/release/external-evidence-gate.mjs
+    path: internal/tooling/release/evidence/conformance.go
     status: planned
     kind: release-validator
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release-evidence
     path_role: concrete
     derives_from:
       - external-conformance-evidence-schema
@@ -1880,10 +1932,12 @@ artifacts:
     runtime_inputs:
       - trusted-release-role-registry-schema
   - id: freeze-overlay-checker
-    path: scripts/release/verify-final-overlay.mjs
+    path: internal/tooling/release/finalize/overlay.go
     status: planned
     kind: release-validator
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release-finalization
     path_role: concrete
     derives_from:
       - cross-commit-lineage-verifier
@@ -1896,10 +1950,12 @@ artifacts:
     acceptance_test: make-test-release-finalization-tooling
     exposure: repository-internal
   - id: rc-source-freeze-checker
-    path: scripts/release/freeze-rc-source.mjs
+    path: internal/tooling/release/finalize/freeze.go
     status: planned
     kind: release-validator
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release-finalization
     path_role: concrete
     derives_from:
       - cross-commit-lineage-verifier
@@ -1913,10 +1969,12 @@ artifacts:
     acceptance_test: make-test-release-finalization-tooling
     exposure: repository-internal
   - id: final-delivery-checker
-    path: scripts/release/deliver-final.mjs
+    path: internal/tooling/cmd/arop-release-finalize/main.go
     status: planned
     kind: release-validator
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release-finalization
     path_role: concrete
     derives_from:
       - payload-equivalence-checker
@@ -1930,10 +1988,12 @@ artifacts:
     acceptance_test: make-test-release-finalization-tooling
     exposure: repository-internal
   - id: release-report-integration
-    path: scripts/release/reporting.mjs
+    path: internal/tooling/release/lineage/reporting.go
     status: planned
     kind: release-tooling
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release-lineage
     path_role: concrete
     derives_from:
       - check-report-meta-schema
@@ -1946,10 +2006,12 @@ artifacts:
     acceptance_test: make-test-release-lineage-tooling
     exposure: repository-internal
   - id: public-namespace-regeneration
-    path: scripts/regenerate-public.mjs
+    path: internal/tooling/release/finalize/regenerate.go
     status: planned
     kind: tooling
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release-finalization
     path_role: concrete
     derives_from:
       - codegen-pipeline
@@ -1976,24 +2038,44 @@ artifacts:
     status: present
     kind: tooling
     authority: derived
+    implementation_runtime: node
+    tool_scope: schema-validation
     owner: spec-governance
     owner_phase: P01
     acceptance_test: make-spec-index-check
     exposure: repository-internal
     derives_from:
+      - structured-file-tools
       - artifact-catalog
       - immutable-requirements
       - conflict-ledger
       - artifact-catalog-meta-schema
       - immutable-requirements-meta-schema
       - conflict-ledger-meta-schema
-      - machine-report-writer
     path_role: concrete
-  - id: blueprint-validation
-    path: scripts/blueprint-check.mjs
+  - id: spec-index-report-orchestrator
+    path: internal/tooling/cmd/arop-spec-index-check/main.go
     status: present
     kind: tooling
     authority: derived
+    implementation_runtime: go
+    tool_scope: report
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+    derives_from:
+      - spec-index-validation
+      - machine-report-writer
+      - go-structured-file-tools
+    path_role: concrete
+  - id: blueprint-validation
+    path: internal/tooling/cmd/arop-blueprint-check/main.go
+    status: present
+    kind: tooling
+    authority: derived
+    implementation_runtime: go
+    tool_scope: blueprint
     owner: implementation-planning
     owner_phase: P02
     acceptance_test: make-blueprint-check
@@ -2006,10 +2088,12 @@ artifacts:
       - machine-report-writer
     path_role: concrete
   - id: planning-audit-validation
-    path: scripts/planning-audit.mjs
+    path: internal/tooling/cmd/arop-planning-audit/main.go
     status: present
     kind: tooling
     authority: derived
+    implementation_runtime: go
+    tool_scope: planning
     owner: spec-governance
     owner_phase: P01
     acceptance_test: make-spec-index-check
@@ -2023,10 +2107,12 @@ artifacts:
       - machine-report-verifier
     path_role: concrete
   - id: user-gate-validation
-    path: scripts/gate-check.mjs
+    path: internal/tooling/cmd/arop-gate-check/main.go
     status: present
     kind: tooling
     authority: derived
+    implementation_runtime: go
+    tool_scope: gate
     owner: spec-governance
     owner_phase: P01
     acceptance_test: make-spec-index-check
@@ -3157,10 +3243,12 @@ artifacts:
     acceptance_test: make-production-reference-smoke
     exposure: reference-only
   - id: release-package-orchestrator
-    path: scripts/release/orchestrate-packages.mjs
+    path: internal/tooling/release/supply/packages.go
     status: planned
     kind: release-tooling
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release
     path_role: concrete
     derives_from:
       - go-release-primitive
@@ -3173,10 +3261,12 @@ artifacts:
     acceptance_test: make-test-release-supply-chain
     exposure: repository-internal
   - id: supply-chain-orchestrator
-    path: scripts/release/supply-chain.mjs
+    path: internal/tooling/cmd/arop-release-supply/main.go
     status: planned
     kind: release-tooling
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release
     path_role: concrete
     derives_from:
       - release-package-orchestrator
@@ -3194,10 +3284,12 @@ artifacts:
     acceptance_test: make-test-release-supply-chain
     exposure: repository-internal
   - id: release-journal
-    path: scripts/release/journal.mjs
+    path: internal/tooling/release/journal/store.go
     status: planned
     kind: release-tooling
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release
     path_role: concrete
     derives_from:
       - decisions
@@ -3212,10 +3304,12 @@ artifacts:
     acceptance_test: make-test-release-supply-chain
     exposure: repository-internal
   - id: cross-commit-lineage-verifier
-    path: scripts/release/verify-lineage.mjs
+    path: internal/tooling/release/lineage/git.go
     status: planned
     kind: release-validator
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release-lineage
     path_role: concrete
     derives_from:
       - machine-report-verifier
@@ -3239,10 +3333,12 @@ artifacts:
     acceptance_test: make-test-release-finalization-tooling
     exposure: repository-internal
   - id: payload-equivalence-checker
-    path: scripts/release/verify-payload-equivalence.mjs
+    path: internal/tooling/release/finalize/equivalence.go
     status: planned
     kind: release-validator
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release-finalization
     path_role: concrete
     derives_from:
       - freeze-overlay-checker
@@ -3255,10 +3351,12 @@ artifacts:
     acceptance_test: make-test-release-finalization-tooling
     exposure: repository-internal
   - id: evidence-lineage-tests
-    path: scripts/test-evidence-lineage.mjs
+    path: internal/tooling/evidence/lineage_test.go
     status: present
     kind: tooling-test
     authority: evidence
+    implementation_runtime: go
+    tool_scope: evidence
     path_role: concrete
     derives_from:
       - evidence-validation-library
@@ -3565,10 +3663,12 @@ artifacts:
     acceptance_test: make-quickstart-smoke
     exposure: repository-internal
   - id: go-release-primitive
-    path: scripts/build-go-release.mjs
+    path: internal/tooling/cmd/arop-build-go-release/main.go
     status: planned
     kind: build-primitive
     authority: implementation
+    implementation_runtime: go
+    tool_scope: go-build
     path_role: concrete
     derives_from:
       - go-release-layout
@@ -3639,10 +3739,12 @@ artifacts:
     acceptance_test: make-test-release-supply-chain
     exposure: public-contract
   - id: release-version-mapper
-    path: scripts/release/map-version.mjs
+    path: internal/tooling/release/version/mapper.go
     status: planned
     kind: release-tooling
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release
     path_role: concrete
     derives_from:
       - release-version-policy
@@ -3676,10 +3778,12 @@ artifacts:
     acceptance_test: make-test-release-supply-chain
     exposure: repository-internal
   - id: oidc-release-workflow-policy
-    path: scripts/release/verify-workflow-policy.mjs
+    path: internal/tooling/release/workflow/policy.go
     status: planned
     kind: release-validator
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release
     path_role: concrete
     derives_from:
       - oidc-release-workflow
@@ -3703,10 +3807,12 @@ artifacts:
     acceptance_test: make-test-release-evidence-tooling
     exposure: public-contract
   - id: detached-release-evidence-verifier
-    path: scripts/release/verify-detached-evidence.mjs
+    path: internal/tooling/cmd/arop-release-evidence/main.go
     status: planned
     kind: release-validator
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release-evidence
     path_role: concrete
     derives_from:
       - detached-release-evidence-envelope-schema
@@ -3803,6 +3909,18 @@ artifacts:
     path_role: concrete
     derives_from:
       - spec-index-validation
+      - spec-index-report-orchestrator
+      - check-report-meta-schema
+      - machine-report-writer
+      - machine-report-verifier
+      - machine-report-verifier-tests
+      - evidence-lineage-tests
+      - planning-audit-evidence-schema
+      - user-gate-evidence-schema
+      - evidence-validation-library
+      - planning-audit-validation
+      - user-gate-validation
+      - go-structured-file-tools
     producer_phase: P01
     acceptance_test: make-spec-index-check
     exposure: repository-internal
@@ -3847,7 +3965,9 @@ artifacts:
     path_role: concrete
     derives_from:
       - user-gate-validation
+    runtime_inputs:
       - planning-audit-reports
+      - planning-audit-canonical-summary
     producer_phase: P04
     acceptance_test: make-gate-check
     exposure: repository-internal
@@ -3889,7 +4009,9 @@ artifacts:
     authority: evidence
     path_role: concrete
     derives_from:
+      - external-config-evidence-schema
       - external-config-validator
+      - external-conformance-evidence-schema
       - external-conformance-validator
       - detached-release-evidence-envelope-schema
       - detached-release-evidence-verifier
@@ -3908,6 +4030,7 @@ artifacts:
       - cross-commit-lineage-verifier
       - public-release-aggregator
       - report-provenance-verifier
+      - release-report-integration
     producer_phase: P41
     acceptance_test: make-test-release-lineage-tooling
     exposure: repository-internal
@@ -4967,10 +5090,12 @@ artifacts:
       - decisions
       - security-governance-specification
   - id: trusted-release-role-registry
-    path: scripts/release/trust-root-policy.mjs
+    path: internal/tooling/release/evidence/trust.go
     status: planned
     kind: release-validator
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release-evidence
     path_role: concrete
     language: language-neutral
     owner: release-evidence-tooling
@@ -4987,10 +5112,12 @@ artifacts:
       - trusted-release-role-registry-schema
       - security-governance-specification
   - id: report-provenance-verifier
-    path: scripts/release/verify-report-provenance.mjs
+    path: internal/tooling/cmd/arop-release-lineage/main.go
     status: planned
     kind: release-validator
     authority: implementation
+    implementation_runtime: go
+    tool_scope: release-lineage
     path_role: concrete
     owner: release-lineage-tooling
     owner_phase: P41

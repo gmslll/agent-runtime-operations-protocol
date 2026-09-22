@@ -21,11 +21,17 @@ agent-runtime-operations-protocol/
 ├── Makefile
 ├── VERSION
 ├── scripts/
-│   ├── go-proxy-bootstrap.mjs           # P05 未发布 root 时供 nested GOWORK=off 验证
-│   ├── generate.mjs                     # P07 可复用完整三语言 codegen pipeline
-│   ├── build-go-release.mjs             # P36 deterministic Go module/CLI build primitive
-│   ├── regenerate-public.mjs            # P42 唯一 public namespace/version 冻结器
-│   └── release/                         # P39 supply/version；P40 evidence；P41 lineage；P42 freeze/finalization
+│   ├── validate.mjs                     # 仅 Schema/spec/manifest validation
+│   ├── spec-index-check.mjs             # 仅结构化 Schema/spec/catalog 检查结果；Go 写报告
+│   ├── manifest-digest.mjs              # P06 repair-retain 的 Schema/Manifest 工具
+│   ├── generate.mjs                     # P07 Schema-driven 三语言 codegen
+│   └── lib/repository.mjs               # 仅 Node Schema/YAML/JSON loader/walker
+├── internal/tooling/                    # 根 module 私有 Go 治理与发布工具
+│   ├── cmd/                             # blueprint/report/planning/Gate/proxy/build/release 私有入口
+│   ├── structuredfile/                  # Go JSON/YAML/Git-safe repository helpers
+│   ├── report/                          # machine report writer/verifier/tests
+│   ├── evidence/                        # planning/Gate evidence 与 lineage tests
+│   └── release/                         # P39 supply；P40 evidence；P41 lineage；P42 finalize
 │
 ├── docs/                                # 手写规范、决策、蓝图
 │   ├── ARCHITECTURE.md
@@ -217,7 +223,7 @@ CLI: arop
 CLI config: ~/.config/arop/
 ```
 
-上述是预发布命名。项目域名、PyPI/npm 所有权与两名 Maintainer/安全入口在 P45 必须用外部证据确认。`scripts/regenerate-public.mjs` 在 P42 实现并冻结，P43 用保留域名和临时 registry 验其可重现性；P46 仅把 P45 已验真实值交给该工具生成 RC tree，P47 再创建 clean commit A。P45 后禁止 implement/refactor。P44 及之前只允许 private/dev snapshot；取消独立公共 v0.1，首个公开候选是 P49 的 `v1.0.0-rc.N`。
+上述是预发布命名。项目域名、PyPI/npm 所有权与两名 Maintainer/安全入口在 P45 必须用外部证据确认。`internal/tooling/release/finalize/regenerate.go` 在 P42 实现并冻结，P43 用保留域名和临时 registry 验其可重现性；P46 仅把 P45 已验真实值交给该工具生成 RC tree，P47 再创建 clean commit A。P45 后禁止 implement/refactor。P44 及之前只允许 private/dev snapshot；取消独立公共 v0.1，首个公开候选是 P49 的 `v1.0.0-rc.N`。
 
 发布工具唯一逻辑版本输入不带 `v`：`1.0.0-rc.N`/`1.0.0` 映射到 Go `v...`、Python `1.0.0rcN`/`1.0.0`，npm/OCI/CLI/Schema Bundle 保持逻辑值。P51 final overlay 只允许 `VERSION`、Python/npm metadata/lock、OCI/CLI/Schema metadata、nested `go.mod` 和必要 checksum 的 RC→final 变化。
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import Ajv2020 from "ajv/dist/2020.js";
@@ -15,9 +15,6 @@ import {
   repositoryRoot,
   walkFiles,
 } from "./lib/repository.mjs";
-import { actualCommand, writeCheckReport } from "./lib/report.mjs";
-
-const reportDirectory = "build/reports/P01";
 const errors = [];
 const checks = [];
 
@@ -795,21 +792,21 @@ const reportInputPaths = [
   ...textFiles.map(relative),
   ...jsonFiles.map(relative),
   "scripts/spec-index-check.mjs",
-  "scripts/verify-report.mjs",
-  "scripts/test-report-verifier.mjs",
-  "scripts/lib/report.mjs",
+  "internal/tooling/cmd/arop-verify-report/main.go",
+  "internal/tooling/report/verifier.go",
+  "internal/tooling/report/verifier_test.go",
+  "internal/tooling/report/writer.go",
+  "internal/tooling/evidence/validation.go",
+  "internal/tooling/evidence/lineage_test.go",
+  "internal/tooling/cmd/arop-planning-audit/main.go",
+  "internal/tooling/cmd/arop-gate-check/main.go",
   "scripts/lib/repository.mjs",
   "spec/schemas/check-report.schema.json",
 ];
-await writeCheckReport({
-  reportDirectory,
-  suiteName: "arop-spec-index-check",
-  className: "arop.spec-index",
-  command: actualCommand("scripts/spec-index-check.mjs"),
-  checkerPath: "scripts/spec-index-check.mjs",
-  inputPaths: reportInputPaths,
+const result = {
   checks,
   errors,
+  input_paths: reportInputPaths,
   summary: {
     artifacts: artifacts.length,
     immutable_requirements: requirements.length,
@@ -822,15 +819,19 @@ await writeCheckReport({
     yaml_files: yamlFiles.length,
     json_files: jsonFiles.length,
     markdown_files: markdownFiles.length,
-  },
-  auditNote:
-    "Hard-coded statements and self-check probes detect repository drift; they cannot replace the independent P03 planning audit.",
-});
+  }
+};
+const resultFile = process.env.AROP_RESULT_FILE;
+if (!resultFile) {
+  console.error("AROP_RESULT_FILE is required; the Go governance command owns machine-report generation.");
+  process.exit(2);
+}
+await mkdir(path.dirname(path.resolve(resultFile)), { recursive: true });
+await writeFile(path.resolve(resultFile), `${JSON.stringify(result, null, 2)}\n`, "utf8");
 
 if (errors.length > 0) {
   console.error(`AROP spec index check failed with ${errors.length} error(s):`);
   for (const error of errors) console.error(`- ${error}`);
-  console.error(`Reports: ${reportDirectory}/report.json and junit.xml`);
   process.exit(1);
 }
 
@@ -840,4 +841,3 @@ console.log(
     `${schemaFiles.length} protocol schemas, ${planningMetaSchemaFiles.length} planning/evidence schemas, ` +
     `${markdownFiles.length} Markdown files.`,
 );
-console.log(`Reports: ${reportDirectory}/report.json and junit.xml`);
