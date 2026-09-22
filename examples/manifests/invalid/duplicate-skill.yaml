@@ -1,0 +1,28 @@
+protocol: arop/v1
+kind: AgentManifest
+identity:
+  id: invalid.duplicate-skill
+  version: 1.0.0
+  name: Invalid duplicate skill example
+  summary: Must fail because skill identifiers are unique within a version.
+  owner:
+    team: example-team
+skills:
+  - id: default
+    name: First
+    invoke_modes: [params]
+    input_schema: {type: object}
+    output_schema: {type: object}
+  - id: default
+    name: Second
+    invoke_modes: [params]
+    input_schema: {type: object}
+    output_schema: {type: object}
+execution:
+  default_timeout_seconds: 30
+  max_timeout_seconds: 60
+  effects:
+    level: none
+    idempotency: supported
+    human_confirmation: false
+  capabilities: {}

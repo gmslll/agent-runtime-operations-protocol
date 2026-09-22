@@ -1,0 +1,467 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/manifest/agent-manifest-v1.schema.json",
+  "title": "AROP Agent Manifest v1",
+  "$comment": "arop.invalid is a reserved provisional base URI and will be replaced before the first stable public release.",
+  "type": "object",
+  "required": ["protocol", "kind", "identity", "skills", "execution"],
+  "properties": {
+    "protocol": {
+      "const": "arop/v1"
+    },
+    "kind": {
+      "const": "AgentManifest"
+    },
+    "identity": {
+      "$ref": "#/$defs/identity"
+    },
+    "skills": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/skill"
+      }
+    },
+    "content": {
+      "$ref": "#/$defs/content"
+    },
+    "execution": {
+      "$ref": "#/$defs/execution"
+    },
+    "session": {
+      "$ref": "#/$defs/session"
+    },
+    "usage": {
+      "$ref": "#/$defs/usage"
+    },
+    "dependencies": {
+      "$ref": "#/$defs/dependencies"
+    },
+    "governance": {
+      "$ref": "#/$defs/governance"
+    },
+    "presentation": {
+      "$ref": "#/$defs/presentation"
+    },
+    "required_extensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/extensionId"
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/extensionId"
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "identity": {
+      "type": "object",
+      "required": ["id", "version", "name", "summary", "owner"],
+      "properties": {
+        "id": {
+          "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/agentId"
+        },
+        "version": {
+          "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/semanticVersion"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 10000
+        },
+        "owner": {
+          "type": "object",
+          "properties": {
+            "user": {
+              "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/slug"
+            },
+            "team": {
+              "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/slug"
+            },
+            "contact": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 320
+            }
+          },
+          "anyOf": [
+            {
+              "required": ["user"],
+              "properties": {"user": true}
+            },
+            {
+              "required": ["team"],
+              "properties": {"team": true}
+            }
+          ],
+          "additionalProperties": false
+        },
+        "categories": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/slug"
+          }
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "schemaDeclaration": {
+      "type": "object",
+      "minProperties": 1,
+      "properties": {
+        "$ref": {
+          "type": "string",
+          "format": "uri-reference",
+          "not": {
+            "pattern": "^(?:file:|/|[A-Za-z]:[\\\\/])"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "skill": {
+      "type": "object",
+      "required": ["id", "name", "invoke_modes", "input_schema", "output_schema"],
+      "properties": {
+        "id": {
+          "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/skillId"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "invoke_modes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["params", "chat"]
+          }
+        },
+        "input_schema": {
+          "$ref": "#/$defs/schemaDeclaration"
+        },
+        "output_schema": {
+          "$ref": "#/$defs/schemaDeclaration"
+        },
+        "required_scopes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9._:-]+$",
+            "maxLength": 200
+          }
+        },
+        "risk_level": {
+          "enum": ["low", "medium", "high", "critical"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "content": {
+      "type": "object",
+      "properties": {
+        "input_types": {
+          "$ref": "#/$defs/contentTypes"
+        },
+        "output_types": {
+          "$ref": "#/$defs/contentTypes"
+        },
+        "accepted_media_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+*-]+$"
+          }
+        },
+        "max_assets": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "max_input_bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "contentTypes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["text", "json", "asset_ref", "data_ref"]
+      }
+    },
+    "execution": {
+      "type": "object",
+      "required": ["default_timeout_seconds", "max_timeout_seconds", "effects", "capabilities"],
+      "properties": {
+        "default_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "max_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 604800
+        },
+        "max_concurrency": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "effects": {
+          "$ref": "#/$defs/effects"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/capabilities"
+        },
+        "network": {
+          "$ref": "#/$defs/network"
+        }
+      },
+      "additionalProperties": false
+    },
+    "effects": {
+      "type": "object",
+      "required": ["level", "idempotency", "human_confirmation"],
+      "properties": {
+        "level": {
+          "enum": ["none", "read", "write", "irreversible"]
+        },
+        "idempotency": {
+          "enum": ["none", "supported", "required"]
+        },
+        "human_confirmation": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "level": {
+                "enum": ["write", "irreversible"]
+              }
+            },
+            "required": ["level"]
+          },
+          "then": {
+            "properties": {
+              "idempotency": {
+                "enum": ["supported", "required"]
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "streaming": {"type": "boolean"},
+        "progress": {"type": "boolean"},
+        "cancellation": {"type": "boolean"},
+        "status_query": {"type": "boolean"},
+        "usage": {"type": "boolean"},
+        "required_profiles": {
+          "$ref": "#/$defs/capabilityList"
+        },
+        "optional_profiles": {
+          "$ref": "#/$defs/capabilityList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "capabilityList": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/capabilityId"
+      }
+    },
+    "network": {
+      "type": "object",
+      "required": ["egress"],
+      "properties": {
+        "egress": {
+          "enum": ["none", "restricted", "unrestricted"]
+        },
+        "allowed_hosts": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^(?:\\*\\.)?[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"egress": {"const": "restricted"}},
+            "required": ["egress"]
+          },
+          "then": {
+            "required": ["allowed_hosts"],
+            "properties": {"allowed_hosts": true}
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "session": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "enum": ["stateless", "sticky", "portable"]
+        },
+        "idle_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "usage": {
+      "type": "object",
+      "required": ["meters"],
+      "properties": {
+        "meters": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+            "maxLength": 100
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "dependencies": {
+      "type": "object",
+      "properties": {
+        "secrets": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "https://arop.invalid/schemas/v1/resources/secret-ref-v1.schema.json"
+          }
+        },
+        "data_resource_types": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/slug"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "governance": {
+      "type": "object",
+      "required": ["visibility", "maturity", "risk_level", "data_classification"],
+      "properties": {
+        "visibility": {
+          "enum": ["private", "team", "company", "public"]
+        },
+        "maturity": {
+          "enum": ["experimental", "verified", "production", "deprecated"]
+        },
+        "risk_level": {
+          "enum": ["low", "medium", "high", "critical"]
+        },
+        "data_classification": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["public", "internal", "confidential", "restricted"]
+          }
+        },
+        "maintainers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          }
+        },
+        "support_contact": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 320
+        }
+      },
+      "additionalProperties": false
+    },
+    "presentation": {
+      "type": "object",
+      "properties": {
+        "icon": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "preferred_input_ui": {
+          "enum": ["form", "chat", "upload", "custom"]
+        },
+        "preferred_result_ui": {
+          "enum": ["text", "markdown", "table", "gallery", "download", "custom"]
+        },
+        "suggested_prompts": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

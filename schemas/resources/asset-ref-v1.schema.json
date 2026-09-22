@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json",
+  "title": "AROP v1 AssetRef",
+  "type": "object",
+  "required": ["asset_id", "name", "media_type", "size_bytes", "access"],
+  "properties": {
+    "asset_id": {
+      "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/assetId"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "not": {
+        "pattern": "(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)"
+      }
+    },
+    "media_type": {
+      "type": "string",
+      "pattern": "^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$"
+    },
+    "size_bytes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "digest": {
+      "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/sha256Digest"
+    },
+    "access": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "const": "brokered"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

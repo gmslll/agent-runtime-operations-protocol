@@ -1,0 +1,77 @@
+protocol: arop/v1
+kind: AgentManifest
+identity:
+  id: image.generate
+  version: 1.0.0-beta.1
+  name: Product Image Generator
+  summary: Generates governed product images from text and supplied assets.
+  description: Demonstrates the complete AROP v1 Agent Manifest surface.
+  owner:
+    team: ai-design
+    contact: ai-design@example.invalid
+  categories: [design, image]
+  tags: [product, generation]
+skills:
+  - id: default
+    name: Generate product image
+    summary: Generate an image with optional reference assets.
+    invoke_modes: [params, chat]
+    input_schema:
+      $ref: ./schemas/image-generate-input.schema.json
+    output_schema:
+      $ref: ./schemas/image-generate-output.schema.json
+    required_scopes: [image.generate]
+    risk_level: medium
+content:
+  input_types: [text, json, asset_ref]
+  output_types: [text, json, asset_ref]
+  accepted_media_types: [image/png, image/jpeg]
+  max_assets: 10
+  max_input_bytes: 1048576
+execution:
+  default_timeout_seconds: 300
+  max_timeout_seconds: 1800
+  max_concurrency: 8
+  effects:
+    level: write
+    idempotency: required
+    human_confirmation: false
+  capabilities:
+    streaming: true
+    progress: true
+    cancellation: true
+    status_query: true
+    usage: true
+    required_profiles: [arop.delivery.direct.v1]
+    optional_profiles: [arop.streaming.sse.v1]
+  network:
+    egress: restricted
+    allowed_hosts: [api.example.invalid]
+session:
+  mode: stateless
+usage:
+  meters: [calls, input_tokens, output_tokens, duration_seconds]
+dependencies:
+  secrets:
+    - name: model-provider
+      purpose: Exchange for a short-lived model provider credential.
+      required: true
+      allowed_operations: [invoke]
+  data_resource_types: [product-catalog]
+governance:
+  visibility: public
+  maturity: experimental
+  risk_level: medium
+  data_classification: [public, internal]
+  maintainers: [example-team]
+  support_contact: support@example.invalid
+presentation:
+  icon: image
+  preferred_input_ui: form
+  preferred_result_ui: gallery
+  suggested_prompts:
+    - Generate a white-background product image.
+required_extensions: [com.example.arop.audit.v1]
+extensions:
+  com.example.arop.audit.v1:
+    policy: standard

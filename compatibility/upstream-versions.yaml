@@ -1,0 +1,16 @@
+schema_version: 1
+updated: 2026-09-22
+upstreams:
+  a2a:
+    protocol_line: "1.0"
+    fixture_release: "v1.0.1"
+    source: "https://github.com/a2aproject/A2A/releases/tag/v1.0.1"
+    mapping_status: planned
+  json_schema:
+    specification: "2020-12"
+    source: "https://json-schema.org/draft/2020-12/schema"
+    mapping_status: active
+  cloudevents:
+    specification: "1.0"
+    source: "https://github.com/cloudevents/spec/blob/v1.0.2/cloudevents/spec.md"
+    mapping_status: planned

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/common/content-part.schema.json",
+  "title": "AROP v1 ContentPart",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["type", "text"],
+      "properties": {
+        "type": {"const": "text"},
+        "text": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"const": "json"},
+        "value": true
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["type", "asset"],
+      "properties": {
+        "type": {"const": "asset_ref"},
+        "asset": {
+          "$ref": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": ["type", "data"],
+      "properties": {
+        "type": {"const": "data_ref"},
+        "data": {
+          "$ref": "https://arop.invalid/schemas/v1/resources/data-ref-v1.schema.json"
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

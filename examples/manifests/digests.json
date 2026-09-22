@@ -1,0 +1,4 @@
+{
+  "examples/manifests/valid/complete.yaml": "sha256:471bd987eed3f3880e754b190e5118152947b0a7f8b51e59dd851fc860a2e527",
+  "examples/manifests/valid/minimal.yaml": "sha256:8d76cb3dafbcf705767bbb3f520808a1afd13385cfb1f3f042feaa6dadd7f274"
+}

@@ -1,0 +1,20 @@
+{
+  "name": "arop-repository-tools",
+  "version": "0.1.0-dev",
+  "private": true,
+  "description": "Repository validation tools for the Agent Runtime Operations Protocol",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "validate": "node scripts/validate.mjs",
+    "manifest:digest": "node scripts/manifest-digest.mjs"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "canonicalize": "5.1.0",
+    "yaml": "2.9.1"
+  }
+}

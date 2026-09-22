@@ -1,0 +1,24 @@
+protocol: arop/v1
+kind: AgentManifest
+identity:
+  id: invalid.endpoint
+  version: 1.0.0
+  name: Invalid endpoint example
+  summary: Must fail because runtime endpoints do not belong in a Manifest.
+  owner:
+    team: example-team
+skills:
+  - id: default
+    name: Default
+    invoke_modes: [params]
+    input_schema: {type: object}
+    output_schema: {type: object}
+execution:
+  default_timeout_seconds: 30
+  max_timeout_seconds: 60
+  effects:
+    level: none
+    idempotency: supported
+    human_confirmation: false
+  capabilities: {}
+endpoint: http://127.0.0.1:8080

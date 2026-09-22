@@ -1,0 +1,23 @@
+protocol: arop/v1
+kind: AgentManifest
+identity:
+  id: invalid.timeout
+  version: 1.0.0
+  name: Invalid timeout example
+  summary: Must fail because the default timeout exceeds the declared maximum.
+  owner:
+    team: example-team
+skills:
+  - id: default
+    name: Default
+    invoke_modes: [params]
+    input_schema: {type: object}
+    output_schema: {type: object}
+execution:
+  default_timeout_seconds: 120
+  max_timeout_seconds: 60
+  effects:
+    level: none
+    idempotency: supported
+    human_confirmation: false
+  capabilities: {}

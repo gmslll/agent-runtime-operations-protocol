@@ -1,0 +1,23 @@
+protocol: arop/v1
+kind: AgentManifest
+identity:
+  id: invalid.write
+  version: 1.0.0
+  name: Invalid write example
+  summary: Must fail because write effects require idempotency support.
+  owner:
+    team: example-team
+skills:
+  - id: default
+    name: Default
+    invoke_modes: [params]
+    input_schema: {type: object}
+    output_schema: {type: object}
+execution:
+  default_timeout_seconds: 30
+  max_timeout_seconds: 60
+  effects:
+    level: write
+    idempotency: none
+    human_confirmation: false
+  capabilities: {}

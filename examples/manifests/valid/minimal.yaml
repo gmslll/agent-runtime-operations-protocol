@@ -1,0 +1,38 @@
+protocol: arop/v1
+kind: AgentManifest
+identity:
+  id: hello.agent
+  version: 0.1.0
+  name: Hello Agent
+  summary: Returns a greeting for the supplied name.
+  owner:
+    team: example-team
+skills:
+  - id: default
+    name: Greet
+    invoke_modes: [params]
+    input_schema:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+      additionalProperties: false
+    output_schema:
+      type: object
+      required: [greeting]
+      properties:
+        greeting:
+          type: string
+      additionalProperties: false
+execution:
+  default_timeout_seconds: 30
+  max_timeout_seconds: 60
+  effects:
+    level: none
+    idempotency: supported
+    human_confirmation: false
+  capabilities:
+    streaming: false
+    cancellation: true
+    status_query: true
