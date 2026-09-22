@@ -1,0 +1,166 @@
+schema_version: 1
+inventory_id: arop-p01-fixed-go-test-inventory-v1
+schema_artifact: p01-fixed-test-inventory-schema
+owner_artifact: p01-fixed-test-inventory
+owner_phase: P01
+packages:
+  - path: ./internal/tooling/blueprint
+    package: github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/blueprint
+    artifact_ids:
+      - blueprint-validation-tests
+    owner_phase: P02
+    tests:
+      - TestBlueprintBaselineAndEmbeddedNegativeProbes
+      - TestBoundaryNegativeProbesAreIndividuallyRejected
+      - TestMarkdownLinkClosureRejectsEmptyTargetWithoutPanicking
+      - TestPositivePublicV01ProbeIsRejected
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/allowed_tool_undeclared_helper
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/allowlisted_tool_child-process_escape
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/allowlisted_tool_dynamic_execution_escape
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/cyclic_package_alias
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/extensionless_env-S_node
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/external_symlink_escape
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/internal_unregistered_symlink
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/make_variable_alias
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/package_runtime_trampoline
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/production_Containerfile
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/recursive_package_alias
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/workflow_env_alias
+  - path: ./internal/tooling/evidence
+    package: github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/evidence
+    artifact_ids:
+      - evidence-lineage-tests
+      - evidence-validation-tests
+    owner_phase: P01
+    tests:
+      - TestAllExternalEvidenceMaterialsUseCanonicalContainment
+      - TestAllExternalEvidenceMaterialsUseCanonicalContainment/EVIDENCE_dot-dot-inside
+      - TestAllExternalEvidenceMaterialsUseCanonicalContainment/EVIDENCE_symlink-back
+      - TestAllExternalEvidenceMaterialsUseCanonicalContainment/EVIDENCE_valid_outside
+      - TestAllExternalEvidenceMaterialsUseCanonicalContainment/TRUSTED_CHANNEL_CONFIRMATION_dot-dot-inside
+      - TestAllExternalEvidenceMaterialsUseCanonicalContainment/TRUSTED_CHANNEL_CONFIRMATION_symlink-back
+      - TestAllExternalEvidenceMaterialsUseCanonicalContainment/TRUSTED_CHANNEL_CONFIRMATION_valid_outside
+      - TestAllExternalEvidenceMaterialsUseCanonicalContainment/TRUSTED_KEYS_registry_dot-dot-inside
+      - TestAllExternalEvidenceMaterialsUseCanonicalContainment/TRUSTED_KEYS_registry_symlink-back
+      - TestAllExternalEvidenceMaterialsUseCanonicalContainment/TRUSTED_KEYS_registry_valid_outside
+      - TestAuthenticateStrictEd25519Registry
+      - TestAuthenticateStrictEd25519Registry/duplicate_key_id
+      - TestAuthenticateStrictEd25519Registry/empty_key_id
+      - TestAuthenticateStrictEd25519Registry/evidence_algorithm
+      - TestAuthenticateStrictEd25519Registry/invalid_base64
+      - TestAuthenticateStrictEd25519Registry/missing_attestation
+      - TestAuthenticateStrictEd25519Registry/non_Ed25519_key
+      - TestAuthenticateStrictEd25519Registry/registry_algorithm
+      - TestAuthenticateStrictEd25519Registry/registry_extra
+      - TestAuthenticateStrictEd25519Registry/registry_missing
+      - TestAuthenticateStrictEd25519Registry/registry_role
+      - TestAuthenticateStrictEd25519Registry/registry_version
+      - TestAuthenticateStrictEd25519Registry/short_signature
+      - TestCountAcceptsOnlyNonnegativeInRangeIntegers
+      - TestCountAcceptsOnlyNonnegativeInRangeIntegers/fractional_float
+      - TestCountAcceptsOnlyNonnegativeInRangeIntegers/fractional_json_number
+      - TestCountAcceptsOnlyNonnegativeInRangeIntegers/integral_float
+      - TestCountAcceptsOnlyNonnegativeInRangeIntegers/json_number
+      - TestCountAcceptsOnlyNonnegativeInRangeIntegers/native_int
+      - TestCountAcceptsOnlyNonnegativeInRangeIntegers/negative_int
+      - TestCountAcceptsOnlyNonnegativeInRangeIntegers/negative_json_number
+      - TestCountAcceptsOnlyNonnegativeInRangeIntegers/overflow_json_number
+      - TestEvidenceLineage
+      - TestEvidenceLineage/P04-schema-requires-artifact-manifest
+      - TestEvidenceLineage/deleted-current-planning-blob
+      - TestEvidenceLineage/missing
+      - TestEvidenceLineage/non-ancestor
+      - TestEvidenceLineage/subject-commit-missing-blob
+      - TestEvidenceLineage/wrong-signed-digest
+      - TestManualAuthenticationPreservesLimitation
+      - TestP03AndP04CommandsAcceptCompleteValidEvidenceEndToEnd
+      - TestValidP03AndP04EvidenceEndToEnd
+      - TestValidP03AndP04EvidenceEndToEnd/P03
+      - TestValidP03AndP04EvidenceEndToEnd/P04
+  - path: ./internal/tooling/report
+    package: github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/report
+    artifact_ids:
+      - machine-report-verifier-tests
+    owner_phase: P01
+    tests:
+      - TestStrictReportSchemaRejectsMalformedDocuments
+      - TestStrictReportSchemaRejectsMalformedDocuments/bad_date-time
+      - TestStrictReportSchemaRejectsMalformedDocuments/bad_digest
+      - TestStrictReportSchemaRejectsMalformedDocuments/empty_inputs
+      - TestStrictReportSchemaRejectsMalformedDocuments/fractional_count
+      - TestStrictReportSchemaRejectsMalformedDocuments/missing_nested
+      - TestStrictReportSchemaRejectsMalformedDocuments/nested_duplicate
+      - TestStrictReportSchemaRejectsMalformedDocuments/top-level_duplicate
+      - TestStrictReportSchemaRejectsMalformedDocuments/trailing_document
+      - TestStrictReportSchemaRejectsMalformedDocuments/unknown_check_field
+      - TestStrictReportSchemaRejectsMalformedDocuments/unknown_top-level
+      - TestVerifierCurrentReports
+      - TestVerifierHistoricalLineage
+      - TestVerifierRejectsCorruptedDigest
+      - TestVerifierRejectsEveryCurrentRuntimeMutation
+      - TestVerifierRejectsEveryCurrentRuntimeMutation/go
+      - TestVerifierRejectsEveryCurrentRuntimeMutation/node
+      - TestVerifierRejectsEveryCurrentRuntimeMutation/os_arch
+      - TestVerifierRejectsEveryCurrentRuntimeMutation/os_platform
+      - TestVerifierRejectsEveryCurrentRuntimeMutation/os_release
+      - TestWriterCommandAndGitErrorsPropagate
+      - TestWriterPropagatesMarshalFailure
+      - TestWriterRuntimeIsGo
+  - path: ./internal/tooling/schema
+    package: github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/schema
+    artifact_ids:
+      - go-schema-validator-tests
+    owner_phase: P01
+    tests:
+      - TestDraft2020AndFormatAssertions
+      - TestPlanningAndGateSummarySchemasAreStrict
+      - TestPlanningAndGateSummarySchemasAreStrict/bad_date
+      - TestPlanningAndGateSummarySchemasAreStrict/bad_digest
+      - TestPlanningAndGateSummarySchemasAreStrict/bad_phase
+      - TestPlanningAndGateSummarySchemasAreStrict/fraction_count
+      - TestPlanningAndGateSummarySchemasAreStrict/result_extra
+      - TestPlanningAndGateSummarySchemasAreStrict/subject_extra
+      - TestPlanningAndGateSummarySchemasAreStrict/top_extra
+  - path: ./internal/tooling/specindex
+    package: github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/specindex
+    artifact_ids:
+      - spec-index-governance-tests
+    owner_phase: P01
+    tests:
+      - TestGovernanceNegativeProbes
+  - path: ./internal/tooling/structuredfile
+    package: github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile
+    artifact_ids:
+      - go-structured-file-tools-tests
+    owner_phase: P01
+    tests:
+      - TestCanonicalRepositoryContainment
+      - TestStrictJSON
+      - TestStrictJSON/nested_duplicate
+      - TestStrictJSON/top-level_duplicate
+      - TestStrictJSON/trailing_null
+      - TestStrictJSON/trailing_object
+      - TestStrictYAML
+      - TestStrictYAML/alias
+      - TestStrictYAML/multiple_documents
+      - TestStrictYAML/nested_duplicate
+      - TestStrictYAML/top-level_duplicate
+  - path: ./internal/tooling/testinventory
+    package: github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/testinventory
+    artifact_ids:
+      - p01-fixed-test-runner-tests
+    owner_phase: P01
+    tests:
+      - TestEvaluateRejectsInventoryBypasses
+      - TestEvaluateRejectsInventoryBypasses/GOFLAGS=-run
+      - TestEvaluateRejectsInventoryBypasses/TestMain_no-tests
+      - TestEvaluateRejectsInventoryBypasses/cache
+      - TestEvaluateRejectsInventoryBypasses/extra-package
+      - TestEvaluateRejectsInventoryBypasses/extra-test
+      - TestEvaluateRejectsInventoryBypasses/failed-test
+      - TestEvaluateRejectsInventoryBypasses/missing-package
+      - TestEvaluateRejectsInventoryBypasses/missing-test
+      - TestEvaluateRejectsInventoryBypasses/no-test-files
+      - TestEvaluateRejectsInventoryBypasses/skipped-test
+      - TestInvocationNeutralizesSelectionAndCacheEnvironment

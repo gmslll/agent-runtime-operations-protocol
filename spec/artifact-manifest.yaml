@@ -1,6 +1,6 @@
 schema_version: 1
 catalog_id: arop-artifact-catalog-v1
-updated: 2026-09-22
+updated: 2026-09-23
 purpose: AROP 唯一机器可读的当前与规划制品目录。面向人的目录树不得 被解释为第二份制品清单。
 authority_chain:
   - rank: 1
@@ -160,6 +160,33 @@ artifacts:
     exposure: repository-internal
     derives_from:
       - decisions
+    path_role: concrete
+  - id: p01-fixed-test-inventory-schema
+    path: spec/schemas/p01-test-inventory.schema.json
+    status: present
+    kind: planning-json-schema
+    authority: structure
+    language: language-neutral
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+    derives_from:
+      - decisions
+      - development-plan
+    path_role: concrete
+  - id: p01-fixed-test-inventory
+    path: spec/p01-test-inventory.yaml
+    status: present
+    kind: machine-test-inventory
+    authority: evidence
+    language: language-neutral
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+    derives_from:
+      - p01-fixed-test-inventory-schema
     path_role: concrete
   - id: planning-audit-evidence-schema
     path: spec/schemas/planning-audit-evidence.schema.json
@@ -2191,6 +2218,41 @@ artifacts:
       - immutable-requirements-meta-schema
       - conflict-ledger-meta-schema
     path_role: concrete
+  - id: p01-fixed-test-runner
+    path: internal/tooling/testinventory/inventory.go
+    status: present
+    kind: tooling
+    authority: derived
+    implementation_runtime: go
+    tool_scope: report
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+    derives_from:
+      - artifact-catalog
+      - artifact-catalog-meta-schema
+      - check-report-meta-schema
+      - go-schema-validator
+      - go-structured-file-tools
+      - p01-fixed-test-inventory
+      - p01-fixed-test-inventory-schema
+    path_role: concrete
+  - id: p01-fixed-test-runner-tests
+    path: internal/tooling/testinventory/inventory_test.go
+    status: present
+    kind: tooling-test
+    authority: evidence
+    implementation_runtime: go
+    tool_scope: report
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+    derives_from:
+      - p01-fixed-test-runner
+      - p01-fixed-test-inventory
+    path_role: concrete
   - id: spec-index-report-orchestrator
     path: internal/tooling/cmd/arop-spec-index-check/main.go
     status: present
@@ -2208,6 +2270,7 @@ artifacts:
       - machine-report-writer
       - controlled-input-manifest-library
       - go-structured-file-tools
+      - p01-fixed-test-runner
     path_role: concrete
   - id: spec-index-governance
     path: internal/tooling/specindex/governance.go
@@ -2226,6 +2289,7 @@ artifacts:
       - conflict-ledger
       - go-schema-validator
       - go-structured-file-tools
+      - p01-fixed-test-runner
     path_role: concrete
   - id: spec-index-governance-tests
     path: internal/tooling/specindex/governance_test.go
@@ -4139,6 +4203,10 @@ artifacts:
       - spec-index-governance-tests
       - controlled-input-manifest-library
       - controlled-input-manifest-tests
+      - p01-fixed-test-inventory-schema
+      - p01-fixed-test-inventory
+      - p01-fixed-test-runner
+      - p01-fixed-test-runner-tests
     producer_phase: P01
     acceptance_test: make-spec-index-check
     exposure: repository-internal

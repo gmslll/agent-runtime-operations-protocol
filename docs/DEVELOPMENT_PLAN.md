@@ -30,14 +30,14 @@ updated: 2026-09-23
 - **Status:** complete
 - **Capability owner:** spec-governance
 - **Components:** governance
-- **Artifacts owned:** spec-index-validation, spec-index-report-orchestrator, spec-index-governance, spec-index-governance-tests, go-structured-file-tools, go-structured-file-tools-tests, go-schema-validator, go-schema-validator-tests, check-report-meta-schema, planning-canonical-evidence-summary-schema, planning-trusted-key-registry-schema, controlled-input-manifest-library, controlled-input-manifest-tests, machine-report-writer, machine-report-verifier-library, machine-report-verifier, machine-report-verifier-tests, evidence-lineage-tests, evidence-validation-tests, planning-audit-evidence-schema, user-gate-evidence-schema, evidence-validation-library, planning-audit-validation, user-gate-validation
+- **Artifacts owned:** spec-index-validation, spec-index-report-orchestrator, spec-index-governance, spec-index-governance-tests, go-structured-file-tools, go-structured-file-tools-tests, go-schema-validator, go-schema-validator-tests, check-report-meta-schema, p01-fixed-test-inventory-schema, p01-fixed-test-inventory, p01-fixed-test-runner, p01-fixed-test-runner-tests, planning-canonical-evidence-summary-schema, planning-trusted-key-registry-schema, controlled-input-manifest-library, controlled-input-manifest-tests, machine-report-writer, machine-report-verifier-library, machine-report-verifier, machine-report-verifier-tests, evidence-lineage-tests, evidence-validation-tests, planning-audit-evidence-schema, user-gate-evidence-schema, evidence-validation-library, planning-audit-validation, user-gate-validation
 - **Goal:** 建立 Decision 权威链、14 条不可变 `statement_original_zh`、冲突台账、制品 DAG 和规划 Meta-Schema 候选。
-- **Scope:** `docs/DECISIONS.md`、`spec/*`、Node 仅执行无进程逃逸的 Schema/spec/manifest 校验，Go 编排并生成公共 report、evidence、planning/Gate 验证；统一执行 separator-aware、symlink-aware 路径边界和 current runtime 复核；不改业务实现。
+- **Scope:** `docs/DECISIONS.md`、`spec/*`、Node 仅执行无进程逃逸的 Schema/spec/manifest 校验，Go 编排并生成公共 report、evidence、planning/Gate 验证；P01 使用受 Schema 和 artifact manifest 管理的 exact package+test ID inventory，净化 Go 选测/缓存环境并解析 `go test -json`；统一执行 separator-aware、symlink-aware 路径边界和 current runtime 复核；不改业务实现。
 - **Dependencies:** none
 - **First-path invariants:** Authoring strict/Consumer forward compatible；离线 `$ref`；先校验再 Digest；制品路径唯一、DAG 无环、语言派生正确。
 - **Machine acceptance:** `make spec-index-check` → `build/reports/P01/report.json` 和 `junit.xml`。
 - **Rollback point:** 恢复上一份规划元数据；冲突或 DAG 错误时不进入 P02。
-- **Definition of done:** Meta-Schema、路径、DAG、Decision/链接/引用闭包和反例探针全绿；报告带 commit/dirty/command/runtime/input/checker digest，current-worktree 精确重验 Node/Go/OS，ancestor 只标记 archive-only；allowlisted Node 工具仍拒绝 child process、动态加载和 eval/Function。
+- **Definition of done:** Meta-Schema、路径、DAG、Decision/链接/引用闭包和反例探针全绿；P01 实际 package/test 终态集合与 tracked inventory 完全一致且全部 pass，fail/skip/cache/no-tests 均为零，`GOFLAGS=-run`、TestMain/no-tests、cache、缺测试和多测试负例失败闭合；报告带 commit/dirty/command/runtime/input/checker digest，current-worktree 精确重验 Node/Go/OS，ancestor 只标记 archive-only；allowlisted Node 工具仍拒绝 child process、动态加载和 eval/Function。
 
 ## P02 — Schedulable implementation blueprint
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/report"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/schema"
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/testinventory"
 )
 
 func Run(root string) ([]report.Check, map[string]any, []string) {
@@ -45,6 +46,8 @@ func Run(root string) ([]report.Check, map[string]any, []string) {
 		artifactProblems = append(artifactProblems, manifestErr.Error())
 	}
 	record("artifact-catalog-governance", len(artifactProblems) == 0, strings.Join(artifactProblems, "; "))
+	_, inventoryErr := testinventory.Load(root)
+	record("p01-fixed-test-inventory-governance", inventoryErr == nil, fmt.Sprint(inventoryErr))
 	requirementProblems, requirementCount := immutableRequirementProblems(requirementsValue, manifestValue)
 	if requirementsErr != nil {
 		requirementProblems = append(requirementProblems, requirementsErr.Error())

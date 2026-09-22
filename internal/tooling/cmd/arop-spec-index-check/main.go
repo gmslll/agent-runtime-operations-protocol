@@ -1,9 +1,6 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +11,7 @@ import (
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/report"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/specindex"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile"
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/testinventory"
 )
 
 type nodeResult struct {
@@ -21,13 +19,6 @@ type nodeResult struct {
 	Errors     []string       `json:"errors"`
 	InputPaths []string       `json:"input_paths"`
 	Summary    map[string]any `json:"summary"`
-}
-type goTestEvent struct {
-	Action  string  `json:"Action"`
-	Package string  `json:"Package"`
-	Test    string  `json:"Test"`
-	Output  string  `json:"Output"`
-	Elapsed float64 `json:"Elapsed"`
 }
 
 func main() {
@@ -63,28 +54,40 @@ func main() {
 		result.Summary[key] = value
 	}
 
-	testArgs := []string{"test", "-count=1", "-json", "./internal/tooling/structuredfile", "./internal/tooling/schema", "./internal/tooling/report", "./internal/tooling/evidence", "./internal/tooling/specindex", "./internal/tooling/blueprint"}
-	test := exec.Command("go", testArgs...)
-	test.Dir = root
-	test.Env = append(os.Environ(), "AROP_VERIFY_CURRENT=1")
-	testOut, testErr := test.CombinedOutput()
+	inventory, inventoryErr := testinventory.Load(root)
+	if inventoryErr != nil {
+		result.Checks = append(result.Checks, report.Check{Name: "p01-fixed-test-inventory", Passed: false, Detail: inventoryErr.Error()})
+	}
+	testRun := testinventory.RunResult{}
+	var testRunErr error
+	if inventoryErr == nil {
+		testRun, testRunErr = testinventory.Run(root, inventory)
+		result.Checks = append(result.Checks, testRun.Evaluation.Checks...)
+		result.Checks = append(result.Checks, report.Check{Name: "p01-fixed-test-inventory", Passed: testRun.Evaluation.Passed && testRunErr == nil, Detail: strings.Join(testRun.Evaluation.Details, "; ")})
+	}
+	testOut := testRun.Output
 	testLog := filepath.Join(dir, "governance-tests.log")
 	fatal(os.WriteFile(testLog, testOut, 0o644))
-	testChecks, counts, parseErr := structuredGoTestChecks(testOut)
-	result.Checks = append(result.Checks, testChecks...)
-	goTestPassed := testErr == nil && parseErr == nil && counts["fail"] == 0 && counts["skip"] == 0 && counts["executed"] > 0 && !bytes.Contains(testOut, []byte("(cached)"))
-	detail := fmt.Sprintf("executed=%d pass=%d fail=%d skip=%d uncached=%t", counts["executed"], counts["pass"], counts["fail"], counts["skip"], !bytes.Contains(testOut, []byte("(cached)")))
-	if testErr != nil {
-		detail += "; " + testErr.Error()
+	counts := testRun.Evaluation.Counts
+	goTestPassed := inventoryErr == nil && testRunErr == nil && testRun.Evaluation.Passed && counts["fail"] == 0 && counts["skip"] == 0 && counts["package_fail"] == 0 && counts["package_skip"] == 0 && counts["cache"] == 0 && counts["no_tests"] == 0 && counts["executed"] > 0
+	detail := fmt.Sprintf("packages=%d package-pass=%d package-fail=%d package-skip=%d executed=%d pass=%d fail=%d skip=%d cache=%d no-tests=%d exact=%t argv=%q", counts["packages"], counts["package_pass"], counts["package_fail"], counts["package_skip"], counts["executed"], counts["pass"], counts["fail"], counts["skip"], counts["cache"], counts["no_tests"], testRun.Evaluation.Passed, strings.Join(testRun.Command, " "))
+	if inventoryErr != nil {
+		detail += "; " + inventoryErr.Error()
 	}
-	if parseErr != nil {
-		detail += "; " + parseErr.Error()
+	if testRunErr != nil {
+		detail += "; " + testRunErr.Error()
 	}
 	result.Checks = append(result.Checks, report.Check{Name: "go-governance-tests", Passed: goTestPassed, Detail: detail})
 	result.Summary["go_testcases_executed"] = counts["executed"]
 	result.Summary["go_testcases_passed"] = counts["pass"]
 	result.Summary["go_testcases_failed"] = counts["fail"]
 	result.Summary["go_testcases_skipped"] = counts["skip"]
+	result.Summary["go_test_packages"] = counts["packages"]
+	result.Summary["go_test_packages_failed"] = counts["package_fail"]
+	result.Summary["go_test_packages_passed"] = counts["package_pass"]
+	result.Summary["go_test_packages_skipped"] = counts["package_skip"]
+	result.Summary["go_test_cache_hits"] = counts["cache"]
+	result.Summary["go_test_packages_without_tests"] = counts["no_tests"]
 
 	inputs := append([]string{}, result.InputPaths...)
 	staticInputs, staticErr := governanceStaticInputs(root)
@@ -114,34 +117,8 @@ func main() {
 	fmt.Printf("AROP spec index check passed: %d checks (%d uncached Go tests).\n", len(r.Checks), counts["executed"])
 }
 
-func structuredGoTestChecks(data []byte) ([]report.Check, map[string]int, error) {
-	checks := []report.Check{}
-	counts := map[string]int{"executed": 0, "pass": 0, "fail": 0, "skip": 0}
-	scanner := bufio.NewScanner(bytes.NewReader(data))
-	scanner.Buffer(make([]byte, 64*1024), 4*1024*1024)
-	seen := map[string]bool{}
-	for scanner.Scan() {
-		var event goTestEvent
-		if err := json.Unmarshal(scanner.Bytes(), &event); err != nil {
-			return checks, counts, fmt.Errorf("parse go test -json: %w", err)
-		}
-		if event.Test == "" || (event.Action != "pass" && event.Action != "fail" && event.Action != "skip") {
-			continue
-		}
-		key := event.Package + "/" + event.Test
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		counts["executed"]++
-		counts[event.Action]++
-		checks = append(checks, report.Check{Name: "go-test:" + key, Passed: event.Action == "pass", Detail: fmt.Sprintf("action=%s elapsed=%.3fs", event.Action, event.Elapsed)})
-	}
-	return checks, counts, scanner.Err()
-}
-
 func governanceStaticInputs(root string) ([]string, error) {
-	inputs := []string{"go.mod", "go.sum", "Makefile", "package.json", "internal/tooling/cmd/arop-spec-index-check/main.go", "internal/tooling/controlledinput/manifest.go", "internal/tooling/controlledinput/manifest_test.go", "scripts/spec-index-check.mjs", "scripts/lib/repository.mjs", "spec/schemas/check-report.schema.json", "spec/schemas/artifact-manifest.schema.json", "spec/schemas/requirements.schema.json", "spec/schemas/conflicts.schema.json", "spec/schemas/planning-audit-evidence.schema.json", "spec/schemas/user-gate-evidence.schema.json", "spec/schemas/canonical-evidence-summary.schema.json", "spec/schemas/trusted-key-registry.schema.json"}
+	inputs := []string{"go.mod", "go.sum", "Makefile", "package.json", "internal/tooling/cmd/arop-spec-index-check/main.go", "internal/tooling/controlledinput/manifest.go", "internal/tooling/controlledinput/manifest_test.go", "scripts/spec-index-check.mjs", "scripts/lib/repository.mjs", "spec/p01-test-inventory.yaml", "spec/schemas/p01-test-inventory.schema.json", "spec/schemas/check-report.schema.json", "spec/schemas/artifact-manifest.schema.json", "spec/schemas/requirements.schema.json", "spec/schemas/conflicts.schema.json", "spec/schemas/planning-audit-evidence.schema.json", "spec/schemas/user-gate-evidence.schema.json", "spec/schemas/canonical-evidence-summary.schema.json", "spec/schemas/trusted-key-registry.schema.json"}
 	err := filepath.WalkDir(filepath.Join(root, "internal/tooling"), func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err

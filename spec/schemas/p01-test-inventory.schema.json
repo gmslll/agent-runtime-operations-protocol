@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/spec/schemas/p01-test-inventory.schema.json",
+  "title": "AROP P01 fixed Go test inventory",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "inventory_id",
+    "schema_artifact",
+    "owner_artifact",
+    "owner_phase",
+    "packages"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "inventory_id": {"const": "arop-p01-fixed-go-test-inventory-v1"},
+    "schema_artifact": {"const": "p01-fixed-test-inventory-schema"},
+    "owner_artifact": {"const": "p01-fixed-test-inventory"},
+    "owner_phase": {"const": "P01"},
+    "packages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "package", "artifact_ids", "owner_phase", "tests"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^\\./internal/tooling(?:/[a-z0-9-]+)+$"
+          },
+          "package": {
+            "type": "string",
+            "pattern": "^github\\.com/gmslll/agent-runtime-operations-protocol/internal/tooling(?:/[a-z0-9-]+)+$"
+          },
+          "artifact_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"}
+          },
+          "owner_phase": {"type": "string", "pattern": "^P(?:0[1-9]|[1-9][0-9])$"},
+          "tests": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^Test[A-Za-z0-9_]+(?:/[A-Za-z0-9_.=-]+)*$"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
