@@ -4,10 +4,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/controlledinput"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/report"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile"
 )
@@ -33,8 +33,7 @@ func main() {
 	fmt.Printf("AROP report verified: %s; mode=%s; claimed=%s; current=%s; %d JSON/JUnit testcases, %v failures, lineage and digests match.\n", filepath.ToSlash(path), mode, r.Provenance.Git.Head, current, len(r.Checks), r.Summary["failed"])
 }
 func git(root string, args ...string) string {
-	c := exec.Command("git", args...)
-	c.Dir = root
+	c := controlledinput.GitCommand(root, args...)
 	out, _ := c.Output()
 	return strings.TrimSpace(string(out))
 }

@@ -1133,6 +1133,9 @@ func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact
 					p = append(p, rel+" Node execution closure must not contain symlinks")
 					return nil
 				}
+				if nodeShebang(text) {
+					p = append(p, rel+" Node shebang execution is forbidden; use an exact manifest-owned Node invocation template")
+				}
 				if strings.HasPrefix(lower, "scripts/release/") {
 					p = append(p, rel+" JavaScript is forbidden under scripts/release")
 				}
@@ -1193,7 +1196,7 @@ func boundaryNegativeProbes() []string {
 			p = append(p, tc.name+" escaped")
 		}
 	}
-	for name, shebang := range map[string]string{"env-node": "#!/usr/bin/env node", "env-s-node": "\ufeff  #!/usr/bin/env -S node\r", "usr-node": "#!/usr/bin/node", "usr-nodejs": "#!/usr/bin/nodejs", "env-nodejs": "#!/usr/bin/env nodejs"} {
+	for name, shebang := range map[string]string{"env-node": "#!/usr/bin/env node", "env-s-node": "\ufeff  #!/usr/bin/env -S node\r", "env-s-quoted-node": `#!/usr/bin/env -S 'node --no-warnings'`, "env-assignment-node": "#!/usr/bin/env MODE=strict node", "env-split-string-node": "#!/usr/bin/env --split-string=node", "nvm-node": "#!/Users/example/.nvm/versions/node/v22/bin/node", "usr-node": "#!/usr/bin/node", "usr-nodejs": "#!/usr/bin/nodejs", "env-nodejs": "#!/usr/bin/env nodejs"} {
 		if !nodeShebang(shebang + "\n") {
 			p = append(p, name+" shebang escaped")
 		}
@@ -1244,11 +1247,19 @@ type nodeSourceAnalysis struct {
 	Problems      []string
 }
 
-type nodeASTVisitor struct{ analysis *nodeSourceAnalysis }
+type nodeASTVisitor struct {
+	analysis *nodeSourceAnalysis
+	stack    []js.INode
+}
 
 func (visitor *nodeASTVisitor) Enter(node js.INode) js.IVisitor {
 	const suffix = "; Node tool scopes have no process, network, worker, native-addon, or dynamic-code allowlist"
 	add := func(problem string) { visitor.analysis.Problems = append(visitor.analysis.Problems, problem+suffix) }
+	var parent js.INode
+	if len(visitor.stack) != 0 {
+		parent = visitor.stack[len(visitor.stack)-1]
+	}
+	visitor.stack = append(visitor.stack, node)
 	switch current := node.(type) {
 	case *js.ImportStmt:
 		if module, ok := decodeJSString(current.Module); ok {
@@ -1266,11 +1277,17 @@ func (visitor *nodeASTVisitor) Enter(node js.INode) js.IVisitor {
 		}
 	case *js.Var:
 		name := string(current.Name())
+		if strings.Contains(string(current.Data), `\`) || strings.Contains(name, `\`) {
+			add("uses escaped JavaScript identifier spelling")
+		}
 		if name == "Reflect" {
 			add("uses dangerous reflection identifier Reflect")
 		}
-		if map[string]bool{"require": true, "createRequire": true, "eval": true, "Function": true, "binding": true, "dlopen": true, "getBuiltinModule": true}[name] {
+		if map[string]bool{"require": true, "createRequire": true, "eval": true, "Function": true, "binding": true, "dlopen": true, "getBuiltinModule": true, "fetch": true, "WebSocket": true, "EventSource": true, "WebTransport": true, "Worker": true, "BroadcastChannel": true, "MessageChannel": true, "navigator": true, "global": true, "globalThis": true, "self": true, "window": true}[name] {
 			add("uses forbidden dynamic loader/code identifier " + name)
+		}
+		if name == "process" && !allowedProcessReference(parent, current) {
+			add("aliases or passes the process object outside its exact member allowlist")
 		}
 	case *js.CallExpr:
 		name, _ := nodeExpressionName(current.X)
@@ -1287,6 +1304,9 @@ func (visitor *nodeASTVisitor) Enter(node js.INode) js.IVisitor {
 		if map[string]bool{"exec": true, "execFile": true, "execSync": true, "execFileSync": true, "spawn": true, "spawnSync": true, "fork": true}[last] {
 			add("calls forbidden external-command primitive " + last)
 		}
+		if map[string]bool{"fetch": true, "WebSocket": true, "EventSource": true, "WebTransport": true}[last] {
+			add("calls forbidden global network primitive " + last)
+		}
 		if map[string]bool{"binding": true, "dlopen": true, "getBuiltinModule": true}[last] && (strings.HasPrefix(name, "process.") || strings.HasPrefix(name, "globalThis.process.")) {
 			add("uses process native loading escape " + last)
 		}
@@ -1298,14 +1318,24 @@ func (visitor *nodeASTVisitor) Enter(node js.INode) js.IVisitor {
 		if name == "Function" || strings.HasSuffix(name, ".Function") {
 			add("constructs Function")
 		}
-		if name == "Worker" || strings.HasSuffix(name, ".Worker") {
-			add("constructs a worker")
+		last := name
+		if dot := strings.LastIndexByte(last, '.'); dot >= 0 {
+			last = last[dot+1:]
+		}
+		if map[string]bool{"Worker": true, "WebSocket": true, "EventSource": true, "WebTransport": true, "BroadcastChannel": true, "MessageChannel": true}[last] {
+			add("constructs forbidden worker/network primitive " + last)
 		}
 	case *js.DotExpr:
 		if name, ok := nodeExpressionName(current); ok {
 			if dangerousMemberPath(name) {
 				add("accesses dangerous runtime/reflection member " + name)
 			}
+			if forbiddenProcessMemberPath(name, parent) {
+				add("accesses process member outside the exact argv/exit/result-file allowlist: " + name)
+			}
+		}
+		if member, ok := nodePropertyIdentifier(current.Y); ok && member == "constructor" {
+			add("accesses constructor-based dynamic code generation")
 		}
 	case *js.IndexExpr:
 		base, _ := nodeExpressionName(current.X)
@@ -1319,7 +1349,37 @@ func (visitor *nodeASTVisitor) Enter(node js.INode) js.IVisitor {
 	return visitor
 }
 
-func (visitor *nodeASTVisitor) Exit(js.INode) {}
+func (visitor *nodeASTVisitor) Exit(js.INode) {
+	visitor.stack = visitor.stack[:len(visitor.stack)-1]
+}
+
+func allowedProcessReference(parent js.INode, current *js.Var) bool {
+	switch value := parent.(type) {
+	case *js.DotExpr:
+		return value.X == current
+	case *js.IndexExpr:
+		return value.X == current
+	default:
+		return false
+	}
+}
+
+func forbiddenProcessMemberPath(name string, parent js.INode) bool {
+	if name == "globalThis.process" || strings.HasPrefix(name, "globalThis.process.") {
+		return true
+	}
+	if name == "process.argv" || name == "process.exit" || name == "process.env.AROP_RESULT_FILE" {
+		return false
+	}
+	if name == "process.env" {
+		if outer, ok := parent.(*js.DotExpr); ok {
+			outerName, _ := nodeExpressionName(outer)
+			return outerName != "process.env.AROP_RESULT_FILE"
+		}
+		return true
+	}
+	return strings.HasPrefix(name, "process.")
+}
 
 func analyzeNodeSource(source string) (nodeSourceAnalysis, error) {
 	tree, err := js.Parse(parse.NewInput(strings.NewReader(source)), js.Options{})
@@ -1327,6 +1387,9 @@ func analyzeNodeSource(source string) (nodeSourceAnalysis, error) {
 		return nodeSourceAnalysis{}, err
 	}
 	analysis := nodeSourceAnalysis{}
+	if regexp.MustCompile(`\\u(?:[0-9A-Fa-f]{4}|\{[0-9A-Fa-f]{1,6}\})`).MatchString(source) {
+		analysis.Problems = append(analysis.Problems, "uses Unicode escape spelling; Node boundary source must use canonical literal tokens")
+	}
 	js.Walk(&nodeASTVisitor{analysis: &analysis}, tree)
 	analysis.StaticImports = uniqueStrings(analysis.StaticImports)
 	analysis.Problems = uniqueStrings(analysis.Problems)
@@ -1426,6 +1489,15 @@ func dangerousComputedBase(base string) bool {
 }
 
 func dangerousComputedMember(base, member string) bool {
+	if member == "constructor" {
+		return true
+	}
+	if (base == "process" || base == "globalThis.process") && member != "" {
+		return true
+	}
+	if base == "globalThis" && (member == "Reflect" || member == "Object" || member == "process") {
+		return true
+	}
 	if map[string]bool{"process": true, "require": true, "createRequire": true, "eval": true, "Function": true, "binding": true, "dlopen": true, "getBuiltinModule": true, "constructor": true, "_load": true}[member] {
 		return dangerousComputedBase(base) || strings.HasPrefix(base, "globalThis.") || strings.HasPrefix(base, "module.")
 	}
@@ -1433,13 +1505,13 @@ func dangerousComputedMember(base, member string) bool {
 }
 
 func dangerousMemberPath(name string) bool {
-	return strings.HasPrefix(name, "Reflect.") || dangerousObjectReflection(name) || strings.HasSuffix(name, ".constructor._load") ||
+	return strings.HasPrefix(name, "Reflect.") || strings.HasPrefix(name, "globalThis.Reflect.") || name == "globalThis.Reflect" || name == "globalThis.Object" || strings.HasPrefix(name, "globalThis.Object.") || dangerousObjectReflection(name) || strings.Contains(name, ".constructor") ||
 		(strings.HasPrefix(name, "process.") || strings.HasPrefix(name, "globalThis.process.")) &&
 			(strings.HasSuffix(name, ".binding") || strings.HasSuffix(name, ".dlopen") || strings.HasSuffix(name, ".getBuiltinModule"))
 }
 
 func dangerousObjectReflection(name string) bool {
-	return name == "Object.getOwnPropertyDescriptor" || name == "Object.getOwnPropertyDescriptors" || name == "Object.defineProperty" || name == "Object.setPrototypeOf"
+	return name == "Object.getOwnPropertyDescriptor" || name == "Object.getOwnPropertyDescriptors" || name == "Object.getPrototypeOf" || name == "Object.defineProperty" || name == "Object.setPrototypeOf"
 }
 
 func uniqueStrings(values []string) []string {
@@ -1455,7 +1527,20 @@ func uniqueStrings(values []string) []string {
 }
 func nodeShebang(source string) bool {
 	first := strings.SplitN(strings.TrimLeft(source, "\ufeff \t\r\n"), "\n", 2)[0]
-	return regexp.MustCompile(`^#!\s*(?:(?:/usr/bin/)?env(?:\s+-S)?\s+|/usr/bin/)(?:node|nodejs)(?:\s|$)`).MatchString(strings.TrimSpace(strings.TrimSuffix(first, "\r")))
+	first = strings.TrimSpace(strings.TrimSuffix(first, "\r"))
+	if !strings.HasPrefix(first, "#!") {
+		return false
+	}
+	fields := strings.Fields(strings.TrimSpace(strings.TrimPrefix(first, "#!")))
+	if len(fields) == 0 {
+		return false
+	}
+	interpreter := filepath.Base(fields[0])
+	if interpreter == "env" {
+		remainder := strings.Join(fields[1:], " ")
+		return regexp.MustCompile(`(?i)\bnode(?:js)?\b`).MatchString(remainder) || containsObfuscatedNodeToken(remainder)
+	}
+	return interpreter == "node" || interpreter == "nodejs"
 }
 
 func resolveNodeImport(root, sourcePath, imported string) string {
@@ -1585,6 +1670,7 @@ func packageScriptProblems(scripts map[string]any, artifacts []Artifact) []strin
 			return
 		}
 		command = normalizeCommandText(command)
+		problems = append(problems, nodeCommandIndirectionProblems("package script "+name, command)...)
 		aliasPattern := regexp.MustCompile(`(?:npm|pnpm)\s+run\s+([a-zA-Z0-9:_-]+)|\byarn\s+([a-zA-Z0-9:_-]+)`)
 		aliasMatches := aliasPattern.FindAllStringSubmatch(command, -1)
 		for _, match := range aliasMatches {
@@ -1642,6 +1728,7 @@ func commandSourceProblems(name, source string, productionImage bool, artifacts 
 			break
 		}
 	}
+	p = append(p, nodeCommandIndirectionProblems(name, expanded)...)
 	forbidden := regexp.MustCompile(`(?m)\b(node(?:js)?\s+(?:-e|--eval)|npm\s+exec|npx\b|tsx\b|bun\b|deno\b|node(?:js)?\s+scripts/release/|node(?:js)?\s+scripts/(?:blueprint-check|gate-check|planning-audit|verify-report|test-evidence-lineage|test-report-verifier))`)
 	if forbidden.MatchString(expanded) {
 		p = append(p, name+" invokes non-allowlisted Node runtime")
@@ -1659,6 +1746,77 @@ func normalizeCommandText(source string) string {
 	source = strings.ReplaceAll(source, "\\\r\n", " ")
 	source = strings.ReplaceAll(source, "\\\n", " ")
 	return strings.ReplaceAll(source, "\r\n", "\n")
+}
+
+func nodeCommandIndirectionProblems(context, command string) []string {
+	problems := []string{}
+	lower := strings.ToLower(command)
+	if regexp.MustCompile(`(?m)(?:^|[^A-Za-z0-9_])(?:node_options|node_path|npm_config_node_options)[ \t]*[?:+]?=`).MatchString(lower) {
+		problems = append(problems, context+" sets a forbidden Node loader/search-path environment variable")
+	}
+	nodeWord := regexp.MustCompile(`(?i)\bnode(?:js)?\b`)
+	if containsObfuscatedNodeToken(command) {
+		problems = append(problems, context+" obfuscates the Node command with shell quotes or escapes")
+	}
+	if !nodeWord.MatchString(command) && !containsObfuscatedNodeToken(command) {
+		return problems
+	}
+	for _, line := range strings.Split(command, "\n") {
+		if !nodeWord.MatchString(line) {
+			continue
+		}
+		if strings.Contains(line, "$(") || strings.Contains(line, "`") {
+			problems = append(problems, context+" resolves Node through shell substitution")
+		}
+		if strings.Contains(line, "$") {
+			problems = append(problems, context+" resolves Node through non-exact variable expansion")
+		}
+	}
+	if regexp.MustCompile(`(?mi)(?:^|[;|& \t])(?:export[ \t]+)?PATH[ \t]*[?:+]?=[^\r\n;|&]*`).MatchString(command) {
+		problems = append(problems, context+" mutates PATH in a Node command surface")
+	}
+	if regexp.MustCompile(`(?mi)(?:alias[ \t]+node(?:js)?[ \t]*=|function[ \t]+node(?:js)?\b|\bnode(?:js)?[ \t]*\(\)|\bhash[ \t]+-[^\r\n;|&]*\bnode(?:js)?\b)`).MatchString(command) {
+		problems = append(problems, context+" redefines or rebinds the Node command")
+	}
+	if regexp.MustCompile(`(?m)(?:^|[ \t;|&"'])(?:/|\.\.?/)[^ \t\r\n;|&"']*node(?:js)?(?:[ \t\r\n;|&"']|$)`).MatchString(command) {
+		problems = append(problems, context+" invokes Node through a non-exact filesystem path")
+	}
+	if regexp.MustCompile(`(?m)\b(?:env|command|xargs|exec|sh|bash|zsh|sudo|nice|time|nohup|stdbuf|chrt|ionice|setsid|taskset|timeout|builtin)\b[^\n;|&]*\bnode(?:js)?\b`).MatchString(lower) {
+		problems = append(problems, context+" wraps Node in a non-exact shell/environment command")
+	}
+	if regexp.MustCompile(`(?mi)(?:^|[;|& \t])(?:[A-Za-z_][A-Za-z0-9_]*=[^\r\n;|& \t]+[ \t]+)+node(?:js)?\b`).MatchString(command) {
+		problems = append(problems, context+" prefixes Node with non-exact shell environment assignments")
+	}
+	return problems
+}
+
+func containsObfuscatedNodeToken(source string) bool {
+	normalized := make([]byte, 0, len(source))
+	originalOffsets := make([]int, 0, len(source))
+	for index := 0; index < len(source); index++ {
+		switch source[index] {
+		case '\'', '"':
+			continue
+		case '\\':
+			if index+1 < len(source) {
+				index++
+				normalized = append(normalized, source[index])
+				originalOffsets = append(originalOffsets, index)
+			}
+		default:
+			normalized = append(normalized, source[index])
+			originalOffsets = append(originalOffsets, index)
+		}
+	}
+	for _, match := range regexp.MustCompile(`(?i)\bnode(?:js)?\b`).FindAllIndex(normalized, -1) {
+		start := originalOffsets[match[0]]
+		end := originalOffsets[match[1]-1] + 1
+		fragment := source[start:end]
+		if strings.ContainsAny(fragment, `\'"`) || start > 0 && strings.ContainsRune(`'"\`, rune(source[start-1])) || end < len(source) && strings.ContainsRune(`'"`, rune(source[end])) {
+			return true
+		}
+	}
+	return false
 }
 
 func nodeInvocationProblems(context, command string, artifacts []Artifact) []string {

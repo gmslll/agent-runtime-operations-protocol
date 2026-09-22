@@ -74,6 +74,68 @@ func TestCurrentRejectsWorktreeSymlinkBeforeReadingTarget(t *testing.T) {
 	}
 }
 
+func TestCurrentRejectsSymlinkedWorktreeParentBeforeReadingTarget(t *testing.T) {
+	root := t.TempDir()
+	gitTest(t, root, "init", "-q")
+	gitTest(t, root, "config", "user.name", "Controlled Input Test")
+	gitTest(t, root, "config", "user.email", "controlled-input@invalid.example")
+	writeTestFile(t, root, "nested/input.txt", "tracked\n", 0o644)
+	gitTest(t, root, "add", ".")
+	gitTest(t, root, "commit", "-q", "-m", "fixture")
+	external := filepath.Join(t.TempDir(), "nested")
+	if err := os.Rename(filepath.Join(root, "nested"), external); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(external, filepath.Join(root, "nested")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Current(root, "P02"); err == nil || !strings.Contains(err.Error(), "traverses worktree symlink nested") {
+		t.Fatalf("symlinked worktree parent was not rejected before target read: %v", err)
+	}
+}
+
+func TestCurrentRejectsWorktreeExecutableModeDrift(t *testing.T) {
+	root := t.TempDir()
+	gitTest(t, root, "init", "-q")
+	gitTest(t, root, "config", "user.name", "Controlled Input Test")
+	gitTest(t, root, "config", "user.email", "controlled-input@invalid.example")
+	writeTestFile(t, root, "input.txt", "tracked\n", 0o644)
+	gitTest(t, root, "add", ".")
+	gitTest(t, root, "commit", "-q", "-m", "fixture")
+	gitTest(t, root, "config", "core.fileMode", "false")
+	if err := os.Chmod(filepath.Join(root, "input.txt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Current(root, "P01"); err == nil || !strings.Contains(err.Error(), "executable mode does not match") {
+		t.Fatalf("worktree executable-mode drift was accepted: %v", err)
+	}
+}
+
+func TestCurrentIgnoresAmbientGitIndexOverride(t *testing.T) {
+	root := t.TempDir()
+	gitTest(t, root, "init", "-q")
+	gitTest(t, root, "config", "user.name", "Controlled Input Test")
+	gitTest(t, root, "config", "user.email", "controlled-input@invalid.example")
+	writeTestFile(t, root, "tracked.txt", "tracked\n", 0o644)
+	gitTest(t, root, "add", ".")
+	gitTest(t, root, "commit", "-q", "-m", "fixture")
+	emptyIndex := filepath.Join(t.TempDir(), "empty-index")
+	indexCommand := exec.Command("git", "read-tree", "--empty")
+	indexCommand.Dir = root
+	indexCommand.Env = append(WithoutGitOverrides(os.Environ()), "GIT_INDEX_FILE="+emptyIndex)
+	if output, err := indexCommand.CombinedOutput(); err != nil {
+		t.Fatalf("create alternate index: %v: %s", err, output)
+	}
+	t.Setenv("GIT_INDEX_FILE", emptyIndex)
+	manifest, err := Current(root, "P01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.Entries) != 1 || manifest.Entries[0].Path != "tracked.txt" {
+		t.Fatalf("ambient GIT_INDEX_FILE hid controlled inputs: %#v", manifest.Entries)
+	}
+}
+
 func TestAncestorRejectsTrackedSymlink(t *testing.T) {
 	root := t.TempDir()
 	gitTest(t, root, "init", "-q")
@@ -103,8 +165,7 @@ func writeTestFile(t *testing.T, root, relative, content string, mode os.FileMod
 
 func gitTest(t *testing.T, root string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = root
+	cmd := GitCommand(root, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v: %v: %s", args, err, out)

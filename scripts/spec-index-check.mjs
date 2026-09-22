@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 // IR-03 boundary: only strict structured-file and JSON Schema validation live
 // here. Generic governance, Git, evidence and report semantics are Go-owned.
 import { mkdir, writeFile } from "node:fs/promises";

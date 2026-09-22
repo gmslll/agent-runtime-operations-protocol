@@ -6,7 +6,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -22,8 +21,7 @@ type VerifyOptions struct {
 }
 
 func gitBytes(root string, args ...string) ([]byte, error) {
-	c := exec.Command("git", args...)
-	c.Dir = root
+	c := controlledinput.GitCommand(root, args...)
 	return c.Output()
 }
 func gitString(root string, args ...string) (string, error) {
@@ -169,7 +167,7 @@ func Verify(options VerifyOptions) (*Report, string, error) {
 		mode = "ancestor-archive-only"
 		if !options.AllowAncestor {
 			problems = append(problems, "report HEAD is not current HEAD; rerun or opt in with ALLOW_ANCESTOR=1")
-		} else if c := exec.Command("git", "merge-base", "--is-ancestor", claimed, current); func() error { c.Dir = options.Root; return c.Run() }() != nil {
+		} else if c := controlledinput.GitCommand(options.Root, "merge-base", "--is-ancestor", claimed, current); func() error { return c.Run() }() != nil {
 			problems = append(problems, "report claimed HEAD is not an ancestor of current HEAD")
 		}
 	}

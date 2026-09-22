@@ -12,12 +12,12 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/controlledinput"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/report"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/schema"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile"
@@ -71,8 +71,7 @@ var P03RuntimeEvidenceKinds = []string{
 func hash(v []byte) string { s := sha256.Sum256(v); return hex.EncodeToString(s[:]) }
 func Hash(v []byte) string { return hash(v) }
 func git(root string, args ...string) ([]byte, error) {
-	c := exec.Command("git", args...)
-	c.Dir = root
+	c := controlledinput.GitCommand(root, args...)
 	return c.Output()
 }
 func gitText(root string, args ...string) (string, error) {
@@ -104,8 +103,7 @@ func VerifySubjectCommit(root, commit string, subject map[string]any) (SubjectLi
 		return SubjectLineage{}, fmt.Errorf("evidence subject commit does not exist: %s", commit)
 	}
 	if commit != head {
-		c := exec.Command("git", "merge-base", "--is-ancestor", commit, head)
-		c.Dir = root
+		c := controlledinput.GitCommand(root, "merge-base", "--is-ancestor", commit, head)
 		if c.Run() != nil {
 			return SubjectLineage{}, fmt.Errorf("evidence subject commit %s is not an ancestor of current HEAD %s", commit, head)
 		}

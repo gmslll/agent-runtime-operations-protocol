@@ -16,21 +16,42 @@ packages:
       - TestExactSafeNodePackageTemplatePasses
       - TestMarkdownLinkClosureRejectsEmptyTargetWithoutPanicking
       - TestNodeASTRejectsComputedAndReflectiveEscapes
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/aliased-process-getbuiltin
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/async-function-constructor
       - TestNodeASTRejectsComputedAndReflectiveEscapes/computed-child-process
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/constructor-constructor
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/destructured-process-binding
       - TestNodeASTRejectsComputedAndReflectiveEscapes/dynamic-import
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/global-fetch
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/global-object-fetch
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/global-process-getbuiltin
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/global-reflect-get-binding
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/global-this-alias
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/global-websocket
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/process-env-secret
       - TestNodeASTRejectsComputedAndReflectiveEscapes/reflective-binding
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/unicode-constructor
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/unicode-fetch
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/unicode-global-this
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/unicode-process
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/unicode-reflect
       - TestPositivePublicV01ProbeIsRejected
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/absolute_import
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/absolute_node_binary
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/allowed_tool_undeclared_helper
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/allowlisted_tool_child-process_escape
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/commonjs_require
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/computed_getBuiltinModule_child-process
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/computed_global_require
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/concatenated_quoted_node_token
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/create_require
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/cyclic_package_alias
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/data_import
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/double_quoted_node
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/dynamic_import
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/env_wrapped_node_binary
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/escaped_node_token
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/eval
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/extensionless_env-S_node
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/external_symlink_escape
@@ -40,10 +61,17 @@ packages:
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/make_continuation
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/make_variable_alias
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/native_addon_import
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/nice_node_wrapper
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_alias_shadow
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_cluster_builtin
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_dgram_builtin
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_http_builtin
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_net_builtin
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_options_append
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_options_import
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_options_require
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_path_injection
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_path_shadow
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_tls_builtin
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_worker_builtin
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/package_runtime_trampoline
@@ -53,9 +81,19 @@ packages:
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/production_Containerfile
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/recursive_package_alias
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/reflection_escape
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/registered_fragmented_node_shebang
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/registered_quoted_node_shebang
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/registered_unsafe_node_shebang
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/root_node_binary
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/shell_parameter_node_binary
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/shell_resolved_node_binary
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/single_quoted_node
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/sudo_node_wrapper
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/time_node_wrapper
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/undeclared_bare_import
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/vm_builtin
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/workflow_env_alias
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/worktrees_executable_node
   - path: ./internal/tooling/controlledinput
     package: github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/controlledinput
     artifact_ids:
@@ -64,6 +102,9 @@ packages:
     tests:
       - TestAncestorRejectsTrackedSymlink
       - TestCurrentAndAncestorDiscoverCompleteTrackedTree
+      - TestCurrentIgnoresAmbientGitIndexOverride
+      - TestCurrentRejectsSymlinkedWorktreeParentBeforeReadingTarget
+      - TestCurrentRejectsWorktreeExecutableModeDrift
       - TestCurrentRejectsWorktreeSymlinkBeforeReadingTarget
   - path: ./internal/tooling/evidence
     package: github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/evidence
@@ -123,6 +164,7 @@ packages:
       - machine-report-verifier-tests
     owner_phase: P01
     tests:
+      - TestNodeLoaderEnvironmentIsSanitized
       - TestStrictReportSchemaRejectsMalformedDocuments
       - TestStrictReportSchemaRejectsMalformedDocuments/bad_date-time
       - TestStrictReportSchemaRejectsMalformedDocuments/bad_digest

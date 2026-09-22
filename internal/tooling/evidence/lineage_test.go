@@ -3,16 +3,16 @@ package evidence
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/controlledinput"
 )
 
 func run(t *testing.T, root string, args ...string) string {
 	t.Helper()
-	c := exec.Command("git", args...)
-	c.Dir = root
+	c := controlledinput.GitCommand(root, args...)
 	b, e := c.CombinedOutput()
 	if e != nil {
 		t.Fatalf("git %v: %v %s", args, e, b)

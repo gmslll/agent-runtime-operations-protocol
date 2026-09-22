@@ -3,12 +3,13 @@ package report
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/controlledinput"
 )
 
 func strictReportFixture() Report {
@@ -127,6 +128,19 @@ func TestVerifierRejectsCorruptedDigest(t *testing.T) {
 func TestWriterRuntimeIsGo(t *testing.T) {
 	if runtime.Version() == "" {
 		t.Fatal("Go runtime unavailable")
+	}
+}
+
+func TestNodeLoaderEnvironmentIsSanitized(t *testing.T) {
+	t.Parallel()
+	filtered := withoutNodeLoaderEnvironment([]string{
+		"KEEP=value",
+		"NODE_OPTIONS=--require=/tmp/escape.cjs",
+		"node_path=/tmp/escape-modules",
+		"NPM_CONFIG_NODE_OPTIONS=--import=/tmp/escape.mjs",
+	})
+	if got := strings.Join(filtered, "\n"); got != "KEEP=value" {
+		t.Fatalf("unsafe Node loader environment survived sanitization: %q", got)
 	}
 }
 
@@ -332,8 +346,7 @@ func TestVerifierRediscoverControlledInputsForCurrentAndAncestorReports(t *testi
 
 func gitTest(t *testing.T, root string, args ...string) string {
 	t.Helper()
-	c := exec.Command("git", args...)
-	c.Dir = root
+	c := controlledinput.GitCommand(root, args...)
 	b, err := c.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %v: %v %s", args, err, b)

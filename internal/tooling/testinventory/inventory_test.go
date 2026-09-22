@@ -20,6 +20,10 @@ func TestInvocationNeutralizesSelectionAndCacheEnvironment(t *testing.T) {
 		"GOTMPDIR=/tmp/shared-tmp",
 		"GOWORK=/tmp/host.work",
 		"AROP_VERIFY_CURRENT=0",
+		"NODE_OPTIONS=--require=/tmp/escape.cjs",
+		"NODE_PATH=/tmp/escape-modules",
+		"NPM_CONFIG_NODE_OPTIONS=--import=/tmp/escape.mjs",
+		"GIT_INDEX_FILE=/tmp/alternate-index",
 	}, "/tmp/fresh-cache", "/tmp/fresh-tmp")
 	wantArgs := "test -count=1 -run=. -json ./internal/tooling/example"
 	if got := strings.Join(args, " "); got != wantArgs {
@@ -40,8 +44,10 @@ func TestInvocationNeutralizesSelectionAndCacheEnvironment(t *testing.T) {
 			t.Errorf("%s=%q, want %q", key, values[key], want)
 		}
 	}
-	if _, exists := values["GOCACHEPROG"]; exists {
-		t.Fatal("GOCACHEPROG was not cleared")
+	for _, key := range []string{"GOCACHEPROG", "NODE_OPTIONS", "NODE_PATH", "NPM_CONFIG_NODE_OPTIONS", "GIT_INDEX_FILE"} {
+		if _, exists := values[key]; exists {
+			t.Fatalf("%s was not cleared", key)
+		}
 	}
 }
 

@@ -49,13 +49,42 @@ func aggregate(entries []Entry) string {
 }
 
 func command(root string, args ...string) ([]byte, error) {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = root
+	cmd := GitCommand(root, args...)
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
 	return out, nil
+}
+
+// GitCommand creates a repository-local Git subprocess after removing ambient
+// GIT_* overrides that could redirect its index, worktree, object database, or
+// configuration away from root.
+func GitCommand(root string, args ...string) *exec.Cmd {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = root
+	cmd.Env = append(WithoutGitOverrides(os.Environ()),
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_CONFIG_GLOBAL="+os.DevNull,
+		"GIT_CONFIG_SYSTEM="+os.DevNull,
+		"GIT_OPTIONAL_LOCKS=0",
+		"GIT_TERMINAL_PROMPT=0",
+	)
+	return cmd
+}
+
+func WithoutGitOverrides(environment []string) []string {
+	filtered := make([]string, 0, len(environment))
+	for _, item := range environment {
+		key := item
+		if index := strings.IndexByte(item, '='); index >= 0 {
+			key = item[:index]
+		}
+		if !strings.HasPrefix(strings.ToUpper(key), "GIT_") {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func validatePath(path string) error {
@@ -79,16 +108,34 @@ func entry(path, mode, kind string, data []byte) (Entry, error) {
 	return Entry{Path: path, Type: kind, Mode: mode, LinkTarget: "", SHA256: hash(data), Bytes: int64(len(data))}, nil
 }
 
-func validateWorktreeFile(root, path string) error {
-	info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(path)))
-	if err != nil {
-		return fmt.Errorf("inspect controlled input %s: %w", path, err)
+func validateWorktreeFile(root, path, gitMode string) error {
+	if err := validatePath(path); err != nil {
+		return err
 	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("controlled input %s is a worktree symlink; controlled inputs forbid symlinks", path)
-	}
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("controlled input %s is not a regular worktree file", path)
+	current := filepath.Clean(root)
+	components := strings.Split(filepath.FromSlash(path), string(filepath.Separator))
+	for index, component := range components {
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if err != nil {
+			return fmt.Errorf("inspect controlled input %s component %s: %w", path, component, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("controlled input %s traverses worktree symlink %s; controlled inputs forbid symlinks", path, filepath.ToSlash(strings.Join(components[:index+1], string(filepath.Separator))))
+		}
+		if index < len(components)-1 && !info.IsDir() {
+			return fmt.Errorf("controlled input %s parent component %s is not a directory", path, component)
+		}
+		if index == len(components)-1 && !info.Mode().IsRegular() {
+			return fmt.Errorf("controlled input %s is not a regular worktree file", path)
+		}
+		if index == len(components)-1 {
+			worktreeExecutable := info.Mode().Perm()&0o111 != 0
+			gitExecutable := gitMode == "100755"
+			if worktreeExecutable != gitExecutable {
+				return fmt.Errorf("controlled input %s executable mode does not match Git mode %s", path, gitMode)
+			}
+		}
 	}
 	return nil
 }
@@ -104,6 +151,11 @@ func Current(root, scope string) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, err
 	}
+	rootedWorktree, err := os.OpenRoot(root)
+	if err != nil {
+		return Manifest{}, fmt.Errorf("open controlled worktree root: %w", err)
+	}
+	defer rootedWorktree.Close()
 	entries := []Entry{}
 	for _, record := range bytes.Split(raw, []byte{0}) {
 		if len(record) == 0 {
@@ -123,12 +175,15 @@ func Current(root, scope string) (Manifest, error) {
 		if _, itemErr := entry(path, meta[0], kind, nil); itemErr != nil {
 			return Manifest{}, itemErr
 		}
-		if fileErr := validateWorktreeFile(root, path); fileErr != nil {
+		if fileErr := validateWorktreeFile(root, path, meta[0]); fileErr != nil {
 			return Manifest{}, fileErr
 		}
-		data, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		data, readErr := rootedWorktree.ReadFile(filepath.FromSlash(path))
 		if readErr != nil {
 			return Manifest{}, fmt.Errorf("read controlled input %s: %w", path, readErr)
+		}
+		if fileErr := validateWorktreeFile(root, path, meta[0]); fileErr != nil {
+			return Manifest{}, fmt.Errorf("revalidate controlled input after read: %w", fileErr)
 		}
 		item, itemErr := entry(path, meta[0], kind, data)
 		if itemErr != nil {

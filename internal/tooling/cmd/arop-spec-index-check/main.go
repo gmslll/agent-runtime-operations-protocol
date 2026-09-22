@@ -36,7 +36,7 @@ func main() {
 		"scripts/spec-index-check.mjs",
 	)
 	node.Dir = root
-	node.Env = append(os.Environ(), "AROP_RESULT_FILE="+resultPath)
+	node.Env = append(withoutNodeLoaderEnvironment(os.Environ()), "AROP_RESULT_FILE="+resultPath)
 	node.Stdout = os.Stdout
 	node.Stderr = os.Stderr
 	nodeErr := node.Run()
@@ -122,6 +122,21 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("AROP spec index check passed: %d checks (%d uncached Go tests).\n", len(r.Checks), counts["executed"])
+}
+
+func withoutNodeLoaderEnvironment(environment []string) []string {
+	blocked := map[string]bool{"AROP_RESULT_FILE": true, "NODE_OPTIONS": true, "NODE_PATH": true, "NPM_CONFIG_NODE_OPTIONS": true}
+	filtered := make([]string, 0, len(environment))
+	for _, item := range environment {
+		key := item
+		if index := strings.IndexByte(item, '='); index >= 0 {
+			key = item[:index]
+		}
+		if !blocked[strings.ToUpper(key)] {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func governanceStaticInputs(root string) ([]string, error) {

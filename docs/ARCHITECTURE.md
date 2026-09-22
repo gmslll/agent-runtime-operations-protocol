@@ -304,7 +304,7 @@ Reference Control Plane、Registry、Dispatcher、Run/Event Ledger 和服务端 
 
 治理工具共享同一严格输入链：递归拒绝 JSON/YAML 重复键与多文档/尾随值，离线执行 Draft 2020-12（含 format assertion）后才进入 typed model。外部证据/信任材料同时按 separator-aware lexical path 与 EvalSymlinks canonical target 验证必须位于仓库外。机器报告把 source-tree 静态输入、前序阶段运行时输入和仓库外/ignored runtime evidence 分栏；writer 落盘前自验，任何序列化、Git、runtime 探测或 I/O 错误均 fail closed；current-worktree 精确重验 Node/Go/OS，ancestor 仅为 archive-only。Node scope 不允许 child process 或动态执行逃逸。P01 用未缓存 Go tests 实际验证这些边界，而不是把测试列表当作证据。
 
-Node 边界由 Go JavaScript AST 检查器强制：每个 entry/helper 都必须是 manifest 中 exact concrete path/kind/tool_scope，静态 import 必须在 safe builtin、declared npm dependency 或 exact relative `tooling-helper` 闭包内，执行与 import 路径不得经过 symlink。Node 22 启动使用 permission/最小文件权限、`--disable-proto=throw` 和 `--no-addons`；危险 builtin、动态加载/生成代码、native loading、computed/reflection 绕过以及未归一化的 Make/workflow/package/image 入口都 fail closed。
+Node 边界由 Go JavaScript AST 检查器强制：每个 entry/helper 都必须是 manifest 中 exact concrete path/kind/tool_scope，静态 import 必须在 safe builtin、declared npm dependency 或 exact relative `tooling-helper` 闭包内，执行与 import 路径不得经过 symlink。Node 22 启动使用 permission/最小文件权限、`--disable-proto=throw` 和 `--no-addons`；危险 builtin、动态加载/生成代码、native loading、全局网络/worker API、process 别名/非必要环境读取、Unicode-escaped identifier、constructor/computed/reflection 绕过以及 Node shebang、filesystem-path/wrapper/variable/shell-quote 间接入口都 fail closed。Go/Make 启动器会清除 `NODE_OPTIONS`/`NODE_PATH`/`NPM_CONFIG_NODE_OPTIONS`，Git 启动器会清除 ambient `GIT_*` repository override。
 
 # 11. 实施边界
 

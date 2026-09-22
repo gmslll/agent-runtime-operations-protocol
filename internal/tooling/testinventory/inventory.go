@@ -204,14 +204,17 @@ func Invocation(inventory Inventory, inherited []string, cacheDir, tempDir strin
 		args = append(args, pkg.Path)
 	}
 	remove := map[string]bool{
-		"AROP_VERIFY_CURRENT": true,
-		"GOCACHE":             true,
-		"GOCACHEPROG":         true,
-		"GODEBUG":             true,
-		"GOENV":               true,
-		"GOFLAGS":             true,
-		"GOTMPDIR":            true,
-		"GOWORK":              true,
+		"AROP_VERIFY_CURRENT":     true,
+		"GOCACHE":                 true,
+		"GOCACHEPROG":             true,
+		"GODEBUG":                 true,
+		"GOENV":                   true,
+		"GOFLAGS":                 true,
+		"GOTMPDIR":                true,
+		"GOWORK":                  true,
+		"NODE_OPTIONS":            true,
+		"NODE_PATH":               true,
+		"NPM_CONFIG_NODE_OPTIONS": true,
 	}
 	env := make([]string, 0, len(inherited)+7)
 	for _, item := range inherited {
@@ -219,7 +222,8 @@ func Invocation(inventory Inventory, inherited []string, cacheDir, tempDir strin
 		if index := strings.IndexByte(item, '='); index >= 0 {
 			key = item[:index]
 		}
-		if !remove[strings.ToUpper(key)] {
+		upperKey := strings.ToUpper(key)
+		if !remove[upperKey] && !strings.HasPrefix(upperKey, "GIT_") {
 			env = append(env, item)
 		}
 	}

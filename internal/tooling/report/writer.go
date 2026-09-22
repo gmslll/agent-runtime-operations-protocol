@@ -121,6 +121,9 @@ func DigestFiles(root string, paths []string) (InputDigest, error) {
 func command(root, name string, args ...string) (string, error) {
 	c := exec.Command(name, args...)
 	c.Dir = root
+	if name == "node" || name == "nodejs" {
+		c.Env = withoutNodeLoaderEnvironment(os.Environ())
+	}
 	out, err := c.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("%s: %w: %s", name, err, strings.TrimSpace(string(out)))
@@ -131,9 +134,23 @@ func command(root, name string, args ...string) (string, error) {
 	}
 	return value, nil
 }
+
+func withoutNodeLoaderEnvironment(environment []string) []string {
+	blocked := map[string]bool{"NODE_OPTIONS": true, "NODE_PATH": true, "NPM_CONFIG_NODE_OPTIONS": true}
+	filtered := make([]string, 0, len(environment))
+	for _, item := range environment {
+		key := item
+		if index := strings.IndexByte(item, '='); index >= 0 {
+			key = item[:index]
+		}
+		if !blocked[strings.ToUpper(key)] {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
 func git(root string, args ...string) (string, error) {
-	c := exec.Command("git", args...)
-	c.Dir = root
+	c := controlledinput.GitCommand(root, args...)
 	out, err := c.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
@@ -141,8 +158,7 @@ func git(root string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 func gitStatus(root string) (string, error) {
-	c := exec.Command("git", "status", "--porcelain=v1", "--untracked-files=all")
-	c.Dir = root
+	c := controlledinput.GitCommand(root, "status", "--porcelain=v1", "--untracked-files=all")
 	out, err := c.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git status: %w: %s", err, strings.TrimSpace(string(out)))
