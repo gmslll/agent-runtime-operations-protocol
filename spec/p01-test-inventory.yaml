@@ -12,21 +12,59 @@ packages:
     tests:
       - TestBlueprintBaselineAndEmbeddedNegativeProbes
       - TestBoundaryNegativeProbesAreIndividuallyRejected
+      - TestCommandNormalizationRejectsWorkflowAliases
+      - TestExactSafeNodePackageTemplatePasses
       - TestMarkdownLinkClosureRejectsEmptyTargetWithoutPanicking
+      - TestNodeASTRejectsComputedAndReflectiveEscapes
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/computed-child-process
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/dynamic-import
+      - TestNodeASTRejectsComputedAndReflectiveEscapes/reflective-binding
       - TestPositivePublicV01ProbeIsRejected
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/absolute_import
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/allowed_tool_undeclared_helper
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/allowlisted_tool_child-process_escape
-      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/allowlisted_tool_dynamic_execution_escape
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/commonjs_require
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/computed_getBuiltinModule_child-process
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/computed_global_require
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/create_require
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/cyclic_package_alias
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/data_import
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/dynamic_import
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/eval
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/extensionless_env-S_node
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/external_symlink_escape
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/file_import
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/function_constructor
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/internal_unregistered_symlink
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/make_continuation
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/make_variable_alias
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/native_addon_import
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_cluster_builtin
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_dgram_builtin
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_http_builtin
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_net_builtin
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_tls_builtin
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/node_worker_builtin
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/package_runtime_trampoline
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/process_binding
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/process_dlopen
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/process_get_builtin
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/production_Containerfile
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/recursive_package_alias
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/reflection_escape
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/undeclared_bare_import
+      - TestRuntimeBoundaryRejectsRealFilesystemEscapes/vm_builtin
       - TestRuntimeBoundaryRejectsRealFilesystemEscapes/workflow_env_alias
+  - path: ./internal/tooling/controlledinput
+    package: github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/controlledinput
+    artifact_ids:
+      - controlled-input-manifest-tests
+    owner_phase: P01
+    tests:
+      - TestAncestorRejectsTrackedSymlink
+      - TestCurrentAndAncestorDiscoverCompleteTrackedTree
+      - TestCurrentRejectsWorktreeSymlinkBeforeReadingTarget
   - path: ./internal/tooling/evidence
     package: github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/evidence
     artifact_ids:
@@ -51,6 +89,7 @@ packages:
       - TestAuthenticateStrictEd25519Registry/invalid_base64
       - TestAuthenticateStrictEd25519Registry/missing_attestation
       - TestAuthenticateStrictEd25519Registry/non_Ed25519_key
+      - TestAuthenticateStrictEd25519Registry/nonzero_base64_padding_bits
       - TestAuthenticateStrictEd25519Registry/registry_algorithm
       - TestAuthenticateStrictEd25519Registry/registry_extra
       - TestAuthenticateStrictEd25519Registry/registry_missing
@@ -97,6 +136,7 @@ packages:
       - TestStrictReportSchemaRejectsMalformedDocuments/unknown_top-level
       - TestVerifierCurrentReports
       - TestVerifierHistoricalLineage
+      - TestVerifierRediscoverControlledInputsForCurrentAndAncestorReports
       - TestVerifierRejectsCorruptedDigest
       - TestVerifierRejectsEveryCurrentRuntimeMutation
       - TestVerifierRejectsEveryCurrentRuntimeMutation/go
