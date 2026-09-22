@@ -1,14 +1,19 @@
 #!/usr/bin/env node
 
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { loadStructuredFile, repositoryRoot, walkFiles } from "./lib/repository.mjs";
+import Ajv2020 from "ajv/dist/2020.js";
 
-const reportDirectory = path.join(
+import {
+  loadStructuredFile,
+  parseJSONWithUniqueKeys,
   repositoryRoot,
-  "build/reports/spec-index-check",
-);
+  walkFiles,
+} from "./lib/repository.mjs";
+import { actualCommand, writeCheckReport } from "./lib/report.mjs";
+
+const reportDirectory = "build/reports/P01";
 const errors = [];
 const checks = [];
 
@@ -30,15 +35,6 @@ function isSafeRepositoryPath(value) {
     !path.isAbsolute(value) &&
     !value.split(/[\\/]/).includes("..")
   );
-}
-
-function xmlEscape(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&apos;");
 }
 
 function resolveJsonPointer(document, fragment) {
@@ -82,6 +78,12 @@ function collectRefs(value, output = []) {
   return output;
 }
 
+function formatAjvErrors(validationErrors = []) {
+  return validationErrors
+    .map((error) => `${error.instancePath || "/"} ${error.message}`)
+    .join("; ");
+}
+
 let artifactManifest;
 let requirementsDocument;
 let conflictsDocument;
@@ -102,12 +104,84 @@ for (const specFile of [
   }
 }
 
-const yamlFiles = await walkFiles(repositoryRoot, (filePath) =>
-  [".yaml", ".yml"].includes(path.extname(filePath)),
+const planningSchemaBindings = [
+  {
+    schema: "spec/schemas/artifact-manifest.schema.json",
+    document: "spec/artifact-manifest.yaml",
+    value: artifactManifest,
+  },
+  {
+    schema: "spec/schemas/requirements.schema.json",
+    document: "spec/requirements.yaml",
+    value: requirementsDocument,
+  },
+  {
+    schema: "spec/schemas/conflicts.schema.json",
+    document: "spec/conflicts.yaml",
+    value: conflictsDocument,
+  },
+];
+const planningSchemaProblems = [];
+const planningAjv = new Ajv2020({ allErrors: true, strict: true });
+for (const binding of planningSchemaBindings) {
+  try {
+    const schema = await loadStructuredFile(path.join(repositoryRoot, binding.schema));
+    if (!planningAjv.validateSchema(schema)) {
+      planningSchemaProblems.push(
+        `${binding.schema}: ${formatAjvErrors(planningAjv.errors)}`,
+      );
+      continue;
+    }
+    const validate = planningAjv.compile(schema);
+    if (!validate(binding.value)) {
+      planningSchemaProblems.push(
+        `${binding.document}: ${formatAjvErrors(validate.errors)}`,
+      );
+    }
+  } catch (error) {
+    planningSchemaProblems.push(`${binding.schema}: ${error.message}`);
+  }
+}
+record(
+  "planning-metadata-json-schema",
+  planningSchemaProblems.length === 0,
+  planningSchemaProblems.length === 0
+    ? "artifact, requirement and conflict metadata pass executable JSON Schemas"
+    : planningSchemaProblems.join("; "),
 );
+
+const planningMetaSchemaFiles = await walkFiles(
+  path.join(repositoryRoot, "spec/schemas"),
+  (filePath) => filePath.endsWith(".schema.json"),
+);
+const planningMetaSchemaProblems = [];
+for (const schemaFile of planningMetaSchemaFiles) {
+  try {
+    const schema = await loadStructuredFile(schemaFile);
+    if (!planningAjv.validateSchema(schema)) {
+      planningMetaSchemaProblems.push(
+        `${relative(schemaFile)}: ${formatAjvErrors(planningAjv.errors)}`,
+      );
+    }
+  } catch (error) {
+    planningMetaSchemaProblems.push(`${relative(schemaFile)}: ${error.message}`);
+  }
+}
+record(
+  "planning-meta-schema-validity",
+  planningMetaSchemaProblems.length === 0,
+  planningMetaSchemaProblems.length === 0
+    ? `${planningMetaSchemaFiles.length} planning/evidence schemas are valid Draft 2020-12 schemas`
+    : planningMetaSchemaProblems.join("; "),
+);
+
+const yamlFiles = (
+  await walkFiles(repositoryRoot, (filePath) =>
+    [".yaml", ".yml"].includes(path.extname(filePath)),
+  )
+).filter((filePath) => !relative(filePath).startsWith("build/"));
 const yamlProblems = [];
 for (const yamlFile of yamlFiles) {
-  if (relative(yamlFile).startsWith("build/")) continue;
   try {
     await loadStructuredFile(yamlFile);
   } catch (error) {
@@ -120,6 +194,39 @@ record(
   yamlProblems.length === 0
     ? `${yamlFiles.length} YAML files parse with unique keys`
     : yamlProblems.join("; "),
+);
+
+const jsonFiles = (
+  await walkFiles(repositoryRoot, (filePath) => filePath.endsWith(".json"))
+).filter((filePath) => !relative(filePath).startsWith("build/"));
+const jsonProblems = [];
+for (const jsonFile of jsonFiles) {
+  try {
+    await loadStructuredFile(jsonFile);
+  } catch (error) {
+    jsonProblems.push(`${relative(jsonFile)}: ${error.message}`);
+  }
+}
+record(
+  "json-syntax-and-unique-keys",
+  jsonProblems.length === 0,
+  jsonProblems.length === 0
+    ? `${jsonFiles.length} JSON files parse without duplicate object keys`
+    : jsonProblems.join("; "),
+);
+
+let duplicateKeyProbePassed = false;
+try {
+  parseJSONWithUniqueKeys('{"outer":{"same":1,"same":2}}', "duplicate-key-probe");
+} catch (error) {
+  duplicateKeyProbePassed = /duplicate object key/u.test(error.message);
+}
+record(
+  "json-duplicate-key-negative-probe",
+  duplicateKeyProbePassed,
+  duplicateKeyProbePassed
+    ? "the shared JSON loader rejects nested duplicate keys before JSON.parse"
+    : "the shared JSON loader accepted a duplicate key or returned the wrong failure",
 );
 
 const decisionSource = await readFile(
@@ -146,12 +253,13 @@ record(
     : `duplicate definitions: ${duplicateDecisions.join(", ")}`,
 );
 
-const textFiles = await walkFiles(repositoryRoot, (filePath) =>
-  [".md", ".yaml", ".yml"].includes(path.extname(filePath)),
-);
+const textFiles = (
+  await walkFiles(repositoryRoot, (filePath) =>
+    [".md", ".yaml", ".yml"].includes(path.extname(filePath)),
+  )
+).filter((filePath) => !relative(filePath).startsWith("build/"));
 const unknownDecisionReferences = [];
 for (const filePath of textFiles) {
-  if (relative(filePath).startsWith("build/")) continue;
   const source = await readFile(filePath, "utf8");
   for (const match of source.matchAll(/\b([DPC]-\d{3})\b/g)) {
     if (!decisionDefinitions.has(match[1])) {
@@ -169,6 +277,7 @@ record(
 
 const artifactIDs = new Set();
 const artifactProblems = [];
+const artifactPaths = new Map();
 if (!artifactManifest || artifactManifest.schema_version !== 1) {
   artifactProblems.push("artifact manifest schema_version must be 1");
 }
@@ -188,6 +297,13 @@ for (const artifact of artifacts) {
   if (!artifact.kind || !artifact.authority || !Array.isArray(artifact.derives_from)) {
     artifactProblems.push(`${artifact.id} is missing kind, authority, or derives_from`);
   }
+  if (artifactPaths.has(artifact.path)) {
+    artifactProblems.push(
+      `${artifact.id} duplicates path ${artifact.path} already owned by ${artifactPaths.get(artifact.path)}`,
+    );
+  } else {
+    artifactPaths.set(artifact.path, artifact.id);
+  }
 }
 for (const artifact of artifacts) {
   for (const parent of artifact.derives_from ?? []) {
@@ -201,6 +317,58 @@ for (const artifact of artifacts) {
     } catch {
       artifactProblems.push(`${artifact.id} is present but path is missing: ${artifact.path}`);
     }
+  }
+}
+const artifactByID = new Map(artifacts.map((artifact) => [artifact.id, artifact]));
+const artifactVisiting = new Set();
+const artifactVisited = new Set();
+const artifactStack = [];
+function visitArtifact(artifactID) {
+  if (artifactVisiting.has(artifactID)) {
+    const cycleStart = artifactStack.indexOf(artifactID);
+    artifactProblems.push(
+      `artifact dependency cycle: ${[...artifactStack.slice(cycleStart), artifactID].join(" -> ")}`,
+    );
+    return;
+  }
+  if (artifactVisited.has(artifactID)) return;
+  artifactVisiting.add(artifactID);
+  artifactStack.push(artifactID);
+  for (const dependency of artifactByID.get(artifactID)?.derives_from ?? []) {
+    if (artifactByID.has(dependency)) visitArtifact(dependency);
+  }
+  artifactStack.pop();
+  artifactVisiting.delete(artifactID);
+  artifactVisited.add(artifactID);
+}
+for (const artifactID of artifactIDs) visitArtifact(artifactID);
+
+const languageGeneratedDependencies = new Map([
+  ["sdk-go", "generated-models"],
+  ["sdk-python", "generated-python-models"],
+  ["sdk-typescript", "generated-typescript-models"],
+]);
+const generatedArtifactIDs = new Set([...languageGeneratedDependencies.values()]);
+for (const [sdkID, expectedGeneratedID] of languageGeneratedDependencies) {
+  const sdkArtifact = artifactByID.get(sdkID);
+  const expectedGeneratedArtifact = artifactByID.get(expectedGeneratedID);
+  if (!sdkArtifact || !expectedGeneratedArtifact) {
+    artifactProblems.push(`${sdkID} or ${expectedGeneratedID} is missing`);
+    continue;
+  }
+  if (!sdkArtifact.derives_from.includes(expectedGeneratedID)) {
+    artifactProblems.push(`${sdkID} must derive from ${expectedGeneratedID}`);
+  }
+  const wrongGenerated = sdkArtifact.derives_from.filter(
+    (dependency) => generatedArtifactIDs.has(dependency) && dependency !== expectedGeneratedID,
+  );
+  if (wrongGenerated.length > 0) {
+    artifactProblems.push(`${sdkID} derives from wrong-language generated artifacts: ${wrongGenerated.join(", ")}`);
+  }
+  if (!sdkArtifact.language || sdkArtifact.language !== expectedGeneratedArtifact.language) {
+    artifactProblems.push(
+      `${sdkID} language ${sdkArtifact.language} does not match ${expectedGeneratedID} language ${expectedGeneratedArtifact.language}`,
+    );
   }
 }
 const expectedAuthorityRoles = [
@@ -218,11 +386,21 @@ if (JSON.stringify(actualAuthorityRoles) !== JSON.stringify(expectedAuthorityRol
     `authority chain must be ${expectedAuthorityRoles.join(" -> ")}`,
   );
 }
+for (const [index, authority] of (artifactManifest?.authority_chain ?? []).entries()) {
+  if (authority.rank !== index + 1) {
+    artifactProblems.push(`${authority.role} has non-contiguous authority rank ${authority.rank}`);
+  }
+  for (const sourceID of authority.sources ?? []) {
+    if (!artifactIDs.has(sourceID)) {
+      artifactProblems.push(`${authority.role} references unknown authority source ${sourceID}`);
+    }
+  }
+}
 record(
   "artifact-catalog",
   artifactProblems.length === 0,
   artifactProblems.length === 0
-    ? `${artifacts.length} artifacts; authority chain and derivations valid`
+    ? `${artifacts.length} unique paths; authority chain, status, DAG and language derivations valid`
     : artifactProblems.join("; "),
 );
 
@@ -234,8 +412,7 @@ const expectedRequirementIDs = Array.from(
 );
 const expectedRequirementStatements = [
   "First plan into authoritative docs; later implementation must follow core docs.",
-  "Protocol repo vendor-neutral; no dependency on Console/Feishu/cc-connect/framework.",
-  "Do not modify kinglucky-agent-console in this implementation.",
+  "Protocol repo vendor-neutral; no dependency on Console/Feishu/cc-connect/framework. Do not modify kinglucky-agent-console in this implementation.",
   "Go for Reference Control Plane, Registry, Dispatcher, Run/Event Ledger, server Conformance; Node only schema/TS tooling, Python Provider SDK, TS Consumer.",
   "Full lifecycle: publish, register, discover, auth, Run/Attempt, Direct/Proxy/Worker Pull, structured streaming, result, usage, audit, trace, drain/upgrade.",
   "All new calls pass Control Plane auth/create Run; trusted service can Direct after ticket; browser v1 BFF/Proxy.",
@@ -247,18 +424,13 @@ const expectedRequirementStatements = [
   "Final layout clearly separates handwritten sources, generated code, public SDKs, internal Go backend, migrations, reference, conformance, deployments, CI.",
   "Public release externally gated by domain, package ownership, two maintainers/security entry.",
   "Machine-test acceptance including cross-language, fault injection, HA, replay/out-of-order/cancel/fencing.",
+  "Never fake external partner/independent implementation conditions as complete.",
 ];
 const actualRequirementIDs = requirements.map((requirement) => requirement.id);
 if (JSON.stringify(actualRequirementIDs) !== JSON.stringify(expectedRequirementIDs)) {
   requirementProblems.push(
     `requirements must be exactly ${expectedRequirementIDs.join(", ")}`,
   );
-}
-if (
-  requirementsDocument?.external_evidence_gate !==
-  "Never fake external partner/independent implementation conditions as complete."
-) {
-  requirementProblems.push("external evidence gate is missing or changed");
 }
 for (const [index, requirement] of requirements.entries()) {
   if (requirement.statement !== expectedRequirementStatements[index]) {
@@ -282,10 +454,16 @@ record(
     ? "14 immutable requirements map to artifacts, phases, and tests"
     : requirementProblems.join("; "),
 );
+record(
+  "independent-audit-boundary",
+  true,
+  "Hard-coded immutable statements detect accidental drift; they do not replace the independent P03 planning audit.",
+);
 
 const conflictProblems = [];
 const conflicts = conflictsDocument?.conflicts ?? [];
 const conflictIDs = new Set();
+const verificationCatalog = conflictsDocument?.verification_catalog ?? {};
 const requiredConflictTitles = new Set([
   "strict-authoring-vs-forward-compatible-consumer",
   "schema-declaration-and-reference-closure",
@@ -328,6 +506,40 @@ for (const conflict of conflicts) {
   }
   if (!Array.isArray(conflict.verification) || conflict.verification.length === 0) {
     conflictProblems.push(`${conflict.id} lacks future verification`);
+  } else {
+    for (const verificationID of conflict.verification) {
+      if (!Object.hasOwn(verificationCatalog, verificationID)) {
+        conflictProblems.push(`${conflict.id} references unknown verification: ${verificationID}`);
+      }
+    }
+  }
+}
+for (const [verificationID, verification] of Object.entries(verificationCatalog)) {
+  if (!artifactIDs.has(verification.owner_artifact)) {
+    conflictProblems.push(
+      `${verificationID} owner artifact does not exist: ${verification.owner_artifact}`,
+    );
+  }
+  if (!["present", "planned"].includes(verification.status)) {
+    conflictProblems.push(`${verificationID} has invalid status: ${verification.status}`);
+  }
+}
+const implementedVerificationIDs = new Set([
+  "canonical-event-batch-binding-check",
+  "control-plane-command-binding-check",
+  "direct-runtime-command-binding-check",
+  "duplicate-key-rejected-test",
+  "legacy-event-sink-negative-check",
+  "no-cancel-alias-check",
+]);
+for (const verificationID of implementedVerificationIDs) {
+  if (verificationCatalog[verificationID]?.status !== "present") {
+    conflictProblems.push(`${verificationID} must be registered as present`);
+  }
+}
+for (const [verificationID, verification] of Object.entries(verificationCatalog)) {
+  if (verification.status === "present" && !implementedVerificationIDs.has(verificationID)) {
+    conflictProblems.push(`${verificationID} is marked present without an implemented planning check`);
   }
 }
 if (requiredConflictTitles.size > 0) {
@@ -339,8 +551,71 @@ record(
   "conflict-ledger",
   conflictProblems.length === 0,
   conflictProblems.length === 0
-    ? `${conflicts.length} conflicts resolved; zero unresolved`
+    ? `${conflicts.length} conflicts resolved against ${Object.keys(verificationCatalog).length} registered verification IDs; zero unresolved`
     : conflictProblems.join("; "),
+);
+
+const protocolSource = await readFile(
+  path.join(repositoryRoot, "docs/PROTOCOL_SPECIFICATION.md"),
+  "utf8",
+);
+const runStreamingSource = await readFile(
+  path.join(repositoryRoot, "docs/RUN_AND_STREAMING.md"),
+  "utf8",
+);
+const canonicalCorpus = `${decisionSource}\n${protocolSource}\n${runStreamingSource}\n${await readFile(path.join(repositoryRoot, "spec/conflicts.yaml"), "utf8")}`;
+const legacyBindingFindings = (source) => ({
+  legacyEventSink:
+    /"event_sink"\s*:\s*"[^"\n]*\/v1\/agent-runs\/[^"\n]*\/events(?!:batch)/u.test(source),
+  cancelURLField: /\bcancel_url\b/u.test(source),
+  cancelHTTPAlias:
+    /\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/v1\/(?:agent-)?runs\/\{?[^\s}/]+\}?\/cancel\b/u.test(source),
+});
+const actualLegacyBindings = legacyBindingFindings(canonicalCorpus);
+const canonicalBindingProblems = [];
+if (
+  !protocolSource.includes(
+    '"event_batch_url": "https://control.example/v1/agent-runs/run_01/events:batch"',
+  )
+) {
+  canonicalBindingProblems.push("RunRequest Delivery lacks canonical event_batch_url");
+}
+if (
+  !runStreamingSource.includes(
+    '"event_batch_url": "https://control.example/v1/agent-runs/run_01/events:batch"',
+  )
+) {
+  canonicalBindingProblems.push("Event Session response lacks canonical event_batch_url");
+}
+for (const binding of [
+  "POST /v1/agent-runs/{run_id}/events:batch",
+  "POST /v1/agent-runs/{run_id}/commands",
+  "POST /v1/runs/{run_id}/commands",
+]) {
+  if (!canonicalCorpus.includes(binding)) canonicalBindingProblems.push(`missing ${binding}`);
+}
+for (const [finding, found] of Object.entries(actualLegacyBindings)) {
+  if (found) canonicalBindingProblems.push(`legacy binding detected: ${finding}`);
+}
+record(
+  "canonical-http-bindings",
+  canonicalBindingProblems.length === 0,
+  canonicalBindingProblems.length === 0
+    ? "event_batch_url and both Command trust-boundary bindings are canonical; legacy event sink and cancel aliases are absent"
+    : canonicalBindingProblems.join("; "),
+);
+
+const negativeLegacyBindings = legacyBindingFindings(`
+{"event_sink":"https://control.invalid/v1/agent-runs/run_1/events"}
+{"cancel_url":"/v1/runs/run_1/cancel"}
+POST /v1/runs/{run_id}/cancel
+`);
+record(
+  "canonical-binding-negative-probes",
+  Object.values(negativeLegacyBindings).every(Boolean),
+  Object.values(negativeLegacyBindings).every(Boolean)
+    ? "the checker rejects legacy event_sink, cancel_url and HTTP /cancel aliases"
+    : `negative probe escaped detection: ${JSON.stringify(negativeLegacyBindings)}`,
 );
 
 const markdownFiles = await walkFiles(repositoryRoot, (filePath) =>
@@ -379,7 +654,7 @@ const schemaByID = new Map();
 const schemaProblems = [];
 for (const schemaFile of schemaFiles) {
   try {
-    const schema = JSON.parse(await readFile(schemaFile, "utf8"));
+    const schema = await loadStructuredFile(schemaFile);
     schemaDocuments.set(schemaFile, schema);
     if (typeof schema.$id !== "string") {
       schemaProblems.push(`${relative(schemaFile)} has no $id`);
@@ -415,7 +690,7 @@ for (const [schemaFile, schema] of schemaDocuments) {
         }
         targetSchema = schemaDocuments.get(targetPath);
         if (!targetSchema) {
-          targetSchema = JSON.parse(await readFile(targetPath, "utf8"));
+          targetSchema = await loadStructuredFile(targetPath);
         }
       }
       resolveJsonPointer(targetSchema, fragment);
@@ -432,58 +707,50 @@ record(
     : schemaProblems.join("; "),
 );
 
-const report = {
-  schema_version: 1,
-  generated_at: new Date().toISOString(),
-  success: errors.length === 0,
+const reportInputPaths = [
+  ...textFiles.map(relative),
+  ...jsonFiles.map(relative),
+  "scripts/spec-index-check.mjs",
+  "scripts/lib/report.mjs",
+  "scripts/lib/repository.mjs",
+];
+await writeCheckReport({
+  reportDirectory,
+  suiteName: "arop-spec-index-check",
+  className: "arop.spec-index",
+  command: actualCommand("scripts/spec-index-check.mjs"),
+  checkerPath: "scripts/spec-index-check.mjs",
+  inputPaths: reportInputPaths,
+  checks,
+  errors,
   summary: {
-    checks: checks.length,
-    passed: checks.filter((check) => check.passed).length,
-    failed: checks.filter((check) => !check.passed).length,
     artifacts: artifacts.length,
     immutable_requirements: requirements.length,
     conflicts: conflicts.length,
+    registered_verifications: Object.keys(verificationCatalog).length,
     unresolved_conflicts: conflicts.filter((conflict) => conflict.status !== "resolved")
       .length,
     schemas: schemaFiles.length,
+    planning_meta_schemas: planningMetaSchemaFiles.length,
+    yaml_files: yamlFiles.length,
+    json_files: jsonFiles.length,
     markdown_files: markdownFiles.length,
   },
-  checks,
-  errors,
-};
-
-await mkdir(reportDirectory, { recursive: true });
-await writeFile(
-  path.join(reportDirectory, "report.json"),
-  `${JSON.stringify(report, null, 2)}\n`,
-  "utf8",
-);
-
-const testCases = checks
-  .map((check) => {
-    const failure = check.passed
-      ? ""
-      : `<failure message="${xmlEscape(check.detail)}"/>`;
-    return `  <testcase classname="arop.spec-index" name="${xmlEscape(check.name)}">${failure}</testcase>`;
-  })
-  .join("\n");
-const junit = `<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="arop-spec-index-check" tests="${checks.length}" failures="${errors.length}">
-${testCases}
-</testsuite>
-`;
-await writeFile(path.join(reportDirectory, "junit.xml"), junit, "utf8");
+  auditNote:
+    "Hard-coded statements and self-check probes detect repository drift; they cannot replace the independent P03 planning audit.",
+});
 
 if (errors.length > 0) {
   console.error(`AROP spec index check failed with ${errors.length} error(s):`);
   for (const error of errors) console.error(`- ${error}`);
-  console.error(`Reports: ${relative(reportDirectory)}/report.json and junit.xml`);
+  console.error(`Reports: ${reportDirectory}/report.json and junit.xml`);
   process.exit(1);
 }
 
 console.log(
   `AROP spec index check passed: ${artifacts.length} artifacts, ` +
     `${requirements.length} immutable requirements, ${conflicts.length} resolved conflicts, ` +
-    `${schemaFiles.length} schemas, ${markdownFiles.length} Markdown files.`,
+    `${schemaFiles.length} protocol schemas, ${planningMetaSchemaFiles.length} planning/evidence schemas, ` +
+    `${markdownFiles.length} Markdown files.`,
 );
-console.log(`Reports: ${relative(reportDirectory)}/report.json and junit.xml`);
+console.log(`Reports: ${reportDirectory}/report.json and junit.xml`);

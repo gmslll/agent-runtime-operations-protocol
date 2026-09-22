@@ -106,7 +106,7 @@ updated: 2026-09-22
 | Core Provider | Manifest、Run、Result、Error、Cancel、幂等 | 普通 HTTP Agent |
 | Streaming Provider | Core + Event Stream + Resume + Snapshot | 对话和生成型 Agent |
 | Managed Runtime | Streaming + Register + Lease + Health + Drain | 云端 Agent 服务 |
-| Pull Worker | Core + Claim + Attempt Lease + Fencing | 内网、桌面和 cc-connect Worker |
+| Pull Worker | Core + Claim + Attempt Lease + Fencing | 内网、桌面和无入站端点的通用 Worker |
 | Control Plane | Authz、Run Ledger、Dispatch、Event Ledger、Discovery | 平台实现方 |
 | Production | Durable Inbox/Outbox、Trace、安全和故障测试 | 生产部署 |
 
@@ -161,7 +161,7 @@ Reference Control Plane 使用 Go 实现，只覆盖验证协议所需的开发�
 
 - 普通 HTTP/Python Agent。
 - Go Agent 或服务型 Agent。
-- cc-connect/Codex Pull Worker。
+- 通用 Pull Worker（可由任意桌面或内网执行器实现）。
 
 它们必须复用同一套 Schema 和 Conformance，而不是各写一条特殊路径。
 

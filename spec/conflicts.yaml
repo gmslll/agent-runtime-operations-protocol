@@ -4,6 +4,46 @@ closure_rule: >-
   每个冲突只能在决议、修复位置和可执行验证均明确后标记 resolved。
   resolved 不等于实现已完成；implementation_state 必须如实表示当前进度。
 
+verification_catalog:
+  asset-content-part-schema-test: {status: planned, owner_artifact: conformance-fixtures}
+  cancel-command-contract-test: {status: planned, owner_artifact: conformance-fixtures}
+  cancel-race-state-machine-test: {status: planned, owner_artifact: state-machine-fixtures}
+  canonical-event-batch-binding-check: {status: present, owner_artifact: spec-index-validation}
+  control-plane-command-binding-check: {status: present, owner_artifact: spec-index-validation}
+  core-content-part-closed-test: {status: planned, owner_artifact: conformance-fixtures}
+  core-manifest-without-governance-test: {status: planned, owner_artifact: conformance-fixtures}
+  digest-cross-language-test: {status: planned, owner_artifact: conformance-fixtures}
+  direct-runtime-command-binding-check: {status: present, owner_artifact: spec-index-validation}
+  duplicate-key-rejected-test: {status: present, owner_artifact: spec-index-validation}
+  event-batch-contract-test: {status: planned, owner_artifact: conformance-fixtures}
+  event-type-coverage-test: {status: planned, owner_artifact: conformance-fixtures}
+  extension-schema-digest-test: {status: planned, owner_artifact: conformance-fixtures}
+  forward-consumer-fixtures: {status: planned, owner_artifact: conformance-fixtures}
+  governed-publication-requires-metadata-test: {status: planned, owner_artifact: conformance-fixtures}
+  heartbeat-semantics-test: {status: planned, owner_artifact: conformance-fixtures}
+  id-prefix-positive-and-negative-vectors: {status: planned, owner_artifact: conformance-fixtures}
+  invalid-manifest-digest-rejected-test: {status: planned, owner_artifact: conformance-fixtures}
+  legacy-event-sink-negative-check: {status: present, owner_artifact: spec-index-validation}
+  manifest-digest-cross-language-test: {status: planned, owner_artifact: conformance-fixtures}
+  negotiated-extension-content-part-test: {status: planned, owner_artifact: conformance-fixtures}
+  neutral-boundary-lint: {status: planned, owner_artifact: conformance-fixtures}
+  no-cancel-alias-check: {status: present, owner_artifact: spec-index-validation}
+  no-network-schema-loader-test: {status: planned, owner_artifact: conformance-fixtures}
+  offline-ref-resolution-test: {status: planned, owner_artifact: conformance-fixtures}
+  openapi-canonical-path-check: {status: planned, owner_artifact: conformance-fixtures}
+  package-reference-closure-test: {status: planned, owner_artifact: conformance-fixtures}
+  required-extension-subset-test: {status: planned, owner_artifact: conformance-fixtures}
+  schema-declaration-one-of-test: {status: planned, owner_artifact: conformance-fixtures}
+  security-sensitive-unknown-field-fixtures: {status: planned, owner_artifact: conformance-fixtures}
+  ssrf-and-dns-rebinding-suite: {status: planned, owner_artifact: conformance-fixtures}
+  standalone-conformance-test: {status: planned, owner_artifact: conformance-fixtures}
+  standalone-quickstart-test: {status: planned, owner_artifact: quickstart}
+  strict-authoring-negative-fixtures: {status: planned, owner_artifact: conformance-fixtures}
+  terminal-immutability-test: {status: planned, owner_artifact: state-machine-fixtures}
+  traversal-and-remote-ref-negative-test: {status: planned, owner_artifact: conformance-fixtures}
+  w3c-traceparent-semantic-vectors: {status: planned, owner_artifact: conformance-fixtures}
+  worker-client-contract-test: {status: planned, owner_artifact: conformance-fixtures}
+
 conflicts:
   - id: CF-001
     title: strict-authoring-vs-forward-compatible-consumer
@@ -104,9 +144,13 @@ conflicts:
     status: resolved
     implementation_state: documentation-fixed-transport-planned
     decisions: [D-049]
-    resolution: "v1 上报 Event Batch 的唯一规范路径是 `POST /v1/agent-runs/{run_id}/events:batch`。"
-    repair_locations: [run-streaming-specification, openapi-agent-runtime, asyncapi-agent-events, sdk-bundle]
-    verification: [openapi-canonical-path-check, event-batch-contract-test]
+    resolution: >-
+      v1 上报 Event Batch 的唯一规范路径是
+      `POST /v1/agent-runs/{run_id}/events:batch`。RunRequest Delivery 和 Event Session
+      响应都必须使用 `event_batch_url` 携带该端点，禁止旧
+      `event_sink` 指向 `/events`。
+    repair_locations: [protocol-specification, run-streaming-specification, openapi-agent-runtime, asyncapi-agent-events, sdk-bundle]
+    verification: [canonical-event-batch-binding-check, legacy-event-sink-negative-check, event-batch-contract-test]
 
   - id: CF-010
     title: cancel-path-vs-command
@@ -114,10 +158,13 @@ conflicts:
     implementation_state: documentation-fixed-transport-planned
     decisions: [D-049]
     resolution: >-
-      v1 取消只通过 `POST /v1/runs/{run_id}/commands` 提交幂等 `run.cancel` Command。
-      Accepted 响应返回 `commands_url`，不再声明 `/cancel` 第二条路径。
-    repair_locations: [run-streaming-specification, openapi-agent-runtime, sdk-bundle]
-    verification: [cancel-command-contract-test, no-cancel-alias-check]
+      `run.cancel` 只有一套 Command 载荷和状态语义，但按信任边界有两个传输绑定：
+      外部 Caller 到 Control Plane 使用 `POST /v1/agent-runs/{run_id}/commands`；
+      Control Plane/已授权可信调用方到 Direct Runtime 使用
+      `POST /v1/runs/{run_id}/commands`。Accepted 响应返回 Runtime `commands_url`，
+      v1 禁止 `/cancel` 别名。
+    repair_locations: [protocol-specification, run-streaming-specification, openapi-agent-runtime, sdk-bundle]
+    verification: [control-plane-command-binding-check, direct-runtime-command-binding-check, cancel-command-contract-test, no-cancel-alias-check]
 
   - id: CF-011
     title: session-and-attempt-id-prefixes

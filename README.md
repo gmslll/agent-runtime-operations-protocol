@@ -53,7 +53,7 @@ A2A / MCP / ARD 互操作 Adapter
 9. [公共项目与采用策略](docs/PUBLIC_PROJECT_AND_ADOPTION.md)
 10. [最终仓库布局](docs/DIRECTORY_STRUCTURE.md)
 11. [实施蓝图](docs/IMPLEMENTATION_BLUEPRINT.md)
-12. [P01–P24 开发与发布计划](docs/DEVELOPMENT_PLAN.md)
+12. [P01–P46 可调度开发与发布计划](docs/DEVELOPMENT_PLAN.md)
 13. [架构决策与发布配置](docs/DECISIONS.md)
 14. [机器可读制品目录](spec/artifact-manifest.yaml)
 15. [不可变需求映射](spec/requirements.yaml)
@@ -83,7 +83,9 @@ AROP 的权威顺序为：`DECISIONS` 约束 → 领域规范与状态机 Fixtur
 
 ## 当前状态
 
-当前处于 Protocol v1 设计冻结和仓库基线阶段，已经开始第一批 Schema、Fixture 和 Go Reference Control Plane 基线实现。核心架构、wire 语义、Apache-2.0 许可证、GitHub/Go Module、SDK/CLI 首选命名和治理方式已经确认；项目域名、包注册表所有权和初始维护者名单仍需填写。在这些发布配置完成前不发布稳定软件包。
+当前是 **Protocol v1 规划候选**：P01 权威/元数据基线与 P02 可调度蓝图候选已完成，正在等待 P03 重新独立审计和 P04 用户明确确认；此前不执行目录重构或新协议行为实现。现有首批 Schema、Fixture 和 Go 基线仅是起点，不表示规划已冻结或 v1 已可发布。
+
+项目域名、包注册表所有权和初始维护者名单仍属 P40 真实外部 Gate，未完成前不发布稳定软件包。
 
 预发布源码暂存于私有仓库 [`gmslll/agent-runtime-operations-protocol`](https://github.com/gmslll/agent-runtime-operations-protocol)，完成公开发布配置和安全入口后再转为公开。
 
@@ -96,7 +98,11 @@ make blueprint-check
 make validate
 ```
 
-`make spec-index-check` 校验权威链、机器目录、14 条不可变需求、冲突、Decision ID 和本地引用闭包。`make blueprint-check` 校验双 Go Module、最终布局、24 阶段 DAG、Gate/发布顺序、需求映射、Console 隔离与报告约定。两者都产生 JSON/JUnit 报告，并由 `make validate` 强制执行。
+`make spec-index-check` 校验权威链、机器目录/DAG、14 条不可变需求、冲突、Decision ID 和本地引用闭包。`make blueprint-check` 动态校验双 Go Module、最终布局、P01..Pn 连续阶段 DAG、paseo-epic type、单组件范围、Gate/v1 RC/发布顺序、需求映射和报告约定。两者都产生 JSON/JUnit 报告，并由 `make validate` 强制执行。
+
+P03/P04 另使用仓库外证据：`make planning-audit EVIDENCE=...` 和 `make gate-check GATE=P04 EVIDENCE=...`。两个工具只校验证据和生成脱敏摘要，不会自动伪造审计或用户批准。
+
+检查器内的固定要求和反例只用于防止仓库漂移，不能替代 P03 的独立计划审计。报告会记录精确 HEAD、dirty 状态、实际命令、Node/Go/OS、输入 Digest、Checker Digest 和 Testcase 数。
 
 计算 Manifest Digest：
 

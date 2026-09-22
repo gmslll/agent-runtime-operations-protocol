@@ -289,7 +289,7 @@ DataRef 表示受控业务资源范围；SecretRef 表示通过凭据代理解�
     "timezone": "Asia/Shanghai"
   },
   "delivery": {
-    "event_sink": "https://control.example/v1/agent-runs/run_01/events",
+    "event_batch_url": "https://control.example/v1/agent-runs/run_01/events:batch",
     "event_session_url": "https://control.example/v1/agent-runs/run_01/event-session",
     "response_mode": "stream"
   },
@@ -428,6 +428,13 @@ Run 可以有多个 Attempt，但同一时刻只允许一个 Attempt 拥有有�
 - `session.close`
 
 Command 具有独立 `command_id` 和幂等语义。Agent 必须返回 Command Accepted/Rejected，并通过事件报告实际状态变化。
+
+同一 Command 载荷和状态语义有两个明确的 HTTP 传输绑定：
+
+- 外部 Caller 请求 Control Plane：`POST /v1/agent-runs/{run_id}/commands`。
+- Control Plane 或已授权可信调用方请求 Direct Runtime：`POST /v1/runs/{run_id}/commands`。
+
+`run.cancel` 也使用这两个绑定，v1 禁止额外的 `/cancel` 别名。
 
 收到 Cancel 不等于已经取消；只有 `run.cancelled` 终态表示执行已停止。
 

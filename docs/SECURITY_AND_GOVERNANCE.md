@@ -71,7 +71,7 @@ Run Token 默认使用 ES256 非对称签名。Control Plane 必须通过 HTTPS 
   "skill_id": "default",
   "deployment_id": "dep_01...",
   "fencing_token": 43,
-  "channel": "feishu_bot",
+  "channel": "enterprise_bot",
   "scope": ["agent:invoke", "run:stream"],
   "iat": 1790000000,
   "nbf": 1790000000,

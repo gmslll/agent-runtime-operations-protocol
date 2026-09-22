@@ -92,6 +92,41 @@ artifacts:
     kind: decision-evidence
     authority: evidence
     derives_from: [decisions]
+  - id: artifact-catalog-meta-schema
+    path: spec/schemas/artifact-manifest.schema.json
+    status: present
+    kind: planning-json-schema
+    authority: structure
+    language: language-neutral
+    derives_from: [artifact-catalog]
+  - id: immutable-requirements-meta-schema
+    path: spec/schemas/requirements.schema.json
+    status: present
+    kind: planning-json-schema
+    authority: structure
+    language: language-neutral
+    derives_from: [immutable-requirements]
+  - id: conflict-ledger-meta-schema
+    path: spec/schemas/conflicts.schema.json
+    status: present
+    kind: planning-json-schema
+    authority: structure
+    language: language-neutral
+    derives_from: [conflict-ledger]
+  - id: planning-audit-evidence-schema
+    path: spec/schemas/planning-audit-evidence.schema.json
+    status: present
+    kind: planning-json-schema
+    authority: structure
+    language: language-neutral
+    derives_from: [development-plan, immutable-requirements]
+  - id: user-gate-evidence-schema
+    path: spec/schemas/user-gate-evidence.schema.json
+    status: present
+    kind: planning-json-schema
+    authority: structure
+    language: language-neutral
+    derives_from: [development-plan]
   - id: decisions
     path: docs/DECISIONS.md
     status: present
@@ -337,31 +372,62 @@ artifacts:
     status: planned
     kind: openapi
     authority: transport
+    owner: delivery-http
+    phase: P20
+    tests: [make-test-direct-proxy]
+    exposure: public-contract
+    capabilities: [agent-runtime-direct, agent-runtime-proxy]
     derives_from: [schema-bundle, run-streaming-specification]
+  - id: openapi-control-plane
+    path: openapi/control-plane-v1.yaml
+    status: planned
+    kind: openapi
+    authority: transport
+    owner: publication-contracts
+    phase: P11
+    tests: [make-test-publication-contracts]
+    exposure: public-contract
+    capabilities: [publication, run-control, jwks-discovery, event-session-exchange, asset-token-exchange]
+    derives_from: [schema-bundle, protocol-specification, run-streaming-specification, security-governance-specification]
   - id: openapi-registry-runtime
     path: openapi/registry-runtime-v1.yaml
     status: planned
     kind: openapi
     authority: transport
+    owner: registry-api
+    phase: P14
+    tests: [make-test-registry-api]
+    exposure: public-contract
+    capabilities: [runtime-registration, lease-keepalive, runtime-drain]
     derives_from: [schema-bundle, registry-specification]
   - id: openapi-discovery-runtime
     path: openapi/discovery-runtime-v1.yaml
     status: planned
     kind: openapi
     authority: transport
+    owner: registry-api
+    phase: P14
+    tests: [make-test-registry-api]
+    exposure: public-contract
+    capabilities: [discovery-snapshot, discovery-watch]
     derives_from: [schema-bundle, registry-specification]
   - id: openapi-worker-runtime
     path: openapi/worker-runtime-v1.yaml
     status: planned
     kind: openapi
     authority: transport
+    owner: worker-service
+    phase: P23
+    tests: [make-test-worker-service]
+    exposure: public-contract
+    capabilities: [worker-claim, attempt-lease, attempt-complete]
     derives_from: [schema-bundle, run-streaming-specification]
   - id: openapi-bundle
     path: openapi
     status: planned
     kind: bundle
     authority: transport
-    derives_from: [openapi-agent-runtime, openapi-registry-runtime, openapi-discovery-runtime, openapi-worker-runtime]
+    derives_from: [openapi-control-plane, openapi-agent-runtime, openapi-registry-runtime, openapi-discovery-runtime, openapi-worker-runtime]
   - id: asyncapi-agent-events
     path: asyncapi/agent-events-v1.yaml
     status: planned
@@ -447,43 +513,50 @@ artifacts:
     status: planned
     kind: generated-code
     authority: derived
+    language: go
     derives_from: [schema-bundle]
   - id: generated-python-models
     path: sdk/python/src/arop/generated
     status: planned
     kind: generated-code
     authority: derived
+    language: python
     derives_from: [schema-bundle]
   - id: generated-typescript-models
     path: sdk/typescript/src/generated
     status: planned
     kind: generated-code
     authority: derived
+    language: typescript
     derives_from: [schema-bundle]
   - id: sdk-go
     path: sdk/go
     status: planned
     kind: sdk
     authority: derived
+    language: go
     derives_from: [generated-models, openapi-bundle, asyncapi-bundle]
   - id: go-manifest-library-baseline
     path: sdk/go/protocol/manifest
     status: present
     kind: sdk-baseline
     authority: implementation
+    language: go
     derives_from: [schema-manifest, manifest-digest-vectors]
   - id: sdk-python
     path: sdk/python
     status: planned
     kind: sdk
     authority: derived
-    derives_from: [generated-models, openapi-bundle, asyncapi-bundle]
+    language: python
+    derives_from: [generated-python-models, openapi-bundle, asyncapi-bundle]
   - id: sdk-typescript
     path: sdk/typescript
     status: planned
     kind: sdk
     authority: derived
-    derives_from: [generated-models, openapi-bundle, asyncapi-bundle]
+    language: typescript
+    derives_from: [generated-typescript-models, openapi-bundle, asyncapi-bundle]
   - id: sdk-bundle
     path: sdk
     status: planned
@@ -496,6 +569,17 @@ artifacts:
     kind: go-reference-implementation
     authority: implementation
     derives_from: [schema-bundle, openapi-bundle, asyncapi-bundle, state-machine-fixtures]
+  - id: reference-secret-exchange
+    path: reference/control-plane/internal/adapters/secrets
+    status: planned
+    kind: reference-port-adapter
+    authority: implementation
+    owner: control-plane-security-foundation
+    phase: P10
+    tests: [make-test-security-foundation, make-test-publication-contracts]
+    exposure: reference-only
+    capabilities: [secret-ref-resolution]
+    derives_from: [reference-control-plane, security-governance-specification]
   - id: sqlite-migrations
     path: reference/control-plane/migrations/sqlite
     status: planned
@@ -544,6 +628,18 @@ artifacts:
     kind: tooling
     authority: derived
     derives_from: [schema-bundle, manifest-fixtures, manifest-digest-vectors]
+  - id: structured-file-tools
+    path: scripts/lib/repository.mjs
+    status: present
+    kind: tooling
+    authority: derived
+    derives_from: [artifact-catalog-meta-schema, immutable-requirements-meta-schema, conflict-ledger-meta-schema]
+  - id: machine-report-writer
+    path: scripts/lib/report.mjs
+    status: present
+    kind: tooling
+    authority: derived
+    derives_from: [structured-file-tools]
   - id: arop-cli-baseline
     path: cmd/arop
     status: present
@@ -562,6 +658,37 @@ artifacts:
     kind: tooling
     authority: derived
     derives_from: [schema-bundle, generated-models, generated-python-models, generated-typescript-models]
+  - id: release-engineering-toolchain
+    path: scripts/release
+    status: planned
+    kind: release-tooling
+    authority: implementation
+    owner: release-engineering
+    phase: P37
+    tests: [make-build-release-toolchain]
+    exposure: repository-internal
+    capabilities: [temporary-go-proxy, multi-language-packaging, container-build, sbom, provenance, signing-orchestration]
+    derives_from: [schema-bundle, sdk-bundle, reference-control-plane, portable-conformance-runner, quickstart, production-reference-deployment]
+  - id: release-toolchain-reports
+    path: build/reports/P37
+    status: planned
+    kind: machine-reports
+    authority: derived
+    owner: release-engineering
+    phase: P37
+    tests: [make-build-release-toolchain]
+    exposure: repository-internal
+    derives_from: [release-engineering-toolchain, machine-report-writer]
+  - id: release-dry-run-reports
+    path: build/reports/P38
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    owner: release-dry-run-verification
+    phase: P38
+    tests: [make-release-dry-run]
+    exposure: repository-internal
+    derives_from: [release-engineering-toolchain, release-toolchain-reports, machine-report-writer]
   - id: ci-validation
     path: .github/workflows/validate.yml
     status: present
@@ -573,16 +700,68 @@ artifacts:
     status: present
     kind: tooling
     authority: derived
-    derives_from: [artifact-catalog, immutable-requirements, conflict-ledger]
+    derives_from: [artifact-catalog, immutable-requirements, conflict-ledger, artifact-catalog-meta-schema, immutable-requirements-meta-schema, conflict-ledger-meta-schema, machine-report-writer]
+  - id: spec-index-check-reports
+    path: build/reports/P01
+    status: planned
+    kind: machine-reports
+    authority: derived
+    derives_from: [spec-index-validation]
   - id: blueprint-validation
     path: scripts/blueprint-check.mjs
     status: present
     kind: tooling
     authority: derived
-    derives_from: [implementation-blueprint, repository-layout, development-plan, immutable-requirements]
+    derives_from: [implementation-blueprint, repository-layout, development-plan, immutable-requirements, machine-report-writer]
   - id: blueprint-check-reports
-    path: build/reports/blueprint-check
+    path: build/reports/P02
     status: planned
     kind: machine-reports
     authority: derived
     derives_from: [blueprint-validation]
+  - id: planning-audit-validation
+    path: scripts/planning-audit.mjs
+    status: present
+    kind: tooling
+    authority: derived
+    owner: independent-reviewer
+    phase: P03
+    tests: [make-planning-audit]
+    exposure: repository-internal
+    derives_from: [planning-audit-evidence-schema, development-plan, immutable-requirements, machine-report-writer]
+  - id: planning-audit-reports
+    path: build/reports/P03
+    status: planned
+    kind: machine-reports
+    authority: derived
+    derives_from: [planning-audit-validation]
+  - id: planning-audit-signed-summary
+    path: spec/evidence/P03-planning-audit-summary.json
+    status: planned
+    kind: signed-evidence-summary
+    authority: evidence
+    exposure: repository-internal
+    derives_from: [planning-audit-validation, planning-audit-reports]
+  - id: user-gate-validation
+    path: scripts/gate-check.mjs
+    status: present
+    kind: tooling
+    authority: derived
+    owner: project-owner
+    phase: P04
+    tests: [make-gate-check]
+    exposure: repository-internal
+    derives_from: [user-gate-evidence-schema, development-plan, planning-audit-reports, machine-report-writer]
+  - id: user-gate-reports
+    path: build/reports/P04
+    status: planned
+    kind: machine-reports
+    authority: derived
+    derives_from: [user-gate-validation]
+  - id: user-gate-signed-summary
+    path: spec/evidence/P04-user-gate-summary.json
+    status: planned
+    kind: signed-evidence-summary
+    authority: evidence
+    exposure: repository-internal
+    derives_from: [user-gate-validation, user-gate-reports, planning-audit-signed-summary]

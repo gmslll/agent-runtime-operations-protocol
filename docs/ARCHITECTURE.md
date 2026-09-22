@@ -8,7 +8,7 @@ updated: 2026-09-22
 
 Agent Runtime Operations Protocol（AROP）是企业 Agent 能力接入任意兼容 Control Plane 的稳定边界。
 
-它把员工或团队创建的 LLM Agent、普通 HTTP Agent、cc-connect/Codex Agent、内网 Worker 和后续外部 A2A Agent，统一为可发布、可发现、可授权、可调用、可追踪的企业能力。
+它把员工或团队创建的 LLM Agent、普通 HTTP Agent、本地/桌面 Agent Worker、内网 Worker 和后续外部 A2A Agent，统一为可发布、可发现、可授权、可调用、可追踪的企业能力。
 
 协议不负责实现 Agent 的推理、工作流和业务逻辑，也不替代 MCP、A2A、ARD、Agent 框架或模型 API。它负责定义这些实现如何进入一个可注册、可调度、可恢复、可追踪和可治理的运行平面。
 
@@ -35,7 +35,7 @@ Agent Runtime Operations Protocol（AROP）是企业 Agent 能力接入任意兼
 | --- | --- | --- |
 | `direct` | Caller 直接请求 Agent Endpoint | Bot Gateway、可信后端、BFF、低延迟流式调用 |
 | `proxy` | Caller 经 Control Plane 转发 | 浏览器默认、强审计、隐藏内网地址 |
-| `worker_pull` | Worker 主动从 Control Plane 领取 | cc-connect、Mac mini、企业内网 Agent |
+| `worker_pull` | Worker 主动从 Control Plane 领取 | 桌面节点、企业内网 Agent、无入站端点的执行器 |
 
 “所有调用经过 Control Plane”表示所有新调用必须经过授权、创建 Run 和签发 Ticket，不表示所有业务字节都经过 Console。
 
@@ -109,7 +109,7 @@ Core
 └───────┬─────────────────┬──────────────────────┬───────┘
         │ Ticket/Proxy    │ Claim                │ Events
         ▼                 ▼                      ▲
-  Direct HTTP Agent  Pull Worker / cc-connect    │
+  Direct HTTP Agent  Generic Pull Worker         │
         │                 │                      │
         └──────── Direct / Proxy execution ───────┘
 
@@ -306,4 +306,4 @@ Reference Control Plane、Registry、Dispatcher、Run/Event Ledger 和服务端 
 
 参考实现采用根公共 Go module 与唯一 `reference/control-plane` 嵌套 Go module；语言中立 Conformance Fixture 留在顶层，portable runner 留在根 module。详细组件边界、数据库语义、事务、codegen、测试和发布 DAG 见 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md)；最终物理布局见 [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)；唯一执行顺序见 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)。
 
-`kinglucky-agent-console` 是未来下游实现，不在本仓库 P01–P24 实施范围。Reference Control Plane、Quickstart 和 Conformance 必须独立运行；任何特定 Worker 产品都通过通用 Worker Pull/HTTP/A2A/MCP 边界接入，本仓库不提供厂商专属 Adapter。
+`kinglucky-agent-console` 是未来下游实现，不在本仓库 P01–P46 实施范围。Reference Control Plane、Quickstart 和 Conformance 必须独立运行；任何特定 Worker 产品都通过通用 Worker Pull/HTTP/A2A/MCP 边界接入，本仓库不提供厂商专属 Adapter。

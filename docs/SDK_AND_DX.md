@@ -46,13 +46,13 @@ Conformance Kit
   Mock Control Plane、测试向量、故障注入
 ```
 
-# 3. 公共 v0.1 语言
+# 3. v1 首发语言
 
 ## 3.1 Go
 
 用途：
 
-- Control Plane 和 Console 引用协议类型。
+- 任意兼容 Control Plane 引用协议类型。
 - Go HTTP Agent。
 - Gateway/BFF/Worker。
 - 契约测试工具。
@@ -73,7 +73,7 @@ Conformance Kit
 - Web/BFF Streaming Consumer。
 - SSE、Schema 和 UI 类型。
 
-公共 v0.1 至少提供 TypeScript Generated Models、SSE Consumer 和 Event Reducer；完整 Node Provider 可以随后实现。所有语言必须使用同一 Schema Source。
+v1 首发至少提供 TypeScript Generated Models、SSE Consumer 和 Event Reducer；完整 Node Provider 可以随后实现。所有语言必须使用同一 Schema Source。
 
 # 4. Provider SDK API 示例
 
@@ -304,7 +304,7 @@ sdk/typescript/src/consumer/       # handwritten
 
 Python 和 TypeScript 的最终生成路径分别是 `sdk/python/src/arop/generated/` 和 `sdk/typescript/src/generated/`；Go 是 `sdk/go/generated/`。CI 必须验证重新生成后无未提交差异。
 
-全量 codegen 前必须先执行代表 Schema spike，验证 union、nullable/optional、format、`additionalProperties`、Extension 与离线 `$ref` 在 Go/Python/TypeScript 中的一致映射。严格作者校验与前向兼容消费模式必须是显式独立 API，不能用一个全局开关混用。完整 pipeline 和 module 边界见 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md)。
+P07 全量 codegen 前必须先执行代表 Schema spike，验证 union、nullable/optional、format、`additionalProperties`、Extension 与离线 `$ref` 在 Go/Python/TypeScript 中的一致映射。严格作者校验与前向兼容消费模式必须是显式独立 API，不能用一个全局开关混用。完整 pipeline 和 module 边界见 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md)。
 
 # 12. SDK 稳定性
 

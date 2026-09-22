@@ -1,12 +1,12 @@
 ---
 title: Agent Runtime Operations Protocol 仓库布局
-status: frozen-blueprint
+status: review-candidate
 updated: 2026-09-22
 ---
 
 # 1. 用途与权威
 
-本文档是最终目标布局的人类可读视图，用来约束后续物理重构、代码生成和发布。唯一机器可读制品目录是 [`spec/artifact-manifest.yaml`](../spec/artifact-manifest.yaml)；两者不一致时必须先停止实现并修复蓝图，不能在代码中自行选择。
+本文档是最终目标布局的评审候选人类视图，P04 前内容受控但尚未用户批准，用来约束后续物理重构、代码生成和发布。唯一机器可读制品目录是 [`spec/artifact-manifest.yaml`](../spec/artifact-manifest.yaml)；两者不一致时必须先停止实现并修复蓝图，不能在代码中自行选择。
 
 <!-- blueprint-target-tree:v1 -->
 
@@ -20,6 +20,8 @@ agent-runtime-operations-protocol/
 ├── package.json                         # Schema/TypeScript/文档工具链，不是后端运行时
 ├── Makefile
 ├── VERSION
+├── scripts/
+│   └── release/                         # P37 发布工具链：临时 proxy、打包、SBOM/provenance/signing 编排
 │
 ├── docs/                                # 手写规范、决策、蓝图
 │   ├── ARCHITECTURE.md
@@ -36,11 +38,17 @@ agent-runtime-operations-protocol/
 │   ├── DEVELOPMENT_PLAN.md
 │   └── DECISIONS.md
 ├── spec/                                # 机器可读制品索引、需求和冲突台账
+│   └── evidence/                          # 仅脱敏签名摘要；原始外部证据不入库
 ├── rfcs/
 ├── compatibility/
 │
 ├── schemas/                             # 手写结构权威；所有 $ref 离线闭包
 ├── openapi/                             # 手写/受控生成的 HTTP 绑定
+│   ├── control-plane-v1.yaml              # Publication/Run/JWKS/Event Session/Asset Exchange
+│   ├── agent-runtime-v1.yaml               # Direct/Proxy Runtime
+│   ├── registry-runtime-v1.yaml
+│   ├── discovery-runtime-v1.yaml
+│   └── worker-runtime-v1.yaml
 ├── asyncapi/                            # 手写/受控生成的事件与流式绑定
 ├── examples/                            # 黄金样例，不含真实凭据
 │
@@ -111,6 +119,8 @@ agent-runtime-operations-protocol/
 以下是检查器用的路径锚点，是上述树的平铺表达，不是第二份制品目录：
 
 ```text
+openapi/control-plane-v1.yaml
+spec/evidence/
 sdk/go/generated/
 sdk/python/src/arop/
 sdk/typescript/
@@ -138,7 +148,7 @@ deployments/production-reference/
 | `github.com/gmslll/agent-runtime-operations-protocol` | 公共 Go SDK、生成类型、`arop`、`arop-conformance` | 标准库和审核过的公共依赖 | 不得导入 Reference CP `internal` 或数据库驱动 |
 | `github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane` | Go Reference Control Plane 和服务端 Conformance Driver | 精确版本的根公共 module | 不得被根 module 或 SDK 反向导入 |
 
-`conformance/` 只包含语言中立的 Fixture、Scenario 和 Profile，不建第三个 `go.mod`。根 `cmd/arop-conformance` 读取这些资源；Reference Control Plane 的服务端驱动留在嵌套 module 内。`go.work.example` 只是开发便利层，CI 发布测试必须在不启用 `go.work` 的情况下通过。
+`conformance/` 只包含语言中立的 Fixture、Scenario 和 Profile，不建第三个 `go.mod`。根 `cmd/arop-conformance` 读取这些资源；Reference Control Plane 的服务端驱动留在嵌套 module 内。仓库只提交 `go.work.example`，开发者的真实 `go.work` 默认不提交；CI/发布必须在 `GOWORK=off` 下通过，并通过临时 Go proxy 先放入根伪版本/RC 候选，再验证 nested module 的精确版本解析。
 
 # 4. 分层和依赖方向
 
@@ -170,7 +180,7 @@ Reference Control Plane application and adapters
 
 - 第三个 Go module，或为 `conformance/` 单独建 module。
 - Console 数据库、Web UI、组织模型或内部权限实现。
-- 飞书、cc-connect、Codex 或其他厂商专属 Adapter；它们应通过通用 HTTP/Worker/A2A/MCP 边界接入。
+- 任何渠道、桌面执行器、Agent 框架或具体产品的厂商专属 Adapter；它们应通过通用 HTTP/Worker/A2A/MCP 边界接入。
 - 金运专属 wire namespace、真实 Credential 或客户数据。
 - SDK 导入 Reference Control Plane `internal` 包，或将 Reference 内部模型当作公共协议类型。
 - 只有连接金运 Console 才能运行的 Quickstart 或 Conformance。
@@ -191,4 +201,4 @@ CLI: arop
 CLI config: ~/.config/arop/
 ```
 
-上述是预发布命名。项目域名、PyPI/npm 所有权与两名 Maintainer/安全入口在 P19 必须用外部证据确认；P20 再全量生成公共命名空间制品。
+上述是预发布命名。项目域名、PyPI/npm 所有权与两名 Maintainer/安全入口在 P40 必须用外部证据确认；P41 再全量生成公共命名空间制品。

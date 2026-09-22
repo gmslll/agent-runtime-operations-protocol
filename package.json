@@ -11,6 +11,8 @@
     "validate": "node scripts/validate.mjs",
     "spec:index-check": "node scripts/spec-index-check.mjs",
     "blueprint:check": "node scripts/blueprint-check.mjs",
+    "planning:audit": "node scripts/planning-audit.mjs",
+    "gate:check": "node scripts/gate-check.mjs",
     "manifest:digest": "node scripts/manifest-digest.mjs"
   },
   "devDependencies": {

@@ -169,7 +169,7 @@ Control Plane 验证当前 Attempt 确实分配给该 Deployment 后返回：
 
 ```json
 {
-  "event_sink": "https://control.example/v1/agent-runs/run_01/events",
+  "event_batch_url": "https://control.example/v1/agent-runs/run_01/events:batch",
   "event_token": "<short-lived-event-token>",
   "expires_at": "2026-09-21T08:10:00Z",
   "max_batch_events": 100,
@@ -385,6 +385,8 @@ replay_window_seconds
 
 # 14. Command 与人工交互
 
+外部 Caller 把 Command 提交给 Control Plane：
+
 ```http
 POST /v1/agent-runs/{run_id}/commands
 Idempotency-Key: <command-id>
@@ -400,6 +402,15 @@ Idempotency-Key: <command-id>
   }
 }
 ```
+
+Control Plane 或已授权可信调用方向 Direct Runtime 传递同一 Command 载荷：
+
+```http
+POST /v1/runs/{run_id}/commands
+Idempotency-Key: <command-id>
+```
+
+两个绑定共用 `command_id`、`expected_state_version`、幂等和状态迁移语义，不是两种 Command 协议。
 
 Command 必须记录真实批准主体和渠道。原始调用者、批准者和执行 Agent 可以是不同身份。
 
@@ -419,7 +430,7 @@ running
 
 Agent 不支持强制终止时必须明确 `cancellation=best_effort`。
 
-v1 取消不定义独立 `/cancel` 路径。Direct Agent 与 Control Plane 都通过 `POST /v1/runs/{run_id}/commands` 提交幂等 `run.cancel` Command；Agent Accepted 响应因此返回 `commands_url`。
+v1 取消不定义独立 `/cancel` 路径。外部 Caller 向 Control Plane 使用 `POST /v1/agent-runs/{run_id}/commands`；Control Plane 或已授权可信调用方向 Direct Runtime 使用 `POST /v1/runs/{run_id}/commands`。两者提交同一幂等 `run.cancel` Command；Agent Accepted 响应因此返回 `commands_url`。
 
 ## 15.2 Deadline
 

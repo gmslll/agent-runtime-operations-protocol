@@ -1,7 +1,6 @@
 schema_version: 1
 updated: 2026-09-22
 source: epic-immutable-requirements
-external_evidence_gate: "Never fake external partner/independent implementation conditions as complete."
 immutability_rule: >-
   本文件中的 statement 是实施期不可静默改写的原始要求。若用户后续明确变更，
   必须新增变更记录、更新 Decision 和所有受影响映射，不得直接覆盖历史。
@@ -13,67 +12,67 @@ requirements:
     phases: [P01, P02, P03, P04]
     tests: [make-spec-index-check, make-blueprint-check, make-planning-audit, make-gate-check]
   - id: IR-02
-    statement: "Protocol repo vendor-neutral; no dependency on Console/Feishu/cc-connect/framework."
-    artifacts: [architecture, protocol-specification, security-governance-specification, sdk-dx-specification]
-    phases: [P01, P02, P05, P07, P08, P09, P10, P11, P13, P14, P15]
-    tests: [make-spec-index-check, make-blueprint-check, make-test-go-workspace, make-test-publication, make-test-registry-all, make-test-run-ticket, make-test-direct-proxy-streaming, make-test-worker-pull, make-interoperability, make-test-sdks, make-quickstart-smoke, make-conformance]
+    statement: "Protocol repo vendor-neutral; no dependency on Console/Feishu/cc-connect/framework. Do not modify kinglucky-agent-console in this implementation."
+    artifacts: [architecture, protocol-specification, security-governance-specification, sdk-dx-specification, immutable-requirements, development-plan]
+    phases: [P01, P02, P05, P10, P11, P20, P24, P26, P27, P28, P29, P30, P31, P32, P33, P35, P37, P38, P39]
+    tests: [make-spec-index-check, make-blueprint-check, make-test-go-workspace, make-test-security-foundation, make-test-publication-contracts, make-test-direct-proxy, make-test-go-worker-sdk, make-test-python-provider, make-test-typescript-consumer, make-test-interop-a2a, make-test-interop-mcp, make-test-interop-ard, make-test-interop-observability, make-test-portable-conformance, make-test-server-conformance, make-quickstart-smoke, make-build-release-toolchain, make-release-dry-run, make-validate-all]
   - id: IR-03
-    statement: "Do not modify kinglucky-agent-console in this implementation."
-    artifacts: [immutable-requirements, development-plan]
-    phases: [P01, P02, P18]
-    tests: [make-spec-index-check, make-blueprint-check, make-validate-all]
-  - id: IR-04
     statement: "Go for Reference Control Plane, Registry, Dispatcher, Run/Event Ledger, server Conformance; Node only schema/TS tooling, Python Provider SDK, TS Consumer."
     artifacts: [architecture, sdk-dx-specification, reference-control-plane, sdk-go, sdk-python, sdk-typescript]
-    phases: [P02, P05, P07, P08, P09, P10, P11, P12, P14, P15]
-    tests: [make-blueprint-check, make-test-go-workspace, make-test-publication, make-test-registry-all, make-test-run-ticket, make-test-direct-proxy-streaming, make-test-worker-pull, make-test-operations-security, make-test-sdks, make-conformance]
-  - id: IR-05
+    phases: [P02, P05, P08, P09, P10, P12, P13, P14, P15, P17, P18, P19, P20, P21, P23, P25, P26, P27, P32, P33, P34, P37, P38]
+    tests: [make-blueprint-check, make-test-go-workspace, make-test-control-plane-platform, make-test-storage-migrations, make-test-security-foundation, make-test-publication-service, make-test-registry-core, make-test-registry-api, make-test-registry-recovery, make-test-run-lifecycle, make-test-dispatch-ticket, make-test-event-ledger, make-test-direct-proxy, make-test-streaming-resume, make-test-worker-service, make-verify-operations-security, make-test-python-provider, make-test-typescript-consumer, make-test-portable-conformance, make-test-server-conformance, make-test-fault-ha-drivers, make-build-release-toolchain, make-release-dry-run]
+  - id: IR-04
     statement: "Full lifecycle: publish, register, discover, auth, Run/Attempt, Direct/Proxy/Worker Pull, structured streaming, result, usage, audit, trace, drain/upgrade."
     artifacts: [architecture, protocol-specification, registry-specification, run-streaming-specification, reliability-specification]
-    phases: [P07, P08, P09, P10, P11, P12, P14, P15]
-    tests: [make-test-publication, make-test-registry-all, make-test-run-ticket, make-test-direct-proxy-streaming, make-test-worker-pull, make-test-operations-security, make-test-sdks, make-conformance]
-  - id: IR-06
+    phases: [P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P25, P35]
+    tests: [make-test-publication-contracts, make-test-publication-service, make-test-registry-core, make-test-registry-api, make-test-registry-recovery, make-verify-registry, make-test-run-lifecycle, make-test-dispatch-ticket, make-test-event-ledger, make-test-direct-proxy, make-test-streaming-resume, make-verify-run-delivery, make-test-worker-service, make-test-go-worker-sdk, make-verify-operations-security, make-quickstart-smoke]
+  - id: IR-05
     statement: "All new calls pass Control Plane auth/create Run; trusted service can Direct after ticket; browser v1 BFF/Proxy."
-    artifacts: [architecture, run-streaming-specification, security-governance-specification, openapi-agent-runtime]
-    phases: [P09, P10]
-    tests: [make-test-run-ticket, make-test-direct-proxy-streaming]
-  - id: IR-07
+    artifacts: [architecture, run-streaming-specification, security-governance-specification, openapi-control-plane, openapi-agent-runtime]
+    phases: [P17, P18, P20, P27]
+    tests: [make-test-run-lifecycle, make-test-dispatch-ticket, make-test-direct-proxy, make-test-typescript-consumer]
+  - id: IR-06
     statement: "Self-built registry inspired by Lease/Revision/Watch/CAS/Fencing, no etcd/Nacos dependency."
     artifacts: [registry-specification, reliability-specification, openapi-registry-runtime, openapi-discovery-runtime]
-    phases: [P08]
-    tests: [make-test-registry-all]
-  - id: IR-08
+    phases: [P13, P14, P15, P16]
+    tests: [make-test-registry-core, make-test-registry-api, make-test-registry-recovery, make-verify-registry]
+  - id: IR-07
     statement: "At-least-once, idempotency, durable inbox/outbox, effect_id, immutable terminal state, final Snapshot."
     artifacts: [protocol-specification, run-streaming-specification, reliability-specification, state-machine-fixtures]
-    phases: [P06, P09, P10, P11, P16, P18]
-    tests: [make-test-foundation, make-test-run-ticket, make-test-direct-proxy-streaming, make-test-worker-pull, make-fault-test, make-ha-test, make-validate-all]
-  - id: IR-09
+    phases: [P17, P19, P20, P21, P23, P24, P34, P36]
+    tests: [make-test-run-lifecycle, make-test-event-ledger, make-test-direct-proxy, make-test-streaming-resume, make-test-worker-service, make-test-go-worker-sdk, make-test-fault-ha-drivers, make-verify-resilience]
+  - id: IR-08
     statement: "SDKs in protocol repo, independent Quickstart/Conformance without Console."
     artifacts: [sdk-dx-specification, sdk-bundle, quickstart, conformance-fixtures]
-    phases: [P05, P14, P15]
-    tests: [make-test-go-workspace, make-test-sdks, make-quickstart-smoke, make-conformance]
-  - id: IR-10
+    phases: [P24, P26, P27, P32, P33, P35]
+    tests: [make-test-go-worker-sdk, make-test-python-provider, make-test-typescript-consumer, make-test-portable-conformance, make-test-server-conformance, make-quickstart-smoke]
+  - id: IR-09
     statement: "Core/Profile/Extension layers; interop A2A/MCP/ARD/CloudEvents/OTel."
     artifacts: [architecture, protocol-specification, interoperability-specification, interoperability-adapters]
-    phases: [P13, P15]
-    tests: [make-interoperability, make-conformance]
-  - id: IR-11
+    phases: [P28, P29, P30, P31]
+    tests: [make-test-interop-a2a, make-test-interop-mcp, make-test-interop-ard, make-test-interop-observability]
+  - id: IR-10
     statement: "SQLite Quickstart and PostgreSQL production reference have identical semantics."
     artifacts: [reliability-specification, reference-control-plane, quickstart, conformance-fixtures]
-    phases: [P07, P08, P09, P10, P11, P12, P14, P16]
-    tests: [make-test-publication, make-test-registry-all, make-test-run-ticket, make-test-direct-proxy-streaming, make-test-worker-pull, make-test-operations-security, make-quickstart-smoke, make-migration-test, make-ha-test]
-  - id: IR-12
+    phases: [P09, P12, P13, P17, P19, P23, P25, P35, P36]
+    tests: [make-test-storage-migrations, make-test-publication-service, make-test-registry-core, make-test-run-lifecycle, make-test-event-ledger, make-test-worker-service, make-verify-operations-security, make-quickstart-smoke, make-verify-resilience]
+  - id: IR-11
     statement: "Final layout clearly separates handwritten sources, generated code, public SDKs, internal Go backend, migrations, reference, conformance, deployments, CI."
     artifacts: [repository-layout, artifact-catalog, generated-models, sdk-bundle, reference-control-plane, conformance-fixtures, quickstart]
     phases: [P02, P05]
     tests: [make-blueprint-check, make-test-go-workspace]
-  - id: IR-13
+  - id: IR-12
     statement: "Public release externally gated by domain, package ownership, two maintainers/security entry."
     artifacts: [decisions, public-adoption-policy, compatibility-matrix]
-    phases: [P19, P20, P21, P22, P23, P24]
-    tests: [make-external-config-gate, make-regenerate-public, make-validate-all, make-release-rc, make-external-evidence-gate, make-v1-freeze-check, make-release-v1]
-  - id: IR-14
+    phases: [P40, P41, P42, P43, P44, P45, P46]
+    tests: [make-external-config-gate, make-regenerate-public, make-verify-public-namespace, make-deliver-v1-rc, make-external-evidence-gate, make-verify-v1-freeze, make-deliver-v1]
+  - id: IR-13
     statement: "Machine-test acceptance including cross-language, fault injection, HA, replay/out-of-order/cancel/fencing."
-    artifacts: [conformance-fixtures, conformance-reports, compatibility-matrix, state-machine-fixtures]
-    phases: [P10, P11, P15, P16, P18, P23]
-    tests: [make-test-direct-proxy-streaming, make-test-worker-pull, make-conformance, make-migration-test, make-fault-test, make-ha-test, make-validate-all, make-v1-freeze-check]
+    artifacts: [conformance-fixtures, conformance-reports, compatibility-matrix, state-machine-fixtures, release-engineering-toolchain, release-dry-run-reports]
+    phases: [P06, P07, P16, P22, P25, P26, P27, P32, P33, P34, P36, P37, P38, P39, P42, P45, P46]
+    tests: [make-test-protocol-foundation, make-codegen-spike, make-verify-registry, make-verify-run-delivery, make-verify-operations-security, make-test-python-provider, make-test-typescript-consumer, make-test-portable-conformance, make-test-server-conformance, make-test-fault-ha-drivers, make-verify-resilience, make-build-release-toolchain, make-release-dry-run, make-validate-all, make-verify-public-namespace, make-verify-v1-freeze, make-deliver-v1]
+  - id: IR-14
+    statement: "Never fake external partner/independent implementation conditions as complete."
+    artifacts: [decisions, public-adoption-policy, compatibility-matrix, immutable-requirements]
+    phases: [P03, P04, P39, P40, P44, P45, P46]
+    tests: [make-planning-audit, make-gate-check, make-validate-all, make-external-config-gate, make-external-evidence-gate, make-verify-v1-freeze, make-deliver-v1]

@@ -1,4 +1,4 @@
-.PHONY: install validate spec-index-check blueprint-check test-go manifest-digest
+.PHONY: install validate spec-index-check blueprint-check planning-audit gate-check test-go manifest-digest
 
 install:
 	npm ci
@@ -8,10 +8,16 @@ validate: spec-index-check blueprint-check
 	go test ./...
 
 spec-index-check:
-	node scripts/spec-index-check.mjs
+	AROP_CHECK_COMMAND="make spec-index-check" node scripts/spec-index-check.mjs
 
 blueprint-check:
-	node scripts/blueprint-check.mjs
+	AROP_CHECK_COMMAND="make blueprint-check" node scripts/blueprint-check.mjs
+
+planning-audit:
+	AROP_CHECK_COMMAND="make planning-audit EVIDENCE=$(EVIDENCE)" EVIDENCE="$(EVIDENCE)" node scripts/planning-audit.mjs
+
+gate-check:
+	AROP_CHECK_COMMAND="make gate-check GATE=$(GATE) EVIDENCE=$(EVIDENCE)" GATE="$(GATE)" EVIDENCE="$(EVIDENCE)" node scripts/gate-check.mjs
 
 test-go:
 	go test ./...

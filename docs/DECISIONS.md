@@ -9,7 +9,7 @@ updated: 2026-09-22
 | 编号 | 决策 | 结论 |
 | --- | --- | --- |
 | D-001 | 仓库职责 | Protocol 保存稳定契约、Schema、样例、SDK 和契约测试 |
-| D-002 | 框架关系 | 协议与 Go、Python、Agno、Codex、cc-connect 等实现无关 |
+| D-002 | 框架关系 | 协议与编程语言、Agent 框架、桌面执行器和具体产品实现无关 |
 | D-003 | 注册中心 | 借鉴 etcd/Nacos 语义，由金运自行实现，不依赖 etcd/Nacos |
 | D-004 | 控制面 | 所有新调用必须经过 Control Plane 授权和创建 Run |
 | D-005 | 数据面 | 获得 Dispatch Ticket 后，可信调用方可直接请求 Agent |
@@ -56,10 +56,12 @@ updated: 2026-09-22
 | D-046 | Governance 分层 | Core Manifest 允许省略 Governance；声明 Governance Extension 或发布到受治理 Control Plane 时必须提供完整治理元数据 |
 | D-047 | ContentPart 扩展 | Core ContentPart 保持闭合；非核心内容统一使用 `type=extension` 包装并携带 `extension_id`、Schema Digest 和 `data`，不直接新增未协商的 `type` |
 | D-048 | Trace Context 校验 | `traceparent` 除结构匹配外必须遵循 W3C 语义：禁止 `ff` 版本、全零 Trace/Parent ID，v00 禁止多余字段 |
-| D-049 | v1 HTTP 规范路径 | Worker Claim 使用 `/v1/workers/{worker_id}/claims:next`；Event Batch 使用 `/v1/agent-runs/{run_id}/events:batch`；Cancel 使用 `/v1/runs/{run_id}/commands` 的 `run.cancel` Command，不设第二条取消语义 |
+| D-049 | v1 HTTP 规范路径 | Worker Claim 使用 `/v1/workers/{worker_id}/claims:next`；Event Batch 使用 `/v1/agent-runs/{run_id}/events:batch` 并以 `event_batch_url` 传递；同一 `run.cancel` Command 在 Caller→Control Plane 绑定 `/v1/agent-runs/{run_id}/commands`，在 Control Plane/已授权可信调用方→Direct Runtime 绑定 `/v1/runs/{run_id}/commands`，禁止 `/cancel` 别名 |
 | D-050 | v1 运行命名与分类 | `session_id` 值前缀固定为 `ses_`，`attempt_id` 固定为 `att_`；Run 状态机包含非终态 `cancel_requested`；v1 标准事件补齐 Tool、Error 和 Agent Heartbeat |
 | D-051 | Asset ContentPart | `type=asset_ref` 的 ContentPart 在 `asset` 中携带完整 AssetRef；仅有 `asset_id` 的简写不是合法 v1 ContentPart |
 | D-052 | 外部证据 Gate | 域名、包所有权、维护者/安全入口和独立实现/外部伙伴均是发布 Gate；没有可核验外部证据时不得标记完成或用内部模拟替代 |
+| D-053 | v1 证据与发布闭环 | 外部证据必须绑定最终 `v1.0.0-rc.N` 的 exact source/schema/runner/artifact digest；取证后 freeze 严格只读；正式 v1 使用同一 source commit，只允许 channel/tag/version metadata 差异并必须证明 payload 等价 |
+| D-054 | Control Plane 公共 API 与 Secret 边界 | Publication、Run、JWKS、Event Session 和 Asset Token Exchange 进公共 `control-plane-v1` OpenAPI；SecretRef 的具体值解析是部署内 Reference port/adapter，不定义通用 Secret value HTTP API |
 
 # 2. 实现默认值
 

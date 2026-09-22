@@ -31,7 +31,7 @@ export async function walkFiles(directory, predicate = () => true) {
 export async function loadStructuredFile(filePath) {
   const source = await readFile(filePath, "utf8");
   if (filePath.endsWith(".json")) {
-    return JSON.parse(source);
+    return parseJSONWithUniqueKeys(source, filePath);
   }
 
   const document = parseDocument(source, {
@@ -43,6 +43,110 @@ export async function loadStructuredFile(filePath) {
     throw new Error(document.errors.map((error) => error.message).join("\n"));
   }
   return document.toJS({ maxAliasCount: 0 });
+}
+
+export function parseJSONWithUniqueKeys(source, label = "JSON input") {
+  let index = 0;
+
+  function fail(message) {
+    throw new SyntaxError(`${label}:${index}: ${message}`);
+  }
+
+  function skipWhitespace() {
+    while (/\s/u.test(source[index] ?? "")) index += 1;
+  }
+
+  function parseString() {
+    if (source[index] !== '"') fail("expected string");
+    const start = index;
+    index += 1;
+    let escaped = false;
+    while (index < source.length) {
+      const character = source[index];
+      index += 1;
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (character === "\\") {
+        escaped = true;
+        continue;
+      }
+      if (character === '"') {
+        return JSON.parse(source.slice(start, index));
+      }
+    }
+    fail("unterminated string");
+  }
+
+  function parseArray() {
+    index += 1;
+    skipWhitespace();
+    if (source[index] === "]") {
+      index += 1;
+      return;
+    }
+    while (index < source.length) {
+      parseValue();
+      skipWhitespace();
+      if (source[index] === "]") {
+        index += 1;
+        return;
+      }
+      if (source[index] !== ",") fail("expected ',' or ']' in array");
+      index += 1;
+      skipWhitespace();
+    }
+    fail("unterminated array");
+  }
+
+  function parseObject() {
+    index += 1;
+    skipWhitespace();
+    const keys = new Set();
+    if (source[index] === "}") {
+      index += 1;
+      return;
+    }
+    while (index < source.length) {
+      const key = parseString();
+      if (keys.has(key)) fail(`duplicate object key ${JSON.stringify(key)}`);
+      keys.add(key);
+      skipWhitespace();
+      if (source[index] !== ":") fail("expected ':' after object key");
+      index += 1;
+      parseValue();
+      skipWhitespace();
+      if (source[index] === "}") {
+        index += 1;
+        return;
+      }
+      if (source[index] !== ",") fail("expected ',' or '}' in object");
+      index += 1;
+      skipWhitespace();
+    }
+    fail("unterminated object");
+  }
+
+  function parsePrimitive() {
+    const start = index;
+    while (index < source.length && !/[\s,\]}]/u.test(source[index])) index += 1;
+    if (start === index) fail("expected JSON value");
+  }
+
+  function parseValue() {
+    skipWhitespace();
+    if (source[index] === "{") parseObject();
+    else if (source[index] === "[") parseArray();
+    else if (source[index] === '"') parseString();
+    else parsePrimitive();
+  }
+
+  parseValue();
+  skipWhitespace();
+  if (index !== source.length) fail("unexpected trailing content");
+
+  return JSON.parse(source);
 }
 
 export function manifestDigest(manifest) {

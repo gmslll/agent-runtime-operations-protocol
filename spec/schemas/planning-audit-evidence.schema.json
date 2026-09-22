@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/spec/schemas/planning-audit-evidence.schema.json",
+  "title": "External P03 planning audit evidence",
+  "type": "object",
+  "required": ["schema_version", "kind", "subject", "reviewer", "result", "attested_at", "signed_summary"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "arop-planning-audit"},
+    "subject": {
+      "type": "object",
+      "required": ["commit", "plan_last_phase", "requirements_sha256", "plan_sha256", "blueprint_sha256", "artifact_manifest_sha256"],
+      "properties": {
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "plan_last_phase": {"$ref": "#/$defs/phase_id"},
+        "requirements_sha256": {"$ref": "#/$defs/sha256"},
+        "plan_sha256": {"$ref": "#/$defs/sha256"},
+        "blueprint_sha256": {"$ref": "#/$defs/sha256"},
+        "artifact_manifest_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "reviewer": {
+      "type": "object",
+      "required": ["id", "independent"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "independent": {"const": true}
+      },
+      "additionalProperties": false
+    },
+    "result": {
+      "type": "object",
+      "required": ["requirements_phase_coverage", "must_fix_count", "should_fix_count", "verdict"],
+      "properties": {
+        "requirements_phase_coverage": {"const": "YES"},
+        "must_fix_count": {"const": 0},
+        "should_fix_count": {"type": "integer", "minimum": 0},
+        "verdict": {"const": "PASS"}
+      },
+      "additionalProperties": false
+    },
+    "attested_at": {"type": "string", "format": "date-time"},
+    "signed_summary": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  },
+  "$defs": {
+    "phase_id": {"type": "string", "pattern": "^P(?:0[1-9]|[1-9][0-9])$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "additionalProperties": false
+}
