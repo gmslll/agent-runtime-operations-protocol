@@ -75,6 +75,8 @@ A2A / MCP / ARD 互操作 Adapter
 
 当前处于 Protocol v1 设计冻结和仓库基线阶段，已经开始第一批 Schema、Fixture 和 Go Reference Control Plane 基线实现。核心架构、wire 语义、Apache-2.0 许可证、GitHub/Go Module、SDK/CLI 首选命名和治理方式已经确认；项目域名、包注册表所有权和初始维护者名单仍需填写。在这些发布配置完成前不发布稳定软件包。
 
+预发布源码暂存于私有仓库 [`gmslll/agent-runtime-operations-protocol`](https://github.com/gmslll/agent-runtime-operations-protocol)，完成公开发布配置和安全入口后再转为公开。
+
 ## 当前验证
 
 ```bash

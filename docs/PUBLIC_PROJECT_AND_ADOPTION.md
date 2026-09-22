@@ -223,7 +223,7 @@ v1.0 前至少需要：
 - 公共名称：Agent Runtime Operations Protocol。
 - 简称：AROP。
 - 仓库名：`agent-runtime-operations-protocol`。
-- 初期仓库位置：`gmslll/agent-runtime-operations-protocol`。
+- 初期仓库位置：私有的 `gmslll/agent-runtime-operations-protocol`；域名、包所有权、维护者和安全渠道就绪后，在公共 v0.1 前转为公开。
 - Go Module：`github.com/gmslll/agent-runtime-operations-protocol`。
 - Python Distribution：`arop-sdk`；Import Package：`arop`。
 - TypeScript Package：`@arop/sdk`。
