@@ -175,6 +175,10 @@ OpenAPI/AsyncAPI 只引用或派生同一结构，不手写第二份 DTO。生�
 
 每个 P01..Pn 的机器验收都必须产生 `build/reports/<phase>/report.json` 和 `junit.xml`。JSON 至少含 schema version、exact commit/dirty 状态、实际命令、Node/Go/OS runtime、输入集与 Checker Digest、testcase 数和结论；JUnit 与 JSON 的 testcase/failure 数必须一致。不允许只用「进程退出 0」代替可审计报告。
 
+所有治理输入先经过统一 strict loader：JSON 递归拒绝重复键并拒绝尾随第二个值，YAML 只允许一个文档并递归拒绝重复键、Alias 和非字符串 Mapping Key。解析后必须离线执行 Draft 2020-12 Schema 校验并启用 `format` assertion，再进入 Go typed model；`const`、`pattern`、整数、日期时间和 `additionalProperties: false` 都是强制约束。报告 writer 在落盘前用同一 loader/Schema 自验，Marshal、Git/status、runtime 探测、目录和文件写入错误一律向上传播，禁止降级成可通过报告。
+
+报告 provenance 把三类来源分开：`inputs` 只存可由 source tree 重算的静态闭包；`runtime_inputs` 存阶段运行时读取且需要逐文件验证的前序报告/摘要；`runtime_evidence` 只存仓库外证据或 ignored build log/result 的逻辑 kind、digest 和 bytes，不泄露绝对路径。P01 必须运行 `AROP_VERIFY_CURRENT=1 go test -count=1 -json` 覆盖 strict loader、Schema、report、evidence、spec-index 与 blueprint；任一 test fail/skip、缓存输出、无法执行或结构化计数为空均失败，逐条 testcase 进入 P01 报告，Go module、helper、tests 和 Schema 属于静态闭包，Node Schema 结果与 Go test log 属于 runtime evidence。
+
 聚合 Make 目标在执行前声明预期子报告 ID/数量；聚合时拒绝缺报告、多报告、失败报告或 schema/input/checker/artifact digest 不一致。普通报告按 claimed commit 验证；历史普通 success 报告即使通过 ancestry、Git blob 和 current-input 无漂移检查，也只完成存档完整性验证，不能直接作为聚合 success；必须在隔离 checkout 重跑固定 checker，或验证受信 CI/OIDC/Sigstore provenance。P03/P04 的外部规划签署是独立类型：只要 subject commit 仍属于受控 ancestry、planning input closure 的 canonical digest 未漂移，可保留原签署，新 commit 仍重跑当前机器检查，不要求外部人员对无关后续变更重复签署。
 
 P44 等混合 commit 聚合不要求所有报告来自同一 commit，但每份报告都必须独立满足其 phase policy；受控 phase policy 先固定 phase→Make target→checker path→required input closure 与 runner policy，绝不信任 report 自报的 command/input 集。历史 success 只能在隔离 checkout 中以固定 argv、净化环境、无 secrets 重跑（严禁 eval report.command），或验证受信 CI/OIDC/Sigstore provenance 绑定 repository identity、immutable workflow digest、commit、checker、完整 inputs、report digest 和 toolchain。P53 使用 commit A 报告时不得套用普通 ancestor 规则；P52 attestation 是唯一 A→B bridge，必须列出可桥接报告，并证明输入不含 overlay 改动或按批准 normalizer 等价；P53 的 final Conformance/SBOM/provenance 必须在 B 新跑。P03/P04/P45/P50/P52 的原始外部证据保存在仓库外，Git 仅保存脱敏、可重新核验的 canonical 内容摘要与可选签名 attestation。内容 hash 不是签名，检查器不自动生成“已批准”或“独立”证据。
@@ -199,6 +203,8 @@ P44 等混合 commit 聚合不要求所有报告来自同一 commit，但每份�
 P03/P04 验证成功时，工具先在忽略的 `build/reports/<phase>/canonical-summary.json` 产生脱敏候选；经评审后才可将候选提升为 `spec/evidence/` 内的 canonical 内容摘要，并在确实存在时附带 Ed25519 attestation。canonical summary 的逻辑字段顺序为 P03 `schema_version, kind, subject, reviewer, result, attested_at`，P04 `schema_version, kind, gate, subject, approver, result, attested_at`；实际序列化按 RFC 8785/JCS 确定键顺序，`summary_sha256` 和 `attestation` 不进入被摘要内容。任何原始评审正文、账户证明、凭据或私密联系信息都不得进入 Git。
 
 `TRUSTED_KEYS` 指向仓库外 JSON/YAML registry，格式为 `schema_version: 1` 和 `keys[]`；每个 key 必须有 `key_id`、`algorithm: Ed25519`、`role: independent_reviewer|project_owner` 与 `public_key_pem`。`attestation.signature` 是对 canonical summary UTF-8 字节的 Base64 Ed25519 签名。没有受信 key registry 时，只能由人工可信渠道 Gate 确认，并以 `TRUSTED_CHANNEL_CONFIRMATION` 引用仓库外记录；工具只记录该文件的内容摘要，不声称自动验证了渠道或人员身份。
+
+Registry 本身必须通过 strict Schema，`key_id` 全局唯一；证据算法、registry key 算法、PKIX key 类型必须同时为 Ed25519，签名必须是 strict Base64 解码后的 64 字节。promoted candidate 保留可复验 attestation 与 `trusted_keys_sha256`，或保留 manual `confirmation_sha256` 及不可密码学重放的限制声明。P03 report 同时绑定 candidate 文件、canonical summary、subject/result JCS、raw evidence 与 authentication JCS；P04 重算全部字段并与成功 P03 report 逐项交叉核对，且把 P03 JSON、JUnit 和 promoted summary 精确列为 `runtime_inputs`。任何只改自报 `summary_sha256`、subject/result/身份/认证/原始证据而不改变报告的做法都必须失败。
 
 # 12. 发布 DAG
 

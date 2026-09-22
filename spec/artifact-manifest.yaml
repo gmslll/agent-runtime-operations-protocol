@@ -188,6 +188,34 @@ artifacts:
     owner_phase: P01
     acceptance_test: make-spec-index-check
     exposure: repository-internal
+  - id: planning-canonical-evidence-summary-schema
+    path: spec/schemas/canonical-evidence-summary.schema.json
+    status: present
+    kind: planning-json-schema
+    authority: structure
+    language: language-neutral
+    derives_from:
+      - planning-audit-evidence-schema
+      - user-gate-evidence-schema
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+  - id: planning-trusted-key-registry-schema
+    path: spec/schemas/trusted-key-registry.schema.json
+    status: present
+    kind: planning-json-schema
+    authority: structure
+    language: language-neutral
+    derives_from:
+      - planning-audit-evidence-schema
+      - user-gate-evidence-schema
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
   - id: decisions
     path: docs/DECISIONS.md
     status: present
@@ -1687,6 +1715,48 @@ artifacts:
     owner_phase: P01
     acceptance_test: make-spec-index-check
     exposure: repository-internal
+  - id: go-structured-file-tools-tests
+    path: internal/tooling/structuredfile/files_test.go
+    status: present
+    kind: tooling-test
+    authority: evidence
+    implementation_runtime: go
+    tool_scope: planning
+    derives_from:
+      - go-structured-file-tools
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+  - id: go-schema-validator
+    path: internal/tooling/schema/validator.go
+    status: present
+    kind: tooling
+    authority: derived
+    implementation_runtime: go
+    tool_scope: schema-validation
+    derives_from:
+      - go-structured-file-tools
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+  - id: go-schema-validator-tests
+    path: internal/tooling/schema/validator_test.go
+    status: present
+    kind: tooling-test
+    authority: evidence
+    implementation_runtime: go
+    tool_scope: schema-validation
+    derives_from:
+      - go-schema-validator
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
   - id: machine-report-writer
     path: internal/tooling/report/writer.go
     status: present
@@ -1712,8 +1782,44 @@ artifacts:
     derives_from:
       - planning-audit-evidence-schema
       - user-gate-evidence-schema
+      - planning-canonical-evidence-summary-schema
+      - planning-trusted-key-registry-schema
       - machine-report-writer
       - go-structured-file-tools
+      - go-schema-validator
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+  - id: evidence-validation-tests
+    path: internal/tooling/evidence/validation_test.go
+    status: present
+    kind: tooling-test
+    authority: evidence
+    implementation_runtime: go
+    tool_scope: evidence
+    derives_from:
+      - evidence-validation-library
+      - planning-canonical-evidence-summary-schema
+      - planning-trusted-key-registry-schema
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+  - id: machine-report-verifier-library
+    path: internal/tooling/report/verifier.go
+    status: present
+    kind: tooling
+    authority: derived
+    implementation_runtime: go
+    tool_scope: report
+    derives_from:
+      - check-report-meta-schema
+      - go-schema-validator
+      - go-structured-file-tools
+      - machine-report-writer
     path_role: concrete
     owner: spec-governance
     owner_phase: P01
@@ -1734,6 +1840,7 @@ artifacts:
       - check-report-meta-schema
       - go-structured-file-tools
       - machine-report-writer
+      - machine-report-verifier-library
     path_role: concrete
   - id: machine-report-verifier-tests
     path: internal/tooling/report/verifier_test.go
@@ -2066,11 +2173,63 @@ artifacts:
     exposure: repository-internal
     derives_from:
       - spec-index-validation
+      - spec-index-governance
       - machine-report-writer
       - go-structured-file-tools
     path_role: concrete
+  - id: spec-index-governance
+    path: internal/tooling/specindex/governance.go
+    status: present
+    kind: tooling
+    authority: derived
+    implementation_runtime: go
+    tool_scope: planning
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+    derives_from:
+      - artifact-catalog
+      - immutable-requirements
+      - conflict-ledger
+      - go-schema-validator
+      - go-structured-file-tools
+    path_role: concrete
+  - id: spec-index-governance-tests
+    path: internal/tooling/specindex/governance_test.go
+    status: present
+    kind: tooling-test
+    authority: evidence
+    implementation_runtime: go
+    tool_scope: planning
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+    derives_from:
+      - spec-index-governance
+    path_role: concrete
   - id: blueprint-validation
     path: internal/tooling/cmd/arop-blueprint-check/main.go
+    status: present
+    kind: tooling
+    authority: derived
+    implementation_runtime: go
+    tool_scope: blueprint
+    owner: implementation-planning
+    owner_phase: P02
+    acceptance_test: make-blueprint-check
+    exposure: repository-internal
+    derives_from:
+      - blueprint-validation-library
+      - implementation-blueprint
+      - repository-layout
+      - development-plan
+      - immutable-requirements
+      - machine-report-writer
+    path_role: concrete
+  - id: blueprint-validation-library
+    path: internal/tooling/blueprint/check.go
     status: present
     kind: tooling
     authority: derived
@@ -2085,7 +2244,22 @@ artifacts:
       - repository-layout
       - development-plan
       - immutable-requirements
+      - go-structured-file-tools
       - machine-report-writer
+    path_role: concrete
+  - id: blueprint-validation-tests
+    path: internal/tooling/blueprint/check_test.go
+    status: present
+    kind: tooling-test
+    authority: evidence
+    implementation_runtime: go
+    tool_scope: blueprint
+    owner: implementation-planning
+    owner_phase: P02
+    acceptance_test: make-blueprint-check
+    exposure: repository-internal
+    derives_from:
+      - blueprint-validation-library
     path_role: concrete
   - id: planning-audit-validation
     path: internal/tooling/cmd/arop-planning-audit/main.go
@@ -3657,6 +3831,7 @@ artifacts:
     derives_from:
       - decisions
       - root-go-module
+      - root-go-sum
       - nested-control-plane-go-module
     owner: sqlite-quickstart
     owner_phase: P36
@@ -3921,6 +4096,15 @@ artifacts:
       - planning-audit-validation
       - user-gate-validation
       - go-structured-file-tools
+      - go-structured-file-tools-tests
+      - go-schema-validator
+      - go-schema-validator-tests
+      - planning-canonical-evidence-summary-schema
+      - planning-trusted-key-registry-schema
+      - machine-report-verifier-library
+      - evidence-validation-tests
+      - spec-index-governance
+      - spec-index-governance-tests
     producer_phase: P01
     acceptance_test: make-spec-index-check
     exposure: repository-internal
@@ -3932,6 +4116,8 @@ artifacts:
     path_role: concrete
     derives_from:
       - blueprint-validation
+      - blueprint-validation-library
+      - blueprint-validation-tests
     producer_phase: P02
     acceptance_test: make-blueprint-check
     exposure: repository-internal
@@ -3943,6 +4129,9 @@ artifacts:
     path_role: concrete
     derives_from:
       - planning-audit-validation
+      - planning-audit-evidence-schema
+      - planning-canonical-evidence-summary-schema
+      - planning-trusted-key-registry-schema
     producer_phase: P03
     acceptance_test: make-planning-audit
     exposure: repository-internal
@@ -3965,6 +4154,9 @@ artifacts:
     path_role: concrete
     derives_from:
       - user-gate-validation
+      - user-gate-evidence-schema
+      - planning-canonical-evidence-summary-schema
+      - planning-trusted-key-registry-schema
     runtime_inputs:
       - planning-audit-reports
       - planning-audit-canonical-summary
@@ -4441,6 +4633,19 @@ artifacts:
     derives_from:
       - repository-layout
       - decisions
+  - id: root-go-sum
+    path: go.sum
+    status: present
+    kind: go-module-lock
+    authority: implementation
+    path_role: concrete
+    language: go
+    owner: repository-layout
+    owner_phase: P05
+    acceptance_test: make-test-go-workspace
+    exposure: public-contract
+    derives_from:
+      - root-go-module
   - id: nested-control-plane-go-module
     path: reference/control-plane/go.mod
     status: planned
@@ -4525,6 +4730,7 @@ artifacts:
     exposure: repository-internal
     derives_from:
       - root-go-module
+      - root-go-sum
       - nested-control-plane-go-module
       - go-work-example
       - ci-workspace-validation

@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/spec/schemas/canonical-evidence-summary.schema.json",
+  "title": "Promotable P03/P04 canonical evidence summary",
+  "type": "object",
+  "required": ["schema_version", "kind", "subject", "result", "attested_at", "summary_sha256", "authentication", "raw_evidence_sha256"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"enum": ["arop-planning-audit-summary", "arop-user-gate-summary"]},
+    "gate": {"const": "P04"},
+    "subject": {"type": "object"},
+    "reviewer_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "approver_id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "result": {"type": "object"},
+    "attested_at": {"type": "string", "format": "date-time"},
+    "summary_sha256": {"$ref": "#/$defs/prefixed_sha256"},
+    "attestation": {"$ref": "#/$defs/attestation"},
+    "authentication": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["mode", "key_id", "key_role", "trusted_keys_sha256"],
+          "properties": {
+            "mode": {"const": "trusted-key-attestation"},
+            "key_id": {"type": "string", "minLength": 1},
+            "key_role": {"enum": ["independent_reviewer", "project_owner", "release_approver"]},
+            "trusted_keys_sha256": {"$ref": "#/$defs/prefixed_sha256"}
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["mode", "confirmation_sha256", "limitation"],
+          "properties": {
+            "mode": {"const": "manual-trusted-channel"},
+            "confirmation_sha256": {"$ref": "#/$defs/prefixed_sha256"},
+            "limitation": {"const": "manual identity and independence verification is not cryptographically replayable"}
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "raw_evidence_sha256": {"$ref": "#/$defs/prefixed_sha256"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"kind": {"const": "arop-planning-audit-summary"}}},
+      "then": {
+        "required": ["reviewer_id"],
+        "properties": {
+          "subject": {"$ref": "#/$defs/planning_subject"},
+          "result": {"$ref": "#/$defs/results"}
+        },
+        "not": {"anyOf": [{"required": ["gate"]}, {"required": ["approver_id"]}]}
+      }
+    },
+    {
+      "if": {"properties": {"kind": {"const": "arop-user-gate-summary"}}},
+      "then": {
+        "required": ["gate", "approver_id"],
+        "properties": {
+          "subject": {"$ref": "#/$defs/gate_subject"},
+          "result": {"$ref": "#/$defs/results"}
+        },
+        "not": {"required": ["reviewer_id"]}
+      }
+    },
+    {
+      "if": {"properties": {"authentication": {"properties": {"mode": {"const": "trusted-key-attestation"}}}}},
+      "then": {"required": ["attestation"]}
+    }
+  ],
+  "$defs": {
+    "phase_id": {"type": "string", "pattern": "^P(?:0[1-9]|[1-9][0-9])$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "prefixed_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "planning_subject": {
+      "type": "object",
+      "required": ["commit", "plan_last_phase", "requirements_sha256", "plan_sha256", "blueprint_sha256", "artifact_manifest_sha256"],
+      "properties": {
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "plan_last_phase": {"$ref": "#/$defs/phase_id"},
+        "requirements_sha256": {"$ref": "#/$defs/sha256"},
+        "plan_sha256": {"$ref": "#/$defs/sha256"},
+        "blueprint_sha256": {"$ref": "#/$defs/sha256"},
+        "artifact_manifest_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "gate_subject": {
+      "type": "object",
+      "required": ["commit", "plan_last_phase", "requirements_sha256", "plan_sha256", "blueprint_sha256", "artifact_manifest_sha256", "planning_audit_summary_sha256"],
+      "properties": {
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "plan_last_phase": {"$ref": "#/$defs/phase_id"},
+        "requirements_sha256": {"$ref": "#/$defs/sha256"},
+        "plan_sha256": {"$ref": "#/$defs/sha256"},
+        "blueprint_sha256": {"$ref": "#/$defs/sha256"},
+        "artifact_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "planning_audit_summary_sha256": {"$ref": "#/$defs/prefixed_sha256"}
+      },
+      "additionalProperties": false
+    },
+    "result_item": {
+      "type": "object",
+      "required": ["id", "result"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "result": {"enum": ["PASS", "FAIL"]},
+        "detail": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "required": ["id", "detail"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "detail": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "results": {
+      "type": "object",
+      "required": ["requirements", "phases", "must_fix_count", "must_fix", "should_fix_count", "should_fix", "verdict"],
+      "properties": {
+        "requirements": {"type": "array", "minItems": 14, "items": {"$ref": "#/$defs/result_item"}},
+        "phases": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/result_item"}},
+        "must_fix_count": {"const": 0},
+        "must_fix": {"type": "array", "maxItems": 0, "items": {"$ref": "#/$defs/finding"}},
+        "should_fix_count": {"type": "integer", "minimum": 0},
+        "should_fix": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
+        "verdict": {"const": "PASS"}
+      },
+      "additionalProperties": false
+    },
+    "attestation": {
+      "type": "object",
+      "required": ["algorithm", "key_id", "signature"],
+      "properties": {
+        "algorithm": {"const": "Ed25519"},
+        "key_id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "signature": {"type": "string", "pattern": "^[A-Za-z0-9+/]{86}==$"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

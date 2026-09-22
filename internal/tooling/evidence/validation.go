@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/schema"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile"
 )
 
@@ -23,6 +24,7 @@ var PlanningInputs = []struct{ Path, Field string }{{"spec/requirements.yaml", "
 var SummaryFields = map[string][]string{"arop-planning-audit": {"schema_version", "kind", "subject", "reviewer", "result", "attested_at"}, "arop-user-gate": {"schema_version", "kind", "gate", "subject", "approver", "result", "attested_at"}}
 
 func hash(v []byte) string { s := sha256.Sum256(v); return hex.EncodeToString(s[:]) }
+func Hash(v []byte) string { return hash(v) }
 func git(root string, args ...string) ([]byte, error) {
 	c := exec.Command("git", args...)
 	c.Dir = root
@@ -129,6 +131,18 @@ func CanonicalSummaryDigest(e map[string]any) (string, error) {
 	return "sha256:" + hash(b), nil
 }
 
+func JCSDigest(value any) (string, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return "", err
+	}
+	canonical, err := jsoncanonicalizer.Transform(raw)
+	if err != nil {
+		return "", err
+	}
+	return "sha256:" + hash(canonical), nil
+}
+
 func ValidateCoverage(result map[string]any, requirements, phases []string) []string {
 	p := []string{}
 	for _, entry := range []struct {
@@ -172,69 +186,116 @@ func count(v any) int {
 	return -1
 }
 
-func Authenticate(root string, e map[string]any, role, keysPath, confirmationPath string) (map[string]any, error) {
+type Authentication struct {
+	Candidate      map[string]any
+	MaterialSHA256 string
+	MaterialBytes  int64
+}
+
+func Authenticate(root string, e map[string]any, role, keysPath, confirmationPath string) (Authentication, error) {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return Authentication{}, err
+	}
 	canonical, err := CanonicalSummary(e)
 	if err != nil {
-		return nil, err
+		return Authentication{}, err
 	}
 	if keysPath != "" {
-		abs, _ := filepath.Abs(keysPath)
-		rel, _ := filepath.Rel(root, abs)
-		if !strings.HasPrefix(rel, "..") {
-			return nil, fmt.Errorf("TRUSTED_KEYS registry must remain outside the Git repository")
+		abs, err := filepath.Abs(keysPath)
+		if err != nil {
+			return Authentication{}, err
 		}
-		var registry map[string]any
-		if err := structuredfile.Load(abs, &registry); err != nil {
-			return nil, err
+		rel, err := filepath.Rel(root, abs)
+		if err != nil {
+			return Authentication{}, err
+		}
+		if !strings.HasPrefix(rel, "..") {
+			return Authentication{}, fmt.Errorf("TRUSTED_KEYS registry must remain outside the Git repository")
+		}
+		registryValue, registryRaw, err := structuredfile.LoadAny(abs)
+		if err != nil {
+			return Authentication{}, err
+		}
+		if err := schema.ValidateFile(root, "spec/schemas/trusted-key-registry.schema.json", registryValue); err != nil {
+			return Authentication{}, err
+		}
+		registry, ok := registryValue.(map[string]any)
+		if !ok {
+			return Authentication{}, fmt.Errorf("trusted key registry is not an object")
 		}
 		att, _ := e["attestation"].(map[string]any)
+		if att["algorithm"] != "Ed25519" {
+			return Authentication{}, fmt.Errorf("evidence attestation algorithm must be Ed25519")
+		}
 		keyID, _ := att["key_id"].(string)
+		if keyID == "" {
+			return Authentication{}, fmt.Errorf("evidence attestation key_id is required")
+		}
 		var selected map[string]any
+		seen := map[string]bool{}
 		keys, _ := registry["keys"].([]any)
 		for _, raw := range keys {
 			k, _ := raw.(map[string]any)
+			id, _ := k["key_id"].(string)
+			if seen[id] {
+				return Authentication{}, fmt.Errorf("trusted key_id %s is duplicated", id)
+			}
+			seen[id] = true
 			if k["key_id"] == keyID {
 				if selected != nil {
-					return nil, fmt.Errorf("trusted key %s must resolve exactly once", keyID)
+					return Authentication{}, fmt.Errorf("trusted key %s must resolve exactly once", keyID)
 				}
 				selected = k
 			}
 		}
 		if selected == nil {
-			return nil, fmt.Errorf("trusted key %s must resolve exactly once", keyID)
+			return Authentication{}, fmt.Errorf("trusted key %s must resolve exactly once", keyID)
 		}
 		if selected["role"] != role {
-			return nil, fmt.Errorf("trusted key role must be %s", role)
+			return Authentication{}, fmt.Errorf("trusted key role must be %s", role)
 		}
-		block, _ := pem.Decode([]byte(fmt.Sprint(selected["public_key_pem"])))
-		if block == nil {
-			return nil, fmt.Errorf("trusted key public key is invalid")
+		if selected["algorithm"] != "Ed25519" {
+			return Authentication{}, fmt.Errorf("trusted key algorithm must be Ed25519")
+		}
+		block, rest := pem.Decode([]byte(fmt.Sprint(selected["public_key_pem"])))
+		if block == nil || block.Type != "PUBLIC KEY" || len(strings.TrimSpace(string(rest))) != 0 {
+			return Authentication{}, fmt.Errorf("trusted key public key is not one PKIX PUBLIC KEY PEM block")
 		}
 		pubAny, err := x509.ParsePKIXPublicKey(block.Bytes)
 		if err != nil {
-			return nil, err
+			return Authentication{}, err
 		}
 		pub, ok := pubAny.(ed25519.PublicKey)
-		if !ok {
-			return nil, fmt.Errorf("trusted key is not Ed25519")
+		if !ok || len(pub) != ed25519.PublicKeySize {
+			return Authentication{}, fmt.Errorf("trusted key is not Ed25519")
 		}
 		sig, err := base64.StdEncoding.DecodeString(fmt.Sprint(att["signature"]))
-		if err != nil || !ed25519.Verify(pub, canonical, sig) {
-			return nil, fmt.Errorf("Ed25519 signature does not verify against canonical summary")
+		if err != nil || len(sig) != ed25519.SignatureSize {
+			return Authentication{}, fmt.Errorf("attestation signature must be strict Base64 for a 64-byte Ed25519 signature")
 		}
-		return map[string]any{"mode": "trusted-key-attestation", "key_id": keyID, "key_role": role}, nil
+		if !ed25519.Verify(pub, canonical, sig) {
+			return Authentication{}, fmt.Errorf("Ed25519 signature does not verify against canonical summary")
+		}
+		return Authentication{Candidate: map[string]any{"mode": "trusted-key-attestation", "key_id": keyID, "key_role": role, "trusted_keys_sha256": "sha256:" + hash(registryRaw)}, MaterialSHA256: hash(registryRaw), MaterialBytes: int64(len(registryRaw))}, nil
 	}
 	if confirmationPath == "" {
-		return nil, fmt.Errorf("authenticity requires TRUSTED_KEYS or TRUSTED_CHANNEL_CONFIRMATION")
+		return Authentication{}, fmt.Errorf("authenticity requires TRUSTED_KEYS or TRUSTED_CHANNEL_CONFIRMATION")
 	}
-	abs, _ := filepath.Abs(confirmationPath)
-	rel, _ := filepath.Rel(root, abs)
+	abs, err := filepath.Abs(confirmationPath)
+	if err != nil {
+		return Authentication{}, err
+	}
+	rel, err := filepath.Rel(root, abs)
+	if err != nil {
+		return Authentication{}, err
+	}
 	if !strings.HasPrefix(rel, "..") {
-		return nil, fmt.Errorf("TRUSTED_CHANNEL_CONFIRMATION must remain outside the Git repository")
+		return Authentication{}, fmt.Errorf("TRUSTED_CHANNEL_CONFIRMATION must remain outside the Git repository")
 	}
 	raw, err := os.ReadFile(abs)
 	if err != nil || len(raw) == 0 {
-		return nil, fmt.Errorf("trusted-channel confirmation record is empty or unreadable")
+		return Authentication{}, fmt.Errorf("trusted-channel confirmation record is empty or unreadable")
 	}
-	return map[string]any{"mode": "manual-trusted-channel", "confirmation_sha256": "sha256:" + hash(raw)}, nil
+	return Authentication{Candidate: map[string]any{"mode": "manual-trusted-channel", "confirmation_sha256": "sha256:" + hash(raw), "limitation": "manual identity and independence verification is not cryptographically replayable"}, MaterialSHA256: hash(raw), MaterialBytes: int64(len(raw))}, nil
 }

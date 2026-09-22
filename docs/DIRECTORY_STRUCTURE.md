@@ -29,8 +29,11 @@ agent-runtime-operations-protocol/
 ├── internal/tooling/                    # 根 module 私有 Go 治理与发布工具
 │   ├── cmd/                             # blueprint/report/planning/Gate/proxy/build/release 私有入口
 │   ├── structuredfile/                  # Go JSON/YAML/Git-safe repository helpers
+│   ├── schema/                          # 离线 Draft 2020-12 + format assertion validator
 │   ├── report/                          # machine report writer/verifier/tests
 │   ├── evidence/                        # planning/Gate evidence 与 lineage tests
+│   ├── specindex/                       # 通用 governance/index/traceability/link closure
+│   ├── blueprint/                       # 阶段、制品、发布链与 Node 边界 checker/probes
 │   └── release/                         # P39 supply；P40 evidence；P41 lineage；P42 finalize
 │
 ├── docs/                                # 手写规范、决策、蓝图
@@ -49,7 +52,8 @@ agent-runtime-operations-protocol/
 │   └── DECISIONS.md
 ├── spec/                                # 机器可读制品索引、需求和冲突台账
 │   ├── release/                          # 跨生态版本/Go artifact layout 等发布策略
-│   └── evidence/                         # 仅规划期脱敏 canonical 摘要；原始外部证据不入库
+│   ├── evidence/                         # 仅规划期脱敏 canonical 摘要；原始外部证据不入库
+│   └── schemas/                          # report/evidence/trusted-key/catalog/requirements 元 Schema
 ├── rfcs/
 ├── compatibility/
 │

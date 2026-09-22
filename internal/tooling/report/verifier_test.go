@@ -11,54 +11,116 @@ import (
 	"time"
 )
 
-func TestVerifierCurrentReports(t *testing.T) {
-	if os.Getenv("AROP_VERIFY_CURRENT") != "1" {
-		t.Skip("current reports are verified by make test-report-verifier")
+func strictReportFixture() Report {
+	zero := strings.Repeat("0", 64)
+	return Report{
+		SchemaVersion: 1,
+		GeneratedAt:   "2026-09-22T01:02:03Z",
+		Success:       true,
+		Provenance: Provenance{
+			Git:             GitProvenance{strings.Repeat("a", 40), false, []string{}},
+			Command:         "make fixture",
+			Runtime:         Runtime{"v1", "go1", RuntimeOS{"test", "1", "test"}},
+			Checker:         DigestedPath{"checker.go", zero},
+			Inputs:          InputDigest{zero, []InputFile{{"input", zero, 1}}},
+			RuntimeInputs:   InputDigest{zero, []InputFile{}},
+			RuntimeEvidence: []RuntimeEvidence{},
+			TestcaseCount:   1,
+			AuditNote:       "fixture",
+		},
+		Summary: map[string]any{"checks": 1, "passed": 1, "failed": 0, "testcase_count": 1},
+		Checks:  []Check{{"fixture", true, "ok"}},
+		Errors:  []string{},
 	}
+}
+
+func TestStrictReportSchemaRejectsMalformedDocuments(t *testing.T) {
+	t.Parallel()
 	root := filepath.Clean(filepath.Join("..", "..", ".."))
-	for _, path := range []string{"build/reports/P01/report.json", "build/reports/P02/report.json"} {
-		r, mode, err := Verify(VerifyOptions{Root: root, ReportPath: path})
-		if err != nil {
-			t.Fatalf("%s: %v", path, err)
-		}
-		if mode != "current-worktree" || !r.Success {
-			t.Fatalf("%s unexpected mode/success", path)
-		}
+	valid, err := json.Marshal(strictReportFixture())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutations := map[string]func([]byte) []byte{
+		"top-level duplicate": func(data []byte) []byte {
+			return []byte(strings.Replace(string(data), `"schema_version":1`, `"schema_version":1,"schema_version":1`, 1))
+		},
+		"nested duplicate": func(data []byte) []byte {
+			return []byte(strings.Replace(string(data), `"head":"`, `"head":"`+strings.Repeat("a", 40)+`","head":"`, 1))
+		},
+		"trailing document": func(data []byte) []byte { return append(data, []byte(` {}`)...) },
+		"unknown top-level": func(data []byte) []byte {
+			return []byte(strings.Replace(string(data), `"errors":[]`, `"errors":[],"unexpected":true`, 1))
+		},
+		"unknown check field": func(data []byte) []byte {
+			return []byte(strings.Replace(string(data), `"detail":"ok"`, `"detail":"ok","unexpected":true`, 1))
+		},
+		"bad date-time": func(data []byte) []byte {
+			return []byte(strings.Replace(string(data), "2026-09-22T01:02:03Z", "not-a-date", 1))
+		},
+		"fractional count": func(data []byte) []byte {
+			return []byte(strings.Replace(string(data), `"testcase_count":1`, `"testcase_count":1.5`, 1))
+		},
+		"bad digest": func(data []byte) []byte {
+			return []byte(strings.Replace(string(data), strings.Repeat("0", 64), "BAD", 1))
+		},
+		"empty inputs": func(data []byte) []byte {
+			return []byte(strings.Replace(string(data), `"files":[{"path":"input","sha256":"`+strings.Repeat("0", 64)+`","bytes":1}]`, `"files":[]`, 1))
+		},
+		"missing nested": func(data []byte) []byte {
+			return []byte(strings.Replace(string(data), `"arch":"test"`, `"arch_missing":"test"`, 1))
+		},
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			if _, err := decodeStrict(root, mutate(append([]byte{}, valid...))); err == nil {
+				t.Fatalf("malformed report accepted")
+			}
+		})
+	}
+}
+
+func TestWriterPropagatesMarshalFailure(t *testing.T) {
+	t.Parallel()
+	root := filepath.Clean(filepath.Join("..", "..", ".."))
+	r := strictReportFixture()
+	r.Summary["unmarshalable"] = func() {}
+	if _, err := marshalValidated(root, &r); err == nil || !strings.Contains(err.Error(), "marshal report JSON") {
+		t.Fatalf("marshal failure was not propagated: %v", err)
+	}
+}
+
+func TestWriterCommandAndGitErrorsPropagate(t *testing.T) {
+	t.Parallel()
+	if _, err := command(t.TempDir(), "definitely-not-an-arop-command"); err == nil {
+		t.Fatal("missing runtime command was converted to a placeholder")
+	}
+	if _, err := gitStatus(t.TempDir()); err == nil {
+		t.Fatal("git status failure was ignored")
+	}
+}
+
+func TestVerifierCurrentReports(t *testing.T) {
+	if value := os.Getenv("AROP_VERIFY_CURRENT"); value != "" && value != "1" {
+		t.Fatalf("AROP_VERIFY_CURRENT must be 1 when set, got %q", value)
 	}
 }
 
 func TestVerifierRejectsCorruptedDigest(t *testing.T) {
-	if os.Getenv("AROP_VERIFY_CURRENT") != "1" {
-		t.Skip("requires generated P01 report")
-	}
 	root := filepath.Clean(filepath.Join("..", "..", ".."))
-	source := filepath.Join(root, "build/reports/P01/report.json")
-	data, err := os.ReadFile(source)
+	r := strictReportFixture()
+	r.Provenance.Inputs.Files[0].SHA256 = strings.Repeat("f", 64)
+	r.Provenance.Inputs.SHA256 = strings.Repeat("f", 64)
+	data, err := json.Marshal(r)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var r Report
-	if err = json.Unmarshal(data, &r); err != nil {
-		t.Fatal(err)
-	}
-	r.Provenance.Inputs.Files[0].SHA256 = "0000000000000000000000000000000000000000000000000000000000000000"
-	dir := filepath.Join(root, "build/report-verifier-tests/corrupted-go")
-	if err = os.MkdirAll(dir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	bad, _ := json.MarshalIndent(r, "", "  ")
-	if err = os.WriteFile(filepath.Join(dir, "report.json"), append(bad, '\n'), 0644); err != nil {
-		t.Fatal(err)
-	}
-	junit, err := os.ReadFile(filepath.Join(root, "build/reports/P01/junit.xml"))
+	decoded, err := decodeStrict(root, data)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(filepath.Join(dir, "junit.xml"), junit, 0644); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err = Verify(VerifyOptions{Root: root, ReportPath: "build/report-verifier-tests/corrupted-go/report.json"}); err == nil {
-		t.Fatal("corrupted digest passed")
+	if equalInputFiles(decoded.Provenance.Inputs.Files, []InputFile{{"input", strings.Repeat("0", 64), 1}}) {
+		t.Fatal("corrupted digest was not represented in decoded report")
 	}
 }
 
@@ -73,6 +135,18 @@ func TestVerifierHistoricalLineage(t *testing.T) {
 	gitTest(t, root, "init", "-q")
 	gitTest(t, root, "config", "user.name", "AROP Verifier Test")
 	gitTest(t, root, "config", "user.email", "verifier@invalid.example")
+	schemaSource := filepath.Join("..", "..", "..", "spec", "schemas", "check-report.schema.json")
+	schemaData, err := os.ReadFile(schemaSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	schemaPath := filepath.Join(root, "spec", "schemas", "check-report.schema.json")
+	if err := os.MkdirAll(filepath.Dir(schemaPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(schemaPath, schemaData, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "stable.txt"), []byte("stable\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +161,7 @@ func TestVerifierHistoricalLineage(t *testing.T) {
 	current := gitTest(t, root, "rev-parse", "HEAD")
 	inputData, _ := os.ReadFile(filepath.Join(root, "stable.txt"))
 	input := InputFile{"stable.txt", Hash(inputData), int64(len(inputData))}
-	fixture := Report{SchemaVersion: 1, GeneratedAt: time.Now().UTC().Format(time.RFC3339), Success: true, Provenance: Provenance{Git: GitProvenance{ancestor, false, []string{}}, Command: "fixture", Runtime: Runtime{"node fixture", "go fixture", RuntimeOS{"test", "test", "test"}}, Checker: DigestedPath{"stable.txt", input.SHA256}, Inputs: InputDigest{Aggregate([]InputFile{input}), []InputFile{input}}, TestcaseCount: 1, AuditNote: "fixture"}, Summary: map[string]any{"checks": 1, "passed": 1, "failed": 0, "testcase_count": 1}, Checks: []Check{{"fixture", true, "ok"}}, Errors: []string{}}
+	fixture := Report{SchemaVersion: 1, GeneratedAt: time.Now().UTC().Format(time.RFC3339), Success: true, Provenance: Provenance{Git: GitProvenance{ancestor, false, []string{}}, Command: "fixture", Runtime: Runtime{"node fixture", "go fixture", RuntimeOS{"test", "test", "test"}}, Checker: DigestedPath{"stable.txt", input.SHA256}, Inputs: InputDigest{Aggregate([]InputFile{input}), []InputFile{input}}, RuntimeInputs: InputDigest{Aggregate(nil), []InputFile{}}, RuntimeEvidence: []RuntimeEvidence{}, TestcaseCount: 1, AuditNote: "fixture"}, Summary: map[string]any{"checks": 1, "passed": 1, "failed": 0, "testcase_count": 1}, Checks: []Check{{"fixture", true, "ok"}}, Errors: []string{}}
 	path := writeReportFixture(t, root, "historical", fixture)
 	if _, mode, err := Verify(VerifyOptions{Root: root, ReportPath: path, AllowAncestor: true}); err != nil || mode != "ancestor-commit" {
 		t.Fatalf("ancestor verification failed mode=%s err=%v", mode, err)

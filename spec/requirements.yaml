@@ -102,14 +102,26 @@ requirements:
       - python-runtime-registration-client
       - python-worker-client
       - blueprint-validation
+      - blueprint-validation-library
+      - blueprint-validation-tests
       - machine-report-writer
+      - machine-report-verifier-library
       - evidence-validation-library
+      - evidence-validation-tests
       - go-structured-file-tools
+      - go-structured-file-tools-tests
+      - go-schema-validator
+      - go-schema-validator-tests
+      - spec-index-governance
+      - spec-index-governance-tests
+      - planning-canonical-evidence-summary-schema
+      - planning-trusted-key-registry-schema
       - go-module-proxy-bootstrap
       - go-release-primitive
       - container-build-primitive
       - release-engineering-toolchain
     phases:
+      - P01
       - P02
       - P05
       - P08
@@ -140,6 +152,7 @@ requirements:
       - P42
       - P43
     tests:
+      - make-spec-index-check
       - make-blueprint-check
       - make-test-go-workspace
       - make-test-control-plane-platform

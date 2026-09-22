@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/schema"
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile"
 )
 
 type VerifyOptions struct {
@@ -50,9 +53,9 @@ func Verify(options VerifyOptions) (*Report, string, error) {
 	if err != nil {
 		return nil, "", fmt.Errorf("report is unreadable: %w", err)
 	}
-	var r Report
-	if err := json.Unmarshal(data, &r); err != nil {
-		return nil, "", fmt.Errorf("report JSON: %w", err)
+	r, err := decodeStrict(options.Root, data)
+	if err != nil {
+		return nil, "", err
 	}
 	problems := []string{}
 	if r.SchemaVersion != 1 {
@@ -90,6 +93,11 @@ func Verify(options VerifyOptions) (*Report, string, error) {
 			return int(v)
 		case int:
 			return v
+		case json.Number:
+			i, err := v.Int64()
+			if err == nil {
+				return int(i)
+			}
 		}
 		return -1
 	}
@@ -205,6 +213,37 @@ func Verify(options VerifyOptions) (*Report, string, error) {
 	if !equalInputFiles(actual, r.Provenance.Inputs.Files) || Aggregate(actual) != r.Provenance.Inputs.SHA256 {
 		problems = append(problems, "input digest/size mismatch")
 	}
+	runtimePaths := make([]string, 0, len(r.Provenance.RuntimeInputs.Files))
+	runtimeActual := []InputFile{}
+	for _, f := range r.Provenance.RuntimeInputs.Files {
+		path, pathErr := safePath(options.Root, f.Path, "runtime input path")
+		if pathErr != nil {
+			problems = append(problems, pathErr.Error())
+			continue
+		}
+		runtimePaths = append(runtimePaths, f.Path)
+		content, readErr := os.ReadFile(path)
+		if readErr != nil {
+			problems = append(problems, "cannot verify runtime input "+f.Path)
+			continue
+		}
+		runtimeActual = append(runtimeActual, InputFile{f.Path, Hash(content), int64(len(content))})
+	}
+	runtimeSorted := append([]string{}, runtimePaths...)
+	sort.Strings(runtimeSorted)
+	if !equalStrings(runtimePaths, runtimeSorted) || hasDup(runtimePaths) {
+		problems = append(problems, "runtime input paths must be unique and canonically sorted")
+	}
+	if !equalInputFiles(runtimeActual, r.Provenance.RuntimeInputs.Files) || Aggregate(runtimeActual) != r.Provenance.RuntimeInputs.SHA256 {
+		problems = append(problems, "runtime input digest/size mismatch")
+	}
+	evidenceKinds := []string{}
+	for _, item := range r.Provenance.RuntimeEvidence {
+		evidenceKinds = append(evidenceKinds, item.Kind)
+	}
+	if !sort.StringsAreSorted(evidenceKinds) || hasDup(evidenceKinds) {
+		problems = append(problems, "runtime evidence kinds must be unique and canonically sorted")
+	}
 	if mode == "current-worktree" {
 		statusBytes, statusErr := gitBytes(options.Root, "status", "--porcelain=v1", "--untracked-files=all")
 		status := strings.TrimRight(string(statusBytes), "\r\n")
@@ -237,9 +276,31 @@ func Verify(options VerifyOptions) (*Report, string, error) {
 		}
 	}
 	if len(problems) > 0 {
-		return &r, mode, fmt.Errorf("AROP report verification failed with %d error(s): %s", len(problems), strings.Join(problems, "; "))
+		return r, mode, fmt.Errorf("AROP report verification failed with %d error(s): %s", len(problems), strings.Join(problems, "; "))
 	}
-	return &r, mode, nil
+	return r, mode, nil
+}
+
+func decodeStrict(root string, data []byte) (*Report, error) {
+	parsed, err := structuredfile.Parse(data, "json")
+	if err != nil {
+		return nil, fmt.Errorf("report JSON: %w", err)
+	}
+	if err := schema.ValidateFile(root, "spec/schemas/check-report.schema.json", parsed); err != nil {
+		return nil, fmt.Errorf("report schema: %w", err)
+	}
+	normalized, err := json.Marshal(parsed)
+	if err != nil {
+		return nil, fmt.Errorf("normalize report JSON: %w", err)
+	}
+	var r Report
+	decoder := json.NewDecoder(bytes.NewReader(normalized))
+	decoder.UseNumber()
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&r); err != nil {
+		return nil, fmt.Errorf("decode report JSON: %w", err)
+	}
+	return &r, nil
 }
 func equalStrings(a, b []string) bool { return bytes.Equal(mustJSON(a), mustJSON(b)) }
 func hasDup(v []string) bool {

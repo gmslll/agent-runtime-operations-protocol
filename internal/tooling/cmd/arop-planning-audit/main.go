@@ -10,6 +10,7 @@ import (
 
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/evidence"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/report"
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/schema"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile"
 )
 
@@ -22,22 +23,31 @@ func main() {
 	if arg == "" && len(os.Args) > 1 {
 		arg = os.Args[1]
 	}
-	var doc map[string]any
+	doc := map[string]any{}
 	raw := []byte{}
 	outside := false
+	var loadErr error
 	if arg != "" {
-		abs, _ := filepath.Abs(arg)
-		rel, _ := filepath.Rel(root, abs)
-		outside = strings.HasPrefix(rel, "..")
-		raw, err = os.ReadFile(abs)
-		if err == nil {
-			err = structuredfile.Load(abs, &doc)
+		abs, absErr := filepath.Abs(arg)
+		if absErr != nil {
+			loadErr = absErr
+		} else {
+			rel, relErr := filepath.Rel(root, abs)
+			outside = relErr == nil && strings.HasPrefix(rel, "..")
+			value, bytes, strictErr := structuredfile.LoadAny(abs)
+			loadErr = strictErr
+			raw = bytes
+			if strictErr == nil {
+				loadErr = schema.ValidateFile(root, "spec/schemas/planning-audit-evidence.schema.json", value)
+				doc, _ = value.(map[string]any)
+			}
 		}
+	} else {
+		loadErr = fmt.Errorf("EVIDENCE is required")
 	}
 	record("external-evidence-location", outside, "raw review evidence must remain outside the Git repository")
-	record("external-evidence-readable", err == nil && len(raw) > 0, fmt.Sprint(err))
-	valid := doc["schema_version"] != nil && doc["kind"] == "arop-planning-audit" && doc["subject"] != nil && doc["result"] != nil
-	record("planning-audit-evidence-schema", valid, "required evidence shape and kind")
+	record("external-evidence-readable", loadErr == nil && len(raw) > 0, detail(loadErr, "strict external evidence loaded"))
+	record("planning-audit-evidence-schema", loadErr == nil, detail(loadErr, "Draft 2020-12 schema and format assertions passed"))
 	subject, _ := doc["subject"].(map[string]any)
 	commit, _ := subject["commit"].(string)
 	lineage, lerr := evidence.VerifySubjectCommit(root, commit, subject)
@@ -60,17 +70,38 @@ func main() {
 	digest, derr := evidence.CanonicalSummaryDigest(doc)
 	record("canonical-summary-content-binding", derr == nil && doc["summary_sha256"] == digest, detail(derr, "canonical summary digest matches"))
 	auth, aerr := evidence.Authenticate(root, doc, "independent_reviewer", os.Getenv("TRUSTED_KEYS"), os.Getenv("TRUSTED_CHANNEL_CONFIRMATION"))
-	record("reviewer-authenticity-gate", aerr == nil, detail(aerr, fmt.Sprint(auth["mode"])))
+	record("reviewer-authenticity-gate", aerr == nil, detail(aerr, fmt.Sprint(auth.Candidate["mode"])))
+	candidate := map[string]any{"schema_version": 1, "kind": "arop-planning-audit-summary", "subject": subject, "reviewer_id": nested(doc, "reviewer", "id"), "result": result, "attested_at": doc["attested_at"], "summary_sha256": doc["summary_sha256"], "authentication": auth.Candidate, "raw_evidence_sha256": "sha256:" + report.Hash(raw)}
+	if auth.Candidate["mode"] == "trusted-key-attestation" {
+		candidate["attestation"] = doc["attestation"]
+	}
+	candidateData, candidateErr := json.MarshalIndent(candidate, "", "  ")
+	if candidateErr == nil {
+		candidateErr = schema.ValidateFile(root, "spec/schemas/canonical-evidence-summary.schema.json", candidate)
+	}
+	if candidateErr == nil {
+		candidateData = append(candidateData, '\n')
+	}
+	record("canonical-summary-candidate-schema", candidateErr == nil, detail(candidateErr, "candidate preserves authentication material and passes schema"))
+	subjectJCS, subjectErr := evidence.JCSDigest(subject)
+	resultJCS, resultErr := evidence.JCSDigest(result)
+	authJCS, authErr := evidence.JCSDigest(auth.Candidate)
+	record("canonical-summary-component-digests", subjectErr == nil && resultErr == nil && authErr == nil, detail(first(subjectErr, resultErr, authErr), "subject/result/auth JCS digests computed"))
+	if allPassed(checks) {
+		fatal(os.MkdirAll(filepath.Join(root, "build/reports/P03"), 0o755))
+		fatal(os.WriteFile(filepath.Join(root, "build/reports/P03/canonical-summary.json"), candidateData, 0o644))
+	}
 	command := os.Getenv("AROP_CHECK_COMMAND")
 	if command == "" {
 		command = "go run ./internal/tooling/cmd/arop-planning-audit"
 	}
-	r, werr := report.Write(report.WriteOptions{Root: root, Directory: "build/reports/P03", Suite: "arop-planning-audit", Class: "arop.planning-audit", Command: command, CheckerPath: "internal/tooling/cmd/arop-planning-audit/main.go", InputPaths: []string{"spec/requirements.yaml", "docs/DEVELOPMENT_PLAN.md", "docs/IMPLEMENTATION_BLUEPRINT.md", "spec/artifact-manifest.yaml", "spec/schemas/planning-audit-evidence.schema.json", "spec/schemas/check-report.schema.json", "internal/tooling/cmd/arop-planning-audit/main.go", "internal/tooling/evidence/validation.go", "internal/tooling/report/writer.go", "internal/tooling/report/verifier.go", "internal/tooling/structuredfile/files.go"}, Checks: checks, Summary: map[string]any{"evidence_sha256": report.Hash(raw), "canonical_summary_sha256": digest, "authentication_mode": auth["mode"], "raw_evidence_committed": false}, AuditNote: "Reviewer authenticity comes from an external trusted role/signature or a human-owned trusted channel; this tool never infers independence."})
+	runtimeEvidence := []report.RuntimeEvidence{{Kind: "canonical-summary-candidate", SHA256: report.Hash(candidateData), Bytes: int64(len(candidateData))}, {Kind: "external-planning-audit-evidence", SHA256: report.Hash(raw), Bytes: int64(len(raw))}}
+	if auth.MaterialSHA256 != "" {
+		runtimeEvidence = append(runtimeEvidence, report.RuntimeEvidence{Kind: "external-authentication-material", SHA256: auth.MaterialSHA256, Bytes: auth.MaterialBytes})
+	}
+	r, werr := report.Write(report.WriteOptions{Root: root, Directory: "build/reports/P03", Suite: "arop-planning-audit", Class: "arop.planning-audit", Command: command, CheckerPath: "internal/tooling/cmd/arop-planning-audit/main.go", InputPaths: []string{"go.mod", "go.sum", "spec/requirements.yaml", "docs/DEVELOPMENT_PLAN.md", "docs/IMPLEMENTATION_BLUEPRINT.md", "spec/artifact-manifest.yaml", "spec/schemas/planning-audit-evidence.schema.json", "spec/schemas/canonical-evidence-summary.schema.json", "spec/schemas/trusted-key-registry.schema.json", "spec/schemas/check-report.schema.json", "internal/tooling/cmd/arop-planning-audit/main.go", "internal/tooling/evidence/validation.go", "internal/tooling/report/writer.go", "internal/tooling/report/verifier.go", "internal/tooling/schema/validator.go", "internal/tooling/structuredfile/files.go"}, RuntimeEvidence: runtimeEvidence, Checks: checks, Summary: map[string]any{"candidate_file_sha256": "sha256:" + report.Hash(candidateData), "canonical_summary_sha256": digest, "subject_jcs": subjectJCS, "result_jcs": resultJCS, "raw_evidence": map[string]any{"sha256": "sha256:" + report.Hash(raw), "bytes": len(raw)}, "auth_jcs": authJCS, "authentication_mode": auth.Candidate["mode"], "raw_evidence_committed": false}, AuditNote: "Reviewer authenticity comes from external trusted material recorded only by digest and byte count; this tool never infers independence."})
 	fatal(werr)
 	if r.Success {
-		candidate := map[string]any{"schema_version": 1, "kind": "arop-planning-audit-summary", "subject": subject, "reviewer_id": nested(doc, "reviewer", "id"), "result": result, "attested_at": doc["attested_at"], "summary_sha256": doc["summary_sha256"], "authentication": auth, "raw_evidence_sha256": "sha256:" + report.Hash(raw)}
-		data, _ := json.MarshalIndent(candidate, "", "  ")
-		fatal(os.WriteFile(filepath.Join(root, "build/reports/P03/canonical-summary.json"), append(data, '\n'), 0644))
 		fmt.Println("AROP planning audit evidence passed; canonical summary candidate is in build/reports/P03/.")
 		return
 	}
@@ -85,8 +116,8 @@ func ids(root string) ([]string, []string) {
 	}
 	var req struct {
 		Requirements []struct {
-			ID string `yaml:"id"`
-		} `yaml:"requirements"`
+			ID string `json:"id" yaml:"id"`
+		} `json:"requirements" yaml:"requirements"`
 	}
 	_ = structuredfile.Load(filepath.Join(root, "spec/requirements.yaml"), &req)
 	r := []string{}
@@ -108,6 +139,22 @@ func detail(err error, ok string) string {
 	return ok
 }
 func nested(m map[string]any, a, b string) any { x, _ := m[a].(map[string]any); return x[b] }
+func allPassed(checks []report.Check) bool {
+	for _, check := range checks {
+		if !check.Passed {
+			return false
+		}
+	}
+	return true
+}
+func first(errors ...error) error {
+	for _, err := range errors {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 func fatal(e error) {
 	if e != nil {
 		fmt.Fprintln(os.Stderr, e)

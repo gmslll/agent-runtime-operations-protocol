@@ -3,7 +3,6 @@
 package blueprint
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,38 +16,56 @@ import (
 )
 
 type Artifact struct {
-	ID                    string   `yaml:"id"`
-	Path                  string   `yaml:"path"`
-	Status                string   `yaml:"status"`
-	Kind                  string   `yaml:"kind"`
-	Authority             string   `yaml:"authority"`
-	Owner                 string   `yaml:"owner"`
-	OwnerPhase            string   `yaml:"owner_phase"`
-	CompletionPhase       string   `yaml:"completion_phase"`
-	ProducerPhase         string   `yaml:"producer_phase"`
-	AcceptanceTest        string   `yaml:"acceptance_test"`
-	PathRole              string   `yaml:"path_role"`
-	FutureAction          string   `yaml:"future_action"`
-	FutureOwner           string   `yaml:"future_owner"`
-	FutureOwnerPhase      string   `yaml:"future_owner_phase"`
-	FutureAcceptanceTest  string   `yaml:"future_acceptance_test"`
-	ImplementationRuntime string   `yaml:"implementation_runtime"`
-	ToolScope             string   `yaml:"tool_scope"`
-	DerivesFrom           []string `yaml:"derives_from"`
-	RuntimeInputs         []string `yaml:"runtime_inputs"`
-	FutureArtifacts       []string `yaml:"future_artifacts"`
+	ID                    string   `json:"id" yaml:"id"`
+	Path                  string   `json:"path" yaml:"path"`
+	Status                string   `json:"status" yaml:"status"`
+	Kind                  string   `json:"kind" yaml:"kind"`
+	Authority             string   `json:"authority" yaml:"authority"`
+	Language              string   `json:"language" yaml:"language"`
+	Capabilities          []string `json:"capabilities" yaml:"capabilities"`
+	Owner                 string   `json:"owner" yaml:"owner"`
+	OwnerPhase            string   `json:"owner_phase" yaml:"owner_phase"`
+	CompletionPhase       string   `json:"completion_phase" yaml:"completion_phase"`
+	ProducerPhase         string   `json:"producer_phase" yaml:"producer_phase"`
+	AcceptanceTest        string   `json:"acceptance_test" yaml:"acceptance_test"`
+	Exposure              string   `json:"exposure" yaml:"exposure"`
+	PathRole              string   `json:"path_role" yaml:"path_role"`
+	FutureAction          string   `json:"future_action" yaml:"future_action"`
+	FutureOwner           string   `json:"future_owner" yaml:"future_owner"`
+	FutureOwnerPhase      string   `json:"future_owner_phase" yaml:"future_owner_phase"`
+	FutureAcceptanceTest  string   `json:"future_acceptance_test" yaml:"future_acceptance_test"`
+	ImplementationRuntime string   `json:"implementation_runtime" yaml:"implementation_runtime"`
+	ToolScope             string   `json:"tool_scope" yaml:"tool_scope"`
+	DerivesFrom           []string `json:"derives_from" yaml:"derives_from"`
+	RuntimeInputs         []string `json:"runtime_inputs" yaml:"runtime_inputs"`
+	FutureArtifacts       []string `json:"future_artifacts" yaml:"future_artifacts"`
 }
 type Manifest struct {
-	Artifacts []Artifact `yaml:"artifacts"`
+	SchemaVersion  int               `json:"schema_version" yaml:"schema_version"`
+	CatalogID      string            `json:"catalog_id" yaml:"catalog_id"`
+	Updated        string            `json:"updated" yaml:"updated"`
+	Purpose        string            `json:"purpose" yaml:"purpose"`
+	AuthorityChain []map[string]any  `json:"authority_chain" yaml:"authority_chain"`
+	Statuses       map[string]string `json:"statuses" yaml:"statuses"`
+	Artifacts      []Artifact        `json:"artifacts" yaml:"artifacts"`
 }
 type Requirements struct {
-	Requirements []struct {
-		ID    string   `yaml:"id"`
-		Tests []string `yaml:"tests"`
-	} `yaml:"requirements"`
-	VerificationCatalog map[string]any `yaml:"verification_catalog"`
+	SchemaVersion             int    `json:"schema_version" yaml:"schema_version"`
+	Updated                   string `json:"updated" yaml:"updated"`
+	Source                    string `json:"source" yaml:"source"`
+	ImmutabilityRule          string `json:"immutability_rule" yaml:"immutability_rule"`
+	StatementsDigestAlgorithm string `json:"statements_digest_algorithm" yaml:"statements_digest_algorithm"`
+	StatementsDigest          string `json:"statements_digest" yaml:"statements_digest"`
+	Requirements              []struct {
+		ID                  string   `json:"id" yaml:"id"`
+		StatementOriginalZH string   `json:"statement_original_zh" yaml:"statement_original_zh"`
+		TranslationEN       string   `json:"translation_en" yaml:"translation_en"`
+		Artifacts           []string `json:"artifacts" yaml:"artifacts"`
+		Phases              []string `json:"phases" yaml:"phases"`
+		Tests               []string `json:"tests" yaml:"tests"`
+	} `json:"requirements" yaml:"requirements"`
 }
-type Baseline struct{ ID, Action string }
+type Baseline struct{ ID, Action, Phase string }
 type Phase struct {
 	ID, Title, Body, Type, Status, Owner, Components, Owned, Dependencies, Acceptance string
 	Baselines                                                                         []Baseline
@@ -87,9 +104,9 @@ func parsePhases(text string) []Phase {
 				v = strings.TrimSpace(v)
 				open := strings.Index(v, "(")
 				if open > 0 && strings.HasSuffix(v, ")") {
-					p.Baselines = append(p.Baselines, Baseline{v[:open], v[open+1 : len(v)-1]})
+					p.Baselines = append(p.Baselines, Baseline{v[:open], v[open+1 : len(v)-1], p.ID})
 				} else {
-					p.Baselines = append(p.Baselines, Baseline{v, "invalid"})
+					p.Baselines = append(p.Baselines, Baseline{v, "invalid", p.ID})
 				}
 			}
 		}
@@ -166,6 +183,9 @@ func Run(root string) ([]report.Check, map[string]any, []string) {
 	planBaseline := map[string]Baseline{}
 	metadata := []string{}
 	allowedTypes := map[string]bool{"implement": true, "refactor": true, "verify · review": true, "verify · spec": true, "gate": true, "deliver": true}
+	componentWhitelist := map[string]bool{"governance": true, "planning": true, "repository": true, "protocol": true, "codegen": true, "control-plane": true, "operations": true, "storage": true, "identity": true, "publication": true, "assets": true, "registry": true, "sdk-go": true, "run": true, "dispatch": true, "events": true, "delivery": true, "streaming": true, "worker": true, "sdk-python": true, "sdk-typescript": true, "interop": true, "conformance": true, "fault-ha": true, "quickstart": true, "deployment": true, "release": true}
+	acceptanceByPhase := map[string][]string{}
+	implementationOwners := map[string]bool{}
 	for i, p := range phases {
 		byPhase[p.ID] = p
 		if p.ID != fmt.Sprintf("P%02d", i+1) {
@@ -179,10 +199,22 @@ func Run(root string) ([]report.Check, map[string]any, []string) {
 				metadata = append(metadata, p.ID+" missing "+v.k)
 			}
 		}
-		if ownerPhase[p.Owner] != "" {
-			metadata = append(metadata, "duplicate owner "+p.Owner)
+		if (p.Type == "implement" || p.Type == "refactor") && implementationOwners[p.Owner] {
+			metadata = append(metadata, "duplicate implement owner "+p.Owner)
+		}
+		if p.Type == "implement" || p.Type == "refactor" {
+			implementationOwners[p.Owner] = true
 		}
 		ownerPhase[p.Owner] = p.ID
+		components := list(p.Components)
+		if len(components) == 0 {
+			metadata = append(metadata, p.ID+" has no component")
+		}
+		for _, component := range components {
+			if !componentWhitelist[component] {
+				metadata = append(metadata, p.ID+" invalid component "+component)
+			}
+		}
 		owned := list(p.Owned)
 		if (p.Type == "implement" || p.Type == "refactor") && len(owned) == 0 {
 			metadata = append(metadata, p.ID+" owns no artifacts")
@@ -205,11 +237,26 @@ func Run(root string) ([]report.Check, map[string]any, []string) {
 			}
 			planBaseline[b.ID] = b
 		}
+		commands := makeCommands(p.Acceptance)
+		acceptanceByPhase[p.ID] = commands
+		if len(commands) != 1 {
+			metadata = append(metadata, p.ID+" needs exactly one Make command")
+		}
 		if !strings.Contains(p.Acceptance, "build/reports/"+p.ID+"/report.json") || !strings.Contains(p.Acceptance, "junit.xml") {
 			metadata = append(metadata, p.ID+" missing report paths")
 		}
 	}
-	record("dynamic-phase-sequence", len(phases) == 53 && len(metadata) == 0, fmt.Sprintf("%d phases; %s", len(phases), strings.Join(metadata, "; ")))
+	sequenceOK := len(phases) == 53 && len(phases) > 0 && phases[len(phases)-1].Owner == "v1-delivery"
+	for i, p := range phases {
+		sequenceOK = sequenceOK && p.ID == fmt.Sprintf("P%02d", i+1)
+	}
+	record("dynamic-phase-sequence", sequenceOK, fmt.Sprintf("%d phases ending with %s", len(phases), func() string {
+		if len(phases) == 0 {
+			return "none"
+		}
+		return phases[len(phases)-1].Owner
+	}()))
+	record("phase-metadata-and-reports", len(metadata) == 0, strings.Join(metadata, "; "))
 	depProblems := []string{}
 	deps := map[string][]string{}
 	phaseRef := regexp.MustCompile(`P[0-9]{2}`)
@@ -217,6 +264,8 @@ func Run(root string) ([]report.Check, map[string]any, []string) {
 		d := phaseRef.FindAllString(p.Dependencies, -1)
 		if p.Dependencies == "none" {
 			d = nil
+		} else if len(d) == 0 {
+			depProblems = append(depProblems, p.ID+" has unparseable dependencies")
 		}
 		for _, x := range d {
 			if byPhase[x].ID == "" || phaseNum(x) >= phaseNum(p.ID) {
@@ -275,19 +324,48 @@ func Run(root string) ([]report.Check, map[string]any, []string) {
 		if a.Status == "planned" && roles != 1 {
 			artifactProblems = append(artifactProblems, a.ID+" planned lifecycle roles !=1")
 		}
+		for _, lifecycle := range []string{a.OwnerPhase, a.CompletionPhase, a.ProducerPhase} {
+			if lifecycle != "" && byPhase[lifecycle].ID == "" {
+				artifactProblems = append(artifactProblems, a.ID+" unknown lifecycle phase "+lifecycle)
+			}
+		}
 		if a.OwnerPhase != "" {
+			if a.Owner == "" || a.AcceptanceTest == "" || a.Exposure == "" || a.PathRole != "concrete" {
+				artifactProblems = append(artifactProblems, a.ID+" invalid concrete source metadata")
+			}
 			if planOwner[a.ID] != a.OwnerPhase {
 				artifactProblems = append(artifactProblems, a.ID+" plan owner mismatch")
 			}
 			if byPhase[a.OwnerPhase].Owner != a.Owner {
 				artifactProblems = append(artifactProblems, a.ID+" capability owner mismatch")
 			}
+			if len(acceptanceByPhase[a.OwnerPhase]) != 1 || acceptanceByPhase[a.OwnerPhase][0] != a.AcceptanceTest {
+				artifactProblems = append(artifactProblems, a.ID+" acceptance mismatch")
+			}
 		}
-		if a.FutureOwnerPhase != "" {
+		if a.CompletionPhase != "" && a.PathRole != "aggregate" && a.PathRole != "container" {
+			artifactProblems = append(artifactProblems, a.ID+" completion is not aggregate/container")
+		}
+		if a.ProducerPhase != "" && !map[string]bool{"machine-reports": true, "canonical-evidence-summary": true, "detached-evidence-summary": true, "detached-evidence-bundle": true}[a.Kind] {
+			artifactProblems = append(artifactProblems, a.ID+" invalid producer kind")
+		}
+		hasFuture := a.FutureAction != "" || a.FutureOwner != "" || a.FutureOwnerPhase != "" || a.FutureAcceptanceTest != "" || a.FutureArtifacts != nil
+		if hasFuture {
+			if a.Status != "present" || a.FutureAction == "" || a.FutureOwner == "" || a.FutureOwnerPhase == "" || a.FutureAcceptanceTest == "" || a.FutureArtifacts == nil {
+				artifactProblems = append(artifactProblems, a.ID+" future transition requires all future_* fields on a present artifact")
+			}
 			b, ok := planBaseline[a.ID]
-			if !ok || b.Action != a.FutureAction || a.FutureOwner != byPhase[a.FutureOwnerPhase].Owner {
+			futurePhase := byPhase[a.FutureOwnerPhase]
+			if futurePhase.ID == "" || (futurePhase.Type != "implement" && futurePhase.Type != "refactor") || !ok || b.Action != a.FutureAction || b.Phase != a.FutureOwnerPhase || a.FutureOwner != futurePhase.Owner || len(acceptanceByPhase[a.FutureOwnerPhase]) != 1 || acceptanceByPhase[a.FutureOwnerPhase][0] != a.FutureAcceptanceTest {
 				artifactProblems = append(artifactProblems, a.ID+" future baseline mismatch")
 			}
+			for _, future := range a.FutureArtifacts {
+				if future == "" {
+					artifactProblems = append(artifactProblems, a.ID+" has empty future artifact")
+				}
+			}
+		} else if a.Status == "present" && strings.HasSuffix(a.Kind, "baseline") {
+			artifactProblems = append(artifactProblems, a.ID+" present baseline has no future transition")
 		}
 		for _, d := range append(append([]string{}, a.DerivesFrom...), a.RuntimeInputs...) {
 			if d == a.ID || byID[d].ID == "" { /* checked after full map below */
@@ -315,20 +393,39 @@ func Run(root string) ([]report.Check, map[string]any, []string) {
 				artifactProblems = append(artifactProblems, a.ID+" self dependency")
 			}
 		}
+		for _, d := range a.DerivesFrom {
+			if dependency := byID[d]; dependency.ID != "" && availability(dependency) > availability(a) {
+				artifactProblems = append(artifactProblems, fmt.Sprintf("%s@%d depends on future %s@%d", a.ID, availability(a), d, availability(dependency)))
+			}
+		}
+		if a.CompletionPhase != "" {
+			for _, d := range a.DerivesFrom {
+				if dependency := byID[d]; dependency.ID != "" && availability(dependency) > phaseNum(a.CompletionPhase) {
+					artifactProblems = append(artifactProblems, a.ID+" completes before "+d)
+				}
+			}
+		}
+		for _, future := range a.FutureArtifacts {
+			if byID[future].ID == "" {
+				artifactProblems = append(artifactProblems, a.ID+" unknown future artifact "+future)
+			}
+		}
 	}
 	record("artifact-lifecycle-temporal-bidirectional", len(artifactProblems) == 0, fmt.Sprintf("%d artifacts; %s", len(manifest.Artifacts), strings.Join(artifactProblems, "; ")))
 	dagProblems := graphProblems(manifest.Artifacts, byID, nil)
 	record("artifact-runtime-combined-dag", len(dagProblems) == 0, strings.Join(dagProblems, "; "))
 	reports := map[string]Artifact{}
+	reportCounts := map[string]int{}
 	for _, a := range manifest.Artifacts {
 		if a.Kind == "machine-reports" {
 			reports[a.ProducerPhase] = a
+			reportCounts[a.ProducerPhase]++
 		}
 	}
 	reportProblems := []string{}
 	for _, p := range phases {
 		r := reports[p.ID]
-		if r.ID == "" || r.AcceptanceTest != "make-"+firstMake(p.Acceptance) {
+		if reportCounts[p.ID] != 1 || r.ID == "" || r.Path != "build/reports/"+p.ID || r.OwnerPhase != "" || r.CompletionPhase != "" || r.AcceptanceTest != "make-"+firstMake(p.Acceptance) {
 			reportProblems = append(reportProblems, p.ID+" report missing/acceptance mismatch")
 		}
 	}
@@ -341,7 +438,7 @@ func Run(root string) ([]report.Check, map[string]any, []string) {
 	record("implementation-runtime-boundary", len(boundary) == 0, strings.Join(boundary, "; "))
 	boundaryProbes := boundaryNegativeProbes()
 	record("implementation-runtime-negative-probes", len(boundaryProbes) == 0, strings.Join(boundaryProbes, "; "))
-	treeNeedles := []string{"openapi/fragments/control-plane/", "sdk/go/generated/", "sdk/python/src/arop/", "sdk/typescript/", "cmd/arop-conformance/", "reference/control-plane/", "internal/domain/", "internal/ports/", "migrations/sqlite/", "migrations/postgres/", "deployments/quickstart/", "deployments/production-reference/", "internal/tooling/"}
+	treeNeedles := []string{"<!-- blueprint-target-tree:v1 -->", "openapi/fragments/control-plane/", "openapi/control-plane-v1.yaml", "sdk/go/generated/", "sdk/python/src/arop/", "sdk/typescript/", "cmd/arop-conformance/", "conformance/", "reference/control-plane/", "internal/domain/", "internal/ports/", "migrations/sqlite/", "migrations/postgres/", "reference/agents/go-http/", "deployments/quickstart/", "deployments/production-reference/", ".github/workflows/", "internal/tooling/"}
 	missing := []string{}
 	for _, n := range treeNeedles {
 		if !strings.Contains(layout, n) {
@@ -349,6 +446,9 @@ func Run(root string) ([]report.Check, map[string]any, []string) {
 		}
 	}
 	record("target-tree-declaration", len(missing) == 0, strings.Join(missing, ", "))
+	for _, check := range parityChecks(root, plan, layout, blue, architecture, decisions, makefile, read("README.md"), read("AGENTS.md"), read("docs/SDK_AND_DX.md"), read("docs/PUBLIC_PROJECT_AND_ADOPTION.md"), phases, byPhase, ownerPhase, deps, manifest.Artifacts, byID, planOwner, planBaseline, acceptanceByPhase, reports, req) {
+		record(check.Name, check.Passed, check.Detail)
+	}
 	record("architecture-runtime-policy", strings.Contains(architecture, "Node") && strings.Contains(decisions, "D-061") && strings.Contains(blue, "implementation_runtime"), "IR-03 runtime boundary is explicit in architecture, decisions and blueprint")
 	record("console-isolation", !strings.Contains(strings.ToLower(plan+layout), "kinglucky-agent-console/") && !strings.Contains(strings.ToLower(plan+layout), "../kinglucky-agent-console"), "protocol plan does not modify Console")
 	linkProblems := localLinks(root)
@@ -373,6 +473,338 @@ func firstMake(v string) string {
 		return m[1]
 	}
 	return ""
+}
+func makeCommands(v string) []string {
+	r := regexp.MustCompile(`\bmake ([a-z0-9]+(?:-[a-z0-9]+)*)`)
+	out := []string{}
+	for _, match := range r.FindAllStringSubmatch(v, -1) {
+		out = append(out, "make-"+match[1])
+	}
+	return out
+}
+
+func parityChecks(root, plan, layout, blueprint, architecture, decisions, makefile, readme, agents, sdk, publicAdoption string, phases []Phase, byPhase map[string]Phase, ownerPhase map[string]string, dependencies map[string][]string, artifacts []Artifact, byID map[string]Artifact, planOwner map[string]string, planBaseline map[string]Baseline, acceptance map[string][]string, reports map[string]Artifact, requirements Requirements) []report.Check {
+	checks := []report.Check{}
+	add := func(name string, passed bool, detail string) {
+		checks = append(checks, report.Check{name, passed, detail})
+	}
+
+	add("review-candidate-status", strings.Contains(layout, "status: review-candidate") && strings.Contains(blueprint, "status: review-candidate") && strings.Contains(blueprint, "P04 用户 Gate 前") && strings.Contains(readme, "不表示规划已冻结"), "layout and blueprint remain review candidates before P04")
+	modulePattern := regexp.MustCompile(`<!--\s*blueprint-module:\s*([^>]+?)\s*-->`)
+	modules := []string{}
+	for _, match := range modulePattern.FindAllStringSubmatch(layout, -1) {
+		modules = append(modules, strings.TrimSpace(match[1]))
+	}
+	add("two-module-bootstrap", equalStrings(modules, []string{"go.mod", "reference/control-plane/go.mod"}) && strings.Contains(layout, "不建第三个") && strings.Contains(layout, "真实") && strings.Contains(layout, "go.work") && strings.Contains(layout, "临时 Go proxy") && strings.Contains(plan, "GOWORK=off") && strings.Contains(plan, "root pseudo-version"), strings.Join(modules, ", "))
+	lowerPlanLayout := strings.ToLower(layout + "\n" + plan)
+	vendorNeutral := strings.Contains(layout, "cmd/arop-conformance") && strings.Contains(layout, "语言中立") && strings.Contains(blueprint, "不依赖 Reference") && strings.Contains(architecture, "不提供厂商专属 Adapter")
+	for _, forbidden := range []string{"cc-connect-adapter", "feishu-adapter", "codex-adapter"} {
+		vendorNeutral = vendorNeutral && !strings.Contains(lowerPlanLayout, forbidden)
+	}
+	add("portable-vendor-neutral", vendorNeutral, "portable runner, neutral fixtures, no vendor adapter")
+
+	requiredOwners := []string{"spec-governance", "implementation-planning", "independent-reviewer", "project-owner", "repository-layout", "protocol-foundation", "code-generation", "control-plane-platform", "control-plane-storage", "identity-secret-foundation", "publication-contracts", "publication-service", "asset-broker", "registry-core", "registry-api-sdk", "registry-recovery", "registry-verification", "run-service", "dispatch-security", "event-ledger", "go-provider-delivery", "streaming-delivery", "run-delivery-verification", "worker-service", "go-worker-client", "operations-security-review", "python-provider", "typescript-consumer", "interop-a2a", "interop-mcp", "interop-ard", "interop-observability", "portable-conformance", "server-conformance", "fault-ha-harness", "sqlite-quickstart", "production-deployment", "resilience-verification", "release-supply-chain", "release-evidence-tooling", "release-lineage-tooling", "release-finalization-tooling", "release-dry-run-verification", "release-readiness-review", "public-governance", "public-artifact-generation", "rc-source-freeze", "public-release-verification", "v1-rc-delivery", "external-conformance-review", "v1-freeze-overlay-review", "v1-release-approval", "v1-delivery"}
+	ownerProblems := []string{}
+	last := 0
+	for _, owner := range requiredOwners {
+		phase := ownerPhase[owner]
+		if phase == "" {
+			ownerProblems = append(ownerProblems, "missing "+owner)
+			continue
+		}
+		if phaseNum(phase) <= last {
+			ownerProblems = append(ownerProblems, owner+" out of order")
+		}
+		last = phaseNum(phase)
+	}
+	add("capability-owner-order", len(ownerProblems) == 0, strings.Join(ownerProblems, "; "))
+	p01, p02, p03, p04 := byPhase["P01"], byPhase["P02"], byPhase["P03"], byPhase["P04"]
+	gateOK := p01.Type == "implement" && p01.Status == "complete" && p02.Type == "implement" && p02.Status == "complete" && p03.Type == "verify · review" && p03.Status == "pending-review" && p04.Type == "gate" && p04.Status == "blocked" && strings.Contains(p03.Body, "must_fix_count=0") && strings.Contains(p04.Body, "summary_sha256") && contains(dependencies["P04"], "P03")
+	add("planning-audit-user-gate", gateOK, "P01/P02 complete, P03 pending review, P04 blocked and dependent")
+	firstRules := map[string][]string{"control-plane-platform": {"Clock/ID/Fault", "Audit/Trace"}, "control-plane-storage": {"durable Audit", "fixture versions", "readiness"}, "identity-secret-foundation": {"Credential", "SecretRef", "durable Audit"}, "publication-service": {"静态 URL", "离线"}, "asset-broker": {"DNS/IP", "redirect"}, "run-service": {"Outbox", "Cancel", "Deadline", "Usage", "Audit", "Trace", "effect_id"}, "dispatch-security": {"Signer/KMS/SecretRef", "public JWKS", "rotation state"}, "event-ledger": {"append-only", "Inbox", "capacity 释放同事务"}, "go-provider-delivery": {"DurableStore", "SQLite adapter/migration", "effect_id", "crash-before/after-effect", "DNS/IP 重检"}, "worker-service": {"claim 与 Attempt lease 原子", "Inbox/Outbox/effect"}}
+	firstProblems := []string{}
+	for owner, needles := range firstRules {
+		body := byPhase[ownerPhase[owner]].Body
+		for _, needle := range needles {
+			if !strings.Contains(body, needle) {
+				firstProblems = append(firstProblems, owner+":"+needle)
+			}
+		}
+	}
+	add("first-path-invariants", len(firstProblems) == 0, strings.Join(firstProblems, "; "))
+
+	pathProblems := []string{}
+	casePaths := map[string]string{}
+	for i, left := range artifacts {
+		folded := strings.ToLower(filepath.ToSlash(filepath.Clean(left.Path)))
+		if prior := casePaths[folded]; prior != "" && prior != left.Path {
+			pathProblems = append(pathProblems, "case collision "+prior+"/"+left.Path)
+		}
+		casePaths[folded] = left.Path
+		for _, right := range artifacts[i+1:] {
+			lp := strings.TrimSuffix(filepath.ToSlash(filepath.Clean(left.Path)), "/")
+			rp := strings.TrimSuffix(filepath.ToSlash(filepath.Clean(right.Path)), "/")
+			if lp == rp {
+				pathProblems = append(pathProblems, "duplicate "+lp)
+			} else if strings.HasPrefix(rp, lp+"/") && left.PathRole != "aggregate" && left.PathRole != "container" {
+				pathProblems = append(pathProblems, left.ID+" covers "+right.ID)
+			} else if strings.HasPrefix(lp, rp+"/") && right.PathRole != "aggregate" && right.PathRole != "container" {
+				pathProblems = append(pathProblems, right.ID+" covers "+left.ID)
+			}
+		}
+	}
+	add("artifact-path-overlap", len(pathProblems) == 0, strings.Join(pathProblems, "; "))
+	critical := []string{"sdk-go-protocol-core", "base-state-machine-fixtures", "conformance-harness-base", "codegen-pipeline", "codegen-representative-spike", "reference-control-plane-server", "audit-trace-ports", "audit-trace-memory-bootstrap", "migration-engine", "migration-engine-fixture-versions", "sqlite-uow-storage-adapter", "postgres-uow-storage-adapter", "durable-audit-storage", "identity-service", "credential-store", "reference-secret-exchange", "registry-api-service", "direct-proxy-delivery-service", "provider-durable-store-port", "reference-provider-sqlite-adapter", "reference-provider-sqlite-migration", "streaming-service", "go-streaming-client", "typescript-streaming-client", "release-package-orchestrator", "supply-chain-orchestrator", "go-consumer-core", "go-consumer-sdk", "python-runtime-registration-client", "python-worker-client", "python-package-metadata", "typescript-package-metadata", "go-release-primitive", "conformance-scenario-schema", "conformance-profile-schema", "conformance-core-scenarios", "conformance-v1-profiles", "conformance-fault-ha-scenarios", "production-conformance-profile", "release-version-policy-schema", "release-version-policy", "release-version-mapper", "oidc-release-workflow", "oidc-release-workflow-lock", "oidc-release-workflow-policy", "detached-release-evidence-envelope-schema", "detached-release-evidence-verifier", "trusted-release-role-registry", "cross-commit-lineage-verifier", "rc-source-freeze-checker", "final-equivalence-attestation-schema", "freeze-overlay-checker", "payload-equivalence-checker", "final-delivery-checker", "blueprint-validation-library", "machine-report-verifier-library", "go-schema-validator"}
+	missingCritical := []string{}
+	for _, id := range critical {
+		if byID[id].ID == "" {
+			missingCritical = append(missingCritical, id)
+		}
+	}
+	add("critical-artifact-owners", len(missingCritical) == 0, strings.Join(missingCritical, ", "))
+	codegenProblems := []string{}
+	for _, domain := range []string{"control-plane", "asset", "registry", "run", "dispatch", "event", "streaming", "worker"} {
+		for _, language := range []string{"go", "python", "typescript"} {
+			id := "generated-" + domain + "-" + language
+			if !contains(byID[id].DerivesFrom, "codegen-pipeline") {
+				codegenProblems = append(codegenProblems, id)
+			}
+		}
+	}
+	for _, id := range byID["codegen-pipeline"].DerivesFrom {
+		if strings.HasPrefix(id, "generated-") {
+			codegenProblems = append(codegenProblems, "pipeline reverse dependency")
+		}
+	}
+	add("schema-fixture-codegen-increments", len(codegenProblems) == 0, strings.Join(codegenProblems, "; "))
+	migrationProblems := []string{}
+	for _, item := range []struct{ domain, phase string }{{"base", "P09"}, {"identity", "P10"}, {"publication", "P12"}, {"asset", "P13"}, {"registry", "P14"}, {"run", "P18"}, {"dispatch", "P19"}, {"event", "P20"}, {"worker", "P24"}} {
+		for _, engine := range []string{"sqlite", "postgres"} {
+			if byID[engine+"-migration-"+item.domain].OwnerPhase != item.phase {
+				migrationProblems = append(migrationProblems, engine+"/"+item.domain)
+			}
+		}
+		for _, needle := range []string{"empty", "N-1→N", "idempotent", "dirty"} {
+			if !strings.Contains(byPhase[item.phase].Body, needle) {
+				migrationProblems = append(migrationProblems, item.phase+":"+needle)
+			}
+		}
+	}
+	if !strings.Contains(byPhase["P16"].Body, "不新增 migration") {
+		migrationProblems = append(migrationProblems, "P16 no-migration")
+	}
+	if strings.Contains(byPhase["P21"].Owned, "postgres") {
+		migrationProblems = append(migrationProblems, "P21 provider postgres")
+	}
+	if !strings.Contains(byPhase["P18"].Body, "effect_id") {
+		migrationProblems = append(migrationProblems, "P18 effect_id")
+	}
+	add("concrete-migration-increments", len(migrationProblems) == 0, strings.Join(migrationProblems, "; "))
+	providerOK := byID["provider-durable-store-port"].Path == "sdk/go/provider/durable_store.go" && byID["reference-provider-sqlite-adapter"].Path == "reference/agents/go-http/internal/storage/sqlite" && strings.HasPrefix(byID["reference-provider-sqlite-migration"].Path, "reference/agents/go-http/migrations/sqlite/") && strings.Contains(layout, "DurableStore") && strings.Contains(sdk, "不属于 Control Plane 双库矩阵")
+	add("provider-storage-boundary", providerOK, "public SDK port and reference-local SQLite boundary")
+
+	releaseChecks := releaseParity(plan, blueprint, decisions, publicAdoption, phases, byPhase, ownerPhase, dependencies, byID)
+	checks = append(checks, releaseChecks...)
+
+	implementedTargets := map[string]bool{}
+	targetPattern := regexp.MustCompile(`(?m)^([a-z0-9]+(?:-[a-z0-9]+)*):(?:\s|$)`)
+	for _, m := range targetPattern.FindAllStringSubmatch(makefile, -1) {
+		implementedTargets["make-"+m[1]] = true
+	}
+	makeProblems := []string{}
+	for _, id := range []string{"P01", "P02", "P03", "P04"} {
+		for _, target := range acceptance[id] {
+			if !implementedTargets[target] {
+				makeProblems = append(makeProblems, id+" missing "+target)
+			}
+		}
+	}
+	add("current-make-targets", len(makeProblems) == 0, strings.Join(makeProblems, "; "))
+	requirementProblems := []string{}
+	for _, requirement := range requirements.Requirements {
+		allowed := map[string]bool{}
+		for _, phase := range requirement.Phases {
+			if byPhase[phase].ID == "" {
+				requirementProblems = append(requirementProblems, requirement.ID+" unknown "+phase)
+			}
+			matched := false
+			for _, test := range acceptance[phase] {
+				allowed[test] = true
+				if contains(requirement.Tests, test) {
+					matched = true
+				}
+			}
+			if !matched {
+				requirementProblems = append(requirementProblems, requirement.ID+" lacks "+phase+" acceptance")
+			}
+		}
+		for _, test := range requirement.Tests {
+			if !allowed[test] {
+				requirementProblems = append(requirementProblems, requirement.ID+" non-phase test "+test)
+			}
+		}
+		for _, artifact := range requirement.Artifacts {
+			if byID[artifact].ID == "" {
+				requirementProblems = append(requirementProblems, requirement.ID+" unknown artifact "+artifact)
+			}
+		}
+	}
+	add("requirement-traceability-bidirectional", len(requirements.Requirements) == 14 && len(requirementProblems) == 0, strings.Join(requirementProblems, "; "))
+	consoleOK := strings.Contains(blueprint, "kinglucky-agent-console") && strings.Contains(blueprint, "不在本实施范围内") && strings.Contains(blueprint, "P01–P53") && strings.Contains(architecture, "P01–P53") && strings.Contains(plan, "本仓库 P01–P53 不修改 `kinglucky-agent-console`") && strings.Contains(readme, "不依赖 Console") && strings.Contains(agents, "kinglucky-agent-console") && !strings.Contains(layout, "kinglucky-agent-console/")
+	add("console-isolation-full", consoleOK, "Console remains downstream and outside P01-P53")
+	semanticProblems := []string{}
+	for _, needle := range []string{"Authoring strict", "Consumer forward compatible", "Offline closure", "原始事件是不可变 append-only", "语义一致”而非“SQL 一致", "P16 明确复用 P14 ledger/watermark", "P07 交付可复用的三语言 pipeline", "预期子报告 ID/数量", "release_approver", "Sigstore identity"} {
+		if !strings.Contains(blueprint+"\n"+sdk, needle) {
+			semanticProblems = append(semanticProblems, needle)
+		}
+	}
+	add("blueprint-cross-cutting-rules", len(semanticProblems) == 0, strings.Join(semanticProblems, ", "))
+	v01Problems := publicV01Problems(root)
+	add("controlled-v01-language", len(v01Problems) == 0, strings.Join(v01Problems, "; "))
+	probe := publicV01LineProblems("Milestone: publish public v0.1 before the v1 release candidate.", "negative-probe.md")
+	add("controlled-v01-negative-probe", len(probe) == 1, fmt.Sprintf("%d synthetic violations", len(probe)))
+	return checks
+}
+
+func releaseParity(plan, blueprint, decisions, publicAdoption string, phases []Phase, byPhase map[string]Phase, ownerPhase map[string]string, dependencies map[string][]string, byID map[string]Artifact) []report.Check {
+	checks := []report.Check{}
+	add := func(name string, passed bool, detail string) {
+		checks = append(checks, report.Check{name, passed, detail})
+	}
+	sequence := []struct{ owner, phase, kind string }{{"release-supply-chain", "P39", "implement"}, {"release-evidence-tooling", "P40", "implement"}, {"release-lineage-tooling", "P41", "implement"}, {"release-finalization-tooling", "P42", "implement"}, {"release-dry-run-verification", "P43", "verify · spec"}, {"release-readiness-review", "P44", "verify · review"}, {"public-governance", "P45", "gate"}, {"public-artifact-generation", "P46", "deliver"}, {"rc-source-freeze", "P47", "deliver"}, {"public-release-verification", "P48", "verify · review"}, {"v1-rc-delivery", "P49", "deliver"}, {"external-conformance-review", "P50", "gate"}, {"v1-freeze-overlay-review", "P51", "verify · review"}, {"v1-release-approval", "P52", "gate"}, {"v1-delivery", "P53", "deliver"}}
+	problems := []string{}
+	for i, item := range sequence {
+		p := byPhase[item.phase]
+		if ownerPhase[item.owner] != item.phase || p.Type != item.kind {
+			problems = append(problems, item.owner+" mapping")
+		}
+		if i > 0 && !contains(dependencies[item.phase], sequence[i-1].phase) {
+			problems = append(problems, item.phase+" dependency")
+		}
+	}
+	needles := map[string][]string{
+		"P39": {"P36 Go", "P27 Python", "P28 npm", "P37 Container", "不把 P05 proxy bootstrap 当打包 primitive"},
+		"P40": {"root→timestamp→snapshot→targets", "TRUST_ROOT", "protected/pinned root", "Sigstore", "dry-run key", "不自动生成"},
+		"P41": {"隔离 checkout", "CI provenance", "current inputs", "A 到 B"},
+		"P42": {"unsigned canonical candidate", "parent=A", "release_approver", "bridged_reports"},
+		"P43": {"只读", "不得在 verify 阶段补代码", "private/dev snapshot"},
+		"P44": {"private code-complete", "不伪造外部配置/伙伴证据", "P49 v1 RC"},
+		"P45": {"pinned trust root", "两名 Maintainer", "任意 CLI registry", "rollback/freeze"},
+		"P46": {"RC source tree", "不创建 commit/tag", "nested `go.mod` 精确 root RC dependency"},
+		"P47": {"clean RC source commit A", "expected tree digest", "不创 tag/package"},
+		"P48": {"clean commit A", "只读", "不创建 commit/tag", "tracked tree 前后保持同一 digest"},
+		"P49": {"reference/control-plane/v1.0.0-rc.N", "create-only", "annotated tag-object", "incident-blocked", "同一 A/digest", "绝不重标旧 A"},
+		"P50": {"exact A commit/tree", "Schema Bundle", "Runner", "Artifact digests", "distinct `principal_id`"},
+		"P51": {"unsigned canonical final overlay", "expected B tree", "parent=A", "不包含自签 attestation"},
+		"P52": {"release_approver", "Sigstore", "expected B tree", "phase-policy digest", "bridged_reports", "dry-run key", "bound_evidence"},
+		"P53": {"metadata-only commit B", "parent=A", "expected-previous CAS", "同一 B/同一 digest", "incident-blocked", "Conformance/SBOM/provenance"},
+	}
+	for phase, values := range needles {
+		for _, needle := range values {
+			if !strings.Contains(byPhase[phase].Body, needle) {
+				problems = append(problems, phase+":"+needle)
+			}
+		}
+	}
+	add("release-a-b-chain", len(problems) == 0, strings.Join(problems, "; "))
+	postGate := []string{}
+	for _, phase := range phases {
+		if phaseNum(phase.ID) > 45 && (phase.Type == "implement" || phase.Type == "refactor") {
+			postGate = append(postGate, phase.ID)
+		}
+	}
+	add("post-public-gate-freeze", len(postGate) == 0 && byID["public-namespace-regeneration"].OwnerPhase == "P42", strings.Join(postGate, ","))
+	versionProblems := []string{}
+	for _, id := range []string{"release-version-policy-schema", "release-version-policy", "release-version-mapper"} {
+		if byID[id].OwnerPhase != "P39" {
+			versionProblems = append(versionProblems, id)
+		}
+	}
+	for _, needle := range []string{"1.0.0-rc.1", "1.0.0-rc.10", "Python `1.0.0rc1`", "v` 前缀", "PEP 440 输入", "RC leading zero", "build metadata", "version-policy digest"} {
+		if !strings.Contains(plan, needle) {
+			versionProblems = append(versionProblems, needle)
+		}
+	}
+	for phase, values := range map[string][]string{"P43": {"全生态 pack/install", "同一冻结脚本"}, "P46": {"唯一无 `v` 逻辑版本", "Compatibility Matrix 不预填"}, "P48": {"RC1/RC10/final", "policy digest"}, "P51": {"Python `pyproject`/lock", "npm `package.json`/lock", "OCI/CLI/Schema Bundle metadata"}, "P52": {"version-policy digest", "bound_evidence"}, "P53": {"不盲传同一 VERSION", "分别发布"}} {
+		for _, needle := range values {
+			if !strings.Contains(byPhase[phase].Body, needle) {
+				versionProblems = append(versionProblems, phase+":"+needle)
+			}
+		}
+	}
+	add("cross-ecosystem-version-policy", len(versionProblems) == 0, strings.Join(versionProblems, "; "))
+	detachedProblems := []string{}
+	for _, item := range []struct{ id, phase string }{{"verified-external-config-bundle-summary", "P45"}, {"rc-release-subject-manifest", "P49"}, {"rc-compatibility-detached-summary", "P50"}, {"final-overlay-candidate-bundle", "P51"}, {"verified-final-equivalence-attestation-summary", "P52"}, {"final-release-detached-evidence-bundle", "P53"}} {
+		if byID[item.id].ProducerPhase != item.phase {
+			detachedProblems = append(detachedProblems, item.id)
+		}
+	}
+	if !strings.Contains(publicAdoption, "外部") || !strings.Contains(plan, "绝不代签") || !strings.Contains(plan, "不进入 B tree") {
+		detachedProblems = append(detachedProblems, "external producer/validator/detached tree policy")
+	}
+	add("detached-external-evidence-chain", len(detachedProblems) == 0, strings.Join(detachedProblems, "; "))
+	crossCommit := strings.Contains(blueprint, "历史普通 success 报告") && strings.Contains(blueprint, "隔离 checkout") && strings.Contains(blueprint, "受信 CI/OIDC/Sigstore provenance") && strings.Contains(blueprint, "current-input") && strings.Contains(blueprint, "P03/P04 的外部规划签署是独立类型") && strings.Contains(blueprint, "混合 commit 聚合不要求所有报告来自同一 commit") && strings.Contains(blueprint, "P53 使用 commit A 报告") && strings.Contains(blueprint, "P52 attestation 是唯一 A→B bridge") && strings.Contains(decisions, "P03/P04 历史规划签署与机器报告分类") && strings.Contains(decisions, "混合 commit 聚合") && strings.Contains(decisions, "P52 专用外部签名 equivalence attestation")
+	add("cross-commit-report-policy", crossCommit, "ordinary reports, planning signatures, mixed commits and A-to-B bridge are distinct")
+	firstRC := strings.Contains(plan, "取消独立公共 v0.1") && strings.Contains(plan, "P44 前所有产物都是 private/dev snapshot") && strings.Contains(blueprint, "P44 及之前所有制品只允许 private/dev snapshot") && strings.Contains(blueprint, "首个公开候选是 P49") && strings.Contains(publicAdoption, "P44 及之前所有验证制品仅是 private/dev snapshot")
+	add("first-public-v1-rc", firstRC, "P44 and earlier private/dev; P49 is first public RC")
+	return checks
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func publicV01LineProblems(source, label string) []string {
+	problems := []string{}
+	allowed := regexp.MustCompile(`(?i)(取消独立公共 v0\.1|不用 v0\.1|不得用 v0\.1|no (?:separate )?public v0\.1)`)
+	for index, line := range strings.Split(source, "\n") {
+		if regexp.MustCompile(`(?i)\bv0\.1\b`).MatchString(line) && !allowed.MatchString(line) {
+			problems = append(problems, fmt.Sprintf("%s:%d", label, index+1))
+		}
+	}
+	return problems
+}
+
+func publicV01Problems(root string) []string {
+	problems := []string{}
+	for _, top := range []string{"README.md", "SECURITY.md", "CONTRIBUTING.md"} {
+		data, err := os.ReadFile(filepath.Join(root, top))
+		if err != nil {
+			problems = append(problems, top+": "+err.Error())
+			continue
+		}
+		problems = append(problems, publicV01LineProblems(string(data), top)...)
+	}
+	err := filepath.WalkDir(filepath.Join(root, "docs"), func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(path), ".md") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		problems = append(problems, publicV01LineProblems(string(data), filepath.ToSlash(rel))...)
+		return nil
+	})
+	if err != nil {
+		problems = append(problems, "controlled scan: "+err.Error())
+	}
+	return problems
 }
 func availability(a Artifact) int {
 	for _, x := range []string{a.OwnerPhase, a.CompletionPhase, a.ProducerPhase} {
@@ -524,10 +956,24 @@ func reportNegativeProbes(phases []Phase, byID map[string]Artifact, owners map[s
 }
 func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact, makefile, packageJSON string) []string {
 	p := []string{}
+	canonicalRoot := root
+	if root != "" {
+		absoluteRoot, absErr := filepath.Abs(root)
+		if absErr != nil {
+			p = append(p, "repository root resolution failed: "+absErr.Error())
+		} else if resolvedRoot, resolveErr := filepath.EvalSymlinks(absoluteRoot); resolveErr != nil {
+			p = append(p, "repository root symlink resolution failed: "+resolveErr.Error())
+		} else {
+			canonicalRoot = resolvedRoot
+		}
+	}
 	allowedNode := map[string]bool{"schema-validation": true, "schema-codegen": true, "typescript-sdk": true, "npm-packaging": true}
 	execKind := regexp.MustCompile(`tooling|validator|aggregator|build-primitive`)
 	casePaths := map[string]string{}
 	for _, a := range artifacts {
+		if _, err := structuredfile.SafeRelative(".", a.Path); err != nil {
+			p = append(p, a.ID+" unsafe artifact path: "+err.Error())
+		}
 		folded := strings.ToLower(filepath.ToSlash(a.Path))
 		if prior := casePaths[folded]; prior != "" && prior != a.Path {
 			p = append(p, "case-insensitive path collision: "+prior+" / "+a.Path)
@@ -581,7 +1027,7 @@ func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact
 			absolute := filepath.Join(root, filepath.FromSlash(a.Path))
 			if info, err := os.Lstat(absolute); err == nil && info.Mode()&os.ModeSymlink != 0 {
 				resolved, resolveErr := filepath.EvalSymlinks(absolute)
-				rel, relErr := filepath.Rel(root, resolved)
+				rel, relErr := filepath.Rel(canonicalRoot, resolved)
 				if resolveErr != nil || relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 					p = append(p, a.ID+" symlink escapes repository")
 				}
@@ -589,7 +1035,10 @@ func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact
 		}
 	}
 	var pkg map[string]any
-	if json.Unmarshal([]byte(packageJSON), &pkg) == nil {
+	if parsed, err := structuredfile.Parse([]byte(packageJSON), "json"); err != nil {
+		p = append(p, "package.json strict parse: "+err.Error())
+	} else if parsedMap, ok := parsed.(map[string]any); ok {
+		pkg = parsedMap
 		scripts, _ := pkg["scripts"].(map[string]any)
 		for name, raw := range scripts {
 			v := fmt.Sprint(raw)
@@ -597,19 +1046,45 @@ func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact
 				p = append(p, "package script "+name+" aliases forbidden Node governance/release tooling")
 			}
 		}
+		for _, problem := range packageScriptProblems(scripts, artifacts) {
+			p = append(p, problem)
+		}
 	}
-	for _, issue := range commandSourceProblems("Makefile", makefile, false) {
+	for _, issue := range commandSourceProblems("Makefile", makefile, false, artifacts) {
 		p = append(p, issue)
 	}
 	if root != "" {
-		_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		walkErr := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 			if err != nil {
+				p = append(p, "repository walk failed at "+path+": "+err.Error())
 				return nil
 			}
-			rel, _ := filepath.Rel(root, path)
+			rel, relErr := filepath.Rel(root, path)
+			if relErr != nil {
+				p = append(p, "repository relative path failed at "+path+": "+relErr.Error())
+				return nil
+			}
 			rel = filepath.ToSlash(rel)
 			if d.IsDir() && (rel == ".git" || rel == "node_modules" || rel == "build" || strings.HasPrefix(rel, ".git/") || strings.HasPrefix(rel, "node_modules/") || strings.HasPrefix(rel, "build/")) {
 				return filepath.SkipDir
+			}
+			info, lstatErr := os.Lstat(path)
+			if lstatErr != nil {
+				p = append(p, rel+" lstat failed: "+lstatErr.Error())
+				return nil
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				resolved, resolveErr := filepath.EvalSymlinks(path)
+				resolvedRel, resolvedRelErr := filepath.Rel(canonicalRoot, resolved)
+				if resolveErr != nil || resolvedRelErr != nil || resolvedRel == ".." || strings.HasPrefix(resolvedRel, ".."+string(filepath.Separator)) {
+					p = append(p, rel+" symlink escapes repository or cannot be resolved")
+					return nil
+				}
+				owner := artifactForPath(rel, artifacts)
+				resolvedOwner := artifactForPath(filepath.ToSlash(resolvedRel), artifacts)
+				if owner.ID == "" || resolvedOwner.ID == "" {
+					p = append(p, rel+" symlink enters an unregistered artifact")
+				}
 			}
 			if d.IsDir() {
 				return nil
@@ -618,10 +1093,11 @@ func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact
 			ext := strings.ToLower(filepath.Ext(rel))
 			data, readErr := os.ReadFile(path)
 			if readErr != nil {
+				p = append(p, rel+" read failed: "+readErr.Error())
 				return nil
 			}
 			text := string(data)
-			isNode := ext == ".mjs" || ext == ".js" || ext == ".cjs" || ext == ".ts" || strings.HasPrefix(text, "#!/usr/bin/env node") || strings.HasPrefix(text, "#!/usr/bin/node")
+			isNode := ext == ".mjs" || ext == ".js" || ext == ".cjs" || ext == ".ts" || nodeShebang(text)
 			if isNode {
 				owner := artifactForPath(rel, artifacts)
 				if owner.ID == "" || owner.ImplementationRuntime != "node" || !allowedNode[owner.ToolScope] {
@@ -631,9 +1107,11 @@ func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact
 					p = append(p, rel+" JavaScript is forbidden under scripts/release")
 				}
 				for _, imported := range nodeRelativeImports(text) {
-					resolved := filepath.ToSlash(filepath.Clean(filepath.Join(filepath.Dir(rel), imported)))
+					resolved := resolveNodeImport(root, rel, imported)
 					target := artifactForPath(resolved, artifacts)
-					if target.ID != "" && target.ImplementationRuntime != "node" && target.ToolScope != "schema-validation" && target.ToolScope != "schema-codegen" && target.ToolScope != "typescript-sdk" && target.ToolScope != "npm-packaging" {
+					if target.ID == "" {
+						p = append(p, rel+" imports unregistered helper "+imported)
+					} else if target.ImplementationRuntime != "node" && target.ToolScope != "schema-validation" && target.ToolScope != "schema-codegen" && target.ToolScope != "typescript-sdk" && target.ToolScope != "npm-packaging" {
 						p = append(p, rel+" imports non-Node-boundary artifact "+target.ID)
 					}
 					if owner.ID != "" && target.ID != "" && owner.ID != target.ID && !contains(owner.DerivesFrom, target.ID) {
@@ -642,35 +1120,63 @@ func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact
 				}
 			}
 			if strings.HasPrefix(rel, ".github/workflows/") && (ext == ".yml" || ext == ".yaml") {
-				p = append(p, commandSourceProblems(rel, text, false)...)
+				p = append(p, commandSourceProblems(rel, text, false, artifacts)...)
 			}
-			if strings.Contains(strings.ToLower(filepath.Base(rel)), "dockerfile") {
-				p = append(p, commandSourceProblems(rel, text, true)...)
+			base := strings.ToLower(filepath.Base(rel))
+			if strings.Contains(base, "dockerfile") || strings.HasPrefix(base, "containerfile") {
+				p = append(p, commandSourceProblems(rel, text, true, artifacts)...)
 			}
 			return nil
 		})
+		if walkErr != nil {
+			p = append(p, "repository walk failed: "+walkErr.Error())
+		}
 	}
 	return p
 }
 func boundaryNegativeProbes() []string {
 	p := []string{}
-	cases := []Artifact{{ID: "evil-release", Path: "scripts/release/evil.mjs", Kind: "release-validator", ImplementationRuntime: "node", ToolScope: "release"}, {ID: "fake-python", Path: "sdk/python/build.mjs", Kind: "build-primitive", ImplementationRuntime: "python", ToolScope: "python-package"}, {ID: "fake-go", Path: "tools/release.js", Kind: "release-tooling", ImplementationRuntime: "go", ToolScope: "release"}, {ID: "missing-meta", Path: "tools/run", Kind: "release-tooling"}, {ID: "hidden-release", Path: "scripts/schema/hidden.cjs", Kind: "release-tooling", ImplementationRuntime: "node", ToolScope: "release"}, {ID: "node-schema", Path: "scripts/schema.mjs", Kind: "tooling", ImplementationRuntime: "node", ToolScope: "schema-validation", DerivesFrom: []string{"go-release"}}, {ID: "go-release", Path: "internal/tooling/release/x.go", Kind: "release-tooling", ImplementationRuntime: "go", ToolScope: "release", DerivesFrom: []string{"structured-file-tools"}}, {ID: "structured-file-tools", Path: "scripts/lib/repository.mjs", Kind: "tooling", ImplementationRuntime: "node", ToolScope: "schema-validation"}, {ID: "npm-package-primitive", Path: "sdk/typescript/build.mjs", Kind: "build-primitive", ImplementationRuntime: "node", ToolScope: "npm-packaging", DerivesFrom: []string{"python-package"}}, {ID: "python-package", Path: "sdk/python/build.py", Kind: "build-primitive", ImplementationRuntime: "python", ToolScope: "python-package"}, {ID: "case-a", Path: "Tools/A.go"}, {ID: "case-b", Path: "tools/a.go"}}
-	by := map[string]Artifact{}
-	for _, a := range cases {
-		by[a.ID] = a
+	base := []Artifact{{ID: "allowed", Path: "scripts/validate.mjs", Kind: "tooling", ImplementationRuntime: "node", ToolScope: "schema-validation"}}
+	artifactCases := []struct {
+		name     string
+		artifact Artifact
+	}{
+		{"planned-release-node", Artifact{ID: "evil", Path: "scripts/release/evil.mjs", Kind: "release-validator", ImplementationRuntime: "node", ToolScope: "release"}},
+		{"python-mjs", Artifact{ID: "evil", Path: "sdk/python/build.mjs", Kind: "build-primitive", ImplementationRuntime: "python", ToolScope: "python-package"}},
+		{"go-js", Artifact{ID: "evil", Path: "tools/release.js", Kind: "release-tooling", ImplementationRuntime: "go", ToolScope: "release"}},
+		{"missing-runtime-scope", Artifact{ID: "evil", Path: "tools/run", Kind: "release-tooling"}},
+		{"forbidden-scope-under-schema-path", Artifact{ID: "evil", Path: "scripts/schema/hidden.cjs", Kind: "release-tooling", ImplementationRuntime: "node", ToolScope: "release"}},
+		{"case-collision", Artifact{ID: "evil", Path: "Scripts/Validate.mjs", Kind: "tooling", ImplementationRuntime: "node", ToolScope: "schema-validation"}},
 	}
-	if len(runtimeBoundary("", cases, by, "", `{"scripts":{}}`)) < 9 {
-		p = append(p, "path/runtime/scope probes escaped")
-	}
-	for _, s := range []string{`{"scripts":{"evil":"node scripts/release/publish.mjs"}}`, `{"scripts":{"evil":"node scripts/gate-check.mjs"}}`, `{"scripts":{"evil":"npm run hidden","hidden":"node scripts/release/publish.mjs"}}`} {
-		if len(runtimeBoundary("", nil, nil, "", s)) == 0 {
-			p = append(p, "package alias probe escaped")
+	for _, tc := range artifactCases {
+		artifacts := append(append([]Artifact{}, base...), tc.artifact)
+		by := indexArtifacts(artifacts)
+		if len(runtimeBoundary("", artifacts, by, "", `{"scripts":{}}`)) == 0 {
+			p = append(p, tc.name+" escaped")
 		}
 	}
-	for _, m := range []string{"x:\n\tnode -e 'x'", "x:\n\tnpx tsx evil.ts", "x:\n\tbun evil.ts", "x:\n\tdeno run evil.ts", "x:\n\tnode scripts/release/evil.mjs"} {
-		if len(runtimeBoundary("", nil, nil, m, `{"scripts":{}}`)) == 0 {
-			p = append(p, "Make runtime alias probe escaped")
+	for name, shebang := range map[string]string{"env-node": "#!/usr/bin/env node", "env-s-node": "\ufeff  #!/usr/bin/env -S node\r", "usr-node": "#!/usr/bin/node", "usr-nodejs": "#!/usr/bin/nodejs", "env-nodejs": "#!/usr/bin/env nodejs"} {
+		if !nodeShebang(shebang + "\n") {
+			p = append(p, name+" shebang escaped")
 		}
+	}
+	for name, source := range map[string]string{"make-node-var": "NODE_BIN:=node\nx:\n\t$(NODE_BIN) -e x", "make-env-var": "RUNTIME=node\nx:\n\t$${RUNTIME} scripts/release/evil.mjs", "make-env-wrapper": "x:\n\tenv node scripts/release/evil.mjs", "make-npx": "x:\n\tnpx tsx evil.ts", "make-bun": "x:\n\tbun evil.ts", "make-deno": "x:\n\tdeno run evil.ts"} {
+		if len(commandSourceProblems(name, source, false, base)) == 0 {
+			p = append(p, name+" escaped")
+		}
+	}
+	for name, scripts := range map[string]map[string]any{
+		"package-indirect": {"a": "npm run b", "b": "npm run c", "c": "node tools/evil"},
+		"package-cycle":    {"a": "npm run b", "b": "npm run a"},
+		"package-npx":      {"a": "npx tsx tools/evil.ts"},
+		"package-nodejs":   {"a": "nodejs tools/evil"},
+	} {
+		if len(packageScriptProblems(scripts, base)) == 0 {
+			p = append(p, name+" escaped")
+		}
+	}
+	if !strings.HasPrefix(resolveNodeImport("/nonexistent", "scripts/a.mjs", "#release"), "#") {
+		p = append(p, "bare-import alias normalization escaped")
 	}
 	return p
 }
@@ -688,35 +1194,152 @@ func artifactForPath(path string, artifacts []Artifact) Artifact {
 	return best
 }
 func nodeRelativeImports(source string) []string {
-	r := regexp.MustCompile(`(?m)(?:from\s+|import\s*\()?["'](\.{1,2}/[^"']+)["']`)
+	r := regexp.MustCompile(`(?m)(?:from\s+|import\s*(?:\(\s*)?|require\s*\(\s*)["']((?:\.{1,2}/|#)[^"']+)["']`)
 	out := []string{}
 	for _, m := range r.FindAllStringSubmatch(source, -1) {
 		out = append(out, m[1])
 	}
 	return out
 }
-func commandSourceProblems(name, source string, productionImage bool) []string {
+func nodeShebang(source string) bool {
+	first := strings.SplitN(strings.TrimLeft(source, "\ufeff \t\r\n"), "\n", 2)[0]
+	return regexp.MustCompile(`^#!\s*(?:(?:/usr/bin/)?env(?:\s+-S)?\s+|/usr/bin/)(?:node|nodejs)(?:\s|$)`).MatchString(strings.TrimSpace(strings.TrimSuffix(first, "\r")))
+}
+
+func resolveNodeImport(root, sourcePath, imported string) string {
+	if strings.HasPrefix(imported, "#") {
+		return imported
+	}
+	base := filepath.Clean(filepath.Join(filepath.Dir(sourcePath), imported))
+	candidates := []string{base, base + ".mjs", base + ".js", base + ".cjs", base + ".ts", filepath.Join(base, "index.mjs"), filepath.Join(base, "index.js"), filepath.Join(base, "index.ts")}
+	for _, candidate := range candidates {
+		if _, err := os.Stat(filepath.Join(root, candidate)); err == nil {
+			return filepath.ToSlash(candidate)
+		}
+	}
+	return filepath.ToSlash(base)
+}
+
+func packageScriptProblems(scripts map[string]any, artifacts []Artifact) []string {
+	problems := []string{}
+	allowedNode := map[string]bool{"schema-validation": true, "schema-codegen": true, "typescript-sdk": true, "npm-packaging": true}
+	state := map[string]int{}
+	var visit func(string)
+	visit = func(name string) {
+		if state[name] == 1 {
+			problems = append(problems, "package script alias cycle at "+name)
+			return
+		}
+		if state[name] == 2 {
+			return
+		}
+		state[name] = 1
+		command, ok := scripts[name].(string)
+		if !ok {
+			problems = append(problems, "package script "+name+" is not a string")
+			state[name] = 2
+			return
+		}
+		aliasPattern := regexp.MustCompile(`(?:npm|pnpm)\s+run\s+([a-zA-Z0-9:_-]+)|\byarn\s+([a-zA-Z0-9:_-]+)`)
+		for _, match := range aliasPattern.FindAllStringSubmatch(command, -1) {
+			alias := match[1]
+			if alias == "" {
+				alias = match[2]
+			}
+			if _, exists := scripts[alias]; !exists {
+				problems = append(problems, "package script "+name+" references unknown alias "+alias)
+			} else {
+				visit(alias)
+			}
+		}
+		if regexp.MustCompile(`\b(?:npm\s+exec|npx|tsx|bun|deno)\b`).MatchString(command) {
+			problems = append(problems, "package script "+name+" invokes non-allowlisted runtime")
+		}
+		nodePattern := regexp.MustCompile(`(?:^|[;&|]\s*|\benv\s+)(?:node|nodejs)\s+([^\s;&|]+)`)
+		for _, match := range nodePattern.FindAllStringSubmatch(command, -1) {
+			targetPath := strings.Trim(match[1], `"'`)
+			if strings.HasPrefix(targetPath, "-") {
+				problems = append(problems, "package script "+name+" uses inline/unknown Node entry")
+				continue
+			}
+			target := artifactForPath(targetPath, artifacts)
+			if target.ID == "" || target.ImplementationRuntime != "node" || !allowedNode[target.ToolScope] {
+				problems = append(problems, "package script "+name+" invokes unapproved Node target "+targetPath)
+			}
+		}
+		state[name] = 2
+	}
+	for name := range scripts {
+		visit(name)
+	}
+	return problems
+}
+
+func commandSourceProblems(name, source string, productionImage bool, artifacts ...[]Artifact) []string {
 	p := []string{}
+	variables := map[string]string{}
+	for _, match := range regexp.MustCompile(`(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:(?::|\?|\+)?=|:)\s*([^\s#]+)`).FindAllStringSubmatch(source, -1) {
+		variables[match[1]] = match[2]
+	}
+	expanded := source
+	for iteration := 0; iteration < 8; iteration++ {
+		prior := expanded
+		for name, value := range variables {
+			expanded = strings.ReplaceAll(expanded, "$${"+name+"}", value)
+			expanded = strings.ReplaceAll(expanded, "$("+name+")", value)
+			expanded = strings.ReplaceAll(expanded, "${"+name+"}", value)
+			expanded = regexp.MustCompile(`\$`+regexp.QuoteMeta(name)+`\b`).ReplaceAllString(expanded, value)
+		}
+		if expanded == prior {
+			break
+		}
+	}
 	forbidden := regexp.MustCompile(`(?m)\b(node\s+-e|npm\s+exec|npx\b|tsx\b|bun\b|deno\b|node\s+scripts/release/|node\s+scripts/(?:blueprint-check|gate-check|planning-audit|verify-report|test-evidence-lineage|test-report-verifier))`)
-	if forbidden.MatchString(source) {
+	if forbidden.MatchString(expanded) {
 		p = append(p, name+" invokes non-allowlisted Node runtime")
 	}
-	if productionImage && regexp.MustCompile(`(?m)\b(node|npm|npx|tsx|bun|deno)\b`).MatchString(source) {
+	if len(artifacts) > 0 {
+		allowedNode := map[string]bool{"schema-validation": true, "schema-codegen": true, "typescript-sdk": true, "npm-packaging": true}
+		for _, match := range regexp.MustCompile(`\b(?:node|nodejs)\s+([^\s;&|]+)`).FindAllStringSubmatch(expanded, -1) {
+			targetPath := strings.Trim(match[1], `"'`)
+			if strings.HasPrefix(targetPath, "-") {
+				continue
+			}
+			target := artifactForPath(targetPath, artifacts[0])
+			if target.ID == "" || target.ImplementationRuntime != "node" || !allowedNode[target.ToolScope] {
+				p = append(p, name+" invokes unapproved Node target "+targetPath)
+			}
+		}
+	}
+	if productionImage && regexp.MustCompile(`(?m)\b(node|nodejs|npm|npx|tsx|bun|deno)\b`).MatchString(expanded) {
 		p = append(p, name+" production image contains Node runtime/tooling")
 	}
 	return p
 }
 func localLinks(root string) []string {
 	p := []string{}
-	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, e error) error {
-		if e != nil || d.IsDir() || !strings.HasSuffix(path, ".md") || strings.Contains(path, string(filepath.Separator)+"node_modules"+string(filepath.Separator)) {
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, e error) error {
+		if e != nil {
+			p = append(p, "walk/read "+path+": "+e.Error())
 			return nil
 		}
-		b, _ := os.ReadFile(path)
-		r := regexp.MustCompile(`\[[^\]]+\]\(([^)]+)\)`)
+		if d.IsDir() || !strings.HasSuffix(path, ".md") || strings.Contains(path, string(filepath.Separator)+"node_modules"+string(filepath.Separator)) {
+			return nil
+		}
+		b, readErr := os.ReadFile(path)
+		if readErr != nil {
+			p = append(p, "read "+path+": "+readErr.Error())
+			return nil
+		}
+		r := regexp.MustCompile(`\[[^\]]+\]\(([^)]*)\)`)
 		for _, m := range r.FindAllStringSubmatch(string(b), -1) {
 			target := strings.Trim(m[1], "<>")
-			target = strings.Fields(target)[0]
+			fields := strings.Fields(target)
+			if len(fields) == 0 {
+				p = append(p, path+": empty local link")
+				continue
+			}
+			target = fields[0]
 			target = strings.Split(strings.Split(target, "#")[0], "?")[0]
 			if target == "" || strings.HasPrefix(target, "http:") || strings.HasPrefix(target, "https:") || strings.HasPrefix(target, "mailto:") {
 				continue
@@ -728,6 +1351,9 @@ func localLinks(root string) []string {
 		}
 		return nil
 	})
+	if err != nil {
+		p = append(p, "markdown walk: "+err.Error())
+	}
 	return p
 }
 func countType(p []Phase, t string) int {

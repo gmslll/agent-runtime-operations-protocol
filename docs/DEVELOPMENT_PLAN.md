@@ -30,7 +30,7 @@ updated: 2026-09-22
 - **Status:** complete
 - **Capability owner:** spec-governance
 - **Components:** governance
-- **Artifacts owned:** spec-index-validation, spec-index-report-orchestrator, go-structured-file-tools, check-report-meta-schema, machine-report-writer, machine-report-verifier, machine-report-verifier-tests, evidence-lineage-tests, planning-audit-evidence-schema, user-gate-evidence-schema, evidence-validation-library, planning-audit-validation, user-gate-validation
+- **Artifacts owned:** spec-index-validation, spec-index-report-orchestrator, spec-index-governance, spec-index-governance-tests, go-structured-file-tools, go-structured-file-tools-tests, go-schema-validator, go-schema-validator-tests, check-report-meta-schema, planning-canonical-evidence-summary-schema, planning-trusted-key-registry-schema, machine-report-writer, machine-report-verifier-library, machine-report-verifier, machine-report-verifier-tests, evidence-lineage-tests, evidence-validation-tests, planning-audit-evidence-schema, user-gate-evidence-schema, evidence-validation-library, planning-audit-validation, user-gate-validation
 - **Goal:** 建立 Decision 权威链、14 条不可变 `statement_original_zh`、冲突台账、制品 DAG 和规划 Meta-Schema 候选。
 - **Scope:** `docs/DECISIONS.md`、`spec/*`、Node 仅执行 Schema/spec/manifest 校验，Go 编排并生成公共 report、evidence、planning/Gate 验证；不改业务实现。
 - **Dependencies:** none
@@ -45,7 +45,7 @@ updated: 2026-09-22
 - **Status:** complete
 - **Capability owner:** implementation-planning
 - **Components:** planning
-- **Artifacts owned:** blueprint-validation
+- **Artifacts owned:** blueprint-validation-library, blueprint-validation, blueprint-validation-tests
 - **Goal:** 形成双 Go Module、组件边界、单 Agent 阶段 DAG、API 归属、机器验收和 v1 发布闭环候选。
 - **Scope:** `DIRECTORY_STRUCTURE.md`、`IMPLEMENTATION_BLUEPRINT.md`、本计划、README/AGENTS/ARCHITECTURE/SDK 交叉引用和 Go blueprint checker；执行 `implementation_runtime + tool_scope` 边界及恶意别名/路径负例。
 - **Dependencies:** P01
@@ -90,7 +90,7 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** repository-layout
 - **Components:** repository, release
-- **Artifacts owned:** root-go-module, nested-control-plane-go-module, go-work-example, ci-workspace-validation, go-module-proxy-bootstrap
+- **Artifacts owned:** root-go-module, root-go-sum, nested-control-plane-go-module, go-work-example, ci-workspace-validation, go-module-proxy-bootstrap
 - **Baselines transitioned:** reference-control-plane-lite-baseline(migrate-retire)
 - **Goal:** 保留并收口已有 root module，新增唯一 nested module，并让未发布 root module 时 nested module 仍可在 `GOWORK=off` 下验证。
 - **Scope:** 物理搬迁并退休 `reference/control-plane-lite` 基线、验证已有根 `go.mod`、新增 `reference/control-plane/go.mod`、`go.work.example`、最小本地 Go module proxy/bootstrap harness 和 CI 骨架；不改变 wire 行为。

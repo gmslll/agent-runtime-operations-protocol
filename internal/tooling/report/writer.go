@@ -15,6 +15,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/schema"
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile"
 )
 
 type Check struct {
@@ -30,6 +33,11 @@ type InputFile struct {
 type InputDigest struct {
 	SHA256 string      `json:"sha256"`
 	Files  []InputFile `json:"files"`
+}
+type RuntimeEvidence struct {
+	Kind   string `json:"kind"`
+	SHA256 string `json:"sha256"`
+	Bytes  int64  `json:"bytes"`
 }
 type GitProvenance struct {
 	Head         string   `json:"head"`
@@ -51,13 +59,15 @@ type DigestedPath struct {
 	SHA256 string `json:"sha256"`
 }
 type Provenance struct {
-	Git           GitProvenance `json:"git"`
-	Command       string        `json:"command"`
-	Runtime       Runtime       `json:"runtime"`
-	Checker       DigestedPath  `json:"checker"`
-	Inputs        InputDigest   `json:"inputs"`
-	TestcaseCount int           `json:"testcase_count"`
-	AuditNote     string        `json:"audit_note"`
+	Git             GitProvenance     `json:"git"`
+	Command         string            `json:"command"`
+	Runtime         Runtime           `json:"runtime"`
+	Checker         DigestedPath      `json:"checker"`
+	Inputs          InputDigest       `json:"inputs"`
+	RuntimeInputs   InputDigest       `json:"runtime_inputs"`
+	RuntimeEvidence []RuntimeEvidence `json:"runtime_evidence"`
+	TestcaseCount   int               `json:"testcase_count"`
+	AuditNote       string            `json:"audit_note"`
 }
 type Report struct {
 	SchemaVersion int            `json:"schema_version"`
@@ -71,6 +81,8 @@ type Report struct {
 type WriteOptions struct {
 	Root, Directory, Suite, Class, Command, CheckerPath, AuditNote string
 	InputPaths                                                     []string
+	RuntimeInputPaths                                              []string
+	RuntimeEvidence                                                []RuntimeEvidence
 	Checks                                                         []Check
 	Summary                                                        map[string]any
 }
@@ -103,30 +115,36 @@ func DigestFiles(root string, paths []string) (InputDigest, error) {
 	}
 	return InputDigest{Aggregate(files), files}, nil
 }
-func command(root, name string, args ...string) string {
-	out, err := exec.Command(name, args...).CombinedOutput()
+func command(root, name string, args ...string) (string, error) {
+	c := exec.Command(name, args...)
+	c.Dir = root
+	out, err := c.CombinedOutput()
 	if err != nil {
-		return "unavailable: " + err.Error()
+		return "", fmt.Errorf("%s: %w: %s", name, err, strings.TrimSpace(string(out)))
 	}
-	return strings.TrimSpace(string(out))
+	value := strings.TrimSpace(string(out))
+	if value == "" {
+		return "", fmt.Errorf("%s returned empty output", name)
+	}
+	return value, nil
 }
-func git(root string, args ...string) string {
+func git(root string, args ...string) (string, error) {
 	c := exec.Command("git", args...)
 	c.Dir = root
 	out, err := c.CombinedOutput()
 	if err != nil {
-		return "unavailable: " + err.Error()
+		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(string(out)), nil
 }
-func gitStatus(root string) string {
+func gitStatus(root string) (string, error) {
 	c := exec.Command("git", "status", "--porcelain=v1", "--untracked-files=all")
 	c.Dir = root
 	out, err := c.CombinedOutput()
 	if err != nil {
-		return "unavailable: " + err.Error()
+		return "", fmt.Errorf("git status: %w: %s", err, strings.TrimSpace(string(out)))
 	}
-	return strings.TrimRight(string(out), "\r\n")
+	return strings.TrimRight(string(out), "\r\n"), nil
 }
 
 func Write(options WriteOptions) (*Report, error) {
@@ -134,26 +152,42 @@ func Write(options WriteOptions) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
+	runtimeInputs, err := DigestFiles(options.Root, options.RuntimeInputPaths)
+	if err != nil {
+		return nil, err
+	}
 	checkerData, err := os.ReadFile(filepath.Join(options.Root, filepath.FromSlash(options.CheckerPath)))
 	if err != nil {
 		return nil, err
 	}
-	status := gitStatus(options.Root)
+	status, err := gitStatus(options.Root)
+	if err != nil {
+		return nil, err
+	}
 	dirty := []string{}
 	if status != "" {
 		dirty = strings.Split(status, "\n")
 	}
-	node := command(options.Root, "node", "--version")
-	gov := command(options.Root, "go", "version")
-	release := command(options.Root, "uname", "-r")
+	node, err := command(options.Root, "node", "--version")
+	if err != nil {
+		return nil, err
+	}
+	gov, err := command(options.Root, "go", "version")
+	if err != nil {
+		return nil, err
+	}
+	release, err := command(options.Root, "uname", "-r")
+	if err != nil {
+		return nil, err
+	}
 	checks := append([]Check{}, options.Checks...)
 	provenanceProblems := []string{}
-	head := git(options.Root, "rev-parse", "HEAD")
+	head, err := git(options.Root, "rev-parse", "HEAD")
+	if err != nil {
+		return nil, err
+	}
 	if len(head) != 40 {
 		provenanceProblems = append(provenanceProblems, "invalid git HEAD: "+head)
-	}
-	if strings.HasPrefix(gov, "unavailable:") {
-		provenanceProblems = append(provenanceProblems, gov)
 	}
 	if options.Command == "" {
 		provenanceProblems = append(provenanceProblems, "actual command is empty")
@@ -179,13 +213,11 @@ func Write(options WriteOptions) (*Report, error) {
 	summary["passed"] = len(checks) - failed
 	summary["failed"] = failed
 	summary["testcase_count"] = len(checks)
-	report := &Report{1, time.Now().UTC().Format(time.RFC3339Nano), failed == 0, Provenance{GitProvenance{head, len(dirty) > 0, dirty}, options.Command, Runtime{node, gov, RuntimeOS{runtime.GOOS, release, runtime.GOARCH}}, DigestedPath{options.CheckerPath, Hash(checkerData)}, inputs, len(checks), options.AuditNote}, summary, checks, errors}
-	dir := filepath.Join(options.Root, filepath.FromSlash(options.Directory))
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, err
-	}
-	data, _ := json.MarshalIndent(report, "", "  ")
-	if err := os.WriteFile(filepath.Join(dir, "report.json"), append(data, '\n'), 0644); err != nil {
+	evidence := append([]RuntimeEvidence{}, options.RuntimeEvidence...)
+	sort.Slice(evidence, func(i, j int) bool { return evidence[i].Kind < evidence[j].Kind })
+	report := &Report{1, time.Now().UTC().Format(time.RFC3339Nano), failed == 0, Provenance{GitProvenance{head, len(dirty) > 0, dirty}, options.Command, Runtime{node, gov, RuntimeOS{runtime.GOOS, release, runtime.GOARCH}}, DigestedPath{options.CheckerPath, Hash(checkerData)}, inputs, runtimeInputs, evidence, len(checks), options.AuditNote}, summary, checks, errors}
+	data, err := marshalValidated(options.Root, report)
+	if err != nil {
 		return nil, err
 	}
 	type Failure struct {
@@ -213,11 +245,36 @@ func Write(options WriteOptions) (*Report, error) {
 		}
 		cases = append(cases, tc)
 	}
-	x, _ := xml.MarshalIndent(Suite{Name: options.Suite, Tests: len(checks), Failures: failed, Cases: cases}, "", "  ")
+	x, err := xml.MarshalIndent(Suite{Name: options.Suite, Tests: len(checks), Failures: failed, Cases: cases}, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal JUnit XML: %w", err)
+	}
 	x = append([]byte(xml.Header), x...)
 	x = append(x, '\n')
+	dir := filepath.Join(options.Root, filepath.FromSlash(options.Directory))
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "report.json"), append(data, '\n'), 0644); err != nil {
+		return nil, err
+	}
 	if err := os.WriteFile(filepath.Join(dir, "junit.xml"), x, 0644); err != nil {
 		return nil, err
 	}
 	return report, nil
+}
+
+func marshalValidated(root string, value *Report) ([]byte, error) {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal report JSON: %w", err)
+	}
+	parsed, err := structuredfile.Parse(data, "json")
+	if err != nil {
+		return nil, fmt.Errorf("self-parse report JSON: %w", err)
+	}
+	if err := schema.ValidateFile(root, "spec/schemas/check-report.schema.json", parsed); err != nil {
+		return nil, fmt.Errorf("self-validate report JSON: %w", err)
+	}
+	return data, nil
 }
