@@ -1103,6 +1103,9 @@ func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact
 				if owner.ID == "" || owner.ImplementationRuntime != "node" || !allowedNode[owner.ToolScope] {
 					p = append(p, rel+" executable Node file is not covered by an allowed Node artifact")
 				}
+				for _, escape := range nodeExecutionEscapeProblems(text) {
+					p = append(p, rel+" "+escape)
+				}
 				if strings.HasPrefix(lower, "scripts/release/") {
 					p = append(p, rel+" JavaScript is forbidden under scripts/release")
 				}
@@ -1200,6 +1203,29 @@ func nodeRelativeImports(source string) []string {
 		out = append(out, m[1])
 	}
 	return out
+}
+
+func nodeExecutionEscapeProblems(source string) []string {
+	problems := []string{}
+	rules := []struct {
+		name    string
+		pattern string
+	}{
+		{"imports child_process", `(?i)["'](?:node:)?child_process["']`},
+		{"uses dynamic import", `\bimport\s*\(`},
+		{"uses CommonJS require", `\brequire\s*\(`},
+		{"uses eval", `\beval\s*\(`},
+		{"constructs Function", `\b(?:new\s+)?Function\s*\(`},
+		{"executes an external command", `\b(?:exec|execFile|execSync|execFileSync|spawn|spawnSync|fork)\s*\(`},
+		{"uses process native loading escape", `\bprocess\s*\.\s*(?:binding|dlopen)\s*\(`},
+		{"creates a dynamic require", `\bcreateRequire\s*\(`},
+	}
+	for _, rule := range rules {
+		if regexp.MustCompile(rule.pattern).MatchString(source) {
+			problems = append(problems, rule.name+"; Node tool scopes have no external-command allowlist")
+		}
+	}
+	return problems
 }
 func nodeShebang(source string) bool {
 	first := strings.SplitN(strings.TrimLeft(source, "\ufeff \t\r\n"), "\n", 2)[0]

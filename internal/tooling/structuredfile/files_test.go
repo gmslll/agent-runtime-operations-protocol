@@ -1,6 +1,10 @@
 package structuredfile
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestStrictJSON(t *testing.T) {
 	t.Parallel()
@@ -37,5 +41,47 @@ func TestStrictYAML(t *testing.T) {
 				t.Fatalf("Parse accepted %s", tc.name)
 			}
 		})
+	}
+}
+
+func TestCanonicalRepositoryContainment(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	insideDir := filepath.Join(root, "..inside")
+	if err := os.MkdirAll(insideDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	inside := filepath.Join(insideDir, "evidence.json")
+	if err := os.WriteFile(inside, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outsideDir := t.TempDir()
+	outside := filepath.Join(outsideDir, "evidence.json")
+	if err := os.WriteFile(outside, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RequireInsideFile(root, inside, "inside"); err != nil {
+		t.Fatalf("real inside file rejected: %v", err)
+	}
+	if _, err := RequireOutsideFile(root, outside, "outside"); err != nil {
+		t.Fatalf("real outside file rejected: %v", err)
+	}
+	if _, err := RequireOutsideFile(root, inside, "dot-dot-inside"); err == nil {
+		t.Fatal("inside file whose name starts with '..' was accepted as outside")
+	}
+
+	outsideLinkBack := filepath.Join(outsideDir, "back-to-repository")
+	if err := os.Symlink(inside, outsideLinkBack); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RequireOutsideFile(root, outsideLinkBack, "outside-symlink-back"); err == nil {
+		t.Fatal("outside symlink resolving into repository was accepted")
+	}
+	insideLinkOut := filepath.Join(root, "link-out")
+	if err := os.Symlink(outside, insideLinkOut); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RequireInsideFile(root, insideLinkOut, "inside-symlink-out"); err == nil {
+		t.Fatal("inside symlink resolving outside repository was accepted")
 	}
 }

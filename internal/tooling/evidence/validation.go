@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -177,11 +178,25 @@ func ValidateCoverage(result map[string]any, requirements, phases []string) []st
 	return p
 }
 func count(v any) int {
+	max := uint64(^uint(0) >> 1)
 	switch n := v.(type) {
 	case int:
-		return n
+		if n >= 0 {
+			return n
+		}
+	case int64:
+		if n >= 0 && uint64(n) <= max {
+			return int(n)
+		}
+	case json.Number:
+		value, err := n.Int64()
+		if err == nil && value >= 0 && uint64(value) <= max {
+			return int(value)
+		}
 	case float64:
-		return int(n)
+		if !math.IsNaN(n) && !math.IsInf(n, 0) && n >= 0 && math.Trunc(n) == n && n <= float64(max) && uint64(n) <= max {
+			return int(n)
+		}
 	}
 	return -1
 }
@@ -190,6 +205,12 @@ type Authentication struct {
 	Candidate      map[string]any
 	MaterialSHA256 string
 	MaterialBytes  int64
+}
+
+// RequireExternalFile applies the same lexical and symlink-resolved repository
+// boundary to raw evidence, trust registries and trusted-channel records.
+func RequireExternalFile(root, candidate, label string) (string, error) {
+	return structuredfile.RequireOutsideFile(root, candidate, label)
 }
 
 func Authenticate(root string, e map[string]any, role, keysPath, confirmationPath string) (Authentication, error) {
@@ -202,16 +223,9 @@ func Authenticate(root string, e map[string]any, role, keysPath, confirmationPat
 		return Authentication{}, err
 	}
 	if keysPath != "" {
-		abs, err := filepath.Abs(keysPath)
+		abs, err := RequireExternalFile(root, keysPath, "TRUSTED_KEYS registry")
 		if err != nil {
 			return Authentication{}, err
-		}
-		rel, err := filepath.Rel(root, abs)
-		if err != nil {
-			return Authentication{}, err
-		}
-		if !strings.HasPrefix(rel, "..") {
-			return Authentication{}, fmt.Errorf("TRUSTED_KEYS registry must remain outside the Git repository")
 		}
 		registryValue, registryRaw, err := structuredfile.LoadAny(abs)
 		if err != nil {
@@ -282,16 +296,9 @@ func Authenticate(root string, e map[string]any, role, keysPath, confirmationPat
 	if confirmationPath == "" {
 		return Authentication{}, fmt.Errorf("authenticity requires TRUSTED_KEYS or TRUSTED_CHANNEL_CONFIRMATION")
 	}
-	abs, err := filepath.Abs(confirmationPath)
+	abs, err := RequireExternalFile(root, confirmationPath, "TRUSTED_CHANNEL_CONFIRMATION")
 	if err != nil {
 		return Authentication{}, err
-	}
-	rel, err := filepath.Rel(root, abs)
-	if err != nil {
-		return Authentication{}, err
-	}
-	if !strings.HasPrefix(rel, "..") {
-		return Authentication{}, fmt.Errorf("TRUSTED_CHANNEL_CONFIRMATION must remain outside the Git repository")
 	}
 	raw, err := os.ReadFile(abs)
 	if err != nil || len(raw) == 0 {

@@ -261,8 +261,68 @@ func SafeRelative(root, candidate string) (string, error) {
 	}
 	abs := filepath.Join(root, clean)
 	rel, err := filepath.Rel(root, abs)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	if err != nil || pathOutside(rel) {
 		return "", fmt.Errorf("path escapes repository: %q", candidate)
 	}
 	return filepath.ToSlash(rel), nil
+}
+
+// RequireInsideFile resolves both the lexical path and every symlink before
+// accepting a repository file. A path must be inside the repository in both
+// views, so an in-repository symlink cannot escape the trust boundary.
+func RequireInsideFile(root, candidate, label string) (string, error) {
+	resolved, lexicalInside, canonicalInside, err := classifyExistingPath(root, candidate)
+	if err != nil {
+		return "", fmt.Errorf("%s path: %w", label, err)
+	}
+	if !lexicalInside || !canonicalInside {
+		return "", fmt.Errorf("%s must remain inside the repository", label)
+	}
+	return resolved, nil
+}
+
+// RequireOutsideFile accepts only a real file whose lexical path and resolved
+// symlink target are both outside the repository. This rejects misleading
+// names such as "..inside" under the root and outside symlinks back into it.
+func RequireOutsideFile(root, candidate, label string) (string, error) {
+	resolved, lexicalInside, canonicalInside, err := classifyExistingPath(root, candidate)
+	if err != nil {
+		return "", fmt.Errorf("%s path: %w", label, err)
+	}
+	if lexicalInside || canonicalInside {
+		return "", fmt.Errorf("%s must remain outside the repository", label)
+	}
+	return resolved, nil
+}
+
+func classifyExistingPath(root, candidate string) (resolved string, lexicalInside, canonicalInside bool, err error) {
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", false, false, fmt.Errorf("resolve repository root: %w", err)
+	}
+	rootResolved, err := filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return "", false, false, fmt.Errorf("resolve repository root symlinks: %w", err)
+	}
+	candidateAbs, err := filepath.Abs(candidate)
+	if err != nil {
+		return "", false, false, fmt.Errorf("resolve candidate: %w", err)
+	}
+	lexicalRel, err := filepath.Rel(rootAbs, candidateAbs)
+	if err != nil {
+		return "", false, false, fmt.Errorf("compare lexical path: %w", err)
+	}
+	resolved, err = filepath.EvalSymlinks(candidateAbs)
+	if err != nil {
+		return "", false, false, fmt.Errorf("resolve candidate symlinks: %w", err)
+	}
+	canonicalRel, err := filepath.Rel(rootResolved, resolved)
+	if err != nil {
+		return "", false, false, fmt.Errorf("compare canonical path: %w", err)
+	}
+	return resolved, !pathOutside(lexicalRel), !pathOutside(canonicalRel), nil
+}
+
+func pathOutside(relative string) bool {
+	return relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }

@@ -130,6 +130,74 @@ func TestWriterRuntimeIsGo(t *testing.T) {
 	}
 }
 
+func TestVerifierRejectsEveryCurrentRuntimeMutation(t *testing.T) {
+	root := t.TempDir()
+	gitTest(t, root, "init", "-q")
+	gitTest(t, root, "config", "user.name", "AROP Runtime Test")
+	gitTest(t, root, "config", "user.email", "runtime@invalid.example")
+	schemaSource := filepath.Join("..", "..", "..", "spec", "schemas", "check-report.schema.json")
+	schemaData, err := os.ReadFile(schemaSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for path, data := range map[string][]byte{
+		"spec/schemas/check-report.schema.json": schemaData,
+		"checker.go":                            []byte("package fixture\n"),
+		"input.txt":                             []byte("stable\n"),
+		".gitignore":                            []byte("build/\n"),
+	} {
+		absolute := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(absolute), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(absolute, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitTest(t, root, "add", ".")
+	gitTest(t, root, "commit", "-q", "-m", "runtime fixture")
+	_, err = Write(WriteOptions{Root: root, Directory: "build/runtime", Suite: "runtime", Class: "runtime", Command: "test runtime", CheckerPath: "checker.go", InputPaths: []string{"input.txt"}, Checks: []Check{{Name: "fixture", Passed: true, Detail: "ok"}}, AuditNote: "runtime binding fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportPath := "build/runtime/report.json"
+	if _, mode, err := Verify(VerifyOptions{Root: root, ReportPath: reportPath}); err != nil || mode != "current-worktree" {
+		t.Fatalf("valid current report rejected mode=%s err=%v", mode, err)
+	}
+	original, err := os.ReadFile(filepath.Join(root, reportPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func(*Report){
+		"node":        func(r *Report) { r.Provenance.Runtime.Node += "-tampered" },
+		"go":          func(r *Report) { r.Provenance.Runtime.Go += "-tampered" },
+		"os platform": func(r *Report) { r.Provenance.Runtime.OS.Platform += "-tampered" },
+		"os release":  func(r *Report) { r.Provenance.Runtime.OS.Release += "-tampered" },
+		"os arch":     func(r *Report) { r.Provenance.Runtime.OS.Arch += "-tampered" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			var candidate Report
+			if err := json.Unmarshal(original, &candidate); err != nil {
+				t.Fatal(err)
+			}
+			mutate(&candidate)
+			data, err := json.MarshalIndent(candidate, "", "  ")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, reportPath), append(data, '\n'), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, mode, err := Verify(VerifyOptions{Root: root, ReportPath: reportPath}); err == nil || mode != "current-worktree" || !strings.Contains(err.Error(), "runtime does not match") {
+				t.Fatalf("runtime mutation accepted mode=%s err=%v", mode, err)
+			}
+		})
+	}
+	if err := os.WriteFile(filepath.Join(root, reportPath), original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestVerifierHistoricalLineage(t *testing.T) {
 	root := t.TempDir()
 	gitTest(t, root, "init", "-q")
@@ -163,7 +231,7 @@ func TestVerifierHistoricalLineage(t *testing.T) {
 	input := InputFile{"stable.txt", Hash(inputData), int64(len(inputData))}
 	fixture := Report{SchemaVersion: 1, GeneratedAt: time.Now().UTC().Format(time.RFC3339), Success: true, Provenance: Provenance{Git: GitProvenance{ancestor, false, []string{}}, Command: "fixture", Runtime: Runtime{"node fixture", "go fixture", RuntimeOS{"test", "test", "test"}}, Checker: DigestedPath{"stable.txt", input.SHA256}, Inputs: InputDigest{Aggregate([]InputFile{input}), []InputFile{input}}, RuntimeInputs: InputDigest{Aggregate(nil), []InputFile{}}, RuntimeEvidence: []RuntimeEvidence{}, TestcaseCount: 1, AuditNote: "fixture"}, Summary: map[string]any{"checks": 1, "passed": 1, "failed": 0, "testcase_count": 1}, Checks: []Check{{"fixture", true, "ok"}}, Errors: []string{}}
 	path := writeReportFixture(t, root, "historical", fixture)
-	if _, mode, err := Verify(VerifyOptions{Root: root, ReportPath: path, AllowAncestor: true}); err != nil || mode != "ancestor-commit" {
+	if _, mode, err := Verify(VerifyOptions{Root: root, ReportPath: path, AllowAncestor: true}); err != nil || mode != "ancestor-archive-only" {
 		t.Fatalf("ancestor verification failed mode=%s err=%v", mode, err)
 	}
 	if _, _, err := Verify(VerifyOptions{Root: root, ReportPath: path}); err == nil || !strings.Contains(err.Error(), "ALLOW_ANCESTOR=1") {

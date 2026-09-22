@@ -30,14 +30,11 @@ func gitString(root string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 func safePath(root, value, label string) (string, error) {
-	if filepath.IsAbs(value) || strings.Contains(value, ":") {
+	relative, err := structuredfile.SafeRelative(root, value)
+	if err != nil {
 		return "", fmt.Errorf("%s is not a safe repository-relative path: %s", label, value)
 	}
-	clean := filepath.Clean(value)
-	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%s is not a safe repository-relative path: %s", label, value)
-	}
-	return filepath.Join(root, clean), nil
+	return structuredfile.RequireInsideFile(root, filepath.Join(root, filepath.FromSlash(relative)), label)
 }
 
 func Verify(options VerifyOptions) (*Report, string, error) {
@@ -45,8 +42,8 @@ func Verify(options VerifyOptions) (*Report, string, error) {
 	if !filepath.IsAbs(reportPath) {
 		reportPath = filepath.Join(options.Root, reportPath)
 	}
-	rel, err := filepath.Rel(options.Root, reportPath)
-	if err != nil || strings.HasPrefix(rel, "..") {
+	reportPath, err := structuredfile.RequireInsideFile(options.Root, reportPath, "report")
+	if err != nil {
 		return nil, "", fmt.Errorf("report must be inside repository")
 	}
 	data, err := os.ReadFile(reportPath)
@@ -159,7 +156,7 @@ func Verify(options VerifyOptions) (*Report, string, error) {
 	}
 	mode := "current-worktree"
 	if claimed != current {
-		mode = "ancestor-commit"
+		mode = "ancestor-archive-only"
 		if !options.AllowAncestor {
 			problems = append(problems, "report HEAD is not current HEAD; rerun or opt in with ALLOW_ANCESTOR=1")
 		} else if c := exec.Command("git", "merge-base", "--is-ancestor", claimed, current); func() error { c.Dir = options.Root; return c.Run() }() != nil {
@@ -171,7 +168,7 @@ func Verify(options VerifyOptions) (*Report, string, error) {
 		problems = append(problems, e.Error())
 	} else {
 		var content []byte
-		if mode == "ancestor-commit" && options.AllowAncestor {
+		if mode == "ancestor-archive-only" && options.AllowAncestor {
 			content, e = gitBytes(options.Root, "show", claimed+":"+r.Provenance.Checker.Path)
 		} else {
 			content, e = os.ReadFile(checkerAbs)
@@ -199,7 +196,7 @@ func Verify(options VerifyOptions) (*Report, string, error) {
 	for _, p := range paths {
 		var content []byte
 		var e error
-		if mode == "ancestor-commit" && options.AllowAncestor {
+		if mode == "ancestor-archive-only" && options.AllowAncestor {
 			content, e = gitBytes(options.Root, "show", claimed+":"+p)
 		} else {
 			content, e = os.ReadFile(filepath.Join(options.Root, filepath.FromSlash(p)))
@@ -257,8 +254,14 @@ func Verify(options VerifyOptions) (*Report, string, error) {
 		if r.Provenance.Git.Dirty != (len(entries) > 0) || !equalStrings(r.Provenance.Git.DirtyEntries, entries) {
 			problems = append(problems, "report dirty state does not match current worktree")
 		}
+		actualRuntime, runtimeErr := currentRuntime(options.Root)
+		if runtimeErr != nil {
+			problems = append(problems, "cannot verify current runtime: "+runtimeErr.Error())
+		} else if r.Provenance.Runtime != actualRuntime {
+			problems = append(problems, fmt.Sprintf("report runtime does not match current environment: reported=%+v actual=%+v", r.Provenance.Runtime, actualRuntime))
+		}
 	}
-	if mode == "ancestor-commit" && options.AllowAncestor {
+	if mode == "ancestor-archive-only" && options.AllowAncestor {
 		if r.Provenance.Git.Dirty || len(r.Provenance.Git.DirtyEntries) > 0 {
 			problems = append(problems, "historical report reuse requires a clean claimed-commit report")
 		}

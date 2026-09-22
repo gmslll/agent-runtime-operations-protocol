@@ -1,7 +1,7 @@
 ---
 title: Agent Runtime Operations Protocol 开发与发布计划
 status: planning-candidate
-updated: 2026-09-22
+updated: 2026-09-23
 ---
 
 # 1. 执行约定
@@ -32,12 +32,12 @@ updated: 2026-09-22
 - **Components:** governance
 - **Artifacts owned:** spec-index-validation, spec-index-report-orchestrator, spec-index-governance, spec-index-governance-tests, go-structured-file-tools, go-structured-file-tools-tests, go-schema-validator, go-schema-validator-tests, check-report-meta-schema, planning-canonical-evidence-summary-schema, planning-trusted-key-registry-schema, machine-report-writer, machine-report-verifier-library, machine-report-verifier, machine-report-verifier-tests, evidence-lineage-tests, evidence-validation-tests, planning-audit-evidence-schema, user-gate-evidence-schema, evidence-validation-library, planning-audit-validation, user-gate-validation
 - **Goal:** 建立 Decision 权威链、14 条不可变 `statement_original_zh`、冲突台账、制品 DAG 和规划 Meta-Schema 候选。
-- **Scope:** `docs/DECISIONS.md`、`spec/*`、Node 仅执行 Schema/spec/manifest 校验，Go 编排并生成公共 report、evidence、planning/Gate 验证；不改业务实现。
+- **Scope:** `docs/DECISIONS.md`、`spec/*`、Node 仅执行无进程逃逸的 Schema/spec/manifest 校验，Go 编排并生成公共 report、evidence、planning/Gate 验证；统一执行 separator-aware、symlink-aware 路径边界和 current runtime 复核；不改业务实现。
 - **Dependencies:** none
 - **First-path invariants:** Authoring strict/Consumer forward compatible；离线 `$ref`；先校验再 Digest；制品路径唯一、DAG 无环、语言派生正确。
 - **Machine acceptance:** `make spec-index-check` → `build/reports/P01/report.json` 和 `junit.xml`。
 - **Rollback point:** 恢复上一份规划元数据；冲突或 DAG 错误时不进入 P02。
-- **Definition of done:** Meta-Schema、路径、DAG、Decision/链接/引用闭包和反例探针全绿，报告带 commit/dirty/command/runtime/input/checker digest。
+- **Definition of done:** Meta-Schema、路径、DAG、Decision/链接/引用闭包和反例探针全绿；报告带 commit/dirty/command/runtime/input/checker digest，current-worktree 精确重验 Node/Go/OS，ancestor 只标记 archive-only；allowlisted Node 工具仍拒绝 child process、动态加载和 eval/Function。
 
 ## P02 — Schedulable implementation blueprint
 
@@ -64,7 +64,7 @@ updated: 2026-09-22
 - **Goal:** 由未参与 P01/P02 撰写的审核者验证需求覆盖、可调度性和必修项归零。
 - **Scope:** 只读核心文档/规划元数据；输入为仓库外审计证据，仓库只生成脱敏 canonical 内容摘要报告和可选验签结果。
 - **Dependencies:** P02
-- **First-path invariants:** IR-01–IR-14 与 P01–最后阶段逐条 `PASS`；`must_fix_count=0` 且明细为空；subject commit 是当前 HEAD 或其祖先，requirements/plan/blueprint/artifact-manifest 四份证据 digest、`git show subject:path` blob 与 current HEAD/worktree 三方精确匹配；subject→HEAD ancestry 中修改后回退或删除任一 planning blob 都拒绝；`summary_sha256` 重算一致。
+- **First-path invariants:** IR-01–IR-14 与 P01–最后阶段逐条 `PASS`；count 必须是非负、可表示的严格整数，`must_fix_count=0` 且明细为空；subject commit 是当前 HEAD 或其祖先，requirements/plan/blueprint/artifact-manifest 四份证据 digest、`git show subject:path` blob 与 current HEAD/worktree 三方精确匹配；subject→HEAD ancestry 中修改后回退或删除任一 planning blob 都拒绝；`summary_sha256` 重算一致。EVIDENCE、TRUSTED_KEYS、TRUSTED_CHANNEL_CONFIRMATION 的词法路径和 EvalSymlinks 后真实路径都必须在仓库外。
 - **Machine acceptance:** `make planning-audit EVIDENCE=<outside-repo-review> TRUSTED_KEYS=<outside-repo-key-registry>`，或人工 Gate 提供 `TRUSTED_CHANNEL_CONFIRMATION=<outside-repo-record>` → `build/reports/P03/report.json` 和 `junit.xml`。
 - **Rollback point:** must-fix 非零时回 P01/P02 修复并重新独立审计，不编辑证据伪造通过。
 - **Definition of done:** 14 条需求和全部阶段结果完整、digest 匹配、must-fix 为零；审核者独立性由受信 key 角色与 Ed25519 签名或人工可信渠道确认。
@@ -79,7 +79,7 @@ updated: 2026-09-22
 - **Goal:** 在任何物理重构和新协议行为前获得用户对已审计计划的明确确认。
 - **Scope:** P03 成功报告与稳定 canonical summary Digest、计划 subject commit/digest、仓库外用户批准证据。
 - **Dependencies:** P03
-- **First-path invariants:** Gate 绑定已审计版本的 P03 canonical summary；P04 同样对 requirements/plan/blueprint/artifact-manifest 做证据字段、subject Git blob、current closure 三方校验，并拒绝 changed→reverted/deleted ancestry；IR-01–IR-14 与 P01–最后阶段逐条 `PASS`，零 must-fix，`summary_sha256` 可重算；工具只验证而不自动批准。
+- **First-path invariants:** Gate 绑定已审计版本的 P03 canonical summary；P04 同样对 requirements/plan/blueprint/artifact-manifest 做证据字段、subject Git blob、current closure 三方校验，并拒绝 changed→reverted/deleted ancestry；IR-01–IR-14 与 P01–最后阶段逐条 `PASS`，严格整数 count、零 must-fix，`summary_sha256` 可重算；三类外部材料执行同一 lexical/canonical containment，工具只验证而不自动批准。
 - **Machine acceptance:** `make gate-check GATE=P04 EVIDENCE=<outside-repo-approval> TRUSTED_KEYS=<outside-repo-key-registry>`，或人工 Gate 提供 `TRUSTED_CHANNEL_CONFIRMATION=<outside-repo-record>` → `build/reports/P04/report.json` 和 `junit.xml`。
 - **Rollback point:** 用户要求修改时回 P02/P03；任一受审输入新 Digest 使旧批准失效，仅 commit 前进且输入不变时不要求重复批准。
 - **Definition of done:** canonical hash 可重算，批准者由受信 `project_owner` key 或人工可信渠道确认；此前 P05 保持未开始。

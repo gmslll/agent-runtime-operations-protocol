@@ -28,13 +28,12 @@ func main() {
 	outside := false
 	var loadErr error
 	if arg != "" {
-		abs, absErr := filepath.Abs(arg)
-		if absErr != nil {
-			loadErr = absErr
+		resolved, boundaryErr := evidence.RequireExternalFile(root, arg, "EVIDENCE")
+		if boundaryErr != nil {
+			loadErr = boundaryErr
 		} else {
-			rel, relErr := filepath.Rel(root, abs)
-			outside = relErr == nil && strings.HasPrefix(rel, "..")
-			value, bytes, strictErr := structuredfile.LoadAny(abs)
+			outside = true
+			value, bytes, strictErr := structuredfile.LoadAny(resolved)
 			loadErr = strictErr
 			raw = bytes
 			if strictErr == nil {

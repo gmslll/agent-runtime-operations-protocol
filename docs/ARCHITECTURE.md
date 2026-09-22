@@ -1,7 +1,7 @@
 ---
 title: Agent Runtime Operations Protocol 总体架构
 status: active-design
-updated: 2026-09-22
+updated: 2026-09-23
 ---
 
 # 1. 产品定位
@@ -302,7 +302,7 @@ Reference Control Plane 只验证协议，不复制金运 Console 的组织、�
 
 Reference Control Plane、Registry、Dispatcher、Run/Event Ledger 和服务端 Conformance Harness 统一使用 Go 实现。通用 report/evidence/planning/Gate/blueprint、Go proxy、Go/Container build 以及 P39–P42 release/lineage/finalization 工具也统一使用根 module 的 `internal/tooling/` Go 包与私有命令。Node.js 只可用于 Schema/spec/manifest validation、Schema-driven codegen、TypeScript SDK 和 npm packaging；Python 主要用于 Agent Provider SDK，并用原生 Python/PEP 517 完成 Python package primitive。Node/Python 均不是参考后端或通用发布治理运行依赖。机器制品以 `implementation_runtime + tool_scope` 显式声明边界，Checker 同时扫描当前/规划路径、依赖、package scripts、Make/workflow 与生产镜像入口。
 
-治理工具共享同一严格输入链：递归拒绝 JSON/YAML 重复键与多文档/尾随值，离线执行 Draft 2020-12（含 format assertion）后才进入 typed model。机器报告把 source-tree 静态输入、前序阶段运行时输入和仓库外/ignored runtime evidence 分栏；writer 落盘前自验，任何序列化、Git、runtime 探测或 I/O 错误均 fail closed。P01 用未缓存 Go tests 实际验证这些边界，而不是把测试列表当作证据。
+治理工具共享同一严格输入链：递归拒绝 JSON/YAML 重复键与多文档/尾随值，离线执行 Draft 2020-12（含 format assertion）后才进入 typed model。外部证据/信任材料同时按 separator-aware lexical path 与 EvalSymlinks canonical target 验证必须位于仓库外。机器报告把 source-tree 静态输入、前序阶段运行时输入和仓库外/ignored runtime evidence 分栏；writer 落盘前自验，任何序列化、Git、runtime 探测或 I/O 错误均 fail closed；current-worktree 精确重验 Node/Go/OS，ancestor 仅为 archive-only。Node scope 不允许 child process 或动态执行逃逸。P01 用未缓存 Go tests 实际验证这些边界，而不是把测试列表当作证据。
 
 # 11. 实施边界
 

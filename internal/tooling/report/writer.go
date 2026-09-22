@@ -147,6 +147,22 @@ func gitStatus(root string) (string, error) {
 	return strings.TrimRight(string(out), "\r\n"), nil
 }
 
+func currentRuntime(root string) (Runtime, error) {
+	node, err := command(root, "node", "--version")
+	if err != nil {
+		return Runtime{}, err
+	}
+	gov, err := command(root, "go", "version")
+	if err != nil {
+		return Runtime{}, err
+	}
+	release, err := command(root, "uname", "-r")
+	if err != nil {
+		return Runtime{}, err
+	}
+	return Runtime{Node: node, Go: gov, OS: RuntimeOS{Platform: runtime.GOOS, Release: release, Arch: runtime.GOARCH}}, nil
+}
+
 func Write(options WriteOptions) (*Report, error) {
 	inputs, err := DigestFiles(options.Root, options.InputPaths)
 	if err != nil {
@@ -168,15 +184,7 @@ func Write(options WriteOptions) (*Report, error) {
 	if status != "" {
 		dirty = strings.Split(status, "\n")
 	}
-	node, err := command(options.Root, "node", "--version")
-	if err != nil {
-		return nil, err
-	}
-	gov, err := command(options.Root, "go", "version")
-	if err != nil {
-		return nil, err
-	}
-	release, err := command(options.Root, "uname", "-r")
+	runtimeSnapshot, err := currentRuntime(options.Root)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +223,7 @@ func Write(options WriteOptions) (*Report, error) {
 	summary["testcase_count"] = len(checks)
 	evidence := append([]RuntimeEvidence{}, options.RuntimeEvidence...)
 	sort.Slice(evidence, func(i, j int) bool { return evidence[i].Kind < evidence[j].Kind })
-	report := &Report{1, time.Now().UTC().Format(time.RFC3339Nano), failed == 0, Provenance{GitProvenance{head, len(dirty) > 0, dirty}, options.Command, Runtime{node, gov, RuntimeOS{runtime.GOOS, release, runtime.GOARCH}}, DigestedPath{options.CheckerPath, Hash(checkerData)}, inputs, runtimeInputs, evidence, len(checks), options.AuditNote}, summary, checks, errors}
+	report := &Report{1, time.Now().UTC().Format(time.RFC3339Nano), failed == 0, Provenance{GitProvenance{head, len(dirty) > 0, dirty}, options.Command, runtimeSnapshot, DigestedPath{options.CheckerPath, Hash(checkerData)}, inputs, runtimeInputs, evidence, len(checks), options.AuditNote}, summary, checks, errors}
 	data, err := marshalValidated(options.Root, report)
 	if err != nil {
 		return nil, err

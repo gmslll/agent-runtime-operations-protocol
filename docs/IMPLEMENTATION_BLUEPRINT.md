@@ -1,7 +1,7 @@
 ---
 title: Agent Runtime Operations Protocol 实施蓝图
 status: review-candidate
-updated: 2026-09-22
+updated: 2026-09-23
 ---
 
 # 1. 蓝图边界
@@ -177,7 +177,7 @@ OpenAPI/AsyncAPI 只引用或派生同一结构，不手写第二份 DTO。生�
 
 所有治理输入先经过统一 strict loader：JSON 递归拒绝重复键并拒绝尾随第二个值，YAML 只允许一个文档并递归拒绝重复键、Alias 和非字符串 Mapping Key。解析后必须离线执行 Draft 2020-12 Schema 校验并启用 `format` assertion，再进入 Go typed model；`const`、`pattern`、整数、日期时间和 `additionalProperties: false` 都是强制约束。报告 writer 在落盘前用同一 loader/Schema 自验，Marshal、Git/status、runtime 探测、目录和文件写入错误一律向上传播，禁止降级成可通过报告。
 
-报告 provenance 把三类来源分开：`inputs` 只存可由 source tree 重算的静态闭包；`runtime_inputs` 存阶段运行时读取且需要逐文件验证的前序报告/摘要；`runtime_evidence` 只存仓库外证据或 ignored build log/result 的逻辑 kind、digest 和 bytes，不泄露绝对路径。P01 必须运行 `AROP_VERIFY_CURRENT=1 go test -count=1 -json` 覆盖 strict loader、Schema、report、evidence、spec-index 与 blueprint；任一 test fail/skip、缓存输出、无法执行或结构化计数为空均失败，逐条 testcase 进入 P01 报告，Go module、helper、tests 和 Schema 属于静态闭包，Node Schema 结果与 Go test log 属于 runtime evidence。
+报告 provenance 把三类来源分开：`inputs` 只存可由 source tree 重算的静态闭包；`runtime_inputs` 存阶段运行时读取且需要逐文件验证的前序报告/摘要；`runtime_evidence` 只存仓库外证据或 ignored build log/result 的逻辑 kind、digest 和 bytes，不泄露绝对路径。`current-worktree` 验证必须现场重取并精确比较 Node、Go、OS platform/release/arch；篡改任一字段都失败。ancestor 验证只能返回 `ancestor-archive-only`，不得拿报告内历史 runtime 冒充当前环境；真正复用仍需隔离重跑或受信 provenance。P01 必须运行 `AROP_VERIFY_CURRENT=1 go test -count=1 -json` 覆盖 strict loader、Schema、report、evidence、spec-index 与 blueprint；任一 test fail/skip、缓存输出、无法执行或结构化计数为空均失败，逐条 testcase 进入 P01 报告，Go module、helper、tests 和 Schema 属于静态闭包，Node Schema 结果与 Go test log 属于 runtime evidence。
 
 聚合 Make 目标在执行前声明预期子报告 ID/数量；聚合时拒绝缺报告、多报告、失败报告或 schema/input/checker/artifact digest 不一致。普通报告按 claimed commit 验证；历史普通 success 报告即使通过 ancestry、Git blob 和 current-input 无漂移检查，也只完成存档完整性验证，不能直接作为聚合 success；必须在隔离 checkout 重跑固定 checker，或验证受信 CI/OIDC/Sigstore provenance。P03/P04 的外部规划签署是独立类型：只要 subject commit 仍属于受控 ancestry、planning input closure 的 canonical digest 未漂移，可保留原签署，新 commit 仍重跑当前机器检查，不要求外部人员对无关后续变更重复签署。
 
@@ -198,13 +198,13 @@ P44 等混合 commit 聚合不要求所有报告来自同一 commit，但每份�
 
 所有 `type=implement|refactor` 阶段（含 P01/P02 与 P39–P42）的报告静态 `derives_from` 必须覆盖本阶段全部 `Artifacts owned` 和 `Baselines transitioned`；machine report 不得把另一份 report/canonical evidence 放进静态 `derives_from`。P04 运行时精确读取 promoted P03 report+canonical summary；P17/P23/P26/P38 精确接收 3/5/12/15 份报告；P43 精确接收 P39–P42 且静态工具集固定为 7 项；P44 静态工具集固定为 3 项，运行时精确接收 P01–P43 共 43 份报告；P45–P53 各精确接收直接前一阶段报告；其余 report runtime input 必须为空。Checker 对 `derives_from + runtime_inputs` 联合图做时序与无环校验，并覆盖 P01/P40/P41 missing-owned、P04 static/runtime 误分类、缺 P05、增加 P45、未来输入与 runtime cycle 负例。
 
-`implementation_runtime` 与 `tool_scope` 是可执行工具的必填目录字段。Go 拥有通用 report/evidence/planning/Gate/blueprint、Go proxy、Go/Container build 和 P39–P42 release/lineage/finalization；Python package primitive 只通过原生 Python/PEP 517；Node 只允许 `schema-validation|schema-codegen|typescript-sdk|npm-packaging`。Checker 扫描 present+planned path、扩展名/shebang、依赖与 helper/consumer、`package.json` 间接 alias、Make/workflow、生产镜像及大小写/软链接，并用恶意 `.mjs` release path、伪 Go/Python scope、无 metadata、package alias、`node -e`/`npx`/`tsx`/`bun`/`deno` 等负例失败闭合。
+`implementation_runtime` 与 `tool_scope` 是可执行工具的必填目录字段。Go 拥有通用 report/evidence/planning/Gate/blueprint、Go proxy、Go/Container build 和 P39–P42 release/lineage/finalization；Python package primitive 只通过原生 Python/PEP 517；Node 只允许 `schema-validation|schema-codegen|typescript-sdk|npm-packaging`。Checker 扫描 present+planned path、扩展名/shebang、依赖与 helper/consumer、`package.json` 间接 alias、Make/workflow、生产镜像及大小写/软链接，并用恶意 `.mjs` release path、伪 Go/Python scope、无 metadata、package alias、`node -e`/`npx`/`tsx`/`bun`/`deno` 等负例失败闭合。scope allowlist 不是执行权限：当前 Node 工具的 external-command allowlist 固定为空，源码出现 `node:child_process`/`child_process`、exec/spawn/fork、dynamic import/require、eval/Function、native loading 都失败；未来如确需外部命令，必须先新增机器可读的最小命令 allowlist 制品并由 catalog/Checker 约束，不能在源码中自报放行。
 
 P03/P04 验证成功时，工具先在忽略的 `build/reports/<phase>/canonical-summary.json` 产生脱敏候选；经评审后才可将候选提升为 `spec/evidence/` 内的 canonical 内容摘要，并在确实存在时附带 Ed25519 attestation。canonical summary 的逻辑字段顺序为 P03 `schema_version, kind, subject, reviewer, result, attested_at`，P04 `schema_version, kind, gate, subject, approver, result, attested_at`；实际序列化按 RFC 8785/JCS 确定键顺序，`summary_sha256` 和 `attestation` 不进入被摘要内容。任何原始评审正文、账户证明、凭据或私密联系信息都不得进入 Git。
 
-`TRUSTED_KEYS` 指向仓库外 JSON/YAML registry，格式为 `schema_version: 1` 和 `keys[]`；每个 key 必须有 `key_id`、`algorithm: Ed25519`、`role: independent_reviewer|project_owner` 与 `public_key_pem`。`attestation.signature` 是对 canonical summary UTF-8 字节的 Base64 Ed25519 签名。没有受信 key registry 时，只能由人工可信渠道 Gate 确认，并以 `TRUSTED_CHANNEL_CONFIRMATION` 引用仓库外记录；工具只记录该文件的内容摘要，不声称自动验证了渠道或人员身份。
+`EVIDENCE`、`TRUSTED_KEYS` 和 `TRUSTED_CHANNEL_CONFIRMATION` 必须都真实位于仓库外：统一对 repository root 与输入执行绝对化、separator-aware containment 和 `EvalSymlinks`，词法路径与 canonical target 任一仍在仓库内即拒绝；仓内名为 `..inside` 的路径不能借前缀误判，外部 symlink 回仓也不能越界。`TRUSTED_KEYS` 指向仓库外 JSON/YAML registry，格式为 `schema_version: 1` 和 `keys[]`；每个 key 必须有 `key_id`、`algorithm: Ed25519`、`role: independent_reviewer|project_owner` 与 `public_key_pem`。`attestation.signature` 是对 canonical summary UTF-8 字节的 Base64 Ed25519 签名。没有受信 key registry 时，只能由人工可信渠道 Gate 确认，并以 `TRUSTED_CHANNEL_CONFIRMATION` 引用仓库外记录；工具只记录该文件的内容摘要，不声称自动验证了渠道或人员身份。
 
-Registry 本身必须通过 strict Schema，`key_id` 全局唯一；证据算法、registry key 算法、PKIX key 类型必须同时为 Ed25519，签名必须是 strict Base64 解码后的 64 字节。promoted candidate 保留可复验 attestation 与 `trusted_keys_sha256`，或保留 manual `confirmation_sha256` 及不可密码学重放的限制声明。P03 report 同时绑定 candidate 文件、canonical summary、subject/result JCS、raw evidence 与 authentication JCS；P04 重算全部字段并与成功 P03 report 逐项交叉核对，且把 P03 JSON、JUnit 和 promoted summary 精确列为 `runtime_inputs`。任何只改自报 `summary_sha256`、subject/result/身份/认证/原始证据而不改变报告的做法都必须失败。
+Registry 本身必须通过 strict Schema，`key_id` 全局唯一；证据算法、registry key 算法、PKIX key 类型必须同时为 Ed25519，签名必须是 strict Base64 解码后的 64 字节。所有 count 由 `json.Number` 进入严格整数/范围检查，负数、小数和溢出不得被截断。promoted candidate 保留可复验 attestation 与 `trusted_keys_sha256`，或保留 manual `confirmation_sha256` 及不可密码学重放的限制声明。P03 report 同时绑定 candidate 文件、canonical summary、subject/result JCS、raw evidence 与 authentication JCS；P04 重算全部字段并与成功 P03 report 逐项交叉核对，且把 P03 JSON、JUnit 和 promoted summary 精确列为 `runtime_inputs`。任何只改自报 `summary_sha256`、subject/result/身份/认证/原始证据而不改变报告的做法都必须失败。
 
 # 12. 发布 DAG
 
