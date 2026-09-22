@@ -98,6 +98,9 @@ requirements:
       - sdk-go
       - sdk-python
       - sdk-typescript
+      - go-consumer-sdk
+      - python-runtime-registration-client
+      - python-worker-client
     phases:
       - P02
       - P05
@@ -274,6 +277,9 @@ requirements:
     artifacts:
       - sdk-dx-specification
       - sdk-bundle
+      - go-consumer-sdk
+      - python-runtime-registration-client
+      - python-worker-client
       - quickstart
       - conformance-fixtures
     phases:
@@ -360,6 +366,8 @@ requirements:
       - sdk-bundle
       - reference-control-plane
       - conformance-fixtures
+      - conformance-core-scenarios
+      - conformance-v1-profiles
       - quickstart
     phases:
       - P02
@@ -374,6 +382,11 @@ requirements:
       - decisions
       - public-adoption-policy
       - compatibility-matrix
+      - release-version-policy
+      - detached-release-evidence-envelope-schema
+      - verified-external-config-bundle-summary
+      - rc-compatibility-detached-summary
+      - verified-final-equivalence-attestation-summary
     phases:
       - P44
       - P45
@@ -403,6 +416,11 @@ requirements:
       - conformance-fixtures
       - conformance-reports
       - compatibility-matrix
+      - conformance-scenario-schema
+      - conformance-profile-schema
+      - conformance-core-scenarios
+      - conformance-fault-ha-scenarios
+      - production-conformance-profile
       - base-state-machine-fixtures
       - release-engineering-toolchain
       - release-dry-run-reports
@@ -417,6 +435,7 @@ requirements:
       - P33
       - P34
       - P35
+      - P37
       - P38
       - P39
       - P40
@@ -441,6 +460,7 @@ requirements:
       - make-test-portable-conformance
       - make-test-server-conformance
       - make-test-fault-ha-drivers
+      - make-production-reference-smoke
       - make-verify-resilience
       - make-test-release-supply-chain
       - make-test-release-evidence-tooling
@@ -462,6 +482,11 @@ requirements:
       - public-adoption-policy
       - compatibility-matrix
       - immutable-requirements
+      - verified-external-config-bundle-summary
+      - rc-release-subject-manifest
+      - rc-compatibility-detached-summary
+      - verified-final-equivalence-attestation-summary
+      - final-release-detached-evidence-bundle
     phases:
       - P03
       - P04

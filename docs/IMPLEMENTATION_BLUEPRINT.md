@@ -148,7 +148,7 @@ HTTP 入口先做请求大小/超时/内容类型限制，再解析与严格校�
 
 # 10. Codegen pipeline
 
-P07 交付可复用的三语言 pipeline：先用具有 union、format、`additionalProperties`、循环/外部 `$ref` 风险的代表 Schema 做受控 spike，冻结生成器版本和映射；它不得声称已经生成尚未存在的未来 Contract。P11/P15/P18/P19/P20/P22/P24 各自在新增 Schema/OpenAPI/AsyncAPI 时调用同一 pipeline，提交本域 Go/Python/TypeScript 增量输出与 provenance；P46 再用真实 namespace 全量再生成，不临时发明第二套 generator。
+P07 交付可复用的三语言 pipeline：先用具有 union、format、`additionalProperties`、循环/外部 `$ref` 风险的代表 Schema 做受控 spike，冻结生成器版本和映射；它不得声称已经生成尚未存在的未来 Contract。P11/P15/P18/P19/P20/P22/P24 各自在新增 Schema/OpenAPI/AsyncAPI 时调用同一 pipeline，提交本域 Go/Python/TypeScript 增量输出与 provenance；P42 实现并冻结 public namespace/version wrapper，P43 用保留域名验证，P46 只把 P45 已验真实值交给同一工具全量再生成，不临时发明第二套 generator。
 
 ```text
 normative schemas + local ref bundle
@@ -192,6 +192,8 @@ P44 等混合 commit 聚合不要求所有报告来自同一 commit，但每份�
 
 聚合器不允许“就近使用旧报告”。普通 ancestor 报告只证明其 claimed commit，必须通过受控 input closure、隔离重跑或受信 provenance 后才可复用；任何对应输入变化都必须重跑。RC commit A 到 metadata-only commit B 必须由 P52 专用 equivalence attestation 桥接，不得用普通 ancestor 复用规则代替。
 
+P05–P38 每个 implement/refactor 报告的静态 `derives_from` 必须覆盖本阶段全部 `Artifacts owned`。P17/P23/P26/P38 的 `runtime_inputs` 必须分别精确等于上述 3/5/12/15 份报告；P44 静态依赖 P41 聚合/provenance 工具，运行时精确接收 P01–P43 共 43 份报告，不得把 P43 当作前 42 份的代理。Checker 对 `derives_from + runtime_inputs` 联合图做时序与无环校验，并以缺 P05、增加 P45、引用未来报告和构造 runtime cycle 的负例证明失败闭合。
+
 P03/P04 验证成功时，工具先在忽略的 `build/reports/<phase>/canonical-summary.json` 产生脱敏候选；经评审后才可将候选提升为 `spec/evidence/` 内的 canonical 内容摘要，并在确实存在时附带 Ed25519 attestation。canonical summary 的逻辑字段顺序为 P03 `schema_version, kind, subject, reviewer, result, attested_at`，P04 `schema_version, kind, gate, subject, approver, result, attested_at`；实际序列化按 RFC 8785/JCS 确定键顺序，`summary_sha256` 和 `attestation` 不进入被摘要内容。任何原始评审正文、账户证明、凭据或私密联系信息都不得进入 Git。
 
 `TRUSTED_KEYS` 指向仓库外 JSON/YAML registry，格式为 `schema_version: 1` 和 `keys[]`；每个 key 必须有 `key_id`、`algorithm: Ed25519`、`role: independent_reviewer|project_owner` 与 `public_key_pem`。`attestation.signature` 是对 canonical summary UTF-8 字节的 Base64 Ed25519 签名。没有受信 key registry 时，只能由人工可信渠道 Gate 确认，并以 `TRUSTED_CHANNEL_CONFIRMATION` 引用仓库外记录；工具只记录该文件的内容摘要，不声称自动验证了渠道或人员身份。
@@ -206,11 +208,11 @@ spec freeze
  → P39 package/container/SBOM/provenance/signing orchestration
  → P40 external evidence schemas/validators/trusted roles
  → P41 report provenance/lineage/aggregate tooling
- → P42 final-overlay/equivalence/delivery tooling
- → P43 read-only reproducible release dry-run
+ → P42 public namespace/version freeze + final-overlay/equivalence/delivery tooling
+ → P43 read-only reproducible release dry-run with the same frozen generator
  → P44 private code-complete verification
  → P45 external public-configuration gate
- → P46 regenerate deterministic public RC source tree
+ → P46 deliver deterministic public RC source tree with P42 tooling
  → P47 create and freeze clean RC source commit A
  → P48 strictly read-only verification on A
  → P49 publish v1.0.0-rc.N from A without changing tree
@@ -220,23 +222,25 @@ spec freeze
  → P53 apply approved overlay, create metadata-only B and deliver v1
 ```
 
-开发期 P05 的本地 proxy/bootstrap 先装入 root pseudo-version，再以 `GOWORK=off` 验证 nested。语言打包 primitive 分别由 P27/P28 实现，Container primitive 由 P37 实现；P39 只编排这些能力与 SBOM/provenance/signing，P40 专门实现证据 Schema/validator/trusted roles，P41 专门实现 lineage/aggregate，P42 专门实现 RC freeze/final overlay/equivalence/delivery 检查工具，四者均不重写 build primitive。
+开发期 P05 的本地 proxy/bootstrap 仅用于未发布 root 时验证 nested，不是发布打包 primitive。确定性 Go module/CLI、Python、npm、Container primitive 分别由 P36/P27/P28/P37 实现；P39 只编排这些能力、跨生态版本映射、OIDC、SBOM/provenance/signing 与 journal，P40 专门实现 detached evidence Schema/validator/trusted roles，P41 专门实现 lineage/aggregate，P42 实现并冻结唯一 public namespace/version generator 与 RC freeze/final overlay/equivalence/delivery 工具，四者均不重写 build primitive。
 
 | 实现 owner | 后期工具 | 使用阶段 |
 | --- | --- |
-| P39 | package/container orchestration、SBOM/provenance/signing、durable publish journal | P43、P49、P53 |
-| P40 | external-config/external-conformance evidence Schema + validator、trusted role registry | P45、P50、P52 |
+| P39 | version policy/mapper、package/container orchestration、OIDC、SBOM/provenance/signing、journal | P43、P49、P53 |
+| P40 | detached envelope、external config/conformance validator、trusted role registry | P45、P50、P52、P53 |
 | P41 | public report aggregator、cross-commit lineage/provenance verifier | P44、P48、P53 |
-| P42 | RC source freeze、deterministic final-overlay/tree-digest 与 payload-equivalence checker | P47、P51、P52 |
+| P42 | public namespace/version regeneration、RC freeze、final-overlay/tree-digest/payload-equivalence | P43、P46、P47、P51、P52 |
 | P42 | approved-overlay/final-delivery checker | P53 |
 
-上述 Gate 的原始证据始终在仓库外；validator 只能接受受信 key registry 中对应角色的有效签名，或显式人工可信渠道记录，不能把自报身份或裸内容 hash 当作批准。
+上述 Gate 的原始证据始终在仓库外。外部 project owner/maintainer、独立实现/伙伴和 `release_approver` 分别是 P45/P50/P52 原始 signed bundle 的 producer；仓库阶段只是 first consumer/validator，只输出 `build/evidence/Pxx` 中的 verified summary，绝不替外部主体代签。P52 只接受受信 Ed25519 key 或允许的 Sigstore identity，P53 的 final release evidence 是 publisher/CI 自身的发布 provenance，不替代 P52 安全批准。
 
-P44 及之前所有制品只允许 private/dev snapshot；取消独立公共 v0.1 里程碑。P45 验证真实域名、包所有权、两名 Maintainer 和安全入口后，P46 全量再生成 RC tree，P47 再单独创建并冻结 clean source commit A，P48 只读验证 A。首个公开候选是 P49 从 A 发布的 `v1.0.0-rc.N`，不得用 v0.1 或本地伪制品代替。
+P44 及之前所有制品只允许 private/dev snapshot；取消独立公共 v0.1 里程碑。P42 冻结 generator，P43 用保留域名和临时 registries 验 deterministic RC tree、二次零 diff、placeholder 清零、双 Go module/多语言 metadata、非法配置失败和全生态 pack/install。P45 验真实外部配置；自 P45 后禁止 implement/refactor。P46 只把已验值交给同一工具，P47 创建 clean A，P48 只读验证。首个公开候选是 P49 从 A 发布的 `v1.0.0-rc.N`。
 
-P46 在真实配置下全量再生成 RC source tree，写入 RC version metadata 和 nested root RC dependency，但不创建 commit/tag。P47 orchestrator 只从已验收 tree 创建并冻结 clean source commit A；P48 只验证已存在的 clean A，不创建 commit/tag 或修复代码。P49 从同一 A 以 create-only 语义发布 root `v1.0.0-rc.N` 与 nested `reference/control-plane/v1.0.0-rc.N` tags 及其他不可变制品，不能改变 tree；任何 partial publish 只能从同一 A/digest journal 续传，remote digest 冲突必须 `incident-blocked`。P50 的每条外部证据必须绑定 exact A commit/tree、Schema Bundle、Runner 和被测 Artifact digests，且 evidence principal 与项目发布者/维护者职责分离。任何 tracked 规范、Schema、传输、Runner、安全或兼容变化都使证据失效，必须回 P46 产生新 A/RC 并重取证。
+P46 输入唯一无 `v` 逻辑版本并在真实配置下生成 RC source tree，不创建 commit/tag。P47 从该树创建 A；P48 只读验证。P49 用 mapper 分别发布 root/nested Go tag、Python/npm/CLI/OCI/Schema Bundle 并生成 RC subject manifest，绑定 A/tree、P45 config digest、tag-object、artifact/SBOM/provenance/Schema/API/Fixture/Runner digests。P50 只验证外部 principals 已签 compatibility bundle，生成 detached verified summary，绝不更新 A 内 `compatibility/implementation-matrix.yaml` 或预填伙伴。
 
-P51 在隔离临时树生成并审核确定性 unsigned final overlay candidate，仅允许版本/channel/tag 元数据、nested `go.mod` 的 root 依赖从 RC 改为 `v1.0.0` 以及必要 lock/checksum，并计算 overlay digest、expected B tree 与 payload equivalence，不签名、不创建 B。P52 只验证仓库外 `release_approver` trusted key 或允许 Sigstore identity 签发的 A→B equivalence attestation；attestation 必须绑定 A commit/tree、overlay digest、expected B tree、payload/equivalence/phase policy、时间和精确 bridged reports，dry-run key 不得用于正式签发。P53 只能精确应用已批准 overlay 创建直接单父 `parent=A` 的 release-metadata-only commit B；现场 B tree 必须等于 attestation 批准值，再按所有不可变 root final 制品→proxy 可解析→nested final→mutable channel expected-previous CAS 顺序发布。Partial publish 只允许同一 B/digest journal 断点恢复，冲突失败闭合。Schema/API/Runner、生成模型和逻辑不得变化，final local 制品必须在 B 重跑 Conformance/SBOM/provenance。
+P51 的 overlay 白名单精确到 `VERSION`、Python `pyproject`/lock、npm metadata/lock、OCI/CLI/Schema Bundle metadata、nested `go.mod` RC→final 与必要 checksum。P52 外部 attestation 除 A/tree/overlay/expected-B/policy/time/bridged reports 外，必须绑定 version-policy digest 和 P45 config、P49 RC subject、P50 compatibility digests。P53 用同一无 `v` 逻辑 final version分别映射各生态，不能盲传统一 VERSION；创建单父 B 后在 B 重跑 Conformance/SBOM/provenance，并发布不进入 B tree 的 final detached evidence bundle。
+
+跨生态版本策略只有一个逻辑输入：`1.0.0-rc.1`、`1.0.0-rc.10`、`1.0.0`。Go root/nested tags 加 `v`；Python 映射为 `1.0.0rc1`、`1.0.0rc10`、`1.0.0`；npm/OCI/CLI/Schema Bundle 保持逻辑值。Mapper 拒绝输入 `v` 前缀、PEP 440 形式、RC leading zero、build metadata；policy digest 必须进入 P39 journal/SBOM/provenance、P52 attestation 与 P53 final bundle。
 
 # 13. Console 与下游隔离
 

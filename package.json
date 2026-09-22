@@ -13,6 +13,7 @@
     "blueprint:check": "node scripts/blueprint-check.mjs",
     "report:verify": "node scripts/verify-report.mjs",
     "report:test": "node scripts/test-report-verifier.mjs",
+    "evidence:test": "node scripts/test-evidence-lineage.mjs",
     "planning:audit": "node scripts/planning-audit.mjs",
     "gate:check": "node scripts/gate-check.mjs",
     "manifest:digest": "node scripts/manifest-digest.mjs"

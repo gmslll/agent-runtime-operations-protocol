@@ -101,7 +101,7 @@ try {
 
 let subjectLineage = { mode: "unverified" };
 try {
-  subjectLineage = await verifyEvidenceSubjectCommit(evidence?.subject?.commit);
+  subjectLineage = await verifyEvidenceSubjectCommit(evidence?.subject?.commit, evidence?.subject);
   record(
     "subject-commit-lineage",
     true,
@@ -118,6 +118,7 @@ try {
     "spec/requirements.yaml",
     "docs/DEVELOPMENT_PLAN.md",
     "docs/IMPLEMENTATION_BLUEPRINT.md",
+    "spec/artifact-manifest.yaml",
   ]);
   const byPath = new Map(digests.files.map((file) => [file.path, file.sha256]));
   const planText = await readFile(path.join(repositoryRoot, "docs/DEVELOPMENT_PLAN.md"), "utf8");
@@ -129,6 +130,7 @@ try {
     requirements_sha256: byPath.get("spec/requirements.yaml"),
     plan_sha256: byPath.get("docs/DEVELOPMENT_PLAN.md"),
     blueprint_sha256: byPath.get("docs/IMPLEMENTATION_BLUEPRINT.md"),
+    artifact_manifest_sha256: byPath.get("spec/artifact-manifest.yaml"),
     planning_audit_summary_sha256: auditReport?.summary?.canonical_summary_sha256,
   };
   const mismatches = Object.entries(expected)
@@ -138,7 +140,7 @@ try {
     "gate-subject-binding",
     subjectLineage.mode !== "unverified" && mismatches.length === 0,
     subjectLineage.mode !== "unverified" && mismatches.length === 0
-      ? "Gate evidence subject is current/ancestor and binds unchanged requirements/plan/blueprint plus the P03 canonical summary"
+      ? "Gate evidence subject blobs, signed planning closure and current closure match, and bind the P03 canonical summary"
       : mismatches.join("; ") || "subject commit lineage is invalid",
   );
 } catch (error) {
@@ -197,6 +199,7 @@ await writeCheckReport({
     "spec/requirements.yaml",
     "docs/DEVELOPMENT_PLAN.md",
     "docs/IMPLEMENTATION_BLUEPRINT.md",
+    "spec/artifact-manifest.yaml",
     "spec/schemas/user-gate-evidence.schema.json",
     "spec/schemas/check-report.schema.json",
     "scripts/gate-check.mjs",

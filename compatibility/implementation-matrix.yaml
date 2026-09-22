@@ -1,3 +1,17 @@
 schema_version: 1
 updated: 2026-09-22
-implementations: []
+purpose: A 内只保存兼容性门槛与声明，不预填或冒充独立实现、伙伴和测试结果。真实签名结果由 P50 验证后作为 detached release evidence 发布，P53 经 P52 bridge 绑定 final。
+required_profiles:
+  - core-provider
+  - streaming
+  - managed-runtime
+  - pull-worker
+  - control-plane
+external_thresholds:
+  independent_runtimes: 2
+  independent_control_plane_or_validator: 1
+  external_partners: 3
+result_location:
+  rc: build/evidence/P50/verified-compatibility-summary.json
+  final: build/evidence/P53/final-release-evidence.json
+verified_implementations: []

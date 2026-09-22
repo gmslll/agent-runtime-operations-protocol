@@ -31,6 +31,13 @@ export const SUMMARY_FIELDS = Object.freeze({
   ],
 });
 
+export const PLANNING_INPUTS = Object.freeze([
+  ["spec/requirements.yaml", "requirements_sha256"],
+  ["docs/DEVELOPMENT_PLAN.md", "plan_sha256"],
+  ["docs/IMPLEMENTATION_BLUEPRINT.md", "blueprint_sha256"],
+  ["spec/artifact-manifest.yaml", "artifact_manifest_sha256"],
+]);
+
 export function canonicalSummary(evidence) {
   const fields = SUMMARY_FIELDS[evidence?.kind];
   if (!fields) throw new Error(`unsupported evidence kind: ${evidence?.kind}`);
@@ -69,19 +76,32 @@ export function validateResultCoverage(result, requirementIDs, phaseIDs) {
   return problems;
 }
 
-export async function verifyEvidenceSubjectCommit(subjectCommit) {
+async function gitBlob(root, commit, filePath) {
+  try {
+    const { stdout } = await execFileAsync("git", ["show", `${commit}:${filePath}`], {
+      cwd: root,
+      encoding: null,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    return Buffer.isBuffer(stdout) ? stdout : Buffer.from(stdout);
+  } catch {
+    throw new Error(`planning input ${filePath} is absent at evidence subject commit ${commit}`);
+  }
+}
+
+export async function verifyEvidenceSubjectCommit(subjectCommit, subject, root = repositoryRoot) {
   if (!/^[0-9a-f]{40}$/u.test(subjectCommit ?? "")) {
     throw new Error(`evidence subject commit is invalid: ${subjectCommit}`);
   }
   const currentHead = (
     await execFileAsync("git", ["rev-parse", "HEAD"], {
-      cwd: repositoryRoot,
+      cwd: root,
       encoding: "utf8",
     })
   ).stdout.trim();
   try {
     await execFileAsync("git", ["cat-file", "-e", `${subjectCommit}^{commit}`], {
-      cwd: repositoryRoot,
+      cwd: root,
     });
   } catch {
     throw new Error(`evidence subject commit does not exist: ${subjectCommit}`);
@@ -89,7 +109,7 @@ export async function verifyEvidenceSubjectCommit(subjectCommit) {
   if (subjectCommit !== currentHead) {
     try {
       await execFileAsync("git", ["merge-base", "--is-ancestor", subjectCommit, currentHead], {
-        cwd: repositoryRoot,
+        cwd: root,
       });
     } catch {
       throw new Error(
@@ -97,10 +117,56 @@ export async function verifyEvidenceSubjectCommit(subjectCommit) {
       );
     }
   }
+  const subjectDigests = {};
+  for (const [filePath, digestField] of PLANNING_INPUTS) {
+    const subjectBlob = await gitBlob(root, subjectCommit, filePath);
+    const subjectDigest = sha256(subjectBlob);
+    subjectDigests[digestField] = subjectDigest;
+    if (subject?.[digestField] !== subjectDigest) {
+      throw new Error(
+        `signed ${digestField} does not match ${filePath} blob at subject commit ${subjectCommit}`,
+      );
+    }
+    let currentBlob;
+    try {
+      currentBlob = await readFile(path.join(root, filePath));
+    } catch {
+      throw new Error(`current planning input ${filePath} is absent`);
+    }
+    if (sha256(currentBlob) !== subjectDigest) {
+      throw new Error(`current planning input ${filePath} differs from signed subject blob`);
+    }
+  }
+
+  if (subjectCommit !== currentHead) {
+    const commits = (
+      await execFileAsync("git", ["rev-list", "--reverse", "--ancestry-path", `${subjectCommit}..${currentHead}`], {
+        cwd: root,
+        encoding: "utf8",
+      })
+    ).stdout.trim().split(/\s+/u).filter(Boolean);
+    for (const commit of commits) {
+      for (const [filePath, digestField] of PLANNING_INPUTS) {
+        let blob;
+        try {
+          blob = await gitBlob(root, commit, filePath);
+        } catch {
+          throw new Error(`planning input history deletes ${filePath} at ${commit}; rollback replay is forbidden`);
+        }
+        if (sha256(blob) !== subjectDigests[digestField]) {
+          throw new Error(
+            `planning input history changes ${filePath} at ${commit}; changed-then-reverted ancestry cannot reuse evidence`,
+          );
+        }
+      }
+    }
+  }
+
   return {
     subject_commit: subjectCommit,
     current_head: currentHead,
     mode: subjectCommit === currentHead ? "current" : "ancestor",
+    planning_input_digests: subjectDigests,
   };
 }
 

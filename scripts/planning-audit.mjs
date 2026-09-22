@@ -79,7 +79,7 @@ if (evidence) {
 
 let subjectLineage = { mode: "unverified" };
 try {
-  subjectLineage = await verifyEvidenceSubjectCommit(evidence?.subject?.commit);
+  subjectLineage = await verifyEvidenceSubjectCommit(evidence?.subject?.commit, evidence?.subject);
   record(
     "subject-commit-lineage",
     true,
@@ -112,7 +112,7 @@ try {
     "audit-subject-binding",
     subjectLineage.mode !== "unverified" && mismatches.length === 0,
     subjectLineage.mode !== "unverified" && mismatches.length === 0
-      ? "subject commit is current/ancestor and requirements/plan/blueprint/artifact-manifest digests match current inputs"
+      ? "subject commit blobs, signed digests and current planning closure match without changed/reverted ancestry"
       : mismatches.join("; ") || "subject commit lineage is invalid",
   );
 } catch (error) {

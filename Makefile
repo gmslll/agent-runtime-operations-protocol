@@ -1,9 +1,9 @@
-.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier planning-audit gate-check test-go manifest-digest
+.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier test-evidence-lineage planning-audit gate-check test-go manifest-digest
 
 install:
 	npm ci
 
-validate: spec-index-check blueprint-check test-report-verifier
+validate: spec-index-check blueprint-check test-report-verifier test-evidence-lineage
 	npm run validate
 	go test ./...
 
@@ -18,6 +18,9 @@ verify-report:
 
 test-report-verifier: spec-index-check blueprint-check
 	node scripts/test-report-verifier.mjs
+
+test-evidence-lineage:
+	node scripts/test-evidence-lineage.mjs
 
 planning-audit:
 	AROP_CHECK_COMMAND="make planning-audit EVIDENCE=$(EVIDENCE) TRUSTED_KEYS=$(TRUSTED_KEYS) TRUSTED_CHANNEL_CONFIRMATION=$(TRUSTED_CHANNEL_CONFIRMATION)" EVIDENCE="$(EVIDENCE)" TRUSTED_KEYS="$(TRUSTED_KEYS)" TRUSTED_CHANNEL_CONFIRMATION="$(TRUSTED_CHANNEL_CONFIRMATION)" node scripts/planning-audit.mjs

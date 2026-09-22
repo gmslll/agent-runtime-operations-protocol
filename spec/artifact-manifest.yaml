@@ -890,22 +890,28 @@ artifacts:
     path_role: aggregate
     derives_from:
       - conformance-fixtures
+      - conformance-scenarios
+      - conformance-profiles
       - portable-conformance-runner
       - fault-ha-harness
-    completion_phase: P35
-    acceptance_test: make-test-fault-ha-drivers
+    completion_phase: P37
+    acceptance_test: make-production-reference-smoke
     exposure: public-contract
   - id: compatibility-matrix
     path: compatibility/implementation-matrix.yaml
     status: present
-    kind: compatibility-evidence
-    authority: evidence
+    kind: compatibility-policy
+    authority: structure
     derives_from:
       - interoperability-specification
     path_role: concrete
-    runtime_inputs:
-      - conformance-reports
-      - external-evidence-gate-reports
+    future_action: extend-retain
+    future_owner: portable-conformance
+    future_owner_phase: P33
+    future_acceptance_test: make-test-portable-conformance
+    future_artifacts:
+      - conformance-v1-profiles
+      - rc-compatibility-detached-summary
   - id: upstream-version-matrix
     path: compatibility/upstream-versions.yaml
     status: present
@@ -982,6 +988,7 @@ artifacts:
       - generated-models
       - go-registry-sdk
       - go-provider-sdk
+      - go-consumer-sdk
       - provider-durable-store-port
       - go-streaming-client
       - go-worker-sdk
@@ -1000,6 +1007,12 @@ artifacts:
       - schema-manifest
       - manifest-digest-vectors
     path_role: concrete
+    future_action: repair-retain
+    future_owner: protocol-foundation
+    future_owner_phase: P06
+    future_acceptance_test: make-test-protocol-foundation
+    future_artifacts:
+      - sdk-go-protocol-core
   - id: sdk-python
     path: sdk/python
     status: planned
@@ -1009,7 +1022,10 @@ artifacts:
     derives_from:
       - generated-python-models
       - python-provider-sdk
+      - python-runtime-registration-client
+      - python-worker-client
       - python-asgi-runtime
+      - python-package-metadata
       - python-package-primitive
     completion_phase: P27
     acceptance_test: make-test-python-provider
@@ -1026,6 +1042,7 @@ artifacts:
       - typescript-streaming-client
       - typescript-consumer-sdk
       - typescript-bff-web
+      - typescript-package-metadata
       - npm-package-primitive
     completion_phase: P28
     acceptance_test: make-test-typescript-consumer
@@ -1420,6 +1437,13 @@ artifacts:
       - architecture
       - decisions
     path_role: concrete
+    future_action: migrate-retire
+    future_owner: repository-layout
+    future_owner_phase: P05
+    future_acceptance_test: make-test-go-workspace
+    future_artifacts:
+      - nested-control-plane-go-module
+      - reference-control-plane-server
   - id: reference-agents
     path: reference/agents
     status: planned
@@ -1444,7 +1468,10 @@ artifacts:
     authority: implementation
     path_role: concrete
     derives_from:
+      - python-package-metadata
       - python-provider-sdk
+      - python-runtime-registration-client
+      - python-worker-client
       - python-asgi-runtime
     language: python
     owner: python-provider
@@ -1458,6 +1485,7 @@ artifacts:
     authority: implementation
     path_role: concrete
     derives_from:
+      - typescript-package-metadata
       - typescript-consumer-sdk
     language: typescript
     owner: typescript-consumer
@@ -1488,6 +1516,7 @@ artifacts:
     derives_from:
       - production-reference-manifests
       - production-upgrade-recovery-runbook
+      - production-conformance-profile
       - container-build-primitive
     completion_phase: P37
     acceptance_test: make-production-reference-smoke
@@ -1586,6 +1615,7 @@ artifacts:
     derives_from:
       - server-conformance-driver
       - conformance-fixtures
+      - conformance-fault-ha-scenarios
     owner: fault-ha-harness
     owner_phase: P35
     acceptance_test: make-test-fault-ha-drivers
@@ -1689,7 +1719,33 @@ artifacts:
     authority: implementation
     derives_from:
       - go-manifest-library-baseline
+    path_role: aggregate
+    future_action: extend-retain
+    future_owner: sqlite-quickstart
+    future_owner_phase: P36
+    future_acceptance_test: make-quickstart-smoke
+    future_artifacts:
+      - arop-cli-publication-command
+      - arop-cli-registration-command
+      - arop-cli-export-a2a-command
+      - arop-cli-export-ard-command
+      - arop-cli-test-command
+      - arop-cli-development-commands
+  - id: manifest-digest-cli-baseline
+    path: scripts/manifest-digest.mjs
+    status: present
+    kind: tooling-baseline
+    authority: implementation
+    derives_from:
+      - schema-manifest
+      - manifest-digest-vectors
     path_role: concrete
+    future_action: repair-retain
+    future_owner: protocol-foundation
+    future_owner_phase: P06
+    future_acceptance_test: make-test-protocol-foundation
+    future_artifacts:
+      - sdk-go-protocol-core
   - id: portable-conformance-runner
     path: cmd/arop-conformance
     status: planned
@@ -1698,6 +1754,10 @@ artifacts:
     path_role: concrete
     derives_from:
       - conformance-fixtures
+      - conformance-scenario-schema
+      - conformance-profile-schema
+      - conformance-core-scenarios
+      - conformance-v1-profiles
       - sdk-go
     language: go
     owner: portable-conformance
@@ -1728,11 +1788,13 @@ artifacts:
     derives_from:
       - release-package-orchestrator
       - supply-chain-orchestrator
+      - release-version-mapper
       - external-config-validator
       - external-conformance-validator
       - public-release-aggregator
       - cross-commit-lineage-verifier
       - rc-source-freeze-checker
+      - public-namespace-regeneration
       - freeze-overlay-checker
       - payload-equivalence-checker
       - final-delivery-checker
@@ -1893,9 +1955,10 @@ artifacts:
       - codegen-pipeline
       - external-config-validator
       - cross-commit-lineage-verifier
-    owner: public-artifact-generation
-    owner_phase: P46
-    acceptance_test: make-regenerate-public
+      - release-version-mapper
+    owner: release-finalization-tooling
+    owner_phase: P42
+    acceptance_test: make-test-release-finalization-tooling
     exposure: repository-internal
   - id: ci-validation
     path: .github/workflows/validate.yml
@@ -2983,7 +3046,7 @@ artifacts:
     acceptance_test: make-test-streaming-resume
     exposure: reference-only
   - id: go-streaming-client
-    path: sdk/go/streaming
+    path: sdk/go/consumer/stream.go
     status: planned
     kind: sdk-component
     authority: implementation
@@ -2991,6 +3054,7 @@ artifacts:
     derives_from:
       - generated-streaming-go
       - asyncapi-agent-events
+      - go-consumer-core
     language: go
     owner: streaming-delivery
     owner_phase: P22
@@ -3099,10 +3163,11 @@ artifacts:
     authority: implementation
     path_role: concrete
     derives_from:
-      - go-module-proxy-bootstrap
+      - go-release-primitive
       - python-package-primitive
       - npm-package-primitive
       - container-build-primitive
+      - release-version-mapper
     owner: release-supply-chain
     owner_phase: P39
     acceptance_test: make-test-release-supply-chain
@@ -3117,6 +3182,8 @@ artifacts:
       - release-package-orchestrator
       - portable-conformance-runner
       - release-journal
+      - release-version-policy
+      - oidc-release-workflow-lock
     capabilities:
       - sbom
       - provenance
@@ -3135,6 +3202,7 @@ artifacts:
     derives_from:
       - decisions
       - machine-report-writer
+      - release-version-policy
     capabilities:
       - durable-idempotent-step-journal
       - immutable-digest-preflight
@@ -3186,6 +3254,547 @@ artifacts:
     owner_phase: P42
     acceptance_test: make-test-release-finalization-tooling
     exposure: repository-internal
+  - id: evidence-lineage-tests
+    path: scripts/test-evidence-lineage.mjs
+    status: present
+    kind: tooling-test
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - evidence-validation-library
+      - planning-audit-evidence-schema
+      - user-gate-evidence-schema
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+  - id: arop-cli-publication-command
+    path: cmd/arop/internal/commands/publish
+    status: planned
+    kind: go-cli-command
+    authority: implementation
+    path_role: concrete
+    language: go
+    derives_from:
+      - publication-service
+      - openapi-control-plane-foundation
+    owner: publication-service
+    owner_phase: P12
+    acceptance_test: make-test-publication-service
+    exposure: public-contract
+  - id: arop-cli-registration-command
+    path: cmd/arop/internal/commands/register
+    status: planned
+    kind: go-cli-command
+    authority: implementation
+    path_role: concrete
+    language: go
+    derives_from:
+      - go-registry-sdk
+    owner: registry-api-sdk
+    owner_phase: P15
+    acceptance_test: make-test-registry-api
+    exposure: public-contract
+  - id: go-consumer-core
+    path: sdk/go/consumer/client.go
+    status: planned
+    kind: sdk-component
+    authority: implementation
+    path_role: concrete
+    language: go
+    capabilities:
+      - create-query-command
+      - direct-proxy-ticket-redispatch
+      - idempotency-trace-cancel-deadline
+    derives_from:
+      - generated-run-go
+      - generated-dispatch-go
+      - openapi-control-plane
+      - openapi-agent-runtime
+    owner: go-provider-delivery
+    owner_phase: P21
+    acceptance_test: make-test-direct-proxy-provider
+    exposure: public-contract
+  - id: go-consumer-sdk
+    path: sdk/go/consumer
+    status: planned
+    kind: sdk
+    authority: derived
+    path_role: aggregate
+    language: go
+    derives_from:
+      - go-consumer-core
+      - go-streaming-client
+      - generated-run-go
+      - generated-dispatch-go
+      - generated-event-go
+    completion_phase: P22
+    acceptance_test: make-test-streaming-resume
+    exposure: public-contract
+  - id: python-runtime-registration-client
+    path: sdk/python/src/arop/registry/registration.py
+    status: planned
+    kind: sdk-component
+    authority: implementation
+    path_role: concrete
+    language: python
+    capabilities:
+      - register-keepalive-drain-deregister
+      - session-generation-recovery
+    derives_from:
+      - generated-registry-python
+      - openapi-registry-runtime
+    owner: python-provider
+    owner_phase: P27
+    acceptance_test: make-test-python-provider
+    exposure: public-contract
+  - id: python-worker-client
+    path: sdk/python/src/arop/worker
+    status: planned
+    kind: sdk-component
+    authority: implementation
+    path_role: concrete
+    language: python
+    capabilities:
+      - claim-renew-complete
+      - fencing-cancel-deadline
+      - crash-restart-outbox
+    derives_from:
+      - generated-worker-python
+      - openapi-worker-runtime
+    owner: python-provider
+    owner_phase: P27
+    acceptance_test: make-test-python-provider
+    exposure: public-contract
+  - id: python-package-metadata
+    path: sdk/python/pyproject.toml
+    status: planned
+    kind: package-metadata
+    authority: implementation
+    path_role: concrete
+    language: python
+    derives_from:
+      - python-provider-sdk
+      - python-runtime-registration-client
+      - python-worker-client
+    owner: python-provider
+    owner_phase: P27
+    acceptance_test: make-test-python-provider
+    exposure: public-contract
+  - id: typescript-package-metadata
+    path: sdk/typescript/package.json
+    status: planned
+    kind: package-metadata
+    authority: implementation
+    path_role: concrete
+    language: typescript
+    capabilities:
+      - exports-map
+      - types-entrypoint
+      - files-allowlist
+    derives_from:
+      - typescript-consumer-sdk
+    owner: typescript-consumer
+    owner_phase: P28
+    acceptance_test: make-test-typescript-consumer
+    exposure: public-contract
+  - id: arop-cli-export-a2a-command
+    path: cmd/arop/internal/commands/export-a2a
+    status: planned
+    kind: go-cli-command
+    authority: implementation
+    path_role: concrete
+    language: go
+    derives_from:
+      - a2a-adapter
+    owner: interop-a2a
+    owner_phase: P29
+    acceptance_test: make-test-interop-a2a
+    exposure: public-contract
+  - id: arop-cli-export-ard-command
+    path: cmd/arop/internal/commands/export-ard
+    status: planned
+    kind: go-cli-command
+    authority: implementation
+    path_role: concrete
+    language: go
+    derives_from:
+      - ard-adapter
+    owner: interop-ard
+    owner_phase: P31
+    acceptance_test: make-test-interop-ard
+    exposure: public-contract
+  - id: conformance-scenario-schema
+    path: conformance/scenarios/schema.json
+    status: planned
+    kind: conformance-schema
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    derives_from:
+      - protocol-specification
+      - conformance-fixtures
+    owner: portable-conformance
+    owner_phase: P33
+    acceptance_test: make-test-portable-conformance
+    exposure: public-contract
+  - id: conformance-profile-schema
+    path: conformance/profiles/schema.json
+    status: planned
+    kind: conformance-schema
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    derives_from:
+      - protocol-specification
+      - conformance-scenario-schema
+    owner: portable-conformance
+    owner_phase: P33
+    acceptance_test: make-test-portable-conformance
+    exposure: public-contract
+  - id: conformance-core-scenarios
+    path: conformance/scenarios/core
+    status: planned
+    kind: conformance-scenarios
+    authority: evidence
+    path_role: concrete
+    language: language-neutral
+    derives_from:
+      - conformance-scenario-schema
+      - conformance-fixtures
+    owner: portable-conformance
+    owner_phase: P33
+    acceptance_test: make-test-portable-conformance
+    exposure: public-contract
+  - id: conformance-v1-profiles
+    path: conformance/profiles/v1/core.yaml
+    status: planned
+    kind: conformance-profiles
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    capabilities:
+      - core
+      - provider
+      - streaming
+      - managed-runtime
+      - pull-worker
+      - control-plane
+    derives_from:
+      - conformance-profile-schema
+      - conformance-core-scenarios
+    owner: portable-conformance
+    owner_phase: P33
+    acceptance_test: make-test-portable-conformance
+    exposure: public-contract
+  - id: arop-cli-test-command
+    path: cmd/arop/internal/commands/test
+    status: planned
+    kind: go-cli-command
+    authority: implementation
+    path_role: concrete
+    language: go
+    derives_from:
+      - portable-conformance-runner
+      - conformance-v1-profiles
+    owner: portable-conformance
+    owner_phase: P33
+    acceptance_test: make-test-portable-conformance
+    exposure: public-contract
+  - id: conformance-fault-ha-scenarios
+    path: conformance/scenarios/fault-ha
+    status: planned
+    kind: conformance-scenarios
+    authority: evidence
+    path_role: concrete
+    language: language-neutral
+    derives_from:
+      - conformance-scenario-schema
+      - conformance-fixtures
+    owner: fault-ha-harness
+    owner_phase: P35
+    acceptance_test: make-test-fault-ha-drivers
+    exposure: public-contract
+  - id: conformance-scenarios
+    path: conformance/scenarios
+    status: planned
+    kind: conformance-scenarios
+    authority: derived
+    path_role: aggregate
+    language: language-neutral
+    derives_from:
+      - conformance-scenario-schema
+      - conformance-core-scenarios
+      - conformance-fault-ha-scenarios
+    completion_phase: P35
+    acceptance_test: make-test-fault-ha-drivers
+    exposure: public-contract
+  - id: arop-cli-development-commands
+    path: cmd/arop/internal/commands/development
+    status: planned
+    kind: go-cli-command
+    authority: implementation
+    path_role: concrete
+    language: go
+    capabilities:
+      - init
+      - dev
+      - doctor
+    derives_from:
+      - quickstart
+      - arop-cli-test-command
+      - arop-cli-publication-command
+      - arop-cli-registration-command
+    owner: sqlite-quickstart
+    owner_phase: P36
+    acceptance_test: make-quickstart-smoke
+    exposure: public-contract
+  - id: go-release-layout
+    path: spec/release/go-artifacts.yaml
+    status: planned
+    kind: release-policy
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    derives_from:
+      - decisions
+      - root-go-module
+      - nested-control-plane-go-module
+    owner: sqlite-quickstart
+    owner_phase: P36
+    acceptance_test: make-quickstart-smoke
+    exposure: repository-internal
+  - id: go-release-primitive
+    path: scripts/build-go-release.mjs
+    status: planned
+    kind: build-primitive
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - go-release-layout
+      - arop-cli-development-commands
+      - portable-conformance-runner
+    owner: sqlite-quickstart
+    owner_phase: P36
+    acceptance_test: make-quickstart-smoke
+    exposure: repository-internal
+  - id: production-conformance-profile
+    path: conformance/profiles/v1/production.yaml
+    status: planned
+    kind: conformance-profiles
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    derives_from:
+      - conformance-v1-profiles
+      - production-reference-manifests
+      - conformance-fault-ha-scenarios
+    owner: production-deployment
+    owner_phase: P37
+    acceptance_test: make-production-reference-smoke
+    exposure: public-contract
+  - id: conformance-profiles
+    path: conformance/profiles
+    status: planned
+    kind: conformance-profiles
+    authority: derived
+    path_role: aggregate
+    language: language-neutral
+    derives_from:
+      - conformance-profile-schema
+      - conformance-v1-profiles
+      - production-conformance-profile
+    completion_phase: P37
+    acceptance_test: make-production-reference-smoke
+    exposure: public-contract
+  - id: release-version-policy-schema
+    path: spec/schemas/release-version-policy.schema.json
+    status: planned
+    kind: release-policy-schema
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    derives_from:
+      - decisions
+    owner: release-supply-chain
+    owner_phase: P39
+    acceptance_test: make-test-release-supply-chain
+    exposure: public-contract
+  - id: release-version-policy
+    path: spec/release/version-policy.yaml
+    status: planned
+    kind: release-policy
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    capabilities:
+      - logical-semver-without-v
+      - go-tag-mapping
+      - pep440-mapping
+      - npm-oci-cli-schema-mapping
+    derives_from:
+      - release-version-policy-schema
+    owner: release-supply-chain
+    owner_phase: P39
+    acceptance_test: make-test-release-supply-chain
+    exposure: public-contract
+  - id: release-version-mapper
+    path: scripts/release/map-version.mjs
+    status: planned
+    kind: release-tooling
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - release-version-policy
+    owner: release-supply-chain
+    owner_phase: P39
+    acceptance_test: make-test-release-supply-chain
+    exposure: repository-internal
+  - id: oidc-release-workflow
+    path: .github/workflows/release.yml
+    status: planned
+    kind: ci
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - release-version-mapper
+      - security-governance-specification
+    owner: release-supply-chain
+    owner_phase: P39
+    acceptance_test: make-test-release-supply-chain
+    exposure: repository-internal
+  - id: oidc-release-workflow-lock
+    path: .github/workflows/release.lock.json
+    status: planned
+    kind: release-policy
+    authority: structure
+    path_role: concrete
+    derives_from:
+      - oidc-release-workflow
+    owner: release-supply-chain
+    owner_phase: P39
+    acceptance_test: make-test-release-supply-chain
+    exposure: repository-internal
+  - id: oidc-release-workflow-policy
+    path: scripts/release/verify-workflow-policy.mjs
+    status: planned
+    kind: release-validator
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - oidc-release-workflow
+      - oidc-release-workflow-lock
+    owner: release-supply-chain
+    owner_phase: P39
+    acceptance_test: make-test-release-supply-chain
+    exposure: repository-internal
+  - id: detached-release-evidence-envelope-schema
+    path: spec/schemas/detached-release-evidence-envelope.schema.json
+    status: planned
+    kind: release-evidence-schema
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    derives_from:
+      - trusted-release-role-registry-schema
+      - decisions
+    owner: release-evidence-tooling
+    owner_phase: P40
+    acceptance_test: make-test-release-evidence-tooling
+    exposure: public-contract
+  - id: detached-release-evidence-verifier
+    path: scripts/release/verify-detached-evidence.mjs
+    status: planned
+    kind: release-validator
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - detached-release-evidence-envelope-schema
+      - trusted-release-role-registry
+    owner: release-evidence-tooling
+    owner_phase: P40
+    acceptance_test: make-test-release-evidence-tooling
+    exposure: repository-internal
+  - id: verified-external-config-bundle-summary
+    path: build/evidence/P45/verified-summary.json
+    status: planned
+    kind: detached-evidence-summary
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - external-config-validator
+      - detached-release-evidence-verifier
+    producer_phase: P45
+    acceptance_test: make-external-config-gate
+    exposure: repository-internal
+  - id: rc-release-subject-manifest
+    path: build/evidence/P49/rc-release-subject-manifest.json
+    status: planned
+    kind: detached-evidence-bundle
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - supply-chain-orchestrator
+      - release-version-mapper
+      - verified-external-config-bundle-summary
+    producer_phase: P49
+    acceptance_test: make-deliver-v1-rc
+    exposure: public-contract
+  - id: rc-compatibility-detached-summary
+    path: build/evidence/P50/verified-compatibility-summary.json
+    status: planned
+    kind: detached-evidence-summary
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - external-conformance-validator
+      - detached-release-evidence-verifier
+      - rc-release-subject-manifest
+    producer_phase: P50
+    acceptance_test: make-external-evidence-gate
+    exposure: public-contract
+  - id: final-overlay-candidate-bundle
+    path: build/evidence/P51/final-overlay-candidate.json
+    status: planned
+    kind: detached-evidence-bundle
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - freeze-overlay-checker
+      - payload-equivalence-checker
+      - rc-compatibility-detached-summary
+    producer_phase: P51
+    acceptance_test: make-verify-v1-freeze
+    exposure: repository-internal
+  - id: verified-final-equivalence-attestation-summary
+    path: build/evidence/P52/verified-attestation-summary.json
+    status: planned
+    kind: detached-evidence-summary
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - final-equivalence-attestation-schema
+      - detached-release-evidence-verifier
+      - final-overlay-candidate-bundle
+      - verified-external-config-bundle-summary
+      - rc-release-subject-manifest
+      - rc-compatibility-detached-summary
+    producer_phase: P52
+    acceptance_test: make-approve-v1-overlay
+    exposure: public-contract
+  - id: final-release-detached-evidence-bundle
+    path: build/evidence/P53/final-release-evidence.json
+    status: planned
+    kind: detached-evidence-bundle
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - final-delivery-checker
+      - verified-final-equivalence-attestation-summary
+      - release-journal
+    producer_phase: P53
+    acceptance_test: make-deliver-v1
+    exposure: public-contract
   - id: spec-index-check-reports
     path: build/reports/P01
     status: planned
@@ -3261,8 +3870,15 @@ artifacts:
     authority: evidence
     path_role: concrete
     derives_from:
+      - release-version-policy-schema
+      - release-version-policy
+      - release-version-mapper
       - release-package-orchestrator
       - supply-chain-orchestrator
+      - release-journal
+      - oidc-release-workflow
+      - oidc-release-workflow-lock
+      - oidc-release-workflow-policy
     producer_phase: P39
     acceptance_test: make-test-release-supply-chain
     exposure: repository-internal
@@ -3275,7 +3891,10 @@ artifacts:
     derives_from:
       - external-config-validator
       - external-conformance-validator
+      - detached-release-evidence-envelope-schema
+      - detached-release-evidence-verifier
       - trusted-release-role-registry-schema
+      - trusted-release-role-registry
     producer_phase: P40
     acceptance_test: make-test-release-evidence-tooling
     exposure: repository-internal
@@ -3299,6 +3918,7 @@ artifacts:
     authority: evidence
     path_role: concrete
     derives_from:
+      - public-namespace-regeneration
       - rc-source-freeze-checker
       - final-equivalence-attestation-schema
       - freeze-overlay-checker
@@ -3314,6 +3934,14 @@ artifacts:
     authority: evidence
     path_role: concrete
     derives_from:
+      - release-package-orchestrator
+      - supply-chain-orchestrator
+      - public-release-aggregator
+      - report-provenance-verifier
+      - public-namespace-regeneration
+      - rc-source-freeze-checker
+      - freeze-overlay-checker
+    runtime_inputs:
       - release-supply-chain-reports
       - release-evidence-tooling-reports
       - release-lineage-tooling-reports
@@ -3328,6 +3956,52 @@ artifacts:
     authority: evidence
     path_role: concrete
     derives_from:
+      - public-release-aggregator
+      - report-provenance-verifier
+      - release-report-integration
+    runtime_inputs:
+      - spec-index-check-reports
+      - blueprint-check-reports
+      - planning-audit-reports
+      - user-gate-reports
+      - phase-report-p05
+      - phase-report-p06
+      - phase-report-p07
+      - phase-report-p08
+      - phase-report-p09
+      - phase-report-p10
+      - phase-report-p11
+      - phase-report-p12
+      - phase-report-p13
+      - phase-report-p14
+      - phase-report-p15
+      - phase-report-p16
+      - phase-report-p17
+      - phase-report-p18
+      - phase-report-p19
+      - phase-report-p20
+      - phase-report-p21
+      - phase-report-p22
+      - phase-report-p23
+      - phase-report-p24
+      - phase-report-p25
+      - phase-report-p26
+      - phase-report-p27
+      - phase-report-p28
+      - phase-report-p29
+      - phase-report-p30
+      - phase-report-p31
+      - phase-report-p32
+      - phase-report-p33
+      - phase-report-p34
+      - phase-report-p35
+      - phase-report-p36
+      - phase-report-p37
+      - phase-report-p38
+      - release-supply-chain-reports
+      - release-evidence-tooling-reports
+      - release-lineage-tooling-reports
+      - release-finalization-tooling-reports
       - release-dry-run-reports
     producer_phase: P44
     acceptance_test: make-validate-all
@@ -3340,6 +4014,8 @@ artifacts:
     path_role: concrete
     derives_from:
       - external-config-validator
+      - detached-release-evidence-verifier
+    runtime_inputs:
       - code-complete-reports
     producer_phase: P45
     acceptance_test: make-external-config-gate
@@ -3352,6 +4028,8 @@ artifacts:
     path_role: concrete
     derives_from:
       - public-namespace-regeneration
+      - release-version-mapper
+    runtime_inputs:
       - external-config-gate-reports
     producer_phase: P46
     acceptance_test: make-regenerate-public
@@ -3363,8 +4041,9 @@ artifacts:
     authority: evidence
     path_role: concrete
     derives_from:
-      - public-regeneration-reports
       - rc-source-freeze-checker
+    runtime_inputs:
+      - public-regeneration-reports
     producer_phase: P47
     acceptance_test: make-freeze-rc-source
     exposure: repository-internal
@@ -3375,8 +4054,10 @@ artifacts:
     authority: evidence
     path_role: concrete
     derives_from:
-      - rc-source-freeze-reports
       - public-release-aggregator
+      - release-version-mapper
+    runtime_inputs:
+      - rc-source-freeze-reports
     producer_phase: P48
     acceptance_test: make-verify-public-namespace
     exposure: repository-internal
@@ -3387,8 +4068,10 @@ artifacts:
     authority: evidence
     path_role: concrete
     derives_from:
-      - public-namespace-verification-reports
       - supply-chain-orchestrator
+      - release-version-mapper
+    runtime_inputs:
+      - public-namespace-verification-reports
     producer_phase: P49
     acceptance_test: make-deliver-v1-rc
     exposure: repository-internal
@@ -3400,6 +4083,8 @@ artifacts:
     path_role: concrete
     derives_from:
       - external-conformance-validator
+      - detached-release-evidence-verifier
+    runtime_inputs:
       - v1-rc-delivery-reports
     producer_phase: P50
     acceptance_test: make-external-evidence-gate
@@ -3413,6 +4098,7 @@ artifacts:
     derives_from:
       - freeze-overlay-checker
       - payload-equivalence-checker
+    runtime_inputs:
       - external-evidence-gate-reports
     producer_phase: P51
     acceptance_test: make-verify-v1-freeze
@@ -3426,6 +4112,8 @@ artifacts:
     derives_from:
       - final-equivalence-attestation-schema
       - trusted-release-role-registry
+      - detached-release-evidence-verifier
+    runtime_inputs:
       - freeze-overlay-reports
     producer_phase: P52
     acceptance_test: make-approve-v1-overlay
@@ -3438,6 +4126,8 @@ artifacts:
     path_role: concrete
     derives_from:
       - final-delivery-checker
+      - release-version-mapper
+    runtime_inputs:
       - overlay-approval-reports
     producer_phase: P53
     acceptance_test: make-deliver-v1
@@ -3710,7 +4400,13 @@ artifacts:
     producer_phase: P05
     acceptance_test: make-test-go-workspace
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - root-go-module
+      - nested-control-plane-go-module
+      - go-work-example
+      - ci-workspace-validation
+      - go-module-proxy-bootstrap
+      - reference-control-plane-lite-baseline
   - id: phase-report-p06
     path: build/reports/P06
     status: planned
@@ -3720,7 +4416,13 @@ artifacts:
     producer_phase: P06
     acceptance_test: make-test-protocol-foundation
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - error-fixtures
+      - base-state-machine-fixtures
+      - conformance-harness-base
+      - sdk-go-protocol-core
+      - go-manifest-library-baseline
+      - manifest-digest-cli-baseline
   - id: phase-report-p07
     path: build/reports/P07
     status: planned
@@ -3730,7 +4432,9 @@ artifacts:
     producer_phase: P07
     acceptance_test: make-test-codegen-pipeline
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - codegen-pipeline
+      - codegen-representative-spike
   - id: phase-report-p08
     path: build/reports/P08
     status: planned
@@ -3740,7 +4444,11 @@ artifacts:
     producer_phase: P08
     acceptance_test: make-test-control-plane-platform
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - reference-control-plane-server
+      - control-plane-platform-foundation
+      - audit-trace-ports
+      - audit-trace-memory-bootstrap
   - id: phase-report-p09
     path: build/reports/P09
     status: planned
@@ -3750,7 +4458,14 @@ artifacts:
     producer_phase: P09
     acceptance_test: make-test-storage-migrations
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - migration-engine
+      - migration-engine-fixture-versions
+      - sqlite-uow-storage-adapter
+      - postgres-uow-storage-adapter
+      - durable-audit-storage
+      - sqlite-migration-base
+      - postgres-migration-base
   - id: phase-report-p10
     path: build/reports/P10
     status: planned
@@ -3760,7 +4475,13 @@ artifacts:
     producer_phase: P10
     acceptance_test: make-test-identity-secrets
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - identity-service
+      - credential-store
+      - secret-resolver-port
+      - reference-secret-exchange
+      - sqlite-migration-identity
+      - postgres-migration-identity
   - id: phase-report-p11
     path: build/reports/P11
     status: planned
@@ -3770,7 +4491,12 @@ artifacts:
     producer_phase: P11
     acceptance_test: make-test-publication-contracts
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - openapi-control-plane-foundation
+      - publication-contract-fixtures
+      - generated-control-plane-go
+      - generated-control-plane-python
+      - generated-control-plane-typescript
   - id: phase-report-p12
     path: build/reports/P12
     status: planned
@@ -3780,7 +4506,12 @@ artifacts:
     producer_phase: P12
     acceptance_test: make-test-publication-service
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - publication-fixtures
+      - publication-service
+      - sqlite-migration-publication
+      - postgres-migration-publication
+      - arop-cli-publication-command
   - id: phase-report-p13
     path: build/reports/P13
     status: planned
@@ -3790,7 +4521,16 @@ artifacts:
     producer_phase: P13
     acceptance_test: make-test-asset-broker
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - schema-asset-exchange
+      - openapi-control-plane-asset-fragment
+      - generated-asset-go
+      - generated-asset-python
+      - generated-asset-typescript
+      - asset-fixtures
+      - asset-broker-service
+      - sqlite-migration-asset
+      - postgres-migration-asset
   - id: phase-report-p14
     path: build/reports/P14
     status: planned
@@ -3800,7 +4540,14 @@ artifacts:
     producer_phase: P14
     acceptance_test: make-test-registry-core
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - schema-registry-runtime-instance
+      - schema-registry-lease
+      - schema-registry-event
+      - registry-fixtures
+      - registry-core-service
+      - sqlite-migration-registry
+      - postgres-migration-registry
   - id: phase-report-p15
     path: build/reports/P15
     status: planned
@@ -3810,7 +4557,16 @@ artifacts:
     producer_phase: P15
     acceptance_test: make-test-registry-api
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - schema-discovery-snapshot
+      - openapi-registry-runtime
+      - openapi-discovery-runtime
+      - registry-api-service
+      - go-registry-sdk
+      - generated-registry-go
+      - generated-registry-python
+      - generated-registry-typescript
+      - arop-cli-registration-command
   - id: phase-report-p16
     path: build/reports/P16
     status: planned
@@ -3820,7 +4576,9 @@ artifacts:
     producer_phase: P16
     acceptance_test: make-test-registry-recovery
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - registry-recovery-service
+      - registry-watch-fixtures
   - id: phase-report-p17
     path: build/reports/P17
     status: planned
@@ -3831,6 +4589,10 @@ artifacts:
     acceptance_test: make-verify-registry
     exposure: repository-internal
     derives_from: []
+    runtime_inputs:
+      - phase-report-p14
+      - phase-report-p15
+      - phase-report-p16
   - id: phase-report-p18
     path: build/reports/P18
     status: planned
@@ -3840,7 +4602,19 @@ artifacts:
     producer_phase: P18
     acceptance_test: make-test-run-lifecycle
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - schema-run-request
+      - schema-run-status
+      - schema-command
+      - schema-result
+      - openapi-control-plane-run-fragment
+      - run-fixtures
+      - run-lifecycle-service
+      - sqlite-migration-run
+      - postgres-migration-run
+      - generated-run-go
+      - generated-run-python
+      - generated-run-typescript
   - id: phase-report-p19
     path: build/reports/P19
     status: planned
@@ -3850,7 +4624,18 @@ artifacts:
     producer_phase: P19
     acceptance_test: make-test-dispatch-ticket
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - schema-attempt
+      - schema-dispatch-ticket
+      - schema-jwks-metadata
+      - openapi-control-plane-dispatch-fragment
+      - dispatch-fixtures
+      - dispatcher-ticket-service
+      - sqlite-migration-dispatch
+      - postgres-migration-dispatch
+      - generated-dispatch-go
+      - generated-dispatch-python
+      - generated-dispatch-typescript
   - id: phase-report-p20
     path: build/reports/P20
     status: planned
@@ -3860,7 +4645,21 @@ artifacts:
     producer_phase: P20
     acceptance_test: make-test-event-ledger
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - schema-event-envelope
+      - schema-lifecycle-events
+      - schema-output-events
+      - schema-progress-events
+      - schema-usage-events
+      - schema-event-session
+      - openapi-control-plane-event-fragment
+      - event-fixtures
+      - event-ledger-service
+      - sqlite-migration-event
+      - postgres-migration-event
+      - generated-event-go
+      - generated-event-python
+      - generated-event-typescript
   - id: phase-report-p21
     path: build/reports/P21
     status: planned
@@ -3870,7 +4669,17 @@ artifacts:
     producer_phase: P21
     acceptance_test: make-test-direct-proxy-provider
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - openapi-agent-runtime
+      - direct-proxy-delivery-service
+      - provider-durable-store-contract
+      - go-provider-sdk
+      - go-consumer-core
+      - provider-durable-store-port
+      - reference-http-agent
+      - reference-provider-sqlite-adapter
+      - reference-provider-sqlite-migration
+      - provider-reliability-fixtures
   - id: phase-report-p22
     path: build/reports/P22
     status: planned
@@ -3880,7 +4689,16 @@ artifacts:
     producer_phase: P22
     acceptance_test: make-test-streaming-resume
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - asyncapi-agent-events
+      - streaming-service
+      - go-streaming-client
+      - typescript-streaming-client
+      - streaming-fixtures
+      - generated-streaming-go
+      - generated-streaming-python
+      - generated-streaming-typescript
+      - go-consumer-sdk
   - id: phase-report-p23
     path: build/reports/P23
     status: planned
@@ -3891,6 +4709,12 @@ artifacts:
     acceptance_test: make-verify-run-delivery
     exposure: repository-internal
     derives_from: []
+    runtime_inputs:
+      - phase-report-p18
+      - phase-report-p19
+      - phase-report-p20
+      - phase-report-p21
+      - phase-report-p22
   - id: phase-report-p24
     path: build/reports/P24
     status: planned
@@ -3900,7 +4724,17 @@ artifacts:
     producer_phase: P24
     acceptance_test: make-test-worker-service
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - schema-worker-claim
+      - schema-worker-complete
+      - openapi-worker-runtime
+      - worker-fixtures
+      - worker-pull-service
+      - sqlite-migration-worker
+      - postgres-migration-worker
+      - generated-worker-go
+      - generated-worker-python
+      - generated-worker-typescript
   - id: phase-report-p25
     path: build/reports/P25
     status: planned
@@ -3910,7 +4744,9 @@ artifacts:
     producer_phase: P25
     acceptance_test: make-test-go-worker-sdk
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - go-worker-sdk
+      - reference-worker
   - id: phase-report-p26
     path: build/reports/P26
     status: planned
@@ -3921,6 +4757,19 @@ artifacts:
     acceptance_test: make-verify-operations-security
     exposure: repository-internal
     derives_from: []
+    runtime_inputs:
+      - phase-report-p08
+      - phase-report-p10
+      - phase-report-p12
+      - phase-report-p13
+      - phase-report-p18
+      - phase-report-p19
+      - phase-report-p20
+      - phase-report-p21
+      - phase-report-p22
+      - phase-report-p23
+      - phase-report-p24
+      - phase-report-p25
   - id: phase-report-p27
     path: build/reports/P27
     status: planned
@@ -3930,7 +4779,17 @@ artifacts:
     producer_phase: P27
     acceptance_test: make-test-python-provider
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - python-provider-durable-store-port
+      - python-provider-sdk
+      - python-runtime-registration-client
+      - python-worker-client
+      - python-asgi-runtime
+      - reference-python-http-agent
+      - reference-python-sqlite-adapter
+      - reference-python-sqlite-migration
+      - python-package-metadata
+      - python-package-primitive
   - id: phase-report-p28
     path: build/reports/P28
     status: planned
@@ -3940,7 +4799,11 @@ artifacts:
     producer_phase: P28
     acceptance_test: make-test-typescript-consumer
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - typescript-consumer-sdk
+      - typescript-bff-web
+      - typescript-package-metadata
+      - npm-package-primitive
   - id: phase-report-p29
     path: build/reports/P29
     status: planned
@@ -3950,7 +4813,9 @@ artifacts:
     producer_phase: P29
     acceptance_test: make-test-interop-a2a
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - a2a-adapter
+      - arop-cli-export-a2a-command
   - id: phase-report-p30
     path: build/reports/P30
     status: planned
@@ -3960,7 +4825,8 @@ artifacts:
     producer_phase: P30
     acceptance_test: make-test-interop-mcp
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - mcp-adapter
   - id: phase-report-p31
     path: build/reports/P31
     status: planned
@@ -3970,7 +4836,9 @@ artifacts:
     producer_phase: P31
     acceptance_test: make-test-interop-ard
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - ard-adapter
+      - arop-cli-export-ard-command
   - id: phase-report-p32
     path: build/reports/P32
     status: planned
@@ -3980,7 +4848,8 @@ artifacts:
     producer_phase: P32
     acceptance_test: make-test-interop-observability
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - cloudevents-otel-mapping
   - id: phase-report-p33
     path: build/reports/P33
     status: planned
@@ -3990,7 +4859,14 @@ artifacts:
     producer_phase: P33
     acceptance_test: make-test-portable-conformance
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - portable-conformance-runner
+      - conformance-scenario-schema
+      - conformance-profile-schema
+      - conformance-core-scenarios
+      - conformance-v1-profiles
+      - arop-cli-test-command
+      - compatibility-matrix
   - id: phase-report-p34
     path: build/reports/P34
     status: planned
@@ -4000,7 +4876,8 @@ artifacts:
     producer_phase: P34
     acceptance_test: make-test-server-conformance
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - server-conformance-driver
   - id: phase-report-p35
     path: build/reports/P35
     status: planned
@@ -4010,7 +4887,10 @@ artifacts:
     producer_phase: P35
     acceptance_test: make-test-fault-ha-drivers
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - fault-ha-harness
+      - conformance-fault-ha-scenarios
+      - conformance-scenarios
   - id: phase-report-p36
     path: build/reports/P36
     status: planned
@@ -4020,7 +4900,12 @@ artifacts:
     producer_phase: P36
     acceptance_test: make-quickstart-smoke
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - quickstart
+      - arop-cli-development-commands
+      - go-release-layout
+      - go-release-primitive
+      - arop-cli-baseline
   - id: phase-report-p37
     path: build/reports/P37
     status: planned
@@ -4030,7 +4915,12 @@ artifacts:
     producer_phase: P37
     acceptance_test: make-production-reference-smoke
     exposure: repository-internal
-    derives_from: []
+    derives_from:
+      - production-reference-manifests
+      - production-upgrade-recovery-runbook
+      - production-conformance-profile
+      - container-build-primitive
+      - conformance-profiles
   - id: phase-report-p38
     path: build/reports/P38
     status: planned
@@ -4041,6 +4931,22 @@ artifacts:
     acceptance_test: make-verify-resilience
     exposure: repository-internal
     derives_from: []
+    runtime_inputs:
+      - phase-report-p09
+      - phase-report-p10
+      - phase-report-p12
+      - phase-report-p13
+      - phase-report-p14
+      - phase-report-p16
+      - phase-report-p18
+      - phase-report-p19
+      - phase-report-p20
+      - phase-report-p21
+      - phase-report-p24
+      - phase-report-p27
+      - phase-report-p34
+      - phase-report-p35
+      - phase-report-p37
   - id: trusted-release-role-registry-schema
     path: spec/schemas/trusted-release-roles.schema.json
     status: planned

@@ -30,7 +30,7 @@ updated: 2026-09-22
 - **Status:** complete
 - **Capability owner:** spec-governance
 - **Components:** governance
-- **Artifacts owned:** spec-index-validation, check-report-meta-schema, machine-report-writer, machine-report-verifier, machine-report-verifier-tests, planning-audit-evidence-schema, user-gate-evidence-schema, evidence-validation-library, planning-audit-validation, user-gate-validation
+- **Artifacts owned:** spec-index-validation, check-report-meta-schema, machine-report-writer, machine-report-verifier, machine-report-verifier-tests, evidence-lineage-tests, planning-audit-evidence-schema, user-gate-evidence-schema, evidence-validation-library, planning-audit-validation, user-gate-validation
 - **Goal:** 建立 Decision 权威链、14 条不可变 `statement_original_zh`、冲突台账、制品 DAG 和规划 Meta-Schema 候选。
 - **Scope:** `docs/DECISIONS.md`、`spec/*`、`scripts/spec-index-check.mjs`、公共 report writer/schema/verifier；不改业务实现。
 - **Dependencies:** none
@@ -64,7 +64,7 @@ updated: 2026-09-22
 - **Goal:** 由未参与 P01/P02 撰写的审核者验证需求覆盖、可调度性和必修项归零。
 - **Scope:** 只读核心文档/规划元数据；输入为仓库外审计证据，仓库只生成脱敏 canonical 内容摘要报告和可选验签结果。
 - **Dependencies:** P02
-- **First-path invariants:** IR-01–IR-14 与 P01–最后阶段逐条 `PASS`；`must_fix_count=0` 且明细为空；subject commit 是当前 HEAD 或其祖先，requirements/plan/blueprint/artifact-manifest Digest 与当前输入精确匹配；`summary_sha256` 重算一致。
+- **First-path invariants:** IR-01–IR-14 与 P01–最后阶段逐条 `PASS`；`must_fix_count=0` 且明细为空；subject commit 是当前 HEAD 或其祖先，requirements/plan/blueprint/artifact-manifest 四份证据 digest、`git show subject:path` blob 与 current HEAD/worktree 三方精确匹配；subject→HEAD ancestry 中修改后回退或删除任一 planning blob 都拒绝；`summary_sha256` 重算一致。
 - **Machine acceptance:** `make planning-audit EVIDENCE=<outside-repo-review> TRUSTED_KEYS=<outside-repo-key-registry>`，或人工 Gate 提供 `TRUSTED_CHANNEL_CONFIRMATION=<outside-repo-record>` → `build/reports/P03/report.json` 和 `junit.xml`。
 - **Rollback point:** must-fix 非零时回 P01/P02 修复并重新独立审计，不编辑证据伪造通过。
 - **Definition of done:** 14 条需求和全部阶段结果完整、digest 匹配、must-fix 为零；审核者独立性由受信 key 角色与 Ed25519 签名或人工可信渠道确认。
@@ -79,7 +79,7 @@ updated: 2026-09-22
 - **Goal:** 在任何物理重构和新协议行为前获得用户对已审计计划的明确确认。
 - **Scope:** P03 成功报告与稳定 canonical summary Digest、计划 subject commit/digest、仓库外用户批准证据。
 - **Dependencies:** P03
-- **First-path invariants:** Gate 绑定已审计版本的 P03 canonical summary，subject commit 是当前 HEAD 或其祖先，当前受审输入 Digest 不变；IR-01–IR-14 与 P01–最后阶段逐条 `PASS`，零 must-fix，`summary_sha256` 可重算；工具只验证而不自动批准。
+- **First-path invariants:** Gate 绑定已审计版本的 P03 canonical summary；P04 同样对 requirements/plan/blueprint/artifact-manifest 做证据字段、subject Git blob、current closure 三方校验，并拒绝 changed→reverted/deleted ancestry；IR-01–IR-14 与 P01–最后阶段逐条 `PASS`，零 must-fix，`summary_sha256` 可重算；工具只验证而不自动批准。
 - **Machine acceptance:** `make gate-check GATE=P04 EVIDENCE=<outside-repo-approval> TRUSTED_KEYS=<outside-repo-key-registry>`，或人工 Gate 提供 `TRUSTED_CHANNEL_CONFIRMATION=<outside-repo-record>` → `build/reports/P04/report.json` 和 `junit.xml`。
 - **Rollback point:** 用户要求修改时回 P02/P03；任一受审输入新 Digest 使旧批准失效，仅 commit 前进且输入不变时不要求重复批准。
 - **Definition of done:** canonical hash 可重算，批准者由受信 `project_owner` key 或人工可信渠道确认；此前 P05 保持未开始。
@@ -91,8 +91,9 @@ updated: 2026-09-22
 - **Capability owner:** repository-layout
 - **Components:** repository, release
 - **Artifacts owned:** root-go-module, nested-control-plane-go-module, go-work-example, ci-workspace-validation, go-module-proxy-bootstrap
+- **Baselines transitioned:** reference-control-plane-lite-baseline(migrate-retire)
 - **Goal:** 保留并收口已有 root module，新增唯一 nested module，并让未发布 root module 时 nested module 仍可在 `GOWORK=off` 下验证。
-- **Scope:** 物理搬迁、验证已有根 `go.mod`、新增 `reference/control-plane/go.mod`、`go.work.example`、最小本地 Go module proxy/bootstrap harness 和 CI 骨架；不改变 wire 行为。
+- **Scope:** 物理搬迁并退休 `reference/control-plane-lite` 基线、验证已有根 `go.mod`、新增 `reference/control-plane/go.mod`、`go.work.example`、最小本地 Go module proxy/bootstrap harness 和 CI 骨架；不改变 wire 行为。
 - **Dependencies:** P04
 - **First-path invariants:** 仅两个 `go.mod`；真实 `go.work` 默认不提交；bootstrap 先把 root pseudo-version 写入临时 proxy，再让 nested 精确 require 并以 `GOWORK=off` 测试；无永久 `replace`。
 - **Machine acceptance:** `make test-go-workspace` → `build/reports/P05/report.json` 和 `junit.xml`。
@@ -106,10 +107,11 @@ updated: 2026-09-22
 - **Capability owner:** protocol-foundation
 - **Components:** protocol
 - **Artifacts owned:** error-fixtures, base-state-machine-fixtures, conformance-harness-base, sdk-go-protocol-core
+- **Baselines transitioned:** go-manifest-library-baseline(repair-retain), manifest-digest-cli-baseline(repair-retain)
 - **Goal:** 完成 strict/forward 解析、Digest、错误、UTF-8 offset 和基础状态机 Fixture。
 - **Scope:** `sdk/go/protocol`、通用 Fixture/Digest corpus、重复 JSON Key、错误码和基础迁移；不含生成模型。
 - **Dependencies:** P05
-- **First-path invariants:** Authoring strict 与 Consumer forward compatible 分 API；所有 `$ref` 离线；先验证再 Digest；基础 Fixture 是行为权威。
+- **First-path invariants:** Authoring strict 与 Consumer forward compatible 分 API；所有 `$ref` 离线；把现有 Manifest library 的 digest-before-validation 技术债改为先验证再 Digest；基础 Fixture 是行为权威。
 - **Machine acceptance:** `make test-protocol-foundation` → `build/reports/P06/report.json` 和 `junit.xml`。
 - **Rollback point:** 任一跨语言 digest 或状态迁移分歧时停在 P06。
 - **Definition of done:** 黄金/反例、JCS、中英文 offset、错误码和基础状态机结论一致。
@@ -195,9 +197,9 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** publication-service
 - **Components:** publication, storage
-- **Artifacts owned:** publication-fixtures, publication-service, sqlite-migration-publication, postgres-migration-publication
+- **Artifacts owned:** publication-fixtures, publication-service, sqlite-migration-publication, postgres-migration-publication, arop-cli-publication-command
 - **Goal:** 实现 Publication 纵向路径及 Manifest endpoint 静态 URL/离线 `$ref` 安全。
-- **Scope:** domain/app/http/storage、Bundle/Digest、SQLite/PostgreSQL migration、scheme/host/IP 静态 allowlist；不做网络连接和 Asset broker。
+- **Scope:** domain/app/http/storage、Bundle/Digest、SQLite/PostgreSQL migration、scheme/host/IP 静态 allowlist，以及调用同一公共 SDK 的 `arop publish`；不做网络连接和 Asset broker。
 - **Dependencies:** P11
 - **First-path invariants:** strict→offline `$ref`→Digest→immutable version；静态拒绝 loopback/link-local/private/metadata/credential-in-URL；运行双库 `empty/N-1→N/idempotent/dirty` 子矩阵。
 - **Machine acceptance:** `make test-publication-service` → `build/reports/P12/report.json` 和 `junit.xml`。
@@ -240,9 +242,9 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** registry-api-sdk
 - **Components:** registry, sdk-go
-- **Artifacts owned:** schema-discovery-snapshot, openapi-registry-runtime, openapi-discovery-runtime, registry-api-service, go-registry-sdk, generated-registry-go, generated-registry-python, generated-registry-typescript
+- **Artifacts owned:** schema-discovery-snapshot, openapi-registry-runtime, openapi-discovery-runtime, registry-api-service, go-registry-sdk, generated-registry-go, generated-registry-python, generated-registry-typescript, arop-cli-registration-command
 - **Goal:** 交付注册、续租、发现、Drain API 和 Go Registry SDK。
-- **Scope:** Registry/Discovery OpenAPI、handler/app、Go client/keepalive/drain helper；不含 Watch/HA。
+- **Scope:** Registry/Discovery OpenAPI、handler/app、Go client/keepalive/drain helper 与 `arop register`；不含 Watch/HA。
 - **Dependencies:** P14
 - **First-path invariants:** Credential 复用 P10；健康字段正交；Lease 失效立即不可发现；Drain 禁止新 Attempt；SDK 遵守 generation fencing。
 - **Machine acceptance:** `make test-registry-api` → `build/reports/P15/report.json` 和 `junit.xml`。
@@ -330,14 +332,14 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** go-provider-delivery
 - **Components:** delivery, sdk-go, storage
-- **Artifacts owned:** openapi-agent-runtime, direct-proxy-delivery-service, provider-durable-store-contract, go-provider-sdk, provider-durable-store-port, reference-http-agent, reference-provider-sqlite-adapter, reference-provider-sqlite-migration, provider-reliability-fixtures
-- **Goal:** 交付 Direct/Proxy、Go Provider SDK 和通用参考 Agent 的完整 provider-side 可靠路径。
-- **Scope:** Control Plane delivery handler/client、公共 SDK transactional `DurableStore` port、Reference Go HTTP Agent 及其自身 subtree 内 SQLite adapter/migration、连接/redirect DNS/IP 重检；公共 SDK 不带 DB driver，不含 SSE，也不把 Reference Agent 纳入 Control Plane 双库矩阵。
+- **Artifacts owned:** openapi-agent-runtime, direct-proxy-delivery-service, provider-durable-store-contract, go-provider-sdk, go-consumer-core, provider-durable-store-port, reference-http-agent, reference-provider-sqlite-adapter, reference-provider-sqlite-migration, provider-reliability-fixtures
+- **Goal:** 交付 Direct/Proxy、Go Provider SDK、可信 Bot/Gateway Go Consumer 和通用参考 Agent 的端到端可靠路径。
+- **Scope:** Control Plane delivery handler、公共 Go Provider SDK、可信 Bot/Gateway 使用的 Go Consumer Direct/Proxy client、transactional `DurableStore` port、Reference Go HTTP Agent 及其自身 subtree 内 SQLite adapter/migration、连接/redirect DNS/IP 重检；公共 SDK 不带 DB driver，不含 SSE，也不把 Reference Agent 纳入 Control Plane 双库矩阵。
 - **Dependencies:** P20
-- **First-path invariants:** 浏览器仅 BFF/Proxy；每次连接及 redirect DNS/IP 重检；provider durable Inbox/Outbox、稳定 `effect_id` 去重、Cancel/Deadline/Usage/Trace、crash-before/after-effect retry 首次内建；Reference Agent SQLite migration 有空库/幂等/dirty/crash-recovery 测试，但不伪称 PostgreSQL Provider migration。
+- **First-path invariants:** 浏览器仅 BFF/Proxy；Consumer create/query/command 传播 idempotency/trace，ticket 过期必须回 Control Plane redispatch 而非复用；每次连接及 redirect DNS/IP 重检；provider durable Inbox/Outbox、稳定 `effect_id` 去重、Cancel/Deadline/Usage/Trace、crash-before/after-effect retry 首次内建；Reference Agent SQLite migration 有空库/幂等/dirty/crash-recovery 测试，但不伪称 PostgreSQL Provider migration。
 - **Machine acceptance:** `make test-direct-proxy-provider` → `build/reports/P21/report.json` 和 `junit.xml`。
 - **Rollback point:** 禁用 Direct 回 Proxy；副作用不确定时不自动重试 write/irreversible。
-- **Definition of done:** Direct/Proxy、SSRF/DNS/redirect、provider crash/retry/effect 去重、cancel/deadline/usage/trace 与 Reference Agent SQLite 恢复矩阵通过。
+- **Definition of done:** Provider 与 Consumer 的 Direct/Proxy/redispatch、create/query/command、SSRF/DNS/redirect、provider crash/retry/effect 去重、cancel/deadline/usage/trace 与 Reference Agent SQLite 恢复矩阵通过。
 
 ## P22 — Structured streaming and AsyncAPI
 
@@ -420,14 +422,14 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** python-provider
 - **Components:** sdk-python
-- **Artifacts owned:** python-provider-durable-store-port, python-provider-sdk, python-asgi-runtime, reference-python-http-agent, reference-python-sqlite-adapter, reference-python-sqlite-migration, python-package-primitive
-- **Goal:** 交付 Python Provider/ASGI、P21 可靠语义绑定和供 P39 调用的 Python 打包 primitive。
-- **Scope:** generated models、provider middleware、ASGI SSE、durable store port、wheel/sdist primitive；不发布包。
+- **Artifacts owned:** python-provider-durable-store-port, python-provider-sdk, python-runtime-registration-client, python-worker-client, python-asgi-runtime, reference-python-http-agent, reference-python-sqlite-adapter, reference-python-sqlite-migration, python-package-metadata, python-package-primitive
+- **Goal:** 交付 Python v1 SDK distribution：Provider/ASGI、RuntimeRegistration、Worker Client、P21/P24 可靠语义绑定和供 P39 调用的 Python 打包 primitive。
+- **Scope:** generated models、provider middleware、ASGI SSE、RuntimeRegistration/keepalive/drain、Worker claim/renew/complete、durable store port，以及由 `pyproject.toml` 驱动的 wheel/sdist primitive；不发布包。
 - **Dependencies:** P26
-- **First-path invariants:** strict/forward API 分离；公共 Python SDK 只定义 driver-free transactional `DurableStore` port；Reference Python Agent SQLite adapter/migration 只在自身 subtree，复用 Inbox/Outbox/`effect_id`；本地库必须跑 `empty/idempotent/dirty/crash-recovery` 矩阵；primitive 输出 deterministic manifest，不含 registry 凭据。
+- **First-path invariants:** strict/forward API 分离；Registration 覆盖 register→lease/generation→keepalive→断线重注册→SIGTERM drain/deregister，Worker 覆盖 long-poll/renew/fencing/backoff/cancel/deadline/outbox/crash restart；公共 Python SDK 只定义 driver-free transactional `DurableStore` port；Reference Python Agent SQLite adapter/migration 只在自身 subtree，复用 Inbox/Outbox/`effect_id`；`pyproject.toml` 固定 name/version/license/requires-python；primitive 输出 deterministic manifest，不含 registry 凭据。
 - **Machine acceptance:** `make test-python-provider` → `build/reports/P27/report.json` 和 `junit.xml`。
 - **Rollback point:** 删除候选 wheel/sdist，不影响 Go 路径。
-- **Definition of done:** Python contracts/provider crash-resume、SQLite migration/retry 矩阵和 clean build/install 通过。
+- **Definition of done:** Python Provider、RuntimeRegistration、Worker、crash-resume、SQLite migration/retry 矩阵全绿；PEP 517 wheel/sdist 两次 clean build digest 一致，METADATA/RECORD/allowlist 合法，clean venv install/import 通过且无 secret/绝对路径。
 
 ## P28 — TypeScript Consumer, BFF/Web and npm package primitive
 
@@ -435,14 +437,14 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** typescript-consumer
 - **Components:** sdk-typescript
-- **Artifacts owned:** typescript-consumer-sdk, typescript-bff-web, npm-package-primitive
+- **Artifacts owned:** typescript-consumer-sdk, typescript-bff-web, typescript-package-metadata, npm-package-primitive
 - **Goal:** 交付 TypeScript Consumer/reducer、BFF/Web 示例和供 P39 调用的 npm 打包 primitive。
-- **Scope:** generated models、SSE reducer/resume、BFF ticket shielding、Web sample、npm pack primitive；不实现浏览器 Direct，不发布包。
+- **Scope:** generated models、SSE reducer/resume、BFF ticket shielding、Web sample、`package.json` exports/types/files metadata 与 npm pack primitive；不实现浏览器 Direct，不发布包。
 - **Dependencies:** P27
 - **First-path invariants:** 浏览器不持有 Dispatch/Event Token；未知可选事件前向兼容；primitive 可重现且不含 registry 凭据。
 - **Machine acceptance:** `make test-typescript-consumer` → `build/reports/P28/report.json` 和 `junit.xml`。
 - **Rollback point:** 删除候选 tarball/Web build，不影响服务端。
-- **Definition of done:** reducer replay、BFF auth、Web recovery、npm clean pack/install 通过。
+- **Definition of done:** reducer replay、BFF auth、Web recovery通过；`@arop/sdk` name/version/files/exports/types（以及声明时的 require）正确，tarball 不含 dev/test/secret，npm pack 两次 digest 一致并可在空项目安装。
 
 ## P29 — A2A interoperability adapter
 
@@ -450,9 +452,9 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** interop-a2a
 - **Components:** interop
-- **Artifacts owned:** a2a-adapter
+- **Artifacts owned:** a2a-adapter, arop-cli-export-a2a-command
 - **Goal:** 实现 A2A task/message/artifact 与 AROP Run/Event 的显式映射。
-- **Scope:** adapter、fixtures、version pin、loss table；不改变 Core。
+- **Scope:** adapter、fixtures、version pin、loss table 与 `arop export a2a`；不改变 Core。
 - **Dependencies:** P28
 - **First-path invariants:** 不伪造无损映射；identity/effect/cancel/terminal 差异显式记录。
 - **Machine acceptance:** `make test-interop-a2a` → `build/reports/P29/report.json` 和 `junit.xml`。
@@ -480,9 +482,9 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** interop-ard
 - **Components:** interop
-- **Artifacts owned:** ard-adapter
+- **Artifacts owned:** ard-adapter, arop-cli-export-ard-command
 - **Goal:** 实现 ARD/AI Catalog 描述到 AROP Definition/Version 的导入导出。
-- **Scope:** adapter、fixtures、capability/security/version loss table；不引入公共市场。
+- **Scope:** adapter、fixtures、capability/security/version loss table 与 `arop export ard`；不引入公共市场。
 - **Dependencies:** P30
 - **First-path invariants:** Catalog discovery 不等于 Runtime readiness；不可表达字段进入 Extension/loss report。
 - **Machine acceptance:** `make test-interop-ard` → `build/reports/P31/report.json` 和 `junit.xml`。
@@ -510,14 +512,15 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** portable-conformance
 - **Components:** conformance
-- **Artifacts owned:** portable-conformance-runner
-- **Goal:** 在 root module 交付语言中立 Fixture 的 portable runner；Fixture 从 P06 起随领域增量形成，而非本阶段首次出现。
-- **Scope:** `cmd/arop-conformance`、profile/scenario loader、JSON/JUnit reporter；不导入 Reference internal。
+- **Artifacts owned:** portable-conformance-runner, conformance-scenario-schema, conformance-profile-schema, conformance-core-scenarios, conformance-v1-profiles, arop-cli-test-command
+- **Baselines transitioned:** compatibility-matrix(extend-retain)
+- **Goal:** 在 root module 交付语言中立 Runner、Scenario/Profile 和 `arop test`；Fixture 从 P06 起随领域增量形成。
+- **Scope:** `cmd/arop-conformance`、profile/scenario loader、JSON/JUnit reporter 与只调用同一 runner 的 `arop test`；不导入 Reference internal。
 - **Dependencies:** P32
 - **First-path invariants:** 离线运行；Fixture digest 固定；第三方可复用；Runner 不成为行为权威。
 - **Machine acceptance:** `make test-portable-conformance` → `build/reports/P33/report.json` 和 `junit.xml`。
 - **Rollback point:** 回退 runner，不删历史 Fixture。
-- **Definition of done:** 多 profile 正反例、过滤、超时和报告 Schema 通过。
+- **Definition of done:** Scenario/Profile 唯一 ID、引用存在且无环、profile closure、required scenario 不可 skip、target/profile/scenario/fixture digest 进入 JSON/JUnit；多 profile 正反例、过滤、超时与 `arop test` 通过。
 
 ## P34 — Nested Control Plane conformance driver
 
@@ -540,7 +543,7 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** fault-ha-harness
 - **Components:** fault-ha, conformance
-- **Artifacts owned:** fault-ha-harness
+- **Artifacts owned:** fault-ha-harness, conformance-fault-ha-scenarios
 - **Goal:** 交付可确定注入 duplicate/drop/reorder/delay/crash/partition 和 PostgreSQL 多节点切换的 driver。
 - **Scope:** fault scenarios、Reference FaultHook adapter、故障代理/多节点 harness；生产默认 no-op。
 - **Dependencies:** P34
@@ -555,14 +558,15 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** sqlite-quickstart
 - **Components:** quickstart
-- **Artifacts owned:** quickstart
+- **Artifacts owned:** quickstart, arop-cli-development-commands, go-release-layout, go-release-primitive
+- **Baselines transitioned:** arop-cli-baseline(extend-retain)
 - **Goal:** 只编排前序已有 Go/Python/Worker/Web 示例形成 SQLite 单进程 Quickstart。
-- **Scope:** compose/config/sample manifest/start-stop/smoke；禁止在本阶段新写四套示例或协议行为。
+- **Scope:** compose/config/sample manifest/start-stop/smoke 与 `arop init/dev/doctor`；完成既有 CLI command tree；提供 `GOWORK=off`、`-trimpath`、固定 mtime/order/mode、跨平台 archive/checksum 的 deterministic Go module/CLI release primitive；禁止在本阶段新写四套示例或协议行为。
 - **Dependencies:** P35
 - **First-path invariants:** 无真实 Credential；组件引用 P21/P25/P27/P28 制品；默认安全不降级。
 - **Machine acceptance:** `make quickstart-smoke` → `build/reports/P36/report.json` 和 `junit.xml`。
 - **Rollback point:** 销毁临时进程/SQLite/测试凭据，不触及用户数据。
-- **Definition of done:** 全新环境十分钟内完成 publish/register/run/stream，编排不含重复实现。
+- **Definition of done:** 空临时工作区内 init 确定且无 secret、dev 生命周期可清理、doctor JSON/非零诊断准确；十分钟内完成 publish/register/run/stream；Go module/source zip 与 CLI archives 两次 clean clone build digest 一致且无绝对路径。
 
 ## P37 — PostgreSQL production reference deployment
 
@@ -570,14 +574,14 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** production-deployment
 - **Components:** deployment
-- **Artifacts owned:** production-reference-manifests, production-upgrade-recovery-runbook, container-build-primitive
+- **Artifacts owned:** production-reference-manifests, production-upgrade-recovery-runbook, production-conformance-profile, container-build-primitive
 - **Goal:** 交付 PostgreSQL production reference、Container build primitive 和升级/恢复 runbook。
-- **Scope:** deployment manifests、probes、container primitive、migration/backup/restore/rollback runbook；不实现语言包打包或 release orchestration。
+- **Scope:** deployment manifests、probes、Production Conformance Profile、container primitive、migration/backup/restore/rollback runbook；不实现语言包打包或 release orchestration。
 - **Dependencies:** P36
 - **First-path invariants:** 使用前序 migration；镜像非 root、最小能力、固定 base digest；升级前备份和恢复演练。
 - **Machine acceptance:** `make production-reference-smoke` → `build/reports/P37/report.json` 和 `junit.xml`。
 - **Rollback point:** 回滚 deployment revision/镜像并按 runbook 恢复备份。
-- **Definition of done:** PostgreSQL 部署、container clean build、滚动升级、备份恢复和回滚演练通过。
+- **Definition of done:** PostgreSQL 部署、container clean build、滚动升级、备份恢复和回滚演练通过；Production Profile 在实际部署运行且 required scenario 不可 skip。
 
 ## P38 — Read-only resilience verification
 
@@ -600,14 +604,14 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** release-supply-chain
 - **Components:** release
-- **Artifacts owned:** release-package-orchestrator, supply-chain-orchestrator, release-journal
+- **Artifacts owned:** release-version-policy-schema, release-version-policy, release-version-mapper, release-package-orchestrator, supply-chain-orchestrator, release-journal, oidc-release-workflow, oidc-release-workflow-lock, oidc-release-workflow-policy
 - **Goal:** 编排语言包、Container、SBOM、provenance、signing 和可恢复发布 journal，不重新实现 build primitive。
-- **Scope:** 只调用 P05 Go proxy/bootstrap、P27 Python、P28 npm、P37 Container primitive；实现 deterministic artifact manifest 和 durable/idempotent release journal state machine。Journal key 至少绑定 `source commit/tree + version + destination + operation + artifact digest`，记录原子持久、校验和并使用单写锁。
+- **Scope:** 唯一逻辑版本输入不带 `v`；machine-readable policy/mapper 映射 Go root/nested tag、Python PEP 440、npm/OCI/CLI/Schema Bundle。只调用 P36 Go、P27 Python、P28 npm、P37 Container primitive；实现 deterministic artifact manifest、SBOM/provenance/signing、受保护 OIDC workflow/lock/policy 和 durable/idempotent journal。Journal key 至少绑定 `source commit/tree + logical version + version-policy digest + destination + operation + artifact digest`，记录原子持久、校验和并使用单写锁。
 - **Dependencies:** P38
-- **First-path invariants:** 重启后先 remote reconcile 再执行；每个 registry/tag/channel step 先查已有 digest，成功即原子记录；同 digest 重试视为完成，不同 digest fail closed；不可变 artifact/tag 先发，mutable channel/dist-tag 最后以 expected-previous CAS 更新；可从同 source/digest 断点续续且永不重写不可变 tag/package；正式 signing identity 与 dry-run key 隔离；P39 不重写语言打包或 Container build。
+- **First-path invariants:** `1.0.0-rc.1`/`1.0.0-rc.10`/`1.0.0` 映射为 Go `v...`、Python `1.0.0rc1`/`1.0.0rc10`/`1.0.0`，npm/OCI/CLI/Schema Bundle 保持逻辑值；拒绝输入 `v` 前缀、PEP 440 输入、RC leading zero、build metadata 和非规范形式。OIDC workflow 只允许 pinned full-SHA actions、protected environment、`id-token:write`/`contents:read` 最小权限、source/tag/concurrency 约束且不得含 PAT/static registry token；workflow blob digest/lock、job identity、version-policy digest 进入 journal/SBOM/provenance。重启先 remote reconcile；不可变制品先发、mutable channel 最后 CAS；P39 不把 P05 proxy bootstrap 当打包 primitive，也不重写 P27/P28/P36/P37 primitive。
 - **Machine acceptance:** `make test-release-supply-chain` → `build/reports/P39/report.json` 和 `junit.xml`。
 - **Rollback point:** 保留 journal 和已发布不可变制品，销毁临时 registry/test key，从未完成 step 恢复。
-- **Definition of done:** 四类 primitive 统一编排；并发 publisher、journal 截断/篡改、remote success/local crash、root tag 已推送但 proxy 未可读、nested tag 冲突、mutable channel CAS 冲突以及所有 before/after failure injection 反例全绿。
+- **Definition of done:** RC1/RC10/final 正例与 v-prefix/PEP-input/leading-zero/build-metadata 负例、四类 primitive 统一编排、OIDC workflow identity/digest、并发 publisher、journal 截断/篡改、remote success/local crash、tag/registry/channel 冲突及 before/after failure injection 全绿。
 
 ## P40 — External evidence schemas, validators and trust bootstrap
 
@@ -615,9 +619,9 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** release-evidence-tooling
 - **Components:** release, governance
-- **Artifacts owned:** external-config-evidence-schema, external-config-validator, external-conformance-evidence-schema, external-conformance-validator, trusted-release-role-registry-schema, trusted-release-role-registry
+- **Artifacts owned:** external-config-evidence-schema, external-config-validator, external-conformance-evidence-schema, external-conformance-validator, detached-release-evidence-envelope-schema, detached-release-evidence-verifier, trusted-release-role-registry-schema, trusted-release-role-registry
 - **Goal:** 实现外部证据 validator 和不可由调用者替换的 trust bootstrap。
-- **Scope:** P45/P50/P52 Gate 输入；registry 可位于仓库外，但 root 必须来自 CI protected config 内 pinned root key，或由 project_owner/maintainer threshold 签名的 registry；完整验证 TUF `root→timestamp→snapshot→targets`，trusted role registry 必须是 targets 精确绑定的对象；定义 `project_owner`、`independent_reviewer`、`maintainer`、`release_approver`、`external_evidence_reviewer`、builder/orchestrator/publisher 和 CI build identity 的分离角色，并在 protected state 保存 monotonic root/timestamp/snapshot/targets/version checkpoint。
+- **Scope:** P45/P50/P52/P53 Gate 输入与 detached release evidence envelope；registry 可位于仓库外，但 root 必须来自 CI protected config 内 pinned root key，或由 project_owner/maintainer threshold 签名的 registry；完整验证 TUF `root→timestamp→snapshot→targets`；定义职责分离角色，并在 protected state 保存 monotonic checkpoint。Detached envelope 固定 repository URI/object format、subject commit/tree、kind/schema/policy/validator digests、issued/expires、principal/role、trust-root/role-registry/checkpoint、payload digest 与 Ed25519/DSSE Sigstore verification material。P45 配置证据还必须绑定 OIDC issuer/repository/workflow path/environment/workflow-lock digest。
 - **Dependencies:** P39
 - **First-path invariants:** 正式 Gate 不接受任意命令行 registry 或人工渠道 fallback 作为信任根；`TRUST_ROOT` 只能引用 protected/pinned root，并与保护配置中的 digest/checkpoint 匹配，不得成为调用方换根入口；以 TUF root→timestamp→snapshot→targets 和 protected last-seen checkpoint 验 version/expiry/revocation 并防 rollback/freeze，targets 必须精确绑定 trusted role registry digest；threshold 按 distinct `principal_id` 计数，同一 principal 多 key 不得占多席；Sigstore 失败闭合验 exact issuer+subject/SAN+repository+workflow identity/ref/event、trusted-root/TUF、Fulcio chain、Rekor inclusion+signed checkpoint+integrated time，integratedTime 必须晚于 candidate 产生时间且落在 identity/registry 有效窗口内，DSSE payload 必须绑定 artifact digest；禁止缺根 offline bundle 和 `--insecure-ignore-tlog`；release_approver 不得与 builder/orchestrator/publisher/CI build identity 同 principal，dry-run key 不得进入正式 registry；validator 不自动生成“批准”或“独立”证据。
 - **Machine acceptance:** `make test-release-evidence-tooling` → `build/reports/P40/report.json` 和 `junit.xml`。
@@ -634,7 +638,7 @@ updated: 2026-09-22
 - **Goal:** 实现普通报告的 commit 系谱、执行来源与可验证聚合，不处理 final overlay。
 - **Scope:** P03/P04 历史规划报告、普通 ancestor 报告、隔离 checkout 重跑、受信 CI/OIDC/Sigstore provenance 和通用 report verifier 集成。
 - **Dependencies:** P40
-- **First-path invariants:** 报告必须验 claimed commit/blob/checker/inputs；历史 success 只能在隔离 checkout 重跑 claimed checker，或验受信 CI provenance 对 report digest+commit+checker+inputs 的签名；current inputs 漂移必须重跑；聚合允许受控 ancestry 不强求同 commit，但不用普通 ancestor 规则桥接 A 到 B。
+- **First-path invariants:** 报告必须验 claimed commit/blob/checker/inputs；历史 success 只能在隔离 checkout 重跑 claimed checker，或验受信 CI provenance 对 report digest+commit+checker+inputs 的签名；OIDC provenance 必须核对 `job_workflow_ref`、`job_workflow_sha`、workflow blob/lock digest、source commit 与 artifact digest，不信任报告自报；current inputs 漂移必须重跑；聚合允许受控 ancestry 不强求同 commit，但不用普通 ancestor 规则桥接 A 到 B。
 - **Machine acceptance:** `make test-release-lineage-tooling` → `build/reports/P41/report.json` 和 `junit.xml`。
 - **Rollback point:** 删除聚合候选报告，不改变受审 source tree。
 - **Definition of done:** 混合 ancestry、虚假历史 success、Git blob 不符、输入漂移和伪造 CI identity 反例全部失败闭合。
@@ -645,11 +649,11 @@ updated: 2026-09-22
 - **Status:** pending
 - **Capability owner:** release-finalization-tooling
 - **Components:** release, governance
-- **Artifacts owned:** rc-source-freeze-checker, final-equivalence-attestation-schema, freeze-overlay-checker, payload-equivalence-checker, final-delivery-checker
-- **Goal:** 实现 deterministic final overlay candidate、A→B equivalence 验签、单父 commit 与 final delivery 检查器。
-- **Scope:** 仅允许版本/channel/tag metadata、nested root RC→final 依赖与必要 lock/checksum；工具可生成 unsigned canonical candidate，绝不自签或创建正式 B。
+- **Artifacts owned:** public-namespace-regeneration, rc-source-freeze-checker, final-equivalence-attestation-schema, freeze-overlay-checker, payload-equivalence-checker, final-delivery-checker
+- **Goal:** 实现唯一 deterministic public namespace/版本冻结器、final overlay candidate、A→B equivalence 验签、单父 commit 与 final delivery 检查器。
+- **Scope:** `scripts/regenerate-public.mjs` 接受已验证配置与无 `v` 逻辑版本，统一生成 public namespace、跨生态版本和 nested root 依赖；final overlay 仅允许 `VERSION`、Python/npm/OCI/CLI/package metadata、locks/checksums、nested `go.mod` 的 RC→final 变化；工具可生成 unsigned canonical candidate，绝不自签或创建正式 B。
 - **Dependencies:** P41
-- **First-path invariants:** attestation payload 绑定 A commit/tree、canonical overlay digest、expected B tree、payload policy/version、equivalence normalizer/version、phase-policy digest、validity window 和 `bridged_reports[{phase,report_digest,claimed_commit,input_closure_digest}]`；B 必须是直接单父 `parent=A`；Schema/API/Runner/生成模型/逻辑差异失败闭合；必须通过 P40 pinned trust root 验 `release_approver` 且与 publisher 角色分离。
+- **First-path invariants:** public freeze 二次执行零 diff，禁止 placeholder/非法配置；attestation payload 绑定 A commit/tree、canonical overlay digest、expected B tree、version-policy digest、payload policy/version、equivalence normalizer/version、phase-policy digest、validity window 和 `bridged_reports[{phase,report_digest,claimed_commit,input_closure_digest}]`；B 必须是直接单父 `parent=A`；Schema/API/Runner/生成模型/逻辑差异失败闭合；必须通过 P40 pinned trust root 验 `release_approver` 且与 publisher 分离。
 - **Machine acceptance:** `make test-release-finalization-tooling` → `build/reports/P42/report.json` 和 `junit.xml`。
 - **Rollback point:** 删除候选 overlay/attestation，不改 A 或发布表面。
 - **Definition of done:** noncanonical overlay、wrong parent/signer/tree/payload/time/policy/normalizer、bridged report 缺失/多余/digest 不符、逻辑 diff 与重放反例全部失败闭合。
@@ -662,9 +666,9 @@ updated: 2026-09-22
 - **Components:** release
 - **Artifacts owned:** none
 - **Goal:** 只读使用 P39–P42 工具验证双 Module、多语言包、Container、SBOM/provenance/signing、journal 恢复和 finalization。
-- **Scope:** clean clone、`GOWORK=off`、临时 proxy/registries/test key、P05/P27/P28/P37 primitives；工具源码只读。
+- **Scope:** clean clone、`GOWORK=off`、保留域名、临时 Go/PyPI/npm/OCI registries/test key，调用 P42 同一冻结脚本与 P27/P28/P33/P37 primitives；工具源码只读。
 - **Dependencies:** P42
-- **First-path invariants:** tracked tree 零变更；P44 前仅 private/dev snapshot；不得在 verify 阶段补代码；每个 publish step 注入失败并从同 digest journal 断点恢复。
+- **First-path invariants:** 临时树验证 deterministic RC tree、二次零 diff、placeholder 清零、Schema/Event namespace、双 Go module/package metadata、全生态 pack/install、非法配置与非法版本失败；tracked source tree 零变更；P44 前仅 private/dev snapshot；不得在 verify 阶段补代码；每个 publish step 注入失败并从同 digest journal 断点恢复。
 - **Machine acceptance:** `make release-dry-run READ_ONLY=1` → `build/reports/P43/report.json` 和 `junit.xml`。
 - **Rollback point:** 销毁临时 proxy/registry/key，不创建公开 tag/package。
 - **Definition of done:** clean build digest、nested 解析、安装、SBOM/provenance/signing、partial publish 恢复和报告复验通过。
@@ -677,7 +681,7 @@ updated: 2026-09-22
 - **Components:** governance, release
 - **Artifacts owned:** none
 - **Goal:** 聚合仓库内可自证要求，只宣告 private code-complete，不宣告 public/v1 complete。
-- **Scope:** P01–P43 报告、IR-01–IR-14 追溯、clean environment 和已知风险；不修实现。
+- **Scope:** 精确聚合 P01–P43 共 43 份报告、IR-01–IR-14 追溯、clean environment 和已知风险；静态依赖 P41 聚合/provenance 工具，不把 P43 当作其余报告的代理；不修实现。
 - **Dependencies:** P43
 - **First-path invariants:** 历史报告须满足 P41 隔离重跑或受信 provenance；不伪造外部配置/伙伴证据；首个公开候选必须是 P49 v1 RC。
 - **Machine acceptance:** `make validate-all` → `build/reports/P44/report.json` 和 `junit.xml`。
@@ -694,23 +698,23 @@ updated: 2026-09-22
 - **Goal:** 用 P40 validator 验证真实域名、PyPI/npm 所有权、两名 Maintainer/恢复权限和私密安全入口。
 - **Scope:** 仓库外证据、pinned trust root、可信 registry 和脱敏 canonical 摘要；不存原始 Credential。
 - **Dependencies:** P44
-- **First-path invariants:** 占位域名、内部 Fixture、任意 CLI registry、单人自签不能通过；证据过期、撤销或 registry rollback/freeze 立即阻塞。
-- **Machine acceptance:** `make external-config-gate EVIDENCE=<outside-repo-config-evidence> TRUST_ROOT=<protected-pinned-root>` → `build/reports/P45/report.json` 和 `junit.xml`。
+- **First-path invariants:** 外部 project_owner/maintainer threshold 是原始 signed config bundle 的 producer，P45 只验证并生成包含原文 digest、验签结论和非敏感字段的 `build/evidence/P45` summary，绝不代签；bundle 绑定 P44 baseline、canonical public-config digest、domain/package/container claims、两名 distinct maintainer/recovery、安全入口和 protected OIDC environment/workflow-lock；P46 只消费该 verified digest，P47/P49 再把它绑定 A/tree/RC。占位域名、内部 Fixture、任意 CLI registry、单人自签不能通过；证据过期、撤销或 registry rollback/freeze 立即阻塞。
+- **Machine acceptance:** `make external-config-gate EVIDENCE_BUNDLE=<outside-repo-signed-bundle> TRUST_ROOT=<protected-pinned-root> CHECKPOINT=<protected-state>` → `build/reports/P45/report.json`、`junit.xml` 与 `build/evidence/P45/verified-summary.json`。
 - **Rollback point:** 所有权/安全入口失效即撤销 Gate。
 - **Definition of done:** 外部项有来源、threshold/角色验签、时间和非敏感摘要。
 
-## P46 — Generate deterministic RC source tree
+## P46 — Deliver deterministic RC source tree
 
-- **Type:** implement
+- **Type:** deliver
 - **Status:** pending
 - **Capability owner:** public-artifact-generation
 - **Components:** codegen, release
-- **Artifacts owned:** public-namespace-regeneration
-- **Goal:** 写入 P45 真实配置并全量生成 RC source tree，但不创建 commit/tag。
-- **Scope:** Schema `$id`、Event/Extension namespace、OpenAPI/AsyncAPI、三 SDK、Fixture/Docs/Digest/Compatibility Matrix、root RC metadata 与 nested `go.mod` 精确 root RC dependency；不手改生成物。
+- **Artifacts owned:** none
+- **Goal:** 把 P45 已验证的真实配置交给 P42 已冻结工具并产出 RC source tree，但不创建 commit/tag。
+- **Scope:** 输入唯一无 `v` 逻辑版本 `1.0.0-rc.N`，由版本 mapper 写入 Schema `$id`、Event/Extension namespace、OpenAPI/AsyncAPI、三 SDK、Fixture/Docs/Digest、root/Go/Python/npm/OCI/CLI metadata 与 nested `go.mod` 精确 root RC dependency；Compatibility Matrix 不预填未验证伙伴；不手改生成物。
 - **Dependencies:** P45
-- **First-path invariants:** 全量生成而非字符串替换；相同输入产生同一 tree digest；本阶段只准备工作树，不僭越创建 A。
-- **Machine acceptance:** `make regenerate-public RC=v1.0.0-rc.N CREATE_COMMIT=0` → `build/reports/P46/report.json` 和 `junit.xml`。
+- **First-path invariants:** P45 后禁止 implement/refactor；只执行 P42 已冻结脚本，不在交付阶段修工具；全量生成而非字符串替换；相同输入与 version-policy digest 产生同一 tree digest；本阶段只准备工作树，不僭越创建 A。
+- **Machine acceptance:** `make regenerate-public RELEASE_VERSION=1.0.0-rc.N CREATE_COMMIT=0` → `build/reports/P46/report.json` 和 `junit.xml`。
 - **Rollback point:** 回 P45 后基线；未创建 commit/tag/package。
 - **Definition of done:** 占位 namespace 清零、clean regenerate 零 diff，nested 精确 require root `v1.0.0-rc.N`，RC tree digest 已记录。
 
@@ -724,8 +728,8 @@ updated: 2026-09-22
 - **Goal:** 由 orchestrator 从 P46 已验收 tree 创建并冻结 clean RC source commit A，不发布任何制品。
 - **Scope:** 校验 expected tree digest、创建单个 commit A、记录 commit/tree；不生成新内容、不创 tag/package。
 - **Dependencies:** P46
-- **First-path invariants:** commit A 必须精确对应 P46 tree；创建后 HEAD=A 且工作树 clean；A 含 root/nested `v1.0.0-rc.N` 版本关系。
-- **Machine acceptance:** `make freeze-rc-source RC=v1.0.0-rc.N EXPECTED_TREE=<P46-tree>` → `build/reports/P47/report.json` 和 `junit.xml`。
+- **First-path invariants:** commit A 必须精确对应 P46 tree；创建后 HEAD=A 且工作树 clean；A 含 root/nested `v1.0.0-rc.N` 版本关系，freeze report 绑定 P45 verified config summary digest 与 version-policy digest。
+- **Machine acceptance:** `make freeze-rc-source RELEASE_VERSION=1.0.0-rc.N EXPECTED_TREE=<P46-tree>` → `build/reports/P47/report.json` 和 `junit.xml`。
 - **Rollback point:** A 不符则废弃该 RC 号，回 P46 产生新树，不重写历史。
 - **Definition of done:** clean commit A 已存在、tree digest 精确匹配 P46，尚无公开 tag/package。
 
@@ -739,7 +743,7 @@ updated: 2026-09-22
 - **Goal:** 在已存在的 clean commit A 上只读重跑 contracts/conformance/resilience/release 检查。
 - **Scope:** commit A、P17/P23/P26/P38/P43 套件和空环境安装；不修生成物、不创建 commit/tag。
 - **Dependencies:** P47
-- **First-path invariants:** HEAD 必须是 clean A；无 `arop.invalid`、本地 replace/workspace 或 private snapshot 依赖；tracked tree 前后保持同一 digest。
+- **First-path invariants:** HEAD 必须是 clean A；无 `arop.invalid`、本地 replace/workspace 或 private snapshot 依赖；重算 RC1/RC10/final 跨生态映射并核对 policy digest；tracked tree 前后保持同一 digest。
 - **Machine acceptance:** `make verify-public-namespace READ_ONLY=1 SOURCE_COMMIT=A` → `build/reports/P48/report.json` 和 `junit.xml`。
 - **Rollback point:** 失败回 P46 并用新 RC 号重建 A；不得在 verify 内修补。
 - **Definition of done:** A 的公共命名、安装、Conformance、resilience、SBOM/provenance 全绿，tree 不变。
@@ -755,9 +759,9 @@ updated: 2026-09-22
 - **Scope:** root tag、nested `reference/control-plane/v1.0.0-rc.N`、Python/npm/CLI/Container、Schema/API/Runner、SBOM/provenance 与 digest manifest；使用 P39 journal。
 - **Dependencies:** P48
 - **First-path invariants:** 先以 create-only 语义发布所有不可变 root Go/Python/npm/Container/SBOM/provenance RC 制品，校验 tag target 与 annotated tag-object 签名，重启 remote reconcile 且 proxy 可解析后再发不可变 nested `reference/control-plane/v1.0.0-rc.N`，mutable channel/dist-tag 最后用 expected-previous CAS；每步预检 digest、持久记录并可从断点恢复；重试必须是同一 A/同一 digest，remote digest mismatch 或不可变冲突进入 `incident-blocked`，不得推进 mutable channel 或宣告 RC complete；已发布不可变制品不回滚、不重写，只允许同一 A/digest 经 journal/reconcile 续传；deliver 不创建新 commit、不改 tree；不用 v0.1 或本地伪制品取证。
-- **Machine acceptance:** `make deliver-v1-rc VERSION=v1.0.0-rc.N SOURCE_COMMIT=A RESUME=1` → `build/reports/P49/report.json` 和 `junit.xml`。
+- **Machine acceptance:** `make deliver-v1-rc RELEASE_VERSION=1.0.0-rc.N SOURCE_COMMIT=A RESUME=1` → `build/reports/P49/report.json` 和 `junit.xml`。
 - **Rollback point:** 可恢复故障只可按 journal/reconcile 从同一 A/digest 续传，不回滚或重写已发布不可变制品；remote digest 冲突导致 `incident-blocked` 时，必须回 P46 用新 RC 号生成新 tree、P47 创建新 commit A，再重走 P48/P49，绝不重标旧 A。
-- **Definition of done:** 所有发布边界 failure injection 可恢复，外部空环境可下载/验签/安装/跑 Conformance，制品绑定 A 和全部 digests。
+- **Definition of done:** 所有发布边界 failure injection 可恢复，外部空环境可下载/验签/安装/跑 Conformance；生成 RC subject manifest，绑定 A/tree、P45 config digest、RC root/nested tag-object、全 registry artifacts、Schema/OpenAPI/AsyncAPI/Fixture/Runner、SBOM/provenance digests。
 
 ## P50 — Independent implementation and partner evidence gate
 
@@ -767,12 +771,12 @@ updated: 2026-09-22
 - **Components:** governance, conformance
 - **Artifacts owned:** none
 - **Goal:** 使用 P40 validator 验证独立 Runtime/Control Plane/Validator 和伙伴对 P49 commit A v1 RC 的真实证据。
-- **Scope:** 至少两个独立 Runtime、一个非金运 Control Plane/Validator、三个外部伙伴；原始材料仓库外。
+- **Scope:** 至少两个独立 Runtime、一个非金运 Control Plane/Validator、三个外部伙伴；原始 signed compatibility bundle 由外部 principals 产生并留在仓库外，P50 只验证它并发布/记录 verified detached summary 作为绑定 A/RC 的 release asset，绝不替伙伴代签或修改 A。
 - **Dependencies:** P49
-- **First-path invariants:** 每条证据绑定 exact A commit/tree、Schema Bundle、Runner 和 Artifact digests；内部 fork/模拟不算；evidence principal 必须与 builder/orchestrator/publisher/CI build identity 及本项目 maintainer 分离，数量门槛按 distinct `principal_id` 计算；信任链从 P40 pinned root 建立，不接受调用者自带 root。
-- **Machine acceptance:** `make external-evidence-gate RC=v1.0.0-rc.N EVIDENCE=<outside-repo-evidence> TRUST_ROOT=<protected-pinned-root>` → `build/reports/P50/report.json` 和 `junit.xml`。
+- **First-path invariants:** compatibility bundle 引用 P49 RC subject manifest，绑定 exact A commit/tree/object format、RC version/tag-object、Schema Bundle/OpenAPI/AsyncAPI/Fixture/Runner 与被测 Artifact digests/provenance digests；逐条含 external principal、实现来源、runtime/profile/report/result/time；内部 fork/模拟不算，数量按 distinct `principal_id`；信任链从 P40 pinned root 建立，不接受调用者自带 root；`compatibility/implementation-matrix.yaml` 仅是 A 内策略声明，不在 P50 后改写。
+- **Machine acceptance:** `make external-evidence-gate RELEASE_VERSION=1.0.0-rc.N SOURCE_COMMIT=A EVIDENCE_BUNDLE=<outside-repo-signed-bundle> TRUST_ROOT=<protected-pinned-root>` → `build/reports/P50/report.json`、`junit.xml` 与 `build/evidence/P50/verified-compatibility-summary.json`。
 - **Rollback point:** tracked 规范/Schema/transport/runner/security/compatibility 变化使证据失效，回 P46 产生新 A/RC 并重取证。
-- **Definition of done:** 数量/独立性/来源可核验，digests 指向 A v1 RC，只提交脱敏 canonical 摘要与有效 attestation。
+- **Definition of done:** 数量/独立性/来源可核验，digests 指向 A v1 RC；公开 detached canonical summary、attestation 与 compatibility bundle 可下载并验签，内部模拟/空 Matrix 不算完成。
 
 ## P51 — Verify unsigned canonical final overlay candidate
 
@@ -782,10 +786,10 @@ updated: 2026-09-22
 - **Components:** release, governance
 - **Artifacts owned:** none
 - **Goal:** 冻结 A，在隔离临时树生成并只读验证 unsigned canonical final overlay candidate 与 expected B tree，不签名。
-- **Scope:** 使用 P42 工具；overlay 仅含版本/channel/tag metadata、nested root `v1.0.0-rc.N→v1.0.0` 依赖及必要 lock/checksum；A tracked tree 保持不变。
+- **Scope:** 使用 P42 工具；overlay 白名单精确列出 `VERSION`、Python `pyproject`/lock、npm `package.json`/lock、OCI/CLI/Schema Bundle metadata、nested `go.mod` 的 `v1.0.0-rc.N→v1.0.0` 依赖及必要 checksum；A tracked tree 保持不变。
 - **Dependencies:** P50
 - **First-path invariants:** 不关闭 RFC、不修 Matrix；Schema/API/Runner/生成模型/逻辑不得变；candidate 绑定 A commit/tree、canonical overlay digest、expected B tree、`parent=A` 和 payload policy；不包含自签 attestation。
-- **Machine acceptance:** `make verify-v1-freeze READ_ONLY=1 APPROVED_RC=v1.0.0-rc.N FINAL=v1.0.0 SIGN=0` → `build/reports/P51/report.json` 和 `junit.xml`。
+- **Machine acceptance:** `make verify-v1-freeze READ_ONLY=1 APPROVED_RC=1.0.0-rc.N RELEASE_VERSION=1.0.0 SIGN=0` → `build/reports/P51/report.json` 和 `junit.xml`。
 - **Rollback point:** 非白名单 diff 或 digest 不一致即丢弃 candidate；规范变化回 P46–P50 重走 RC/取证。
 - **Definition of done:** 临时树可重现同一 overlay/expected-tree digest，payload equivalence 通过，A 工作树未变。
 
@@ -799,8 +803,8 @@ updated: 2026-09-22
 - **Goal:** 由外部 `release_approver` 对 P51 canonical candidate 签发 A→B equivalence attestation，并严格验签。
 - **Scope:** 仓库外 Ed25519 或允许的 Sigstore 签名流程；阶段仅验 `ATTESTATION=<outside-repo-attestation>` 与 P40 pinned trust root，不改 A/candidate。
 - **Dependencies:** P51
-- **First-path invariants:** attestation 绑定 A commit/tree、overlay digest、expected B tree、`parent=A`、payload policy/version、equivalence normalizer/version、phase-policy digest、有效时间与完整 `bridged_reports`；`release_approver` 与 builder/orchestrator/publisher/CI build identity 不得同 principal；Ed25519 或 Sigstore DSSE 签名必须绑定 canonical candidate digest，Sigstore integratedTime 晚于 candidate 且在 identity/registry 有效窗口内；dry-run key、任意 CLI root、Sigstore 缺 tlog/缺 trusted root 不能通过。
-- **Machine acceptance:** `make approve-v1-overlay ATTESTATION=<outside-repo-attestation> TRUST_ROOT=<protected-pinned-root>` → `build/reports/P52/report.json` 和 `junit.xml`。
+- **First-path invariants:** 外部 `release_approver` 是 signed attestation producer，P52 只验证并记录 summary，绝不代签。Attestation 绑定 A commit/tree、overlay digest、expected B tree、`parent=A`、version-policy digest、payload/equivalence policy、phase-policy digest、有效时间、replay nonce、完整 `bridged_reports` 与 `bound_evidence`；后者至少含 P45 config summary digest、P49 RC subject manifest digest、P50 compatibility summary digest。approver 与 builder/orchestrator/publisher/CI build identity 不得同 principal；Sigstore integratedTime 必须晚于 candidate；dry-run key、任意 CLI root、缺 tlog/缺 trusted root 不能通过。
+- **Machine acceptance:** `make approve-v1-overlay CANDIDATE=build/evidence/P51/final-overlay-candidate.json ATTESTATION=<outside-repo-attestation> TRUST_ROOT=<protected-pinned-root>` → `build/reports/P52/report.json`、`junit.xml` 与 `build/evidence/P52/verified-attestation-summary.json`。
 - **Rollback point:** signer/trust/time/digest 不符即继续阻塞；不替外部批准者生成签名。
 - **Definition of done:** 只接受职责分离、信任链完整且精确绑定 P51 candidate 的有效批准。
 
@@ -812,10 +816,10 @@ updated: 2026-09-22
 - **Components:** release
 - **Artifacts owned:** none
 - **Goal:** 验 P52 批准，只应用 canonical overlay，创建直接单父 `parent=A` 的 metadata-only commit B，并从 B 发布 final v1。
-- **Scope:** 在冻结 A 的专用 release ref/detached checkout 中验 `release_approver`、应用 approved overlay、核对 B parent/tree、创建 commit/tags、root final→proxy 可解析→nested final、Python/npm/Container channel；不 reset/重写 main；使用 P39 journal，不允许临场修改 overlay。
+- **Scope:** 在冻结 A 的专用 release ref/detached checkout 中验 `release_approver`、应用 approved overlay、核对 B parent/tree、创建 commit/tags；向 mapper 传唯一无 `v` 逻辑版本，分别发布 root/nested Go、Python/npm/CLI/Schema Bundle/OCI，不盲传同一 VERSION；把 P50 detached compatibility bundle 绑定 final B 后发布 final evidence asset；不 reset/重写 main；使用 P39 journal，不允许临场修改 overlay。
 - **Dependencies:** P52
-- **First-path invariants:** B 必须是直接单父 parent=A 且 tree 等于 attestation expected value；A 报告只能通过有效 A→B attestation 的精确 `bridged_reports` 桥接；先以 create-only 语义发布所有不可变 root Go/Python/npm/Container/SBOM/provenance `v1.0.0` 制品，tag target 和 annotated tag-object signature 都要验证，remote reconcile 且 proxy 可解析后再发不可变 nested `reference/control-plane/v1.0.0`，mutable channel/dist-tag 最后用 expected-previous CAS；partial publish 只可从同一 B/同一 digest journal 断点恢复，remote digest mismatch 或冲突进入 `incident-blocked`，不得推进 channel 或宣告 v1，已发布不可变制品永不回滚、不重写；最终本地制品在 B 重跑 Conformance/SBOM/provenance。
-- **Machine acceptance:** `make deliver-v1 VERSION=v1.0.0 APPROVED_RC=v1.0.0-rc.N ATTESTATION=<outside-repo-attestation> TRUST_ROOT=<protected-pinned-root> RESUME=1` → `build/reports/P53/report.json` 和 `junit.xml`。
+- **First-path invariants:** B 必须是直接单父 parent=A 且 tree 等于 attestation expected value；P52 的 P45/P49/P50 bound digests 必须原样核验，A 报告只能通过有效 A→B attestation 的精确 `bridged_reports` 桥接；先以 create-only 语义发布所有不可变 root Go/Python/npm/Container/SBOM/provenance final 制品，tag target/annotated tag signature 校验、proxy 可解析后再发 nested，mutable channel 最后 expected-previous CAS；partial publish 只可从同一 B/同一 digest journal 恢复，remote mismatch 进入 `incident-blocked`；最终在 B 重跑 Conformance/SBOM/provenance，并由 publisher/CI 生成不进入 B tree 的 final detached evidence bundle，绑定 B/A/P52/P50/final artifacts/journal。
+- **Machine acceptance:** `make deliver-v1 RELEASE_VERSION=1.0.0 APPROVED_RC=1.0.0-rc.N ATTESTATION=<outside-repo-attestation> TRUST_ROOT=<protected-pinned-root> RESUME=1` → `build/reports/P53/report.json` 和 `junit.xml`。
 - **Rollback point:** signer/parent/tree/payload 不符立即停止；部分成功保留 journal 并仅从同 B/digest 续传；metadata 变化回 P51/P52，逻辑变化回 P46 重走 RC/取证。
 - **Definition of done:** metadata-only commit B 是 A 的直接单父子 commit 且精确匹配已批准 tree，root/nested final 顺序发布，所有 partial-failure 恢复测试和 final Conformance/SBOM/provenance 全绿。
 

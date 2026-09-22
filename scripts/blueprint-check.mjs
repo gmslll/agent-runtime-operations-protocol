@@ -95,7 +95,13 @@ for (const match of plan.matchAll(phasePattern)) {
   for (const key of metadataKeys) {
     metadata[key] = match[3].match(new RegExp("^- \\*\\*" + key + ":\\*\\* (.+)$", "m"))?.[1];
   }
-  phases.push({ id: match[1], title: match[2].trim(), body: match[3], metadata });
+  const baselineDeclaration = match[3].match(/^- \*\*Baselines transitioned:\*\* (.+)$/m)?.[1];
+  const baselines = !baselineDeclaration || baselineDeclaration === "none" ? [] :
+    baselineDeclaration.split(",").map((value) => {
+      const parsed = value.trim().match(/^([a-z][a-z0-9-]*)\((migrate-retire|repair-retain|extend-retain)\)$/u);
+      return parsed ? { id: parsed[1], action: parsed[2] } : { invalid: value.trim() };
+    });
+  phases.push({ id: match[1], title: match[2].trim(), body: match[3], metadata, baselines });
 }
 const phaseIDs = phases.map((phase) => phase.id);
 const expectedPhaseIDs = phases.map((unused, index) => "P" + String(index + 1).padStart(2, "0"));
@@ -117,6 +123,7 @@ const componentWhitelist = new Set([
 const metadataProblems = [];
 const acceptanceByPhase = new Map();
 const planOwnerByArtifact = new Map();
+const planBaselineByArtifact = new Map();
 const implementationOwners = new Set();
 for (const phase of phases) {
   for (const key of metadataKeys) if (!phase.metadata[key]) metadataProblems.push(phase.id + " missing " + key);
@@ -143,6 +150,14 @@ for (const phase of phases) {
   for (const id of owned) {
     if (planOwnerByArtifact.has(id)) metadataProblems.push(id + " is plan-owned twice");
     planOwnerByArtifact.set(id, phase.id);
+  }
+  for (const baseline of phase.baselines) {
+    if (baseline.invalid) {
+      metadataProblems.push(`${phase.id} invalid baseline transition ${baseline.invalid}`);
+      continue;
+    }
+    if (planBaselineByArtifact.has(baseline.id)) metadataProblems.push(`${baseline.id} baseline transitioned twice`);
+    planBaselineByArtifact.set(baseline.id, { phase: phase.id, action: baseline.action });
   }
 }
 record("phase-metadata-and-reports", metadataProblems.length === 0,
@@ -254,7 +269,24 @@ for (const artifact of artifacts) {
     if (planOwnerByArtifact.get(artifact.id) !== artifact.owner_phase) artifactProblems.push(artifact.id + " missing plan ownership");
   }
   if (artifact.completion_phase && !["aggregate", "container"].includes(artifact.path_role)) artifactProblems.push(artifact.id + " completion is not aggregate/container");
-  if (artifact.producer_phase && !["machine-reports", "canonical-evidence-summary"].includes(artifact.kind)) artifactProblems.push(artifact.id + " invalid producer kind");
+  if (artifact.producer_phase && !["machine-reports", "canonical-evidence-summary", "detached-evidence-summary", "detached-evidence-bundle"].includes(artifact.kind)) artifactProblems.push(artifact.id + " invalid producer kind");
+  const futureFields = ["future_action", "future_owner", "future_owner_phase", "future_acceptance_test", "future_artifacts"];
+  const hasFuture = futureFields.some((field) => artifact[field] !== undefined);
+  if (hasFuture) {
+    if (artifact.status !== "present" || futureFields.some((field) => artifact[field] === undefined)) {
+      artifactProblems.push(artifact.id + " future transition requires all future_* fields on a present artifact");
+    } else {
+      const futurePhase = phaseByID.get(artifact.future_owner_phase);
+      if (!futurePhase || !["implement", "refactor"].includes(futurePhase.metadata.Type)) artifactProblems.push(artifact.id + " invalid future owner phase");
+      if (futurePhase?.metadata["Capability owner"] !== artifact.future_owner) artifactProblems.push(artifact.id + " future owner mismatch");
+      if (acceptanceByPhase.get(artifact.future_owner_phase)?.[0] !== artifact.future_acceptance_test) artifactProblems.push(artifact.id + " future acceptance mismatch");
+      const plannedTransition = planBaselineByArtifact.get(artifact.id);
+      if (plannedTransition?.phase !== artifact.future_owner_phase || plannedTransition?.action !== artifact.future_action) artifactProblems.push(artifact.id + " missing/mismatched plan baseline transition");
+      for (const futureArtifact of artifact.future_artifacts || []) if (!artifactByID.has(futureArtifact)) artifactProblems.push(artifact.id + " unknown future artifact " + futureArtifact);
+    }
+  } else if (artifact.status === "present" && artifact.kind.endsWith("baseline")) {
+    artifactProblems.push(artifact.id + " present baseline has no future transition");
+  }
   for (const dependencyID of artifact.derives_from || []) {
     const dependency = artifactByID.get(dependencyID);
     if (!dependency) { artifactProblems.push(artifact.id + " unknown dependency " + dependencyID); continue; }
@@ -268,6 +300,11 @@ for (const [id, phaseID] of planOwnerByArtifact) {
   const artifact = artifactByID.get(id);
   if (!artifact) artifactProblems.push(phaseID + " owns unknown " + id);
   else if (artifact.owner_phase !== phaseID) artifactProblems.push(id + " plan-to-manifest mismatch");
+}
+for (const [id, transition] of planBaselineByArtifact) {
+  const artifact = artifactByID.get(id);
+  if (!artifact) artifactProblems.push(`${transition.phase} transitions unknown baseline ${id}`);
+  else if (artifact.future_owner_phase !== transition.phase || artifact.future_action !== transition.action) artifactProblems.push(id + " plan-to-future transition mismatch");
 }
 record("artifact-lifecycle-temporal-bidirectional", artifactProblems.length === 0,
   artifactProblems.length === 0 ? String(artifacts.length) + " artifacts satisfy lifecycle, temporal and owner closure" : artifactProblems.join("; "));
@@ -309,6 +346,13 @@ const criticalArtifacts = [
   "direct-proxy-delivery-service", "provider-durable-store-port", "reference-provider-sqlite-adapter",
   "reference-provider-sqlite-migration", "streaming-service", "go-streaming-client",
   "typescript-streaming-client", "release-package-orchestrator", "supply-chain-orchestrator",
+  "go-consumer-core", "go-consumer-sdk", "python-runtime-registration-client", "python-worker-client",
+  "python-package-metadata", "typescript-package-metadata", "go-release-primitive",
+  "conformance-scenario-schema", "conformance-profile-schema", "conformance-core-scenarios",
+  "conformance-v1-profiles", "conformance-fault-ha-scenarios", "production-conformance-profile",
+  "release-version-policy-schema", "release-version-policy", "release-version-mapper",
+  "oidc-release-workflow", "oidc-release-workflow-lock", "oidc-release-workflow-policy",
+  "detached-release-evidence-envelope-schema", "detached-release-evidence-verifier",
   "trusted-release-role-registry", "cross-commit-lineage-verifier", "rc-source-freeze-checker",
   "final-equivalence-attestation-schema",
   "freeze-overlay-checker", "payload-equivalence-checker", "final-delivery-checker",
@@ -364,12 +408,105 @@ for (const phase of phases) {
 record("all-phase-report-producers", reportProblems.length === 0,
   reportProblems.length === 0 ? "all phases have producer_phase report artifacts" : "invalid report artifacts " + reportProblems.join(", "));
 
+function reportArtifact(phaseID) {
+  return artifacts.find((artifact) => artifact.kind === "machine-reports" && artifact.producer_phase === phaseID);
+}
+function sameMembers(actual = [], expected = []) {
+  return actual.length === expected.length && expected.every((value) => actual.includes(value));
+}
+const reportClosureProblems = [];
+for (const phase of phases.filter((candidate) =>
+  ["implement", "refactor"].includes(candidate.metadata.Type) &&
+  phaseNumber(candidate.id) >= 5 && phaseNumber(candidate.id) <= 38)) {
+  const expectedOwned = [...planOwnerByArtifact.entries()]
+    .filter(([, phaseID]) => phaseID === phase.id)
+    .map(([id]) => id);
+  const report = reportArtifact(phase.id);
+  const missing = expectedOwned.filter((id) => !report?.derives_from?.includes(id));
+  if (missing.length) reportClosureProblems.push(`${phase.id} report misses owned artifacts ${missing.join(",")}`);
+  const missingBaselines = phase.baselines.map((baseline) => baseline.id)
+    .filter((id) => !report?.derives_from?.includes(id));
+  if (missingBaselines.length) reportClosureProblems.push(`${phase.id} report misses baseline transitions ${missingBaselines.join(",")}`);
+}
+const aggregateFanIn = new Map([
+  ["P17", ["P14", "P15", "P16"]],
+  ["P23", ["P18", "P19", "P20", "P21", "P22"]],
+  ["P26", ["P08", "P10", "P12", "P13", "P18", "P19", "P20", "P21", "P22", "P23", "P24", "P25"]],
+  ["P38", ["P09", "P10", "P12", "P13", "P14", "P16", "P18", "P19", "P20", "P21", "P24", "P27", "P34", "P35", "P37"]],
+]);
+for (const [phaseID, inputPhases] of aggregateFanIn) {
+  const expected = inputPhases.map((id) => reportArtifact(id)?.id);
+  const actual = reportArtifact(phaseID)?.runtime_inputs || [];
+  if (expected.some((id) => !id) || !sameMembers(actual, expected)) {
+    reportClosureProblems.push(`${phaseID} aggregate runtime fan-in must be exactly ${inputPhases.join(",")}`);
+  }
+}
+const p44ExpectedInputs = phases.slice(0, 43).map((phase) => reportArtifact(phase.id)?.id);
+const p44Report = reportArtifact("P44");
+if (p44ExpectedInputs.some((id) => !id) || !sameMembers(p44Report?.runtime_inputs || [], p44ExpectedInputs)) {
+  reportClosureProblems.push("P44 runtime_inputs must be exactly P01-P43 (43 reports)");
+}
+const p44Static = ["public-release-aggregator", "report-provenance-verifier", "release-report-integration"];
+if (!sameMembers(p44Report?.derives_from || [], p44Static)) {
+  reportClosureProblems.push("P44 derives_from must be exactly the controlled aggregation/provenance toolchain");
+}
+record("phase-report-input-closure", reportClosureProblems.length === 0,
+  reportClosureProblems.length === 0
+    ? "P05-P38 implementation reports cover owned artifacts; P17/P23/P26/P38 fan-in and P44 exact 43-report closure match"
+    : reportClosureProblems.join("; "));
+
+function graphProblemsFor(overrides = new Map()) {
+  const problems = [];
+  const visiting = new Set();
+  const visited = new Set();
+  function inputsFor(id) {
+    const artifact = artifactByID.get(id);
+    return overrides.get(id) || [...(artifact?.derives_from || []), ...(artifact?.runtime_inputs || [])];
+  }
+  for (const artifact of artifacts) {
+    for (const inputID of overrides.get(artifact.id) || artifact.runtime_inputs || []) {
+      const input = artifactByID.get(inputID);
+      if (artifact.producer_phase && input && availability(input) >= availability(artifact)) {
+        problems.push(`${artifact.id} runtime input ${inputID} is same/future phase`);
+      }
+    }
+  }
+  function visit(id) {
+    if (visiting.has(id)) { problems.push(`combined artifact/runtime cycle at ${id}`); return; }
+    if (visited.has(id)) return;
+    visiting.add(id);
+    for (const dependency of inputsFor(id)) if (artifactByID.has(dependency)) visit(dependency);
+    visiting.delete(id);
+    visited.add(id);
+  }
+  for (const id of artifactByID.keys()) visit(id);
+  return problems;
+}
+const combinedGraphProblems = graphProblemsFor();
+record("artifact-runtime-combined-dag", combinedGraphProblems.length === 0,
+  combinedGraphProblems.length === 0 ? "derives_from + runtime_inputs are temporally prior and acyclic" : combinedGraphProblems.join("; "));
+
+const p44ID = p44Report?.id;
+const p05ID = reportArtifact("P05")?.id;
+const p45ID = reportArtifact("P45")?.id;
+const p17ID = reportArtifact("P17")?.id;
+const p18ID = reportArtifact("P18")?.id;
+const p14ID = reportArtifact("P14")?.id;
+const negativeProbeResults = [
+  ["missing-p05", !sameMembers((p44Report?.runtime_inputs || []).filter((id) => id !== p05ID), p44ExpectedInputs)],
+  ["extra-p45", !sameMembers([...(p44Report?.runtime_inputs || []), p45ID], p44ExpectedInputs)],
+  ["future-input", graphProblemsFor(new Map([[p17ID, [p18ID]]])).length > 0],
+  ["runtime-cycle", graphProblemsFor(new Map([[p14ID, [p17ID]]])).length > 0],
+].filter(([, passed]) => passed).map(([name]) => name);
+record("report-closure-negative-probes", negativeProbeResults.length === 4,
+  negativeProbeResults.length === 4 ? `${negativeProbeResults.join(", ")} rejected` : `escaped: ${4 - negativeProbeResults.length}`);
+
 const releaseSequence = [
   ["release-supply-chain", "P39", "implement"], ["release-evidence-tooling", "P40", "implement"],
   ["release-lineage-tooling", "P41", "implement"], ["release-finalization-tooling", "P42", "implement"],
   ["release-dry-run-verification", "P43", "verify · spec"],
   ["release-readiness-review", "P44", "verify · review"], ["public-governance", "P45", "gate"],
-  ["public-artifact-generation", "P46", "implement"], ["rc-source-freeze", "P47", "deliver"],
+  ["public-artifact-generation", "P46", "deliver"], ["rc-source-freeze", "P47", "deliver"],
   ["public-release-verification", "P48", "verify · review"], ["v1-rc-delivery", "P49", "deliver"],
   ["external-conformance-review", "P50", "gate"], ["v1-freeze-overlay-review", "P51", "verify · review"],
   ["v1-release-approval", "P52", "gate"], ["v1-delivery", "P53", "deliver"],
@@ -382,7 +519,7 @@ for (let index = 0; index < releaseSequence.length; index += 1) {
   if (index && !(dependencyMap.get(id) || []).includes(releaseSequence[index - 1][1])) releaseProblems.push(id + " dependency");
 }
 const releaseNeedles = [
-  ["P39", ["P05 Go proxy/bootstrap", "P27 Python", "P28 npm", "P37 Container", "不重新实现"]],
+  ["P39", ["P36 Go", "P27 Python", "P28 npm", "P37 Container", "不把 P05 proxy bootstrap 当打包 primitive"]],
   ["P40", ["root→timestamp→snapshot→targets", "TRUST_ROOT", "protected/pinned root", "Sigstore", "dry-run key", "不自动生成"]],
   ["P41", ["隔离 checkout", "CI provenance", "current inputs", "A 到 B"]],
   ["P42", ["unsigned canonical candidate", "parent=A", "release_approver", "bridged_reports"]],
@@ -401,6 +538,50 @@ const releaseNeedles = [
 for (const [id, needles] of releaseNeedles) if (!needles.every((needle) => phaseByID.get(id)?.body.includes(needle))) releaseProblems.push(id + " invariants");
 record("release-a-b-chain", releaseProblems.length === 0,
   releaseProblems.length === 0 ? "P39-P53 enforces tool ownership, clean A, public RC, external evidence, signed overlay and exact B" : releaseProblems.join("; "));
+
+const postGateImplementation = phases.filter((phase) =>
+  phaseNumber(phase.id) > 45 && ["implement", "refactor"].includes(phase.metadata.Type));
+record("post-public-gate-freeze",
+  postGateImplementation.length === 0 && artifactByID.get("public-namespace-regeneration")?.owner_phase === "P42",
+  postGateImplementation.length === 0
+    ? "P42 owns the frozen regeneration tool and P46-P53 contain no implementation/refactor phase"
+    : `implementation after P45: ${postGateImplementation.map((phase) => phase.id).join(",")}`);
+
+const versionArtifactIDs = [
+  "release-version-policy-schema", "release-version-policy", "release-version-mapper",
+];
+const versionProblems = versionArtifactIDs.filter((id) => artifactByID.get(id)?.owner_phase !== "P39");
+for (const needle of [
+  "1.0.0-rc.1", "1.0.0-rc.10", "Python `1.0.0rc1`", "v` 前缀", "PEP 440 输入",
+  "RC leading zero", "build metadata", "version-policy digest",
+]) if (!plan.includes(needle)) versionProblems.push(`missing ${needle}`);
+for (const [id, needles] of [
+  ["P43", ["全生态 pack/install", "同一冻结脚本"]],
+  ["P46", ["唯一无 `v` 逻辑版本", "Compatibility Matrix 不预填"]],
+  ["P48", ["RC1/RC10/final", "policy digest"]],
+  ["P51", ["Python `pyproject`/lock", "npm `package.json`/lock", "OCI/CLI/Schema Bundle metadata"]],
+  ["P52", ["version-policy digest", "bound_evidence"]],
+  ["P53", ["不盲传同一 VERSION", "分别发布"]],
+]) if (!needles.every((needle) => phaseByID.get(id)?.body.includes(needle))) versionProblems.push(`${id} version mapping`);
+record("cross-ecosystem-version-policy", versionProblems.length === 0,
+  versionProblems.length === 0 ? "one logical SemVer maps deterministically across Go/Python/npm/OCI/CLI/Schema with negative cases" : versionProblems.join("; "));
+
+const detachedChain = [
+  ["verified-external-config-bundle-summary", "P45"],
+  ["rc-release-subject-manifest", "P49"],
+  ["rc-compatibility-detached-summary", "P50"],
+  ["final-overlay-candidate-bundle", "P51"],
+  ["verified-final-equivalence-attestation-summary", "P52"],
+  ["final-release-detached-evidence-bundle", "P53"],
+];
+const detachedProblems = detachedChain
+  .filter(([id, phase]) => artifactByID.get(id)?.producer_phase !== phase)
+  .map(([id]) => id);
+if (!publicAdoption.includes("外部") || !plan.includes("绝不代签") || !plan.includes("不进入 B tree")) {
+  detachedProblems.push("external producer/validator/detached-tree policy");
+}
+record("detached-external-evidence-chain", detachedProblems.length === 0,
+  detachedProblems.length === 0 ? "P45/P49/P50/P51/P52/P53 detached evidence chain is cataloged without fabricating external signers" : detachedProblems.join("; "));
 
 record("cross-commit-report-policy",
   blueprint.includes("历史普通 success 报告") && blueprint.includes("隔离 checkout") &&

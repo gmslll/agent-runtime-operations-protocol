@@ -57,6 +57,8 @@ Conformance Kit
 - Gateway/BFF/Worker。
 - 契约测试工具。
 
+Go v1 同时提供 Provider、Registry、Worker 与 Consumer SDK。Consumer 的 `create/query/command`、Direct/Proxy、Ticket 过期回 Control Plane redispatch、SSE resume 都属于首发闭包；可信 Bot/Gateway 不需要复制调度和重试逻辑。
+
 ## 3.2 Python
 
 用途：
@@ -66,6 +68,8 @@ Conformance Kit
 - 参考 Agent 和本地开发。
 - FastAPI/ASGI 薄封装和十分钟 Quickstart。
 
+Python v1 distribution 同时包含 Provider、`RuntimeRegistration` 与 Worker Client；`pyproject.toml` 是 package metadata 权威，wheel/sdist 必须可重现并在 clean venv 中安装验证。
+
 ## 3.3 TypeScript
 
 用途：
@@ -74,6 +78,8 @@ Conformance Kit
 - SSE、Schema 和 UI 类型。
 
 v1 首发至少提供 TypeScript Generated Models、SSE Consumer 和 Event Reducer；完整 Node Provider 可以随后实现。所有语言必须使用同一 Schema Source。
+
+`sdk/typescript/package.json` 必须声明 `@arop/sdk` 的 files、types 与 exports map；npm tarball 不含开发测试文件、凭据或绝对路径，并在空项目完成 pack/install。
 
 # 4. Provider SDK API 示例
 
@@ -189,9 +195,11 @@ SDK 根据 Dispatch Ticket 自动处理：
 
 Consumer SDK 不自行从 Registry 选择另一个实例。重新路由必须回到 Control Plane。
 
+Go Consumer 面向可信 Bot/Gateway/后端；浏览器仍只能经 BFF/Proxy。Python v1 的重点是 Provider/Registration/Worker，TypeScript v1 的重点是 Consumer/BFF/Web。
+
 # 8. CLI
 
-建议命令：
+v1 必须命令：
 
 ```bash
 arop init --lang python
@@ -248,6 +256,8 @@ Dockerfile
 - Output Snapshot。
 - Usage 和 Error。
 
+命令按纵向能力交付：P06 修复 Manifest/schema validate 的 validation-before-digest；P12 `publish`；P15 `register`；P29/P31 两种 `export`；P33 `test`；P36 完成 `init/dev/doctor` 与整个 CLI。现有 `cmd/arop` 是扩展保留的 baseline，不允许后期另起一个 CLI。
+
 # 9. Conformance Level
 
 建议认证等级：
@@ -263,7 +273,13 @@ Dockerfile
 
 Registry Discovery View 可以根据环境要求过滤不满足认证等级的实例。
 
-# 10. 参考适配器
+Scenario 与 Profile 都是机器制品而非文档口号。每个 Scenario 有唯一 ID、Fixture digest、前置能力和可审计结果；Profile 对 required Scenario 做闭包且禁止 skip。Core Provider、Streaming、Managed Runtime、Pull Worker、Control Plane 在 P33 固化，Fault/HA 在 P35 固化，Production Profile 在 P37 的真实部署运行。
+
+# 10. 跨生态发布版本
+
+所有 build/publish 命令只接收不带 `v` 的逻辑 SemVer：`1.0.0-rc.N` 或 `1.0.0`。发布 mapper 负责生成 Go `v1.0.0-rc.N`/`v1.0.0`、Python `1.0.0rcN`/`1.0.0`，npm/OCI/CLI/Schema Bundle 使用原逻辑值。传入 `v` 前缀、PEP 440 RC、leading-zero RC 或 build metadata 必须失败，不能让调用脚本各自解释版本。
+
+# 11. 参考适配器
 
 协议仓建议提供：
 
@@ -306,7 +322,7 @@ sdk/typescript/src/consumer/       # handwritten
 
 Python 和 TypeScript 的最终生成路径分别是 `sdk/python/src/arop/generated/` 和 `sdk/typescript/src/generated/`；Go 是 `sdk/go/generated/`。CI 必须验证重新生成后无未提交差异。
 
-P07 必须交付可复用的三语言 codegen pipeline 和代表 Schema spike，验证 union、nullable/optional、format、`additionalProperties`、Extension 与离线 `$ref` 的一致映射；它不预生成未来 Schema。P11/P15/P18/P19/P20/P22/P24 用同一 pinned pipeline 生成各自增量模型并执行 clean-tree drift check，P46 再以真实 namespace 全量再生成。严格作者校验与前向兼容消费模式必须是显式独立 API，不能用一个全局开关混用。完整 pipeline 和 module 边界见 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md)。
+P07 必须交付可复用的三语言 codegen pipeline 和代表 Schema spike，验证 union、nullable/optional、format、`additionalProperties`、Extension 与离线 `$ref` 的一致映射；它不预生成未来 Schema。P11/P15/P18/P19/P20/P22/P24 用同一 pinned pipeline 生成各自增量模型并执行 clean-tree drift check；P42 实现并冻结 public namespace/version wrapper，P43 用保留域名验证，P46 仅以 P45 已验真实值运行同一工具全量再生成。严格作者校验与前向兼容消费模式必须是显式独立 API，不能用一个全局开关混用。完整 pipeline 和 module 边界见 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md)。
 
 # 12. SDK 稳定性
 

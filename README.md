@@ -98,7 +98,7 @@ make blueprint-check
 make validate
 ```
 
-`make spec-index-check` 校验权威链、机器目录/DAG、14 条不可变需求、冲突、Decision ID 和本地引用闭包。`make blueprint-check` 动态校验双 Go Module、最终布局、P01..Pn 连续阶段 DAG、paseo-epic type、受控组件集合、关键制品唯一 owner/phase/test/exposure、双库 migration 子矩阵、commit A→审核 overlay→metadata-only commit B 发布链、需求映射和报告约定。两者都产生 JSON/JUnit 报告，并由 `make validate` 强制执行。
+`make spec-index-check` 校验权威链、机器目录/DAG、14 条不可变需求、冲突、Decision ID 和本地引用闭包。`make blueprint-check` 动态校验双 Go Module、最终布局、连续阶段 DAG、baseline future ownership、关键制品 owner/phase/test/exposure、implement report closure、聚合报告精确 fan-in、跨生态版本、detached evidence 与 commit A→metadata-only B 发布链。`make test-evidence-lineage` 以真实临时 Git 历史验证 planning blob 的 ancestor/current/changed→reverted/deleted 负例。全部由 `make validate` 强制执行。
 
 `make verify-report REPORT=build/reports/P01/report.json` 使用独立验证器重新核对报告 Schema、JSON/JUnit testcase 与 failure 数、HEAD、Checker Digest 及全部输入 Digest。默认模式要求报告 claimed HEAD 等于当前 HEAD，并如实核对当前 dirty 状态；`make verify-report REPORT=... ALLOW_ANCESTOR=1` 可显式核对祖先 commit 的 clean 报告存档完整性，此时 Checker 和每个输入都从 `git show <claimed>:<path>` 重算。该模式的通过不等于历史 success 可被聚合；P41 必须再在隔离 checkout 重跑受控 checker，或验证绑定完整来源的受信 CI/OIDC/Sigstore provenance。当前对应输入或 Checker 有任何变化时必须重跑，不得复用。
 

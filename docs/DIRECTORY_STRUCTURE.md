@@ -23,7 +23,9 @@ agent-runtime-operations-protocol/
 ├── scripts/
 │   ├── go-proxy-bootstrap.mjs           # P05 未发布 root 时供 nested GOWORK=off 验证
 │   ├── generate.mjs                     # P07 可复用完整三语言 codegen pipeline
-│   └── release/                         # P39 supply chain；P40 evidence；P41 lineage；P42 RC freeze/finalization tools
+│   ├── build-go-release.mjs             # P36 deterministic Go module/CLI build primitive
+│   ├── regenerate-public.mjs            # P42 唯一 public namespace/version 冻结器
+│   └── release/                         # P39 supply/version；P40 evidence；P41 lineage；P42 freeze/finalization
 │
 ├── docs/                                # 手写规范、决策、蓝图
 │   ├── ARCHITECTURE.md
@@ -40,7 +42,8 @@ agent-runtime-operations-protocol/
 │   ├── DEVELOPMENT_PLAN.md
 │   └── DECISIONS.md
 ├── spec/                                # 机器可读制品索引、需求和冲突台账
-│   └── evidence/                          # 仅脱敏 canonical 内容摘要/可选验签；原始外部证据不入库
+│   ├── release/                          # 跨生态版本/Go artifact layout 等发布策略
+│   └── evidence/                         # 仅规划期脱敏 canonical 摘要；原始外部证据不入库
 ├── rfcs/
 ├── compatibility/
 │
@@ -64,24 +67,28 @@ agent-runtime-operations-protocol/
 │   │   ├── registry/
 │   │   └── worker/
 │   ├── python/
+│   │   ├── pyproject.toml               # arop-sdk PEP 517 metadata
 │   │   └── src/arop/
 │   │       ├── generated/              # 生成；禁止手改
 │   │       ├── provider/
+│   │       ├── registry/                # RuntimeRegistration/keepalive/drain
+│   │       ├── worker/                  # claim/renew/complete/fencing
 │   │       └── protocol/
 │   └── typescript/
+│       ├── package.json                 # @arop/sdk exports/types/files metadata
 │       └── src/
 │           ├── generated/                  # 生成；禁止手改
 │           ├── consumer/
 │           └── reducer/
 │
 ├── cmd/
-│   ├── arop/                               # 公共 CLI，属于根 Go module
+│   ├── arop/                               # init/dev/test/publish/register/export/doctor
 │   └── arop-conformance/                   # portable runner，不依赖 Reference CP internal
 │
 ├── conformance/                         # 语言中立；不允许 go.mod
 │   ├── fixtures/
-│   ├── scenarios/
-│   ├── profiles/
+│   ├── scenarios/                       # Core + fault/HA；唯一 ID/闭包/required 不可跳
+│   ├── profiles/                        # Core/Provider/Streaming/Managed/Pull/CP/Production
 │   ├── fault-injection/
 │   └── reports/                            # 公开认证报告与摘要
 │
@@ -117,7 +124,8 @@ agent-runtime-operations-protocol/
 │   ├── quickstart/                          # SQLite 单进程
 │   └── production-reference/                # PostgreSQL 多节点参考部署
 ├── build/reports/                       # CI 产生，默认不入库
-└── .github/workflows/                   # validate/conformance/release/provenance
+├── build/evidence/                      # ignored detached summaries/candidates/final bundle
+└── .github/workflows/                   # validate/conformance/release/provenance + release lock
 ```
 
 ## 2.1 冻结路径锚点
@@ -195,7 +203,7 @@ Reference Control Plane application and adapters
 
 # 7. 渐进建立
 
-目标树不要求创建空目录。P05 才执行物理重构，每个后续阶段只在存在真实制品时创建路径。当前的 `reference/control-plane-lite` 是待迁移基线，不是第三个长期实现。
+目标树不要求创建空目录。P05 才执行物理重构，每个后续阶段只在存在真实制品时创建路径。`reference/control-plane-lite` 在 P05 `migrate-retire`；现有 Go Manifest/Node digest baseline 在 P06 `repair-retain`；`cmd/arop` baseline 在 P36 `extend-retain`。future transition 不改变现存制品的当前可用阶段，也不形成第三个长期实现。
 
 # 8. 包名与发布前置
 
@@ -209,4 +217,8 @@ CLI: arop
 CLI config: ~/.config/arop/
 ```
 
-上述是预发布命名。项目域名、PyPI/npm 所有权与两名 Maintainer/安全入口在 P45 必须用外部证据确认；P46 全量生成 RC tree，P47 再单独创建并冻结 clean RC source commit A。P44 及之前只允许 private/dev snapshot；取消独立公共 v0.1，首个公开候选是 P49 的 `v1.0.0-rc.N`。
+上述是预发布命名。项目域名、PyPI/npm 所有权与两名 Maintainer/安全入口在 P45 必须用外部证据确认。`scripts/regenerate-public.mjs` 在 P42 实现并冻结，P43 用保留域名和临时 registry 验其可重现性；P46 仅把 P45 已验真实值交给该工具生成 RC tree，P47 再创建 clean commit A。P45 后禁止 implement/refactor。P44 及之前只允许 private/dev snapshot；取消独立公共 v0.1，首个公开候选是 P49 的 `v1.0.0-rc.N`。
+
+发布工具唯一逻辑版本输入不带 `v`：`1.0.0-rc.N`/`1.0.0` 映射到 Go `v...`、Python `1.0.0rcN`/`1.0.0`，npm/OCI/CLI/Schema Bundle 保持逻辑值。P51 final overlay 只允许 `VERSION`、Python/npm metadata/lock、OCI/CLI/Schema metadata、nested `go.mod` 和必要 checksum 的 RC→final 变化。
+
+P45/P50/P52 的原始签名外部证据永不写入 A/B tree；仓库工具只在 ignored `build/evidence/` 生成验签摘要。P49 生成 RC subject manifest，P50 验证伙伴 compatibility bundle，P51 生成 unsigned candidate，P52 验外部 approver attestation，P53 生成 final detached evidence bundle；这些作为 release asset、OCI referrer 或 transparency statement 发布。

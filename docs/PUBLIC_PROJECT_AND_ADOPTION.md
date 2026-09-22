@@ -170,13 +170,15 @@ Reference Control Plane 使用 Go 实现，只覆盖验证协议所需的开发�
 必须包含：
 
 - Core Schema Bundle。
-- Python Provider SDK。
-- Go SDK。
+- Python Provider、RuntimeRegistration 和 Worker SDK。
+- Go Provider、Consumer、Registry 和 Worker SDK。
 - TypeScript Streaming Consumer。
 - Reference Control Plane。
 - Docker Compose Quickstart。
 - 在线或本地 Event Viewer。
 - Conformance CLI。
+- 可执行 Scenario/Profile（Core、Streaming、Managed、Pull、Control Plane、Production）。
+- `arop init/dev/test/publish/register/export/doctor`。
 
 ## 8.3 生态适配
 
@@ -206,6 +208,10 @@ v1.0 前至少需要：
 
 每个 Gate 必须关联可核验的所有权记录、报告、公开链接或签字评审。证据不存在时状态必须是 `pending-external-evidence` 或 `blocked`，不得为了进入 RC/v1 而标记完成。
 
+原始签名证据的 producer 必须是相应外部主体：P45 的 project owner/maintainer threshold、P50 的独立实现/伙伴 principals、P52 的 release approver。仓库 validator 只验签并输出 detached verified summary，绝不代签、补齐伙伴或把内部模拟写成外部结果。A 内 `compatibility/implementation-matrix.yaml` 只描述门槛/Profile/结果位置，真实兼容结果作为绑定 A/RC 的 release asset、OCI referrer 或 transparency statement；P53 通过 P52 equivalence bridge 绑定 final B。
+
+P49 的 RC subject manifest、P50 compatibility summary、P51 unsigned overlay candidate、P52 verified external attestation summary 与 P53 final release evidence 构成可下载的 detached 证据链，不进入冻结 A/B tree。每个对象绑定 repository/object format、commit/tree、policy/validator/trust-root digest、签名主体、时效和上游 evidence digest。
+
 # 9. 开放治理
 
 开放治理规则已经确定：
@@ -215,6 +221,7 @@ v1.0 前至少需要：
 - 初期贡献签署使用 DCO，不使用 CLA。
 - 安全漏洞通过 `SECURITY.md` 公布的私密渠道报告，不先公开 Issue。
 - GitHub 强制 2FA、分支保护和签名 Release Tag；包发布使用 OIDC Trusted Publishing。
+- OIDC provenance 必须绑定 issuer、repository、protected environment、`job_workflow_ref`/`job_workflow_sha`、workflow blob/lock digest、source commit 与 artifact digest；不得使用 PAT 或静态 registry token 替代。
 - 仓库与包的发布、恢复权限至少由两人持有。
 - `CONTRIBUTING.md`、`CODE_OF_CONDUCT.md` 和 `SECURITY.md`。
 - 版本、兼容性和弃用策略。

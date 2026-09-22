@@ -341,7 +341,7 @@ for (const artifact of artifacts) {
   if (artifact.completion_phase && !["aggregate", "container"].includes(artifact.path_role)) {
     artifactProblems.push(`${artifact.id} completion phase requires aggregate/container path_role`);
   }
-  if (artifact.producer_phase && !["machine-reports", "canonical-evidence-summary"].includes(artifact.kind)) {
+  if (artifact.producer_phase && !["machine-reports", "canonical-evidence-summary", "detached-evidence-summary", "detached-evidence-bundle"].includes(artifact.kind)) {
     artifactProblems.push(`${artifact.id} producer phase is reserved for reports/evidence outputs`);
   }
   for (const dependencyID of artifact.derives_from ?? []) {
