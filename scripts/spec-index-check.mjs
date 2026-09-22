@@ -9,7 +9,9 @@ import { createHash } from "node:crypto";
 
 import {
   loadStructuredFile,
+  findPublicV01Violations,
   parseJSONWithUniqueKeys,
+  publicV01ViolationsInText,
   repositoryRoot,
   walkFiles,
 } from "./lib/repository.mjs";
@@ -308,9 +310,9 @@ for (const artifact of artifacts) {
   }
 }
 for (const artifact of artifacts) {
-  for (const parent of artifact.derives_from ?? []) {
+  for (const parent of [...(artifact.derives_from ?? []), ...(artifact.runtime_inputs ?? [])]) {
     if (!artifactIDs.has(parent)) {
-      artifactProblems.push(`${artifact.id} derives from unknown artifact: ${parent}`);
+      artifactProblems.push(`${artifact.id} references unknown artifact: ${parent}`);
     }
   }
   if (artifact.status === "present" && isSafeRepositoryPath(artifact.path)) {
@@ -322,6 +324,35 @@ for (const artifact of artifacts) {
   }
 }
 const artifactByID = new Map(artifacts.map((artifact) => [artifact.id, artifact]));
+const lifecycleFields = ["owner_phase", "completion_phase", "producer_phase"];
+const phaseNumber = (phaseID) => Number(phaseID?.slice(1));
+const availability = (artifact) => {
+  const field = lifecycleFields.find((candidate) => artifact?.[candidate]);
+  return field ? phaseNumber(artifact[field]) : 0;
+};
+for (const artifact of artifacts) {
+  const lifecycle = lifecycleFields.filter((field) => artifact[field]);
+  if (artifact.status === "planned" && lifecycle.length !== 1) {
+    artifactProblems.push(`${artifact.id} planned lifecycle must use exactly one of owner/completion/producer phase`);
+  }
+  if (artifact.owner_phase && artifact.path_role !== "concrete") {
+    artifactProblems.push(`${artifact.id} source owner requires path_role=concrete`);
+  }
+  if (artifact.completion_phase && !["aggregate", "container"].includes(artifact.path_role)) {
+    artifactProblems.push(`${artifact.id} completion phase requires aggregate/container path_role`);
+  }
+  if (artifact.producer_phase && !["machine-reports", "canonical-evidence-summary"].includes(artifact.kind)) {
+    artifactProblems.push(`${artifact.id} producer phase is reserved for reports/evidence outputs`);
+  }
+  for (const dependencyID of artifact.derives_from ?? []) {
+    const dependency = artifactByID.get(dependencyID);
+    if (dependency && availability(dependency) > availability(artifact)) {
+      artifactProblems.push(
+        `${artifact.id}@${availability(artifact)} depends on future ${dependencyID}@${availability(dependency)}`,
+      );
+    }
+  }
+}
 const artifactVisiting = new Set();
 const artifactVisited = new Set();
 const artifactStack = [];
@@ -582,7 +613,21 @@ const runStreamingSource = await readFile(
   path.join(repositoryRoot, "docs/RUN_AND_STREAMING.md"),
   "utf8",
 );
-const canonicalCorpus = `${decisionSource}\n${protocolSource}\n${runStreamingSource}\n${await readFile(path.join(repositoryRoot, "spec/conflicts.yaml"), "utf8")}`;
+const controlledTextRoots = ["docs", "spec", "schemas", "openapi", "asyncapi"];
+const controlledTextFiles = [];
+for (const controlledRoot of controlledTextRoots) {
+  try {
+    controlledTextFiles.push(...(await walkFiles(
+      path.join(repositoryRoot, controlledRoot),
+      (filePath) => /\.(?:md|ya?ml|json)$/iu.test(filePath),
+    )));
+  } catch {
+    // A planned directory may not exist before its implementation phase.
+  }
+}
+const canonicalCorpus = (
+  await Promise.all([...new Set(controlledTextFiles)].map((filePath) => readFile(filePath, "utf8")))
+).join("\n");
 const legacyBindingFindings = (source) => ({
   legacyEventSink:
     /"event_sink"\s*:\s*"[^"\n]*\/v1\/agent-runs\/[^"\n]*\/events(?!:batch)/u.test(source),
@@ -635,6 +680,26 @@ record(
   Object.values(negativeLegacyBindings).every(Boolean)
     ? "the checker rejects legacy event_sink, cancel_url and HTTP /cancel aliases"
     : `negative probe escaped detection: ${JSON.stringify(negativeLegacyBindings)}`,
+);
+
+const publicV01Scan = await findPublicV01Violations();
+record(
+  "controlled-publication-v01-language",
+  publicV01Scan.violations.length === 0,
+  publicV01Scan.violations.length === 0
+    ? `${publicV01Scan.files.length} controlled publication documents contain no positive public-v0.1 milestone; VERSION/package dev versions and example AgentVersions are outside this policy scan`
+    : publicV01Scan.violations.join("; "),
+);
+const publicV01NegativeProbe = publicV01ViolationsInText(
+  "Milestone: publish public v0.1 before the v1 release candidate.",
+  "negative-probe.md",
+);
+record(
+  "controlled-publication-v01-negative-probe",
+  publicV01NegativeProbe.length === 1,
+  publicV01NegativeProbe.length === 1
+    ? "the scanner rejects a synthetic positive public-v0.1 milestone"
+    : `positive public-v0.1 probe escaped detection: ${JSON.stringify(publicV01NegativeProbe)}`,
 );
 
 const markdownFiles = await walkFiles(repositoryRoot, (filePath) =>
@@ -731,6 +796,7 @@ const reportInputPaths = [
   ...jsonFiles.map(relative),
   "scripts/spec-index-check.mjs",
   "scripts/verify-report.mjs",
+  "scripts/test-report-verifier.mjs",
   "scripts/lib/report.mjs",
   "scripts/lib/repository.mjs",
   "spec/schemas/check-report.schema.json",

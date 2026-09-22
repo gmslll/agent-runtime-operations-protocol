@@ -110,6 +110,8 @@ SDK 自动提供：
 - Event Outbox 和批量 ACK。
 - Deadline、Cancel 和优雅关闭。
 
+Go 和 Python Provider SDK 的持久化边界都是 driver-free transactional `DurableStore` port：SDK 定义 Inbox/Outbox、`effect_id` claim/result 与原子提交接口，但不携带 SQLite/PostgreSQL driver。Reference Go/Python HTTP Agent 分别只在自身 subtree 提供 SQLite adapter 和 migration，用于 crash/retry Conformance；这些本地库不属于 Control Plane 双库矩阵，也不产生第三 Go Module。
+
 # 5. Runtime 注册示例
 
 ```python
@@ -304,7 +306,7 @@ sdk/typescript/src/consumer/       # handwritten
 
 Python 和 TypeScript 的最终生成路径分别是 `sdk/python/src/arop/generated/` 和 `sdk/typescript/src/generated/`；Go 是 `sdk/go/generated/`。CI 必须验证重新生成后无未提交差异。
 
-P07 必须交付可复用的完整三语言 codegen pipeline：先执行代表 Schema spike，验证 union、nullable/optional、format、`additionalProperties`、Extension 与离线 `$ref` 的一致映射，再由同一 pinned pipeline 批量生成全部模型并执行 clean-tree drift check。严格作者校验与前向兼容消费模式必须是显式独立 API，不能用一个全局开关混用。完整 pipeline 和 module 边界见 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md)。
+P07 必须交付可复用的三语言 codegen pipeline 和代表 Schema spike，验证 union、nullable/optional、format、`additionalProperties`、Extension 与离线 `$ref` 的一致映射；它不预生成未来 Schema。P11/P15/P18/P19/P20/P22/P24 用同一 pinned pipeline 生成各自增量模型并执行 clean-tree drift check，P46 再以真实 namespace 全量再生成。严格作者校验与前向兼容消费模式必须是显式独立 API，不能用一个全局开关混用。完整 pipeline 和 module 边界见 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md)。
 
 # 12. SDK 稳定性
 

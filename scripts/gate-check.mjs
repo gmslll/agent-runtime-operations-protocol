@@ -13,6 +13,7 @@ import {
   canonicalSummaryDigest,
   validateResultCoverage,
   verifyEvidenceAuthentication,
+  verifyEvidenceSubjectCommit,
 } from "./lib/evidence.mjs";
 import { loadStructuredFile, parseJSONWithUniqueKeys, repositoryRoot } from "./lib/repository.mjs";
 import { actualCommand, digestFiles, sha256, writeCheckReport } from "./lib/report.mjs";
@@ -98,11 +99,16 @@ try {
   record("planning-audit-prerequisite", false, error.message);
 }
 
-let head = "unavailable";
+let subjectLineage = { mode: "unverified" };
 try {
-  head = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot })).stdout.trim();
+  subjectLineage = await verifyEvidenceSubjectCommit(evidence?.subject?.commit);
+  record(
+    "subject-commit-lineage",
+    true,
+    `evidence subject is ${subjectLineage.mode} commit ${subjectLineage.subject_commit}; current HEAD is ${subjectLineage.current_head}`,
+  );
 } catch (error) {
-  record("subject-commit", false, error.message);
+  record("subject-commit-lineage", false, error.message);
 }
 
 let phaseIDs = [];
@@ -119,22 +125,21 @@ try {
   const requirements = await loadStructuredFile(path.join(repositoryRoot, "spec/requirements.yaml"));
   requirementIDs = requirements.requirements.map((requirement) => requirement.id);
   const expected = {
-    commit: head,
     plan_last_phase: phaseIDs.at(-1),
     requirements_sha256: byPath.get("spec/requirements.yaml"),
     plan_sha256: byPath.get("docs/DEVELOPMENT_PLAN.md"),
     blueprint_sha256: byPath.get("docs/IMPLEMENTATION_BLUEPRINT.md"),
-    planning_audit_report_sha256: auditReportDigest,
+    planning_audit_summary_sha256: auditReport?.summary?.canonical_summary_sha256,
   };
   const mismatches = Object.entries(expected)
     .filter(([key, value]) => evidence?.subject?.[key] !== value)
     .map(([key, value]) => `${key} expected ${value}, got ${evidence?.subject?.[key]}`);
   record(
     "gate-subject-binding",
-    mismatches.length === 0,
-    mismatches.length === 0
-      ? "Gate evidence binds the current commit, requirements, plan, blueprint and successful P03 report"
-      : mismatches.join("; "),
+    subjectLineage.mode !== "unverified" && mismatches.length === 0,
+    subjectLineage.mode !== "unverified" && mismatches.length === 0
+      ? "Gate evidence subject is current/ancestor and binds unchanged requirements/plan/blueprint plus the P03 canonical summary"
+      : mismatches.join("; ") || "subject commit lineage is invalid",
   );
 } catch (error) {
   record("gate-subject-binding", false, error.message);
@@ -207,7 +212,7 @@ await writeCheckReport({
     evidence_sha256: evidenceDigest,
     canonical_summary_sha256: computedSummaryDigest,
     authentication_mode: authentication.mode,
-    planning_audit_report_sha256: auditReportDigest,
+    current_planning_audit_report_file_sha256: auditReportDigest,
     raw_evidence_committed: false,
   },
   auditNote:

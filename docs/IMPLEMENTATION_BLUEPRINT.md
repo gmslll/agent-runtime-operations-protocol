@@ -80,16 +80,18 @@ portable runner 不依赖 Reference `internal`，只导入根公共 SDK 并读�
 | `ports` | Repository、UnitOfWork、Clock、IDSource、Signer、FaultHook、Telemetry | 环境单例 |
 | `adapters` | HTTP/SSE、SQLite/Postgres、JWKS、OTel、真/虚拟 Clock/ID/Fault | 重新定义协议语义 |
 
-每个纵向功能先实现 Domain + Port + 两个 Storage Adapter + HTTP Binding + 增量 Fixture，而不是先写所有 Handler 再补持久化。P09、P12、P13、P14、P16、P18、P19、P20、P21、P24 每次新增持久化都在所属阶段同步 SQLite/PostgreSQL migration，并立即运行 `empty/N-1→N/idempotent/dirty` 子矩阵；P38 只读聚合这些证据。
+每个 Control Plane 纵向功能先实现 Domain + Port + 两个 Storage Adapter + HTTP Binding + 增量 Fixture，而不是先写所有 Handler 再补持久化。P09、P10、P12、P13、P14、P18、P19、P20、P24 每次新增 Control Plane 持久化都在所属阶段同步 SQLite/PostgreSQL migration，并立即运行 `empty/N-1→N/idempotent/dirty` 子矩阵；P16 明确复用 P14 ledger/watermark，不新增 migration；P38 只读聚合这些证据。
+
+公共 Go/Python Provider SDK 各自只定义 transactional `DurableStore` port，不导入数据库 driver。Reference Go/Python HTTP Agent 可在各自 `reference/agents/<agent>/` subtree 内提供本地 SQLite adapter 和 migration，以证明 Inbox/Outbox/`effect_id` crash recovery；它们不建立第三 Go Module，也不属于 Control Plane 双库 migration 矩阵。因此数据库规则是：公共 SDK 无 DB driver；Control Plane DB 只在 Control Plane subtree；Reference Agent 本地 adapter 只在自身 subtree。
 
 ## 5.1 公共 API 与 Reference-only 归属
 
 | 能力 | 制品/暴露 | 归属 | 首次阶段 | 机器验收 |
 | --- | --- | --- | --- | --- |
-| Publication、Run create/query/command | `openapi/control-plane-v1.yaml` | public Control Plane contract | P11/P18 | `make test-publication-contracts`、`make test-run-lifecycle` |
-| JWKS discovery | `openapi/control-plane-v1.yaml` | public Control Plane contract | P11/P19 | `make test-publication-contracts`、`make test-dispatch-ticket` |
-| Event Session exchange | `openapi/control-plane-v1.yaml` | public Agent↔Control Plane contract | P11/P20 | `make test-publication-contracts`、`make test-event-ledger` |
-| Asset upload/download token exchange | `openapi/control-plane-v1.yaml` + Asset broker | public Control Plane contract/service | P11/P13 | `make test-publication-contracts`、`make test-asset-broker` |
+| Publication、Run create/query/command | `openapi/fragments/control-plane/*.yaml` → `openapi/control-plane-v1.yaml` | public Control Plane contract aggregate | P11/P18/P20 completion | `make test-publication-contracts`、`make test-run-lifecycle`、`make test-event-ledger` |
+| JWKS discovery | Control Plane dispatch/JWKS fragment → aggregate | public Control Plane contract | P19/P20 completion | `make test-dispatch-ticket`、`make test-event-ledger` |
+| Event Session exchange | Control Plane Event Session fragment → aggregate | public Agent↔Control Plane contract | P20 | `make test-event-ledger` |
+| Asset upload/download token exchange | Control Plane Asset fragment + Asset broker | public Control Plane contract/service | P13/P20 completion | `make test-asset-broker`、`make test-event-ledger` |
 | SecretRef resolution/exchange | `reference/control-plane/internal/ports` + deployment adapter | reference-only，不定义通用 Secret value HTTP API | P10 | `make test-identity-secrets` |
 | Agent Runtime Direct/Proxy | `openapi/agent-runtime-v1.yaml` | public Runtime contract | P21 | `make test-direct-proxy-provider` |
 | Registry/Discovery | 两份 Registry/Discovery OpenAPI + Go Registry SDK | public managed-runtime contract | P15 | `make test-registry-api` |
@@ -102,7 +104,7 @@ Token 只传递受限授权，不传递 Secret value。Secret Manager/Vault/KMS 
 SQLite 是 Quickstart 和单进程参考，PostgreSQL 是多节点生产参考。两者必须在同一套黑盒 Fixture 下表现一致，即“语义一致”而非“SQL 一致”。
 
 | 事务 | 必须原子提交 |
-| --- | --- |
+| --- | --- | --- |
 | Publish AgentVersion | 验证后 Bundle、Digest、版本记录、Audit |
 | Register/Keepalive/Drain | Instance 修订、Lease/Generation、Registry Event、Revision |
 | Create Run | Authz 决定快照、Run、初始 Audit、Outbox |
@@ -111,6 +113,8 @@ SQLite 是 Quickstart 和单进程参考，PostgreSQL 是多节点生产参考�
 | Terminal transition | 终态、Final Snapshot/ResultRef、Final Usage、Audit、释放容量 |
 | Execute effect | `effect_id` Inbox 声明与业务结果；不许仅靠 Attempt ID |
 | Provider Direct/Proxy effect | Provider durable Inbox、稳定 `effect_id`、业务结果和 Outbox；crash/retry 后不得重复副作用 |
+
+P19 的 ES256 私钥只能通过 `Signer`/KMS/`SecretRef` port 访问；数据库只保存 key metadata、public JWKS 和 rotation state，不保存可导出的私钥材料。
 
 跨进程通知是加速器，Ledger/Outbox 才是真值。消费者以 inbox 去重后再改变投影；Outbox 按至少一次发送并依赖下游幂等。
 
@@ -144,7 +148,7 @@ HTTP 入口先做请求大小/超时/内容类型限制，再解析与严格校�
 
 # 10. Codegen pipeline
 
-P07 交付可复用的完整三语言 pipeline：先用具有 union、format、`additionalProperties`、循环/外部 `$ref` 风险的代表 Schema 做受控 spike，冻结生成器版本和映射；同一阶段再把已验证 pipeline 扩展到全量 Schema。后续 P43 只调用它做真实 namespace 全量再生成，不临时发明第二套 generator。
+P07 交付可复用的三语言 pipeline：先用具有 union、format、`additionalProperties`、循环/外部 `$ref` 风险的代表 Schema 做受控 spike，冻结生成器版本和映射；它不得声称已经生成尚未存在的未来 Contract。P11/P15/P18/P19/P20/P22/P24 各自在新增 Schema/OpenAPI/AsyncAPI 时调用同一 pipeline，提交本域 Go/Python/TypeScript 增量输出与 provenance；P46 再用真实 namespace 全量再生成，不临时发明第二套 generator。
 
 ```text
 normative schemas + local ref bundle
@@ -171,20 +175,22 @@ OpenAPI/AsyncAPI 只引用或派生同一结构，不手写第二份 DTO。生�
 
 每个 P01..Pn 的机器验收都必须产生 `build/reports/<phase>/report.json` 和 `junit.xml`。JSON 至少含 schema version、exact commit/dirty 状态、实际命令、Node/Go/OS runtime、输入集与 Checker Digest、testcase 数和结论；JUnit 与 JSON 的 testcase/failure 数必须一致。不允许只用「进程退出 0」代替可审计报告。
 
-聚合 Make 目标在执行前声明预期子报告 ID/数量；聚合时拒绝缺报告、多报告、失败报告、commit 不一致或 schema/input/checker/artifact digest 不一致。P03/P04/P42/P46 的原始外部证据保存在仓库外，Git 仅保存脱敏、可重新核验的 canonical 内容摘要与可选 Ed25519 attestation。内容 hash 不是签名，检查器不自动生成“已批准”或“独立”证据。
+聚合 Make 目标在执行前声明预期子报告 ID/数量；聚合时拒绝缺报告、多报告、失败报告或 schema/input/checker/artifact digest 不一致。普通报告按 claimed commit 验证；历史普通 success 报告即使通过 ancestry、Git blob 和 current-input 无漂移检查，也只完成存档完整性验证，不能直接作为聚合 success；必须在隔离 checkout 重跑固定 checker，或验证受信 CI/OIDC/Sigstore provenance。P03/P04 的外部规划签署是独立类型：只要 subject commit 仍属于受控 ancestry、planning input closure 的 canonical digest 未漂移，可保留原签署，新 commit 仍重跑当前机器检查，不要求外部人员对无关后续变更重复签署。
+
+P44 等混合 commit 聚合不要求所有报告来自同一 commit，但每份报告都必须独立满足其 phase policy；受控 phase policy 先固定 phase→Make target→checker path→required input closure 与 runner policy，绝不信任 report 自报的 command/input 集。历史 success 只能在隔离 checkout 中以固定 argv、净化环境、无 secrets 重跑（严禁 eval report.command），或验证受信 CI/OIDC/Sigstore provenance 绑定 repository identity、immutable workflow digest、commit、checker、完整 inputs、report digest 和 toolchain。P53 使用 commit A 报告时不得套用普通 ancestor 规则；P52 attestation 是唯一 A→B bridge，必须列出可桥接报告，并证明输入不含 overlay 改动或按批准 normalizer 等价；P53 的 final Conformance/SBOM/provenance 必须在 B 新跑。P03/P04/P45/P50/P52 的原始外部证据保存在仓库外，Git 仅保存脱敏、可重新核验的 canonical 内容摘要与可选签名 attestation。内容 hash 不是签名，检查器不自动生成“已批准”或“独立”证据。
 
 | 聚合目标 | 预期子报告 | 精确数量 |
 | --- | --- | --- |
 | `make verify-registry` | P14、P15、P16 | 3 |
 | `make verify-run-delivery` | P18、P19、P20、P21、P22 | 5 |
 | `make verify-operations-security` | P08、P10、P12、P13、P18–P25 | 12 |
-| `make verify-resilience` | P09、P12、P13、P14、P16、P18、P19、P20、P21、P24、P34、P35、P37 | 13 |
-| `make validate-all` | P01–P40（包含 P03/P04 真实 Gate 报告） | 40 |
-| `make verify-public-namespace` | P17、P23、P26、P38、P40、P43 | 6 |
-| `make verify-v1-freeze` | P44、P45、P46，另在临时树执行 P47 overlay/tree-digest testcase | 3 份子报告 |
-| `make deliver-v1` | P33、P38、P40、P44、P45、P46、P47，另加 P48 tree-digest/payload-equivalence/Conformance/SBOM/provenance testcase | 7 份子报告 |
+| `make verify-resilience` | P09、P10、P12、P13、P14、P16、P18、P19、P20、P21、P24、P27、P34、P35、P37 | 15 |
+| `make validate-all` | P01–P43（包含 P03/P04 真实 Gate 报告） | 43 |
+| `make verify-public-namespace` | P17、P23、P26、P38、P43、P47 | 6 |
+| `make verify-v1-freeze` | P48、P49、P50，另在临时树执行 P51 unsigned overlay/tree-digest/payload-normalization testcase | 3 份子报告 |
+| `make deliver-v1` | P33、P38、P43、P48、P49、P50、P51、P52，另加 P53 parent/tree-digest/payload-equivalence/Conformance/SBOM/provenance/journal-resume testcase | 8 份子报告 |
 
-聚合器不允许“就近使用旧报告”；上表所有子报告必须属于本次 exact commit 和本次声明的输入/制品 digest。
+聚合器不允许“就近使用旧报告”。普通 ancestor 报告只证明其 claimed commit，必须通过受控 input closure、隔离重跑或受信 provenance 后才可复用；任何对应输入变化都必须重跑。RC commit A 到 metadata-only commit B 必须由 P52 专用 equivalence attestation 桥接，不得用普通 ancestor 复用规则代替。
 
 P03/P04 验证成功时，工具先在忽略的 `build/reports/<phase>/canonical-summary.json` 产生脱敏候选；经评审后才可将候选提升为 `spec/evidence/` 内的 canonical 内容摘要，并在确实存在时附带 Ed25519 attestation。canonical summary 的逻辑字段顺序为 P03 `schema_version, kind, subject, reviewer, result, attested_at`，P04 `schema_version, kind, gate, subject, approver, result, attested_at`；实际序列化按 RFC 8785/JCS 确定键顺序，`summary_sha256` 和 `attestation` 不进入被摘要内容。任何原始评审正文、账户证明、凭据或私密联系信息都不得进入 Git。
 
@@ -197,36 +203,40 @@ spec freeze
  → schema/API/fixture digest
  → codegen + SDK build
  → conformance + migration + fault/HA
- → P39 implement release orchestration/evidence toolchain
- → P40 read-only reproducible release dry-run
- → P41 private code-complete verification
- → P42 external public-configuration gate
- → P43 regenerate every public-namespace artifact
- → P44 final public-namespace verification
- → P45 deliver v1.0.0-rc.N from commit A
- → P46 independent/external evidence bound to commit A RC
- → P47 read-only freeze + deterministic final overlay/tree digest
- → P48 exact approved overlay creates metadata-only commit B and delivers v1
+ → P39 package/container/SBOM/provenance/signing orchestration
+ → P40 external evidence schemas/validators/trusted roles
+ → P41 report provenance/lineage/aggregate tooling
+ → P42 final-overlay/equivalence/delivery tooling
+ → P43 read-only reproducible release dry-run
+ → P44 private code-complete verification
+ → P45 external public-configuration gate
+ → P46 regenerate deterministic public RC source tree
+ → P47 create and freeze clean RC source commit A
+ → P48 strictly read-only verification on A
+ → P49 publish v1.0.0-rc.N from A without changing tree
+ → P50 independent/external evidence bound to A RC
+ → P51 verify unsigned canonical final overlay and expected B tree
+ → P52 external release-approver signs A→B equivalence attestation
+ → P53 apply approved overlay, create metadata-only B and deliver v1
 ```
 
-开发期 P05 的本地 proxy/bootstrap 先装入 root pseudo-version，再以 `GOWORK=off` 验证 nested。语言打包 primitive 分别由 P27/P28 实现，Container primitive 由 P37 实现；P39 只编排这些能力并实现 SBOM/provenance/signing、外部证据 validator、聚合器与 freeze/delivery checker，不重写 build primitive。
+开发期 P05 的本地 proxy/bootstrap 先装入 root pseudo-version，再以 `GOWORK=off` 验证 nested。语言打包 primitive 分别由 P27/P28 实现，Container primitive 由 P37 实现；P39 只编排这些能力与 SBOM/provenance/signing，P40 专门实现证据 Schema/validator/trusted roles，P41 专门实现 lineage/aggregate，P42 专门实现 RC freeze/final overlay/equivalence/delivery 检查工具，四者均不重写 build primitive。
 
-| P39 实现的后期工具 | 使用阶段 |
+| 实现 owner | 后期工具 | 使用阶段 |
 | --- | --- |
-| external-config evidence Schema + validator | P42 |
-| public namespace report aggregator | P44 |
-| external-conformance evidence Schema + validator | P46 |
-| deterministic freeze/final-overlay/tree-digest checker | P47 |
-| approved-overlay/payload-equivalence/final-delivery checker | P48 |
-| 通用 report schema/verifier 集成、SBOM/provenance/signing orchestration | P40–P48 |
+| P39 | package/container orchestration、SBOM/provenance/signing、durable publish journal | P43、P49、P53 |
+| P40 | external-config/external-conformance evidence Schema + validator、trusted role registry | P45、P50、P52 |
+| P41 | public report aggregator、cross-commit lineage/provenance verifier | P44、P48、P53 |
+| P42 | RC source freeze、deterministic final-overlay/tree-digest 与 payload-equivalence checker | P47、P51、P52 |
+| P42 | approved-overlay/final-delivery checker | P53 |
 
 上述 Gate 的原始证据始终在仓库外；validator 只能接受受信 key registry 中对应角色的有效签名，或显式人工可信渠道记录，不能把自报身份或裸内容 hash 当作批准。
 
-P41 前所有制品只允许 private/dev snapshot；取消独立公共 v0.1 里程碑。P42 填入真实域名、包所有权、两名 Maintainer 和安全入口后，必须执行 P43 全量再生成和 P44 只读验证。首个公开候选是 P45 的最终 `v1.0.0-rc.N`，不得用 v0.1 或本地伪制品代替。
+P44 及之前所有制品只允许 private/dev snapshot；取消独立公共 v0.1 里程碑。P45 验证真实域名、包所有权、两名 Maintainer 和安全入口后，P46 全量再生成 RC tree，P47 再单独创建并冻结 clean source commit A，P48 只读验证 A。首个公开候选是 P49 从 A 发布的 `v1.0.0-rc.N`，不得用 v0.1 或本地伪制品代替。
 
-P45 RC 对应 source commit A；A 中 nested `go.mod` 精确 require root RC。P46 的每条外部证据必须绑定 commit A、Schema Bundle、Runner 和被测 Artifact Digest。任何 tracked 规范、Schema、传输、Runner、安全或兼容变化都使证据失效，必须回 P43 产生新 RC 并重取证。
+P46 在真实配置下全量再生成 RC source tree，写入 RC version metadata 和 nested root RC dependency，但不创建 commit/tag。P47 orchestrator 只从已验收 tree 创建并冻结 clean source commit A；P48 只验证已存在的 clean A，不创建 commit/tag 或修复代码。P49 从同一 A 以 create-only 语义发布 root `v1.0.0-rc.N` 与 nested `reference/control-plane/v1.0.0-rc.N` tags 及其他不可变制品，不能改变 tree；任何 partial publish 只能从同一 A/digest journal 续传，remote digest 冲突必须 `incident-blocked`。P50 的每条外部证据必须绑定 exact A commit/tree、Schema Bundle、Runner 和被测 Artifact digests，且 evidence principal 与项目发布者/维护者职责分离。任何 tracked 规范、Schema、传输、Runner、安全或兼容变化都使证据失效，必须回 P46 产生新 A/RC 并重取证。
 
-P47 在临时树生成确定性 final overlay，仅允许版本/channel/tag 元数据、nested `go.mod` 的 root 依赖从 RC 改为 `v1.0.0` 以及必要 lock/checksum。它审核 overlay digest、预期 commit B tree digest 和 payload equivalence，并用签名 A→B equivalence attestation 连接 P46 的 commit A 证据。P48 只能精确应用该 overlay 创建 release-metadata-only commit B；B tree digest 必须等于 P47 批准值，再按 root final→proxy 可解析→nested final 顺序发布。Schema/API/Runner、生成模型和逻辑不得变化，最终本地制品必须重跑 Conformance/SBOM/provenance。
+P51 在隔离临时树生成并审核确定性 unsigned final overlay candidate，仅允许版本/channel/tag 元数据、nested `go.mod` 的 root 依赖从 RC 改为 `v1.0.0` 以及必要 lock/checksum，并计算 overlay digest、expected B tree 与 payload equivalence，不签名、不创建 B。P52 只验证仓库外 `release_approver` trusted key 或允许 Sigstore identity 签发的 A→B equivalence attestation；attestation 必须绑定 A commit/tree、overlay digest、expected B tree、payload/equivalence/phase policy、时间和精确 bridged reports，dry-run key 不得用于正式签发。P53 只能精确应用已批准 overlay 创建直接单父 `parent=A` 的 release-metadata-only commit B；现场 B tree 必须等于 attestation 批准值，再按所有不可变 root final 制品→proxy 可解析→nested final→mutable channel expected-previous CAS 顺序发布。Partial publish 只允许同一 B/digest journal 断点恢复，冲突失败闭合。Schema/API/Runner、生成模型和逻辑不得变化，final local 制品必须在 B 重跑 Conformance/SBOM/provenance。
 
 # 13. Console 与下游隔离
 
@@ -234,4 +244,4 @@ P47 在临时树生成确定性 final overlay，仅允许版本/channel/tag 元�
 
 # 14. 实施入口与停机点
 
-实施必须按 [P01–P48](DEVELOPMENT_PLAN.md) 的 DAG 推进。P04 是用户明确确认计划的停机 Gate；未通过前不得执行 P05 物理重构。P42 和 P46 是外部证据 Gate，仓库内 Fixture 或自我签字不能代替。
+实施必须按 [P01–P53](DEVELOPMENT_PLAN.md) 的 DAG 推进。P04 是用户明确确认计划的停机 Gate；未通过前不得执行 P05 物理重构。P45、P50 和 P52 是外部证据 Gate，仓库内 Fixture、自我签字或裸内容 hash 不能代替。

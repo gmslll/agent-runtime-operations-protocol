@@ -1,118 +1,153 @@
 schema_version: 1
 catalog_id: arop-artifact-catalog-v1
 updated: 2026-09-22
-purpose: >-
-  AROP 唯一机器可读的当前与规划制品目录。面向人的目录树不得
-  被解释为第二份制品清单。
-
+purpose: AROP 唯一机器可读的当前与规划制品目录。面向人的目录树不得 被解释为第二份制品清单。
 authority_chain:
   - rank: 1
     role: decision_constraints
-    sources: [decisions]
+    sources:
+      - decisions
     rule: 已确认 Decision 约束所有规范、Schema、传输绑定和实现。
   - rank: 2
     role: behavioral_authority
-    sources: [protocol-specification, registry-specification, run-streaming-specification, state-machine-fixtures]
+    sources:
+      - protocol-specification
+      - registry-specification
+      - run-streaming-specification
+      - base-state-machine-fixtures
     rule: 领域规范与状态机 Fixture 共同定义可观测行为。
   - rank: 3
     role: structural_authority
-    sources: [schema-bundle]
+    sources:
+      - schema-bundle
     rule: JSON Schema 定义结构、必填性、格式和枚举。
   - rank: 4
     role: transport_binding
-    sources: [openapi-bundle, asyncapi-bundle]
+    sources:
+      - openapi-bundle
+      - asyncapi-bundle
     rule: OpenAPI 和 AsyncAPI 只定义传输绑定，不重新定义数据语义。
   - rank: 5
     role: derived_non_authoritative
-    sources: [generated-models, sdk-bundle, reference-control-plane, conformance-reports]
+    sources:
+      - generated-models
+      - sdk-bundle
+      - reference-control-plane
+      - conformance-reports
     rule: 生成物、SDK、参考实现和报告均非规范权威。
-
 statuses:
   present: 路径当前必须存在。
   planned: 已规划职责和路径、仍待 P04 批准或后续实现；不可宣称已交付。
-
 artifacts:
   - id: repository-readme
     path: README.md
     status: present
     kind: human-document
     authority: explanatory
-    derives_from: [decisions, artifact-catalog]
+    derives_from:
+      - decisions
+      - artifact-catalog
+    path_role: concrete
   - id: repository-license
     path: LICENSE
     status: present
     kind: legal
     authority: evidence
-    derives_from: [decisions]
+    derives_from:
+      - decisions
+    path_role: concrete
   - id: contribution-policy
     path: CONTRIBUTING.md
     status: present
     kind: governance-document
     authority: behavior
-    derives_from: [decisions]
+    derives_from:
+      - decisions
+    path_role: concrete
   - id: security-policy
     path: SECURITY.md
     status: present
     kind: governance-document
     authority: behavior
-    derives_from: [decisions]
+    derives_from:
+      - decisions
+    path_role: concrete
   - id: code-of-conduct
     path: CODE_OF_CONDUCT.md
     status: present
     kind: governance-document
     authority: behavior
-    derives_from: [decisions]
+    derives_from:
+      - decisions
+    path_role: concrete
   - id: rfc-process
     path: rfcs/README.md
     status: present
     kind: governance-document
     authority: behavior
-    derives_from: [decisions]
+    derives_from:
+      - decisions
+    path_role: concrete
   - id: rfc-template
     path: rfcs/template.md
     status: present
     kind: template
     authority: derived
-    derives_from: [rfc-process]
+    derives_from:
+      - rfc-process
+    path_role: concrete
   - id: artifact-catalog
     path: spec/artifact-manifest.yaml
     status: present
     kind: catalog
     authority: catalog
-    derives_from: [decisions]
+    derives_from:
+      - decisions
+    path_role: concrete
   - id: immutable-requirements
     path: spec/requirements.yaml
     status: present
     kind: traceability
     authority: evidence
-    derives_from: [decisions, artifact-catalog]
+    derives_from:
+      - decisions
+      - artifact-catalog
+    path_role: concrete
   - id: conflict-ledger
     path: spec/conflicts.yaml
     status: present
     kind: decision-evidence
     authority: evidence
-    derives_from: [decisions]
+    derives_from:
+      - decisions
+    path_role: concrete
   - id: artifact-catalog-meta-schema
     path: spec/schemas/artifact-manifest.schema.json
     status: present
     kind: planning-json-schema
     authority: structure
     language: language-neutral
-    derives_from: [artifact-catalog]
+    derives_from:
+      - artifact-catalog
+    path_role: concrete
   - id: immutable-requirements-meta-schema
     path: spec/schemas/requirements.schema.json
     status: present
     kind: planning-json-schema
     authority: structure
     language: language-neutral
-    derives_from: [immutable-requirements]
+    derives_from:
+      - immutable-requirements
+    path_role: concrete
   - id: conflict-ledger-meta-schema
     path: spec/schemas/conflicts.schema.json
     status: present
     kind: planning-json-schema
     authority: structure
     language: language-neutral
-    derives_from: [conflict-ledger]
+    derives_from:
+      - conflict-ledger
+    path_role: concrete
   - id: check-report-meta-schema
     path: spec/schemas/check-report.schema.json
     status: present
@@ -123,237 +158,432 @@ artifacts:
     owner_phase: P01
     acceptance_test: make-spec-index-check
     exposure: repository-internal
-    derives_from: [decisions]
+    derives_from:
+      - decisions
+    path_role: concrete
   - id: planning-audit-evidence-schema
     path: spec/schemas/planning-audit-evidence.schema.json
     status: present
     kind: planning-json-schema
     authority: structure
     language: language-neutral
-    derives_from: [development-plan, immutable-requirements]
+    derives_from:
+      - development-plan
+      - immutable-requirements
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
   - id: user-gate-evidence-schema
     path: spec/schemas/user-gate-evidence.schema.json
     status: present
     kind: planning-json-schema
     authority: structure
     language: language-neutral
-    derives_from: [development-plan]
+    derives_from:
+      - development-plan
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
   - id: decisions
     path: docs/DECISIONS.md
     status: present
     kind: normative-document
     authority: decision
     derives_from: []
+    path_role: concrete
   - id: architecture
     path: docs/ARCHITECTURE.md
     status: present
     kind: normative-document
     authority: behavior
-    derives_from: [decisions]
+    derives_from:
+      - decisions
+    path_role: concrete
   - id: protocol-specification
     path: docs/PROTOCOL_SPECIFICATION.md
     status: present
     kind: normative-document
     authority: behavior
-    derives_from: [decisions]
+    derives_from:
+      - decisions
+    path_role: concrete
   - id: registry-specification
     path: docs/REGISTRY_AND_DISCOVERY.md
     status: present
     kind: normative-document
     authority: behavior
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: run-streaming-specification
     path: docs/RUN_AND_STREAMING.md
     status: present
     kind: normative-document
     authority: behavior
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: security-governance-specification
     path: docs/SECURITY_AND_GOVERNANCE.md
     status: present
     kind: normative-document
     authority: behavior
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: reliability-specification
     path: docs/RELIABILITY_AND_OPERATIONS.md
     status: present
     kind: normative-document
     authority: behavior
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: interoperability-specification
     path: docs/INTEROPERABILITY.md
     status: present
     kind: normative-document
     authority: behavior
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: sdk-dx-specification
     path: docs/SDK_AND_DX.md
     status: present
     kind: normative-document
     authority: behavior
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: public-adoption-policy
     path: docs/PUBLIC_PROJECT_AND_ADOPTION.md
     status: present
     kind: governance-document
     authority: behavior
-    derives_from: [decisions]
+    derives_from:
+      - decisions
+    path_role: concrete
   - id: repository-layout
     path: docs/DIRECTORY_STRUCTURE.md
     status: present
     kind: human-document
     authority: explanatory
-    derives_from: [artifact-catalog, decisions]
+    derives_from:
+      - artifact-catalog
+      - decisions
+    path_role: concrete
   - id: development-plan
     path: docs/DEVELOPMENT_PLAN.md
     status: present
     kind: plan
     authority: explanatory
-    derives_from: [immutable-requirements, artifact-catalog, decisions]
+    derives_from:
+      - immutable-requirements
+      - artifact-catalog
+      - decisions
+    path_role: concrete
   - id: implementation-blueprint
     path: docs/IMPLEMENTATION_BLUEPRINT.md
     status: present
     kind: implementation-blueprint
     authority: explanatory
-    derives_from: [decisions, immutable-requirements, artifact-catalog, repository-layout]
-
+    derives_from:
+      - decisions
+      - immutable-requirements
+      - artifact-catalog
+      - repository-layout
+    path_role: concrete
   - id: schema-identifiers
     path: schemas/common/identifiers.schema.json
     status: present
     kind: json-schema
     authority: structure
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: schema-error
     path: schemas/common/error.schema.json
     status: present
     kind: json-schema
     authority: structure
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: schema-trace
     path: schemas/common/trace.schema.json
     status: present
     kind: json-schema
     authority: structure
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: schema-content-part
     path: schemas/common/content-part.schema.json
     status: present
     kind: json-schema
     authority: structure
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: schema-manifest
     path: schemas/manifest/agent-manifest-v1.schema.json
     status: present
     kind: json-schema
     authority: structure
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: schema-asset-ref
     path: schemas/resources/asset-ref-v1.schema.json
     status: present
     kind: json-schema
     authority: structure
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: schema-data-ref
     path: schemas/resources/data-ref-v1.schema.json
     status: present
     kind: json-schema
     authority: structure
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: schema-secret-ref
     path: schemas/resources/secret-ref-v1.schema.json
     status: present
     kind: json-schema
     authority: structure
-    derives_from: [decisions, protocol-specification]
+    derives_from:
+      - decisions
+      - protocol-specification
+    path_role: concrete
   - id: schema-registry-runtime-instance
     path: schemas/registry/runtime-instance-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, registry-specification]
+    path_role: concrete
+    derives_from:
+      - decisions
+      - registry-specification
+    language: language-neutral
+    owner: registry-core
+    owner_phase: P14
+    acceptance_test: make-test-registry-core
+    exposure: public-contract
   - id: schema-registry-lease
     path: schemas/registry/lease-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, registry-specification]
+    path_role: concrete
+    derives_from:
+      - decisions
+      - registry-specification
+    language: language-neutral
+    owner: registry-core
+    owner_phase: P14
+    acceptance_test: make-test-registry-core
+    exposure: public-contract
   - id: schema-discovery-snapshot
     path: schemas/registry/discovery-snapshot-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, registry-specification]
+    path_role: concrete
+    derives_from:
+      - schema-registry-runtime-instance
+      - schema-registry-lease
+      - schema-registry-event
+    language: language-neutral
+    owner: registry-api-sdk
+    owner_phase: P15
+    acceptance_test: make-test-registry-api
+    exposure: public-contract
   - id: schema-registry-event
     path: schemas/registry/registry-event-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, registry-specification]
+    path_role: concrete
+    derives_from:
+      - decisions
+      - registry-specification
+    language: language-neutral
+    owner: registry-core
+    owner_phase: P14
+    acceptance_test: make-test-registry-core
+    exposure: public-contract
   - id: schema-run-request
     path: schemas/runtime/run-request-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, run-streaming-specification]
+    path_role: concrete
+    derives_from:
+      - decisions
+      - run-streaming-specification
+    language: language-neutral
+    owner: run-service
+    owner_phase: P18
+    acceptance_test: make-test-run-lifecycle
+    exposure: public-contract
   - id: schema-run-status
     path: schemas/runtime/run-status-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, run-streaming-specification]
+    path_role: concrete
+    derives_from:
+      - decisions
+      - run-streaming-specification
+    language: language-neutral
+    owner: run-service
+    owner_phase: P18
+    acceptance_test: make-test-run-lifecycle
+    exposure: public-contract
   - id: schema-attempt
     path: schemas/runtime/attempt-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, run-streaming-specification]
+    path_role: concrete
+    derives_from:
+      - schema-run-request
+      - schema-run-status
+      - run-streaming-specification
+    language: language-neutral
+    owner: dispatch-security
+    owner_phase: P19
+    acceptance_test: make-test-dispatch-ticket
+    exposure: public-contract
   - id: schema-command
     path: schemas/runtime/command-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, run-streaming-specification]
+    path_role: concrete
+    derives_from:
+      - decisions
+      - run-streaming-specification
+    language: language-neutral
+    owner: run-service
+    owner_phase: P18
+    acceptance_test: make-test-run-lifecycle
+    exposure: public-contract
   - id: schema-result
     path: schemas/runtime/result-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, run-streaming-specification]
+    path_role: concrete
+    derives_from:
+      - decisions
+      - run-streaming-specification
+    language: language-neutral
+    owner: run-service
+    owner_phase: P18
+    acceptance_test: make-test-run-lifecycle
+    exposure: public-contract
   - id: schema-event-envelope
     path: schemas/events/event-envelope-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, run-streaming-specification]
+    path_role: concrete
+    derives_from:
+      - schema-run-status
+      - schema-result
+      - run-streaming-specification
+    language: language-neutral
+    owner: event-ledger
+    owner_phase: P20
+    acceptance_test: make-test-event-ledger
+    exposure: public-contract
   - id: schema-lifecycle-events
     path: schemas/events/lifecycle-events-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, run-streaming-specification]
+    path_role: concrete
+    derives_from:
+      - schema-run-status
+      - schema-result
+      - run-streaming-specification
+    language: language-neutral
+    owner: event-ledger
+    owner_phase: P20
+    acceptance_test: make-test-event-ledger
+    exposure: public-contract
   - id: schema-output-events
     path: schemas/events/output-events-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, run-streaming-specification]
+    path_role: concrete
+    derives_from:
+      - schema-run-status
+      - schema-result
+      - run-streaming-specification
+    language: language-neutral
+    owner: event-ledger
+    owner_phase: P20
+    acceptance_test: make-test-event-ledger
+    exposure: public-contract
   - id: schema-progress-events
     path: schemas/events/progress-events-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, run-streaming-specification]
+    path_role: concrete
+    derives_from:
+      - schema-run-status
+      - schema-result
+      - run-streaming-specification
+    language: language-neutral
+    owner: event-ledger
+    owner_phase: P20
+    acceptance_test: make-test-event-ledger
+    exposure: public-contract
   - id: schema-usage-events
     path: schemas/events/usage-events-v1.schema.json
     status: planned
     kind: json-schema
     authority: structure
-    derives_from: [decisions, run-streaming-specification]
+    path_role: concrete
+    derives_from:
+      - schema-run-status
+      - schema-result
+      - run-streaming-specification
+    language: language-neutral
+    owner: event-ledger
+    owner_phase: P20
+    acceptance_test: make-test-event-ledger
+    exposure: public-contract
   - id: schema-bundle
     path: schemas
-    status: present
+    status: planned
     kind: bundle
     authority: structure
+    path_role: aggregate
     derives_from:
       - schema-identifiers
       - schema-error
@@ -377,1123 +607,3535 @@ artifacts:
       - schema-output-events
       - schema-progress-events
       - schema-usage-events
-
+      - schema-asset-exchange
+      - schema-dispatch-ticket
+      - schema-jwks-metadata
+      - schema-event-session
+      - schema-worker-claim
+      - schema-worker-complete
+    completion_phase: P24
+    acceptance_test: make-test-worker-service
+    exposure: public-contract
   - id: openapi-agent-runtime
     path: openapi/agent-runtime-v1.yaml
     status: planned
     kind: openapi
     authority: transport
+    path_role: concrete
+    derives_from:
+      - schema-run-request
+      - schema-command
+      - schema-result
+      - schema-event-envelope
+    capabilities:
+      - agent-runtime-direct
+      - agent-runtime-proxy
     owner: go-provider-delivery
-    phase: P21
     owner_phase: P21
-    tests: [make-test-direct-proxy-provider]
     acceptance_test: make-test-direct-proxy-provider
     exposure: public-contract
-    capabilities: [agent-runtime-direct, agent-runtime-proxy]
-    derives_from: [schema-bundle, run-streaming-specification]
   - id: openapi-control-plane
     path: openapi/control-plane-v1.yaml
     status: planned
     kind: openapi
     authority: transport
-    owner: publication-contracts
-    phase: P11
-    owner_phase: P11
-    tests: [make-test-publication-contracts]
-    acceptance_test: make-test-publication-contracts
+    path_role: aggregate
+    derives_from:
+      - openapi-control-plane-foundation
+      - openapi-control-plane-asset-fragment
+      - openapi-control-plane-run-fragment
+      - openapi-control-plane-dispatch-fragment
+      - openapi-control-plane-event-fragment
+    completion_phase: P20
+    acceptance_test: make-test-event-ledger
     exposure: public-contract
-    capabilities: [publication, run-control, jwks-discovery, event-session-exchange, asset-token-exchange]
-    derives_from: [schema-bundle, protocol-specification, run-streaming-specification, security-governance-specification]
   - id: openapi-registry-runtime
     path: openapi/registry-runtime-v1.yaml
     status: planned
     kind: openapi
     authority: transport
+    path_role: concrete
+    derives_from:
+      - schema-registry-runtime-instance
+      - schema-registry-lease
+      - schema-registry-event
+    capabilities:
+      - runtime-registration
+      - lease-keepalive
+      - runtime-drain
     owner: registry-api-sdk
-    phase: P15
     owner_phase: P15
-    tests: [make-test-registry-api]
     acceptance_test: make-test-registry-api
     exposure: public-contract
-    capabilities: [runtime-registration, lease-keepalive, runtime-drain]
-    derives_from: [schema-bundle, registry-specification]
   - id: openapi-discovery-runtime
     path: openapi/discovery-runtime-v1.yaml
     status: planned
     kind: openapi
     authority: transport
+    path_role: concrete
+    derives_from:
+      - schema-discovery-snapshot
+      - schema-registry-event
+    capabilities:
+      - discovery-snapshot
+      - discovery-watch
     owner: registry-api-sdk
-    phase: P15
     owner_phase: P15
-    tests: [make-test-registry-api]
     acceptance_test: make-test-registry-api
     exposure: public-contract
-    capabilities: [discovery-snapshot, discovery-watch]
-    derives_from: [schema-bundle, registry-specification]
   - id: openapi-worker-runtime
     path: openapi/worker-runtime-v1.yaml
     status: planned
     kind: openapi
     authority: transport
+    path_role: concrete
+    derives_from:
+      - schema-worker-claim
+      - schema-worker-complete
+      - schema-event-envelope
+    capabilities:
+      - worker-claim
+      - attempt-lease
+      - attempt-complete
     owner: worker-service
-    phase: P24
     owner_phase: P24
-    tests: [make-test-worker-service]
     acceptance_test: make-test-worker-service
     exposure: public-contract
-    capabilities: [worker-claim, attempt-lease, attempt-complete]
-    derives_from: [schema-bundle, run-streaming-specification]
   - id: openapi-bundle
     path: openapi
     status: planned
     kind: bundle
     authority: transport
-    owner: publication-contracts
-    phase: P11
-    owner_phase: P11
-    tests: [make-test-publication-contracts]
-    acceptance_test: make-test-publication-contracts
+    path_role: aggregate
+    derives_from:
+      - openapi-control-plane
+      - openapi-registry-runtime
+      - openapi-discovery-runtime
+      - openapi-agent-runtime
+      - openapi-worker-runtime
+    completion_phase: P24
+    acceptance_test: make-test-worker-service
     exposure: public-contract
-    derives_from: [openapi-control-plane, openapi-agent-runtime, openapi-registry-runtime, openapi-discovery-runtime, openapi-worker-runtime]
   - id: asyncapi-agent-events
     path: asyncapi/agent-events-v1.yaml
     status: planned
     kind: asyncapi
     authority: transport
+    path_role: concrete
+    derives_from:
+      - schema-event-envelope
+      - schema-lifecycle-events
+      - schema-output-events
+      - schema-progress-events
+      - schema-usage-events
     owner: streaming-delivery
-    phase: P22
     owner_phase: P22
-    tests: [make-test-streaming-resume]
     acceptance_test: make-test-streaming-resume
     exposure: public-contract
-    derives_from: [schema-event-envelope, run-streaming-specification]
   - id: asyncapi-bundle
     path: asyncapi
     status: planned
     kind: bundle
     authority: transport
-    owner: streaming-delivery
-    phase: P22
-    owner_phase: P22
-    tests: [make-test-streaming-resume]
+    path_role: aggregate
+    derives_from:
+      - asyncapi-agent-events
+    completion_phase: P22
     acceptance_test: make-test-streaming-resume
     exposure: public-contract
-    derives_from: [asyncapi-agent-events]
-
   - id: manifest-fixtures
     path: examples/manifests
-    status: present
+    status: planned
     kind: golden-fixtures
     authority: evidence
-    owner: publication-service
-    phase: P12
-    owner_phase: P12
-    tests: [make-test-publication-service]
+    path_role: aggregate
+    derives_from:
+      - manifest-digest-vectors
+      - publication-fixtures
+    completion_phase: P12
     acceptance_test: make-test-publication-service
     exposure: public-contract
-    derives_from: [schema-manifest, protocol-specification]
   - id: registry-fixtures
-    path: examples/registry
+    path: conformance/fixtures/registry
     status: planned
-    kind: golden-fixtures
-    authority: evidence
+    kind: behavioral-fixtures
+    authority: behavior
+    path_role: concrete
+    derives_from:
+      - schema-registry-runtime-instance
+      - schema-registry-lease
+      - schema-registry-event
     owner: registry-core
-    phase: P14
     owner_phase: P14
-    tests: [make-test-registry-core]
     acceptance_test: make-test-registry-core
-    exposure: repository-internal
-    derives_from: [registry-specification, schema-registry-event]
+    exposure: public-contract
   - id: run-fixtures
-    path: examples/runs
+    path: conformance/fixtures/run
     status: planned
-    kind: golden-fixtures
-    authority: evidence
+    kind: behavioral-fixtures
+    authority: behavior
+    path_role: concrete
+    derives_from:
+      - schema-run-request
+      - schema-run-status
+      - schema-command
+      - schema-result
     owner: run-service
-    phase: P18
     owner_phase: P18
-    tests: [make-test-run-lifecycle]
     acceptance_test: make-test-run-lifecycle
-    exposure: repository-internal
-    derives_from: [run-streaming-specification, schema-run-request, schema-run-status]
+    exposure: public-contract
   - id: event-fixtures
-    path: examples/events
+    path: conformance/fixtures/events
     status: planned
-    kind: golden-fixtures
-    authority: evidence
+    kind: behavioral-fixtures
+    authority: behavior
+    path_role: concrete
+    derives_from:
+      - schema-event-envelope
+      - schema-lifecycle-events
+      - schema-output-events
+      - schema-progress-events
+      - schema-usage-events
     owner: event-ledger
-    phase: P20
     owner_phase: P20
-    tests: [make-test-event-ledger]
     acceptance_test: make-test-event-ledger
-    exposure: repository-internal
-    derives_from: [run-streaming-specification, schema-event-envelope]
+    exposure: public-contract
   - id: asset-fixtures
     path: examples/assets
     status: planned
     kind: golden-fixtures
     authority: evidence
+    path_role: concrete
+    derives_from:
+      - schema-asset-ref
+      - security-governance-specification
     owner: asset-broker
-    phase: P13
     owner_phase: P13
-    tests: [make-test-asset-broker]
     acceptance_test: make-test-asset-broker
     exposure: repository-internal
-    derives_from: [schema-asset-ref, security-governance-specification]
   - id: dispatch-fixtures
-    path: examples/dispatch
+    path: conformance/fixtures/dispatch
     status: planned
-    kind: golden-fixtures
-    authority: evidence
+    kind: behavioral-fixtures
+    authority: behavior
+    path_role: concrete
+    derives_from:
+      - schema-attempt
+      - run-fixtures
     owner: dispatch-security
-    phase: P19
     owner_phase: P19
-    tests: [make-test-dispatch-ticket]
     acceptance_test: make-test-dispatch-ticket
-    exposure: repository-internal
-    derives_from: [schema-attempt, run-streaming-specification]
+    exposure: public-contract
   - id: worker-fixtures
-    path: examples/workers
+    path: conformance/fixtures/worker
     status: planned
-    kind: golden-fixtures
-    authority: evidence
+    kind: behavioral-fixtures
+    authority: behavior
+    path_role: concrete
+    derives_from:
+      - openapi-worker-runtime
+      - event-fixtures
     owner: worker-service
-    phase: P24
     owner_phase: P24
-    tests: [make-test-worker-service]
     acceptance_test: make-test-worker-service
-    exposure: repository-internal
-    derives_from: [schema-attempt, run-streaming-specification]
+    exposure: public-contract
   - id: error-fixtures
     path: examples/errors
     status: planned
     kind: golden-fixtures
     authority: evidence
+    path_role: concrete
+    derives_from:
+      - schema-error
+      - protocol-specification
     owner: protocol-foundation
-    phase: P06
     owner_phase: P06
-    tests: [make-test-protocol-foundation]
     acceptance_test: make-test-protocol-foundation
     exposure: public-contract
-    derives_from: [schema-error, protocol-specification]
   - id: manifest-digest-vectors
     path: examples/manifests/digests.json
     status: present
     kind: golden-fixtures
     authority: evidence
-    derives_from: [schema-manifest, decisions]
-  - id: state-machine-fixtures
-    path: conformance/fixtures/state-machines
-    status: planned
-    kind: behavioral-fixtures
-    authority: behavior
-    owner: protocol-foundation
-    phase: P06
-    owner_phase: P06
-    tests: [make-test-protocol-foundation]
-    acceptance_test: make-test-protocol-foundation
-    exposure: public-contract
-    derives_from: [protocol-specification, registry-specification, run-streaming-specification]
+    derives_from:
+      - schema-manifest
+      - decisions
+    path_role: concrete
   - id: conformance-fixtures
     path: conformance/fixtures
     status: planned
     kind: conformance
     authority: evidence
-    owner: protocol-foundation
-    phase: P06
-    owner_phase: P06
-    tests: [make-test-protocol-foundation]
-    acceptance_test: make-test-protocol-foundation
+    path_role: aggregate
+    derives_from:
+      - base-state-machine-fixtures
+      - publication-contract-fixtures
+      - registry-fixtures
+      - registry-watch-fixtures
+      - run-fixtures
+      - dispatch-fixtures
+      - event-fixtures
+      - provider-reliability-fixtures
+      - streaming-fixtures
+      - worker-fixtures
+      - codegen-representative-spike
+    completion_phase: P24
+    acceptance_test: make-test-worker-service
     exposure: public-contract
-    derives_from: [schema-bundle, state-machine-fixtures, openapi-bundle, asyncapi-bundle]
   - id: conformance-reports
     path: conformance/reports
     status: planned
     kind: reports
     authority: derived
-    derives_from: [conformance-fixtures]
+    path_role: aggregate
+    derives_from:
+      - conformance-fixtures
+      - portable-conformance-runner
+      - fault-ha-harness
+    completion_phase: P35
+    acceptance_test: make-test-fault-ha-drivers
+    exposure: public-contract
   - id: compatibility-matrix
     path: compatibility/implementation-matrix.yaml
     status: present
     kind: compatibility-evidence
     authority: evidence
-    derives_from: [conformance-reports]
+    derives_from:
+      - interoperability-specification
+    path_role: concrete
+    runtime_inputs:
+      - conformance-reports
+      - external-evidence-gate-reports
   - id: upstream-version-matrix
     path: compatibility/upstream-versions.yaml
     status: present
     kind: compatibility-evidence
     authority: evidence
-    derives_from: [interoperability-specification]
-
+    derives_from:
+      - interoperability-specification
+    path_role: concrete
   - id: generated-models
     path: sdk/go/generated
     status: planned
     kind: generated-code
     authority: derived
-    language: go
-    owner: code-generation
-    phase: P07
-    owner_phase: P07
-    tests: [make-test-codegen-pipeline]
-    acceptance_test: make-test-codegen-pipeline
+    path_role: aggregate
+    derives_from:
+      - generated-control-plane-go
+      - generated-asset-go
+      - generated-registry-go
+      - generated-run-go
+      - generated-dispatch-go
+      - generated-event-go
+      - generated-streaming-go
+      - generated-worker-go
+    completion_phase: P24
+    acceptance_test: make-test-worker-service
     exposure: public-contract
-    derives_from: [schema-bundle]
+    language: go
   - id: generated-python-models
     path: sdk/python/src/arop/generated
     status: planned
     kind: generated-code
     authority: derived
-    language: python
-    owner: code-generation
-    phase: P07
-    owner_phase: P07
-    tests: [make-test-codegen-pipeline]
-    acceptance_test: make-test-codegen-pipeline
+    path_role: aggregate
+    derives_from:
+      - generated-control-plane-python
+      - generated-asset-python
+      - generated-registry-python
+      - generated-run-python
+      - generated-dispatch-python
+      - generated-event-python
+      - generated-streaming-python
+      - generated-worker-python
+    completion_phase: P24
+    acceptance_test: make-test-worker-service
     exposure: public-contract
-    derives_from: [schema-bundle]
+    language: python
   - id: generated-typescript-models
     path: sdk/typescript/src/generated
     status: planned
     kind: generated-code
     authority: derived
-    language: typescript
-    owner: code-generation
-    phase: P07
-    owner_phase: P07
-    tests: [make-test-codegen-pipeline]
-    acceptance_test: make-test-codegen-pipeline
+    path_role: aggregate
+    derives_from:
+      - generated-control-plane-typescript
+      - generated-asset-typescript
+      - generated-registry-typescript
+      - generated-run-typescript
+      - generated-dispatch-typescript
+      - generated-event-typescript
+      - generated-streaming-typescript
+      - generated-worker-typescript
+    completion_phase: P24
+    acceptance_test: make-test-worker-service
     exposure: public-contract
-    derives_from: [schema-bundle]
+    language: typescript
   - id: sdk-go
     path: sdk/go
     status: planned
     kind: sdk
     authority: derived
-    language: go
-    owner: protocol-foundation
-    phase: P06
-    owner_phase: P06
-    tests: [make-test-protocol-foundation]
-    acceptance_test: make-test-protocol-foundation
+    path_role: aggregate
+    derives_from:
+      - sdk-go-protocol-core
+      - generated-models
+      - go-registry-sdk
+      - go-provider-sdk
+      - provider-durable-store-port
+      - go-streaming-client
+      - go-worker-sdk
+      - go-manifest-library-baseline
+    completion_phase: P25
+    acceptance_test: make-test-go-worker-sdk
     exposure: public-contract
-    derives_from: [generated-models, openapi-bundle, asyncapi-bundle]
+    language: go
   - id: go-manifest-library-baseline
     path: sdk/go/protocol/manifest
     status: present
     kind: sdk-baseline
     authority: implementation
     language: go
-    derives_from: [schema-manifest, manifest-digest-vectors]
+    derives_from:
+      - schema-manifest
+      - manifest-digest-vectors
+    path_role: concrete
   - id: sdk-python
     path: sdk/python
     status: planned
     kind: sdk
     authority: derived
-    language: python
-    owner: python-provider
-    phase: P27
-    owner_phase: P27
-    tests: [make-test-python-provider]
+    path_role: aggregate
+    derives_from:
+      - generated-python-models
+      - python-provider-sdk
+      - python-asgi-runtime
+      - python-package-primitive
+    completion_phase: P27
     acceptance_test: make-test-python-provider
     exposure: public-contract
-    derives_from: [generated-python-models, openapi-bundle, asyncapi-bundle]
+    language: python
   - id: sdk-typescript
     path: sdk/typescript
     status: planned
     kind: sdk
     authority: derived
-    language: typescript
-    owner: typescript-consumer
-    phase: P28
-    owner_phase: P28
-    tests: [make-test-typescript-consumer]
+    path_role: aggregate
+    derives_from:
+      - generated-typescript-models
+      - typescript-streaming-client
+      - typescript-consumer-sdk
+      - typescript-bff-web
+      - npm-package-primitive
+    completion_phase: P28
     acceptance_test: make-test-typescript-consumer
     exposure: public-contract
-    derives_from: [generated-typescript-models, openapi-bundle, asyncapi-bundle]
+    language: typescript
   - id: sdk-bundle
     path: sdk
     status: planned
     kind: bundle
     authority: derived
-    derives_from: [sdk-go, sdk-python, sdk-typescript]
+    path_role: aggregate
+    derives_from:
+      - sdk-go
+      - sdk-python
+      - sdk-typescript
+    completion_phase: P28
+    acceptance_test: make-test-typescript-consumer
+    exposure: public-contract
   - id: reference-control-plane
     path: reference/control-plane
     status: planned
     kind: go-reference-implementation
-    authority: implementation
-    owner: control-plane-platform
-    phase: P08
-    owner_phase: P08
-    tests: [make-test-control-plane-platform]
-    acceptance_test: make-test-control-plane-platform
+    authority: derived
+    path_role: aggregate
+    derives_from:
+      - reference-control-plane-server
+      - control-plane-platform-foundation
+      - audit-trace-ports
+      - audit-trace-memory-bootstrap
+      - migration-engine
+      - migration-engine-fixture-versions
+      - durable-audit-storage
+      - identity-service
+      - credential-store
+      - reference-secret-exchange
+      - publication-service
+      - asset-broker-service
+      - registry-core-service
+      - registry-api-service
+      - registry-recovery-service
+      - run-lifecycle-service
+      - dispatcher-ticket-service
+      - event-ledger-service
+      - direct-proxy-delivery-service
+      - streaming-service
+      - worker-pull-service
+      - sqlite-migrations
+      - postgres-migrations
+      - nested-control-plane-go-module
+      - server-conformance-driver
+    completion_phase: P34
+    acceptance_test: make-test-server-conformance
     exposure: reference-only
-    derives_from: [schema-bundle, openapi-bundle, asyncapi-bundle, state-machine-fixtures]
   - id: go-module-proxy-bootstrap
-    path: scripts/go-proxy-bootstrap
+    path: scripts/go-proxy-bootstrap.mjs
     status: planned
     kind: release-tooling
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - repository-layout
+      - decisions
+    capabilities:
+      - temporary-go-proxy
+      - nested-gowork-off-bootstrap
     owner: repository-layout
-    phase: P05
     owner_phase: P05
-    tests: [make-test-go-workspace]
     acceptance_test: make-test-go-workspace
     exposure: repository-internal
-    capabilities: [temporary-go-proxy, nested-gowork-off-bootstrap]
-    derives_from: [repository-layout, decisions]
   - id: control-plane-platform-foundation
-    path: reference/control-plane/internal/platform
+    path: reference/control-plane/internal/app/platform
     status: planned
     kind: go-package
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - machine-report-writer
+    capabilities:
+      - http-assembly
+      - unit-of-work
+      - clock-id-fault-seams
     owner: control-plane-platform
-    phase: P08
     owner_phase: P08
-    tests: [make-test-control-plane-platform]
     acceptance_test: make-test-control-plane-platform
     exposure: reference-only
-    capabilities: [http-assembly, unit-of-work, clock-id-fault-seams, audit-trace-ports]
-    derives_from: [reference-control-plane, machine-report-writer]
   - id: publication-service
-    path: reference/control-plane/internal/publication
+    path: reference/control-plane/internal/domain/publication
     status: planned
     kind: go-service-component
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - openapi-control-plane-foundation
+      - publication-fixtures
+      - sqlite-migration-publication
+      - postgres-migration-publication
+    capabilities:
+      - publication
+      - manifest-static-url-policy
+      - offline-schema-ref
     owner: publication-service
-    phase: P12
     owner_phase: P12
-    tests: [make-test-publication-service]
     acceptance_test: make-test-publication-service
     exposure: reference-only
-    capabilities: [publication, manifest-static-url-policy, offline-schema-ref]
-    derives_from: [reference-control-plane, openapi-control-plane, sqlite-migrations, postgres-migrations]
   - id: asset-broker-service
-    path: reference/control-plane/internal/assets
+    path: reference/control-plane/internal/domain/assets
     status: planned
     kind: go-service-component
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - openapi-control-plane-asset-fragment
+      - asset-fixtures
+      - sqlite-migration-asset
+      - postgres-migration-asset
+    capabilities:
+      - asset-storage
+      - asset-token-exchange
+      - redirect-dns-ip-recheck
     owner: asset-broker
-    phase: P13
     owner_phase: P13
-    tests: [make-test-asset-broker]
     acceptance_test: make-test-asset-broker
     exposure: reference-only
-    capabilities: [asset-storage, asset-token-exchange, redirect-dns-ip-recheck]
-    derives_from: [reference-control-plane, openapi-control-plane, sqlite-migrations, postgres-migrations]
   - id: registry-core-service
-    path: reference/control-plane/internal/registry
+    path: reference/control-plane/internal/domain/registry
     status: planned
     kind: go-service-component
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - registry-fixtures
+      - sqlite-migration-registry
+      - postgres-migration-registry
+    capabilities:
+      - lease
+      - revision
+      - cas
+      - fencing
     owner: registry-core
-    phase: P14
     owner_phase: P14
-    tests: [make-test-registry-core]
     acceptance_test: make-test-registry-core
     exposure: reference-only
-    capabilities: [lease, revision, cas, fencing]
-    derives_from: [reference-control-plane, registry-fixtures, sqlite-migrations, postgres-migrations]
   - id: go-registry-sdk
     path: sdk/go/registry
     status: planned
     kind: sdk-component
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - generated-registry-go
+      - openapi-registry-runtime
+      - openapi-discovery-runtime
     language: go
+    capabilities:
+      - registry-client
+      - keepalive
+      - drain
     owner: registry-api-sdk
-    phase: P15
     owner_phase: P15
-    tests: [make-test-registry-api]
     acceptance_test: make-test-registry-api
     exposure: public-contract
-    capabilities: [registry-client, keepalive, drain]
-    derives_from: [sdk-go, openapi-registry-runtime, openapi-discovery-runtime]
   - id: registry-recovery-service
-    path: reference/control-plane/internal/registry/recovery
+    path: reference/control-plane/internal/app/registrywatch
     status: planned
     kind: go-service-component
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - registry-api-service
+      - registry-watch-fixtures
+      - sqlite-migration-registry
+      - postgres-migration-registry
+    capabilities:
+      - watch
+      - compaction
+      - resync
+      - ha-recovery
     owner: registry-recovery
-    phase: P16
     owner_phase: P16
-    tests: [make-test-registry-recovery]
     acceptance_test: make-test-registry-recovery
     exposure: reference-only
-    capabilities: [watch, compaction, resync, ha-recovery]
-    derives_from: [registry-core-service, openapi-registry-runtime, openapi-discovery-runtime]
   - id: run-lifecycle-service
-    path: reference/control-plane/internal/run
+    path: reference/control-plane/internal/domain/run
     status: planned
     kind: go-service-component
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - generated-run-go
+      - run-fixtures
+      - sqlite-migration-run
+      - postgres-migration-run
+    capabilities:
+      - authorization
+      - durable-outbox
+      - cancel
+      - deadline
+      - usage
+      - audit
+      - trace
+      - effect-id
     owner: run-service
-    phase: P18
     owner_phase: P18
-    tests: [make-test-run-lifecycle]
     acceptance_test: make-test-run-lifecycle
     exposure: reference-only
-    capabilities: [authorization, durable-outbox, cancel, deadline, usage, audit, trace, effect-id]
-    derives_from: [reference-control-plane, openapi-control-plane, run-fixtures, sqlite-migrations, postgres-migrations]
   - id: dispatcher-ticket-service
-    path: reference/control-plane/internal/dispatch
+    path: reference/control-plane/internal/domain/dispatch
     status: planned
     kind: go-service-component
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - run-lifecycle-service
+      - generated-dispatch-go
+      - sqlite-migration-dispatch
+      - postgres-migration-dispatch
+    capabilities:
+      - dispatcher
+      - attempt
+      - dispatch-ticket
+      - jwks-public-metadata
+      - signer-kms-secretref-port
     owner: dispatch-security
-    phase: P19
     owner_phase: P19
-    tests: [make-test-dispatch-ticket]
     acceptance_test: make-test-dispatch-ticket
     exposure: reference-only
-    capabilities: [dispatcher, attempt, dispatch-ticket, jwks]
-    derives_from: [run-lifecycle-service, openapi-control-plane, sqlite-migrations, postgres-migrations]
   - id: event-ledger-service
-    path: reference/control-plane/internal/events
+    path: reference/control-plane/internal/domain/event
     status: planned
     kind: go-service-component
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - generated-event-go
+      - event-fixtures
+      - sqlite-migration-event
+      - postgres-migration-event
+    capabilities:
+      - event-session
+      - durable-inbox
+      - immutable-ledger
+      - terminal-capacity-release
     owner: event-ledger
-    phase: P20
     owner_phase: P20
-    tests: [make-test-event-ledger]
     acceptance_test: make-test-event-ledger
     exposure: reference-only
-    capabilities: [event-session, durable-inbox, immutable-ledger, terminal-capacity-release]
-    derives_from: [reference-control-plane, openapi-control-plane, event-fixtures, sqlite-migrations, postgres-migrations]
   - id: go-provider-sdk
-    path: sdk/go/provider
+    path: sdk/go/provider/runtime.go
     status: planned
     kind: sdk-component
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - provider-durable-store-port
+      - generated-event-go
+      - openapi-agent-runtime
     language: go
+    capabilities:
+      - provider-runtime
+      - cancel-deadline-usage-trace
     owner: go-provider-delivery
-    phase: P21
     owner_phase: P21
-    tests: [make-test-direct-proxy-provider]
     acceptance_test: make-test-direct-proxy-provider
     exposure: public-contract
-    capabilities: [provider-inbox-outbox, effect-deduplication, cancel-deadline-usage-trace]
-    derives_from: [sdk-go, openapi-agent-runtime, run-streaming-specification]
   - id: reference-http-agent
-    path: reference/agents/go-http
+    path: reference/agents/go-http/cmd/arop-agent
     status: planned
     kind: reference-agent
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - go-provider-sdk
+      - reference-provider-sqlite-adapter
+      - provider-reliability-fixtures
     language: go
+    capabilities:
+      - direct
+      - proxy
+      - durable-provider-state
+      - crash-retry
     owner: go-provider-delivery
-    phase: P21
     owner_phase: P21
-    tests: [make-test-direct-proxy-provider]
     acceptance_test: make-test-direct-proxy-provider
     exposure: reference-only
-    capabilities: [direct, proxy, durable-provider-state, crash-retry]
-    derives_from: [go-provider-sdk, openapi-agent-runtime]
   - id: worker-pull-service
-    path: reference/control-plane/internal/worker
+    path: reference/control-plane/internal/domain/worker
     status: planned
     kind: go-service-component
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - generated-worker-go
+      - event-ledger-service
+      - sqlite-migration-worker
+      - postgres-migration-worker
+    capabilities:
+      - worker-claim
+      - attempt-lease
+      - requeue
     owner: worker-service
-    phase: P24
     owner_phase: P24
-    tests: [make-test-worker-service]
     acceptance_test: make-test-worker-service
     exposure: reference-only
-    capabilities: [worker-claim, attempt-lease, requeue]
-    derives_from: [reference-control-plane, openapi-worker-runtime, event-ledger-service, sqlite-migrations, postgres-migrations]
   - id: go-worker-sdk
     path: sdk/go/worker
     status: planned
     kind: sdk-component
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - generated-worker-go
+      - openapi-worker-runtime
     language: go
     owner: go-worker-client
-    phase: P25
     owner_phase: P25
-    tests: [make-test-go-worker-sdk]
     acceptance_test: make-test-go-worker-sdk
     exposure: public-contract
-    capabilities: [claim-loop, renewal, drain, effect-helper]
-    derives_from: [sdk-go, openapi-worker-runtime]
   - id: reference-worker
     path: reference/agents/pull-worker
     status: planned
     kind: reference-agent
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - go-worker-sdk
+      - worker-pull-service
+    language: go
     owner: go-worker-client
-    phase: P25
     owner_phase: P25
-    tests: [make-test-go-worker-sdk]
     acceptance_test: make-test-go-worker-sdk
     exposure: reference-only
-    derives_from: [go-worker-sdk, worker-pull-service]
   - id: reference-secret-exchange
-    path: reference/control-plane/internal/adapters/secrets
+    path: reference/control-plane/internal/adapters/secrets/resolver.go
     status: planned
     kind: reference-port-adapter
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - identity-service
+      - schema-secret-ref
+      - security-governance-specification
+    capabilities:
+      - secret-ref-resolution
     owner: identity-secret-foundation
-    phase: P10
     owner_phase: P10
-    tests: [make-test-identity-secrets]
     acceptance_test: make-test-identity-secrets
     exposure: reference-only
-    capabilities: [secret-ref-resolution]
-    derives_from: [reference-control-plane, security-governance-specification]
   - id: sqlite-migrations
     path: reference/control-plane/migrations/sqlite
     status: planned
     kind: database-migrations
-    authority: implementation
-    owner: control-plane-storage
-    phase: P09
-    owner_phase: P09
-    tests: [make-test-storage-migrations]
-    acceptance_test: make-test-storage-migrations
+    authority: derived
+    path_role: aggregate
+    derives_from:
+      - sqlite-migration-base
+      - sqlite-migration-identity
+      - sqlite-migration-publication
+      - sqlite-migration-asset
+      - sqlite-migration-registry
+      - sqlite-migration-run
+      - sqlite-migration-dispatch
+      - sqlite-migration-event
+      - sqlite-migration-worker
+    completion_phase: P24
+    acceptance_test: make-test-worker-service
     exposure: reference-only
-    derives_from: [reference-control-plane, reliability-specification]
   - id: postgres-migrations
     path: reference/control-plane/migrations/postgres
     status: planned
     kind: database-migrations
-    authority: implementation
-    owner: control-plane-storage
-    phase: P09
-    owner_phase: P09
-    tests: [make-test-storage-migrations]
-    acceptance_test: make-test-storage-migrations
+    authority: derived
+    path_role: aggregate
+    derives_from:
+      - postgres-migration-base
+      - postgres-migration-identity
+      - postgres-migration-publication
+      - postgres-migration-asset
+      - postgres-migration-registry
+      - postgres-migration-run
+      - postgres-migration-dispatch
+      - postgres-migration-event
+      - postgres-migration-worker
+    completion_phase: P24
+    acceptance_test: make-test-worker-service
     exposure: reference-only
-    derives_from: [reference-control-plane, reliability-specification]
   - id: reference-control-plane-lite-baseline
     path: reference/control-plane-lite
     status: present
     kind: go-reference-baseline
     authority: implementation
-    derives_from: [architecture, decisions]
+    derives_from:
+      - architecture
+      - decisions
+    path_role: concrete
   - id: reference-agents
     path: reference/agents
     status: planned
     kind: reference-implementations
-    authority: implementation
-    owner: go-provider-delivery
-    phase: P21
-    owner_phase: P21
-    tests: [make-test-direct-proxy-provider]
-    acceptance_test: make-test-direct-proxy-provider
+    authority: derived
+    path_role: aggregate
+    derives_from:
+      - reference-http-agent
+      - reference-provider-sqlite-adapter
+      - reference-provider-sqlite-migration
+      - reference-worker
+      - reference-python-http-agent
+      - reference-python-sqlite-adapter
+      - reference-python-sqlite-migration
+    completion_phase: P27
+    acceptance_test: make-test-python-provider
     exposure: reference-only
-    derives_from: [sdk-bundle, conformance-fixtures]
   - id: python-package-primitive
-    path: sdk/python/scripts/build-package
+    path: sdk/python/scripts/build-package.mjs
     status: planned
     kind: build-primitive
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - python-provider-sdk
+      - python-asgi-runtime
     language: python
     owner: python-provider
-    phase: P27
     owner_phase: P27
-    tests: [make-test-python-provider]
     acceptance_test: make-test-python-provider
     exposure: repository-internal
-    capabilities: [wheel, sdist, deterministic-package-manifest]
-    derives_from: [sdk-python]
   - id: npm-package-primitive
-    path: sdk/typescript/scripts/build-package
+    path: sdk/typescript/scripts/build-package.mjs
     status: planned
     kind: build-primitive
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - typescript-consumer-sdk
     language: typescript
     owner: typescript-consumer
-    phase: P28
     owner_phase: P28
-    tests: [make-test-typescript-consumer]
     acceptance_test: make-test-typescript-consumer
     exposure: repository-internal
-    capabilities: [npm-pack, deterministic-package-manifest]
-    derives_from: [sdk-typescript]
   - id: quickstart
     path: deployments/quickstart
     status: planned
     kind: deployment
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - reference-control-plane
+      - reference-agents
+      - python-provider-sdk
+      - typescript-bff-web
     owner: sqlite-quickstart
-    phase: P36
     owner_phase: P36
-    tests: [make-quickstart-smoke]
     acceptance_test: make-quickstart-smoke
     exposure: public-contract
-    derives_from: [reference-control-plane, reference-agents]
   - id: production-reference-deployment
     path: deployments/production-reference
     status: planned
-    kind: deployment
-    authority: implementation
-    owner: production-deployment
-    phase: P37
-    owner_phase: P37
-    tests: [make-production-reference-smoke]
+    kind: deployment-bundle
+    authority: derived
+    path_role: aggregate
+    derives_from:
+      - production-reference-manifests
+      - production-upgrade-recovery-runbook
+      - container-build-primitive
+    completion_phase: P37
     acceptance_test: make-production-reference-smoke
     exposure: reference-only
-    derives_from: [reference-control-plane, postgres-migrations]
   - id: interoperability-adapters
     path: adapters
     status: planned
     kind: adapters
-    authority: implementation
-    owner: interop-a2a
-    phase: P29
-    owner_phase: P29
-    tests: [make-test-interop-a2a]
-    acceptance_test: make-test-interop-a2a
+    authority: derived
+    path_role: aggregate
+    derives_from:
+      - a2a-adapter
+      - mcp-adapter
+      - ard-adapter
+      - cloudevents-otel-mapping
+    completion_phase: P32
+    acceptance_test: make-test-interop-observability
     exposure: public-contract
-    derives_from: [interoperability-specification, sdk-bundle]
   - id: a2a-adapter
     path: adapters/a2a
     status: planned
     kind: adapter
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - interoperability-specification
+      - sdk-bundle
+      - upstream-version-matrix
     owner: interop-a2a
-    phase: P29
     owner_phase: P29
-    tests: [make-test-interop-a2a]
     acceptance_test: make-test-interop-a2a
     exposure: public-contract
-    derives_from: [interoperability-adapters, upstream-version-matrix]
   - id: mcp-adapter
     path: adapters/mcp
     status: planned
     kind: adapter
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - interoperability-specification
+      - a2a-adapter
     owner: interop-mcp
-    phase: P30
     owner_phase: P30
-    tests: [make-test-interop-mcp]
     acceptance_test: make-test-interop-mcp
     exposure: public-contract
-    derives_from: [interoperability-adapters, a2a-adapter]
   - id: ard-adapter
     path: adapters/ard
     status: planned
     kind: adapter
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - interoperability-specification
+      - mcp-adapter
     owner: interop-ard
-    phase: P31
     owner_phase: P31
-    tests: [make-test-interop-ard]
     acceptance_test: make-test-interop-ard
     exposure: public-contract
-    derives_from: [interoperability-adapters, mcp-adapter]
   - id: cloudevents-otel-mapping
     path: adapters/observability
     status: planned
     kind: adapter
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - ard-adapter
+      - asyncapi-agent-events
     owner: interop-observability
-    phase: P32
     owner_phase: P32
-    tests: [make-test-interop-observability]
     acceptance_test: make-test-interop-observability
     exposure: public-contract
-    derives_from: [interoperability-adapters, asyncapi-agent-events]
   - id: server-conformance-driver
     path: reference/control-plane/tests/conformance
     status: planned
     kind: conformance-driver
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - portable-conformance-runner
+      - reference-control-plane-server
+      - publication-service
+      - registry-api-service
+      - run-lifecycle-service
+      - event-ledger-service
+      - worker-pull-service
     owner: server-conformance
-    phase: P34
     owner_phase: P34
-    tests: [make-test-server-conformance]
     acceptance_test: make-test-server-conformance
     exposure: reference-only
-    derives_from: [portable-conformance-runner, reference-control-plane]
   - id: fault-ha-harness
     path: conformance/fault-injection
     status: planned
     kind: conformance-driver
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - server-conformance-driver
+      - conformance-fixtures
     owner: fault-ha-harness
-    phase: P35
     owner_phase: P35
-    tests: [make-test-fault-ha-drivers]
     acceptance_test: make-test-fault-ha-drivers
     exposure: repository-internal
-    derives_from: [server-conformance-driver, conformance-fixtures]
   - id: container-build-primitive
-    path: deployments/production-reference/build-container
+    path: scripts/build-production-container.mjs
     status: planned
     kind: build-primitive
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - production-reference-manifests
     owner: production-deployment
-    phase: P37
     owner_phase: P37
-    tests: [make-production-reference-smoke]
     acceptance_test: make-production-reference-smoke
     exposure: repository-internal
-    capabilities: [container-build, deterministic-image-manifest]
-    derives_from: [production-reference-deployment]
   - id: repository-validation
     path: scripts/validate.mjs
     status: present
     kind: tooling
     authority: derived
-    derives_from: [schema-bundle, manifest-fixtures, manifest-digest-vectors]
+    derives_from:
+      - schema-identifiers
+      - schema-error
+      - schema-trace
+      - schema-content-part
+      - schema-manifest
+      - schema-asset-ref
+      - schema-data-ref
+      - schema-secret-ref
+      - manifest-digest-vectors
+    path_role: concrete
   - id: structured-file-tools
     path: scripts/lib/repository.mjs
     status: present
     kind: tooling
     authority: derived
-    derives_from: [artifact-catalog-meta-schema, immutable-requirements-meta-schema, conflict-ledger-meta-schema]
+    derives_from:
+      - artifact-catalog-meta-schema
+      - immutable-requirements-meta-schema
+      - conflict-ledger-meta-schema
+    path_role: concrete
   - id: machine-report-writer
     path: scripts/lib/report.mjs
     status: present
     kind: tooling
     authority: derived
-    derives_from: [structured-file-tools, check-report-meta-schema]
+    derives_from:
+      - structured-file-tools
+      - check-report-meta-schema
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
   - id: evidence-validation-library
     path: scripts/lib/evidence.mjs
     status: present
     kind: tooling
     authority: derived
-    derives_from: [planning-audit-evidence-schema, user-gate-evidence-schema, machine-report-writer]
+    derives_from:
+      - planning-audit-evidence-schema
+      - user-gate-evidence-schema
+      - machine-report-writer
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
   - id: machine-report-verifier
     path: scripts/verify-report.mjs
     status: present
     kind: tooling
     authority: derived
     owner: spec-governance
-    phase: P01
     owner_phase: P01
-    tests: [make-spec-index-check]
     acceptance_test: make-spec-index-check
     exposure: repository-internal
-    derives_from: [check-report-meta-schema, structured-file-tools, machine-report-writer]
+    derives_from:
+      - check-report-meta-schema
+      - structured-file-tools
+      - machine-report-writer
+    path_role: concrete
+  - id: machine-report-verifier-tests
+    path: scripts/test-report-verifier.mjs
+    status: present
+    kind: tooling-test
+    authority: derived
+    exposure: repository-internal
+    derives_from:
+      - machine-report-verifier
+      - check-report-meta-schema
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
   - id: arop-cli-baseline
     path: cmd/arop
     status: present
     kind: go-cli-baseline
     authority: implementation
-    derives_from: [go-manifest-library-baseline]
+    derives_from:
+      - go-manifest-library-baseline
+    path_role: concrete
   - id: portable-conformance-runner
     path: cmd/arop-conformance
     status: planned
     kind: go-cli
     authority: implementation
+    path_role: concrete
+    derives_from:
+      - conformance-fixtures
+      - sdk-go
+    language: go
     owner: portable-conformance
-    phase: P33
     owner_phase: P33
-    tests: [make-test-portable-conformance]
     acceptance_test: make-test-portable-conformance
     exposure: public-contract
-    derives_from: [conformance-fixtures, sdk-go]
   - id: codegen-pipeline
     path: scripts/generate.mjs
     status: planned
     kind: tooling
     authority: derived
+    path_role: concrete
+    derives_from:
+      - decisions
+      - schema-manifest
+      - schema-error
+      - repository-validation
     owner: code-generation
-    phase: P07
     owner_phase: P07
-    tests: [make-test-codegen-pipeline]
     acceptance_test: make-test-codegen-pipeline
     exposure: repository-internal
-    derives_from: [schema-bundle, generated-models, generated-python-models, generated-typescript-models]
   - id: release-engineering-toolchain
     path: scripts/release
     status: planned
-    kind: release-tooling
-    authority: implementation
-    owner: release-engineering
-    phase: P39
-    owner_phase: P39
-    tests: [make-build-release-toolchain]
-    acceptance_test: make-build-release-toolchain
+    kind: release-tooling-bundle
+    authority: derived
+    path_role: aggregate
+    derives_from:
+      - release-package-orchestrator
+      - supply-chain-orchestrator
+      - external-config-validator
+      - external-conformance-validator
+      - public-release-aggregator
+      - cross-commit-lineage-verifier
+      - rc-source-freeze-checker
+      - freeze-overlay-checker
+      - payload-equivalence-checker
+      - final-delivery-checker
+      - release-report-integration
+      - report-provenance-verifier
+    completion_phase: P42
+    acceptance_test: make-test-release-finalization-tooling
     exposure: repository-internal
-    capabilities: [release-orchestration, evidence-validation, report-aggregation, sbom, provenance, signing-orchestration, deterministic-final-overlay]
-    derives_from: [go-module-proxy-bootstrap, python-package-primitive, npm-package-primitive, container-build-primitive, portable-conformance-runner, machine-report-verifier]
   - id: external-config-evidence-schema
     path: spec/schemas/external-config-evidence.schema.json
     status: planned
     kind: planning-json-schema
     authority: structure
+    path_role: concrete
+    derives_from:
+      - decisions
+      - public-adoption-policy
+      - trusted-release-role-registry-schema
     language: language-neutral
-    owner: release-engineering
-    phase: P39
-    owner_phase: P39
-    tests: [make-build-release-toolchain]
-    acceptance_test: make-build-release-toolchain
+    owner: release-evidence-tooling
+    owner_phase: P40
+    acceptance_test: make-test-release-evidence-tooling
     exposure: repository-internal
-    derives_from: [decisions, public-adoption-policy]
   - id: external-config-validator
     path: scripts/release/external-config-gate.mjs
     status: planned
     kind: release-validator
     authority: implementation
-    owner: release-engineering
-    phase: P39
-    owner_phase: P39
-    tests: [make-build-release-toolchain]
-    acceptance_test: make-build-release-toolchain
+    path_role: concrete
+    derives_from:
+      - external-config-evidence-schema
+      - evidence-validation-library
+      - trusted-release-role-registry
+    owner: release-evidence-tooling
+    owner_phase: P40
+    acceptance_test: make-test-release-evidence-tooling
     exposure: repository-internal
-    derives_from: [external-config-evidence-schema, release-engineering-toolchain, evidence-validation-library]
+    runtime_inputs:
+      - trusted-release-role-registry-schema
   - id: public-release-aggregator
-    path: scripts/release/verify-public-namespace.mjs
+    path: scripts/release/aggregate-reports.mjs
     status: planned
     kind: release-aggregator
     authority: implementation
-    owner: release-engineering
-    phase: P39
-    owner_phase: P39
-    tests: [make-build-release-toolchain]
-    acceptance_test: make-build-release-toolchain
+    path_role: concrete
+    derives_from:
+      - report-provenance-verifier
+      - cross-commit-lineage-verifier
+      - machine-report-verifier
+    owner: release-lineage-tooling
+    owner_phase: P41
+    acceptance_test: make-test-release-lineage-tooling
     exposure: repository-internal
-    derives_from: [release-engineering-toolchain, machine-report-verifier]
   - id: external-conformance-evidence-schema
     path: spec/schemas/external-conformance-evidence.schema.json
     status: planned
     kind: planning-json-schema
     authority: structure
+    path_role: concrete
+    derives_from:
+      - decisions
+      - interoperability-specification
+      - trusted-release-role-registry-schema
     language: language-neutral
-    owner: release-engineering
-    phase: P39
-    owner_phase: P39
-    tests: [make-build-release-toolchain]
-    acceptance_test: make-build-release-toolchain
+    owner: release-evidence-tooling
+    owner_phase: P40
+    acceptance_test: make-test-release-evidence-tooling
     exposure: repository-internal
-    derives_from: [decisions, compatibility-matrix]
   - id: external-conformance-validator
     path: scripts/release/external-evidence-gate.mjs
     status: planned
     kind: release-validator
     authority: implementation
-    owner: release-engineering
-    phase: P39
-    owner_phase: P39
-    tests: [make-build-release-toolchain]
-    acceptance_test: make-build-release-toolchain
+    path_role: concrete
+    derives_from:
+      - external-conformance-evidence-schema
+      - evidence-validation-library
+      - trusted-release-role-registry
+    owner: release-evidence-tooling
+    owner_phase: P40
+    acceptance_test: make-test-release-evidence-tooling
     exposure: repository-internal
-    derives_from: [external-conformance-evidence-schema, release-engineering-toolchain, evidence-validation-library]
+    runtime_inputs:
+      - trusted-release-role-registry-schema
   - id: freeze-overlay-checker
     path: scripts/release/verify-final-overlay.mjs
     status: planned
     kind: release-validator
     authority: implementation
-    owner: release-engineering
-    phase: P39
-    owner_phase: P39
-    tests: [make-build-release-toolchain]
-    acceptance_test: make-build-release-toolchain
+    path_role: concrete
+    derives_from:
+      - cross-commit-lineage-verifier
+      - final-equivalence-attestation-schema
+    capabilities:
+      - deterministic-final-overlay
+      - expected-tree-digest
+    owner: release-finalization-tooling
+    owner_phase: P42
+    acceptance_test: make-test-release-finalization-tooling
     exposure: repository-internal
-    capabilities: [deterministic-final-overlay, expected-tree-digest, payload-equivalence]
-    derives_from: [release-engineering-toolchain, external-conformance-validator, machine-report-verifier]
+  - id: rc-source-freeze-checker
+    path: scripts/release/freeze-rc-source.mjs
+    status: planned
+    kind: release-validator
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - cross-commit-lineage-verifier
+      - release-journal
+    capabilities:
+      - expected-rc-tree-digest
+      - clean-source-commit-freeze
+      - no-tag-or-package-publication
+    owner: release-finalization-tooling
+    owner_phase: P42
+    acceptance_test: make-test-release-finalization-tooling
+    exposure: repository-internal
   - id: final-delivery-checker
     path: scripts/release/deliver-final.mjs
     status: planned
     kind: release-validator
     authority: implementation
-    owner: release-engineering
-    phase: P39
-    owner_phase: P39
-    tests: [make-build-release-toolchain]
-    acceptance_test: make-build-release-toolchain
+    path_role: concrete
+    derives_from:
+      - payload-equivalence-checker
+      - supply-chain-orchestrator
+    capabilities:
+      - approved-tree-digest
+      - root-before-nested
+      - final-local-verification
+    owner: release-finalization-tooling
+    owner_phase: P42
+    acceptance_test: make-test-release-finalization-tooling
     exposure: repository-internal
-    capabilities: [approved-tree-digest, root-before-nested, final-local-verification]
-    derives_from: [freeze-overlay-checker, release-engineering-toolchain]
   - id: release-report-integration
     path: scripts/release/reporting.mjs
     status: planned
     kind: release-tooling
     authority: implementation
-    owner: release-engineering
-    phase: P39
-    owner_phase: P39
-    tests: [make-build-release-toolchain]
-    acceptance_test: make-build-release-toolchain
+    path_role: concrete
+    derives_from:
+      - check-report-meta-schema
+      - machine-report-writer
+      - machine-report-verifier
+      - cross-commit-lineage-verifier
+      - report-provenance-verifier
+    owner: release-lineage-tooling
+    owner_phase: P41
+    acceptance_test: make-test-release-lineage-tooling
     exposure: repository-internal
-    derives_from: [check-report-meta-schema, machine-report-writer, machine-report-verifier]
   - id: public-namespace-regeneration
     path: scripts/regenerate-public.mjs
     status: planned
     kind: tooling
-    authority: derived
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - external-config-validator
+      - cross-commit-lineage-verifier
     owner: public-artifact-generation
-    phase: P43
-    owner_phase: P43
-    tests: [make-regenerate-public]
+    owner_phase: P46
     acceptance_test: make-regenerate-public
     exposure: repository-internal
-    derives_from: [codegen-pipeline, external-config-validator]
-  - id: release-toolchain-reports
-    path: build/reports/P39
-    status: planned
-    kind: machine-reports
-    authority: derived
-    owner: release-engineering
-    phase: P39
-    owner_phase: P39
-    tests: [make-build-release-toolchain]
-    acceptance_test: make-build-release-toolchain
-    exposure: repository-internal
-    derives_from: [release-engineering-toolchain, machine-report-writer]
-  - id: release-dry-run-reports
-    path: build/reports/P40
-    status: planned
-    kind: machine-reports
-    authority: evidence
-    owner: release-dry-run-verification
-    phase: P40
-    owner_phase: P40
-    tests: [make-release-dry-run]
-    acceptance_test: make-release-dry-run
-    exposure: repository-internal
-    derives_from: [release-engineering-toolchain, release-toolchain-reports, machine-report-writer]
-  - id: external-config-gate-reports
-    path: build/reports/P42
-    status: planned
-    kind: machine-reports
-    authority: evidence
-    owner: public-governance
-    phase: P42
-    owner_phase: P42
-    tests: [make-external-config-gate]
-    acceptance_test: make-external-config-gate
-    exposure: repository-internal
-    derives_from: [external-config-validator, release-report-integration]
-  - id: public-namespace-verification-reports
-    path: build/reports/P44
-    status: planned
-    kind: machine-reports
-    authority: evidence
-    owner: public-release-verification
-    phase: P44
-    owner_phase: P44
-    tests: [make-verify-public-namespace]
-    acceptance_test: make-verify-public-namespace
-    exposure: repository-internal
-    derives_from: [public-release-aggregator, public-namespace-regeneration, release-report-integration]
-  - id: external-evidence-gate-reports
-    path: build/reports/P46
-    status: planned
-    kind: machine-reports
-    authority: evidence
-    owner: external-conformance-review
-    phase: P46
-    owner_phase: P46
-    tests: [make-external-evidence-gate]
-    acceptance_test: make-external-evidence-gate
-    exposure: repository-internal
-    derives_from: [external-conformance-validator, public-namespace-verification-reports]
-  - id: freeze-overlay-reports
-    path: build/reports/P47
-    status: planned
-    kind: machine-reports
-    authority: evidence
-    owner: v1-freeze-overlay-review
-    phase: P47
-    owner_phase: P47
-    tests: [make-verify-v1-freeze]
-    acceptance_test: make-verify-v1-freeze
-    exposure: repository-internal
-    derives_from: [freeze-overlay-checker, external-evidence-gate-reports]
-  - id: final-delivery-reports
-    path: build/reports/P48
-    status: planned
-    kind: machine-reports
-    authority: evidence
-    owner: v1-delivery
-    phase: P48
-    owner_phase: P48
-    tests: [make-deliver-v1]
-    acceptance_test: make-deliver-v1
-    exposure: repository-internal
-    derives_from: [final-delivery-checker, freeze-overlay-reports]
   - id: ci-validation
     path: .github/workflows/validate.yml
     status: present
     kind: ci
     authority: derived
-    derives_from: [repository-validation, spec-index-validation]
+    derives_from:
+      - repository-validation
+    path_role: concrete
+    runtime_inputs:
+      - spec-index-validation
+      - blueprint-validation
   - id: spec-index-validation
     path: scripts/spec-index-check.mjs
     status: present
     kind: tooling
     authority: derived
     owner: spec-governance
-    phase: P01
     owner_phase: P01
-    tests: [make-spec-index-check]
     acceptance_test: make-spec-index-check
     exposure: repository-internal
-    derives_from: [artifact-catalog, immutable-requirements, conflict-ledger, artifact-catalog-meta-schema, immutable-requirements-meta-schema, conflict-ledger-meta-schema, machine-report-writer]
-  - id: spec-index-check-reports
-    path: build/reports/P01
-    status: planned
-    kind: machine-reports
-    authority: derived
-    derives_from: [spec-index-validation]
+    derives_from:
+      - artifact-catalog
+      - immutable-requirements
+      - conflict-ledger
+      - artifact-catalog-meta-schema
+      - immutable-requirements-meta-schema
+      - conflict-ledger-meta-schema
+      - machine-report-writer
+    path_role: concrete
   - id: blueprint-validation
     path: scripts/blueprint-check.mjs
     status: present
     kind: tooling
     authority: derived
     owner: implementation-planning
-    phase: P02
     owner_phase: P02
-    tests: [make-blueprint-check]
     acceptance_test: make-blueprint-check
     exposure: repository-internal
-    derives_from: [implementation-blueprint, repository-layout, development-plan, immutable-requirements, machine-report-writer]
-  - id: blueprint-check-reports
-    path: build/reports/P02
-    status: planned
-    kind: machine-reports
-    authority: derived
-    derives_from: [blueprint-validation]
+    derives_from:
+      - implementation-blueprint
+      - repository-layout
+      - development-plan
+      - immutable-requirements
+      - machine-report-writer
+    path_role: concrete
   - id: planning-audit-validation
     path: scripts/planning-audit.mjs
     status: present
     kind: tooling
     authority: derived
-    owner: independent-reviewer
-    phase: P03
-    owner_phase: P03
-    tests: [make-planning-audit]
-    acceptance_test: make-planning-audit
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
     exposure: repository-internal
-    derives_from: [planning-audit-evidence-schema, development-plan, immutable-requirements, evidence-validation-library, machine-report-writer, machine-report-verifier]
-  - id: planning-audit-reports
-    path: build/reports/P03
-    status: planned
-    kind: machine-reports
-    authority: derived
-    derives_from: [planning-audit-validation]
-  - id: planning-audit-canonical-summary
-    path: spec/evidence/P03-planning-audit-summary.json
-    status: planned
-    kind: canonical-evidence-summary
-    authority: evidence
-    exposure: repository-internal
-    derives_from: [planning-audit-validation, planning-audit-reports]
+    derives_from:
+      - planning-audit-evidence-schema
+      - development-plan
+      - immutable-requirements
+      - evidence-validation-library
+      - machine-report-writer
+      - machine-report-verifier
+    path_role: concrete
   - id: user-gate-validation
     path: scripts/gate-check.mjs
     status: present
     kind: tooling
     authority: derived
-    owner: project-owner
-    phase: P04
-    owner_phase: P04
-    tests: [make-gate-check]
-    acceptance_test: make-gate-check
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
     exposure: repository-internal
-    derives_from: [user-gate-evidence-schema, development-plan, planning-audit-reports, evidence-validation-library, machine-report-writer, machine-report-verifier]
+    derives_from:
+      - user-gate-evidence-schema
+      - development-plan
+      - evidence-validation-library
+      - machine-report-writer
+      - machine-report-verifier
+    path_role: concrete
+    runtime_inputs:
+      - planning-audit-reports
+      - planning-audit-canonical-summary
+  - id: openapi-control-plane-foundation
+    path: openapi/fragments/control-plane/publication-v1.yaml
+    status: planned
+    kind: openapi-fragment
+    authority: transport
+    path_role: concrete
+    derives_from:
+      - schema-manifest
+      - schema-asset-ref
+      - schema-secret-ref
+      - protocol-specification
+    capabilities:
+      - publication
+      - common-authentication-errors
+    owner: publication-contracts
+    owner_phase: P11
+    acceptance_test: make-test-publication-contracts
+    exposure: public-contract
+  - id: openapi-control-plane-asset-fragment
+    path: openapi/fragments/control-plane/assets-v1.yaml
+    status: planned
+    kind: openapi-fragment
+    authority: transport
+    path_role: concrete
+    derives_from:
+      - schema-asset-ref
+      - schema-asset-exchange
+      - openapi-control-plane-foundation
+    owner: asset-broker
+    owner_phase: P13
+    acceptance_test: make-test-asset-broker
+    exposure: public-contract
+  - id: openapi-control-plane-run-fragment
+    path: openapi/fragments/control-plane/runs-v1.yaml
+    status: planned
+    kind: openapi-fragment
+    authority: transport
+    path_role: concrete
+    derives_from:
+      - schema-run-request
+      - schema-run-status
+      - schema-command
+      - schema-result
+    owner: run-service
+    owner_phase: P18
+    acceptance_test: make-test-run-lifecycle
+    exposure: public-contract
+  - id: openapi-control-plane-dispatch-fragment
+    path: openapi/fragments/control-plane/dispatch-jwks-v1.yaml
+    status: planned
+    kind: openapi-fragment
+    authority: transport
+    path_role: concrete
+    derives_from:
+      - schema-attempt
+      - schema-dispatch-ticket
+      - schema-jwks-metadata
+      - openapi-control-plane-run-fragment
+    owner: dispatch-security
+    owner_phase: P19
+    acceptance_test: make-test-dispatch-ticket
+    exposure: public-contract
+  - id: openapi-control-plane-event-fragment
+    path: openapi/fragments/control-plane/event-session-v1.yaml
+    status: planned
+    kind: openapi-fragment
+    authority: transport
+    path_role: concrete
+    derives_from:
+      - schema-event-envelope
+      - schema-event-session
+      - openapi-control-plane-dispatch-fragment
+    owner: event-ledger
+    owner_phase: P20
+    acceptance_test: make-test-event-ledger
+    exposure: public-contract
+  - id: publication-contract-fixtures
+    path: conformance/fixtures/contracts/control-plane-publication
+    status: planned
+    kind: contract-fixtures
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - openapi-control-plane-foundation
+    owner: publication-contracts
+    owner_phase: P11
+    acceptance_test: make-test-publication-contracts
+    exposure: public-contract
+  - id: publication-fixtures
+    path: examples/manifests/publication-v1.json
+    status: planned
+    kind: golden-fixtures
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - schema-manifest
+      - publication-contract-fixtures
+    owner: publication-service
+    owner_phase: P12
+    acceptance_test: make-test-publication-service
+    exposure: public-contract
+  - id: registry-watch-fixtures
+    path: conformance/fixtures/registry-watch
+    status: planned
+    kind: behavioral-fixtures
+    authority: behavior
+    path_role: concrete
+    derives_from:
+      - registry-fixtures
+      - schema-discovery-snapshot
+    owner: registry-recovery
+    owner_phase: P16
+    acceptance_test: make-test-registry-recovery
+    exposure: public-contract
+  - id: provider-reliability-fixtures
+    path: conformance/fixtures/provider-reliability
+    status: planned
+    kind: behavioral-fixtures
+    authority: behavior
+    path_role: concrete
+    derives_from:
+      - event-fixtures
+      - openapi-agent-runtime
+    owner: go-provider-delivery
+    owner_phase: P21
+    acceptance_test: make-test-direct-proxy-provider
+    exposure: public-contract
+  - id: streaming-fixtures
+    path: conformance/fixtures/streaming
+    status: planned
+    kind: behavioral-fixtures
+    authority: behavior
+    path_role: concrete
+    derives_from:
+      - asyncapi-agent-events
+      - event-fixtures
+    owner: streaming-delivery
+    owner_phase: P22
+    acceptance_test: make-test-streaming-resume
+    exposure: public-contract
+  - id: base-state-machine-fixtures
+    path: conformance/fixtures/state-machines/base
+    status: planned
+    kind: behavioral-fixtures
+    authority: behavior
+    path_role: concrete
+    derives_from:
+      - protocol-specification
+      - registry-specification
+      - run-streaming-specification
+    owner: protocol-foundation
+    owner_phase: P06
+    acceptance_test: make-test-protocol-foundation
+    exposure: public-contract
+  - id: conformance-harness-base
+    path: conformance/harness/base
+    status: planned
+    kind: conformance-harness
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - base-state-machine-fixtures
+      - error-fixtures
+    owner: protocol-foundation
+    owner_phase: P06
+    acceptance_test: make-test-protocol-foundation
+    exposure: repository-internal
+  - id: codegen-representative-spike
+    path: conformance/fixtures/codegen-spike
+    status: planned
+    kind: codegen-fixtures
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - schema-manifest
+    owner: code-generation
+    owner_phase: P07
+    acceptance_test: make-test-codegen-pipeline
+    exposure: repository-internal
+  - id: generated-control-plane-go
+    path: sdk/go/generated/control-plane
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - openapi-control-plane-foundation
+    language: go
+    owner: publication-contracts
+    owner_phase: P11
+    acceptance_test: make-test-publication-contracts
+    exposure: public-contract
+  - id: generated-control-plane-python
+    path: sdk/python/src/arop/generated/control-plane
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - openapi-control-plane-foundation
+    language: python
+    owner: publication-contracts
+    owner_phase: P11
+    acceptance_test: make-test-publication-contracts
+    exposure: public-contract
+  - id: generated-control-plane-typescript
+    path: sdk/typescript/src/generated/control-plane
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - openapi-control-plane-foundation
+    language: typescript
+    owner: publication-contracts
+    owner_phase: P11
+    acceptance_test: make-test-publication-contracts
+    exposure: public-contract
+  - id: generated-registry-go
+    path: sdk/go/generated/registry
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - schema-registry-runtime-instance
+      - schema-registry-lease
+      - schema-registry-event
+      - schema-discovery-snapshot
+      - openapi-registry-runtime
+      - openapi-discovery-runtime
+    language: go
+    owner: registry-api-sdk
+    owner_phase: P15
+    acceptance_test: make-test-registry-api
+    exposure: public-contract
+  - id: generated-registry-python
+    path: sdk/python/src/arop/generated/registry
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - schema-registry-runtime-instance
+      - schema-registry-lease
+      - schema-registry-event
+      - schema-discovery-snapshot
+      - openapi-registry-runtime
+      - openapi-discovery-runtime
+    language: python
+    owner: registry-api-sdk
+    owner_phase: P15
+    acceptance_test: make-test-registry-api
+    exposure: public-contract
+  - id: generated-registry-typescript
+    path: sdk/typescript/src/generated/registry
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - schema-registry-runtime-instance
+      - schema-registry-lease
+      - schema-registry-event
+      - schema-discovery-snapshot
+      - openapi-registry-runtime
+      - openapi-discovery-runtime
+    language: typescript
+    owner: registry-api-sdk
+    owner_phase: P15
+    acceptance_test: make-test-registry-api
+    exposure: public-contract
+  - id: generated-run-go
+    path: sdk/go/generated/run
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - schema-run-request
+      - schema-run-status
+      - schema-command
+      - schema-result
+      - openapi-control-plane-run-fragment
+    language: go
+    owner: run-service
+    owner_phase: P18
+    acceptance_test: make-test-run-lifecycle
+    exposure: public-contract
+  - id: generated-run-python
+    path: sdk/python/src/arop/generated/run
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - schema-run-request
+      - schema-run-status
+      - schema-command
+      - schema-result
+      - openapi-control-plane-run-fragment
+    language: python
+    owner: run-service
+    owner_phase: P18
+    acceptance_test: make-test-run-lifecycle
+    exposure: public-contract
+  - id: generated-run-typescript
+    path: sdk/typescript/src/generated/run
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - schema-run-request
+      - schema-run-status
+      - schema-command
+      - schema-result
+      - openapi-control-plane-run-fragment
+    language: typescript
+    owner: run-service
+    owner_phase: P18
+    acceptance_test: make-test-run-lifecycle
+    exposure: public-contract
+  - id: generated-dispatch-go
+    path: sdk/go/generated/dispatch
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - schema-attempt
+      - openapi-control-plane-dispatch-fragment
+      - schema-dispatch-ticket
+      - schema-jwks-metadata
+    language: go
+    owner: dispatch-security
+    owner_phase: P19
+    acceptance_test: make-test-dispatch-ticket
+    exposure: public-contract
+  - id: generated-dispatch-python
+    path: sdk/python/src/arop/generated/dispatch
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - schema-attempt
+      - openapi-control-plane-dispatch-fragment
+      - schema-dispatch-ticket
+      - schema-jwks-metadata
+    language: python
+    owner: dispatch-security
+    owner_phase: P19
+    acceptance_test: make-test-dispatch-ticket
+    exposure: public-contract
+  - id: generated-dispatch-typescript
+    path: sdk/typescript/src/generated/dispatch
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - schema-attempt
+      - openapi-control-plane-dispatch-fragment
+      - schema-dispatch-ticket
+      - schema-jwks-metadata
+    language: typescript
+    owner: dispatch-security
+    owner_phase: P19
+    acceptance_test: make-test-dispatch-ticket
+    exposure: public-contract
+  - id: generated-event-go
+    path: sdk/go/generated/event
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - schema-event-envelope
+      - schema-lifecycle-events
+      - schema-output-events
+      - schema-progress-events
+      - schema-usage-events
+      - openapi-control-plane-event-fragment
+      - schema-event-session
+    language: go
+    owner: event-ledger
+    owner_phase: P20
+    acceptance_test: make-test-event-ledger
+    exposure: public-contract
+  - id: generated-event-python
+    path: sdk/python/src/arop/generated/event
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - schema-event-envelope
+      - schema-lifecycle-events
+      - schema-output-events
+      - schema-progress-events
+      - schema-usage-events
+      - openapi-control-plane-event-fragment
+      - schema-event-session
+    language: python
+    owner: event-ledger
+    owner_phase: P20
+    acceptance_test: make-test-event-ledger
+    exposure: public-contract
+  - id: generated-event-typescript
+    path: sdk/typescript/src/generated/event
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - schema-event-envelope
+      - schema-lifecycle-events
+      - schema-output-events
+      - schema-progress-events
+      - schema-usage-events
+      - openapi-control-plane-event-fragment
+      - schema-event-session
+    language: typescript
+    owner: event-ledger
+    owner_phase: P20
+    acceptance_test: make-test-event-ledger
+    exposure: public-contract
+  - id: generated-streaming-go
+    path: sdk/go/generated/streaming
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - asyncapi-agent-events
+    language: go
+    owner: streaming-delivery
+    owner_phase: P22
+    acceptance_test: make-test-streaming-resume
+    exposure: public-contract
+  - id: generated-streaming-python
+    path: sdk/python/src/arop/generated/streaming
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - asyncapi-agent-events
+    language: python
+    owner: streaming-delivery
+    owner_phase: P22
+    acceptance_test: make-test-streaming-resume
+    exposure: public-contract
+  - id: generated-streaming-typescript
+    path: sdk/typescript/src/generated/streaming
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - asyncapi-agent-events
+    language: typescript
+    owner: streaming-delivery
+    owner_phase: P22
+    acceptance_test: make-test-streaming-resume
+    exposure: public-contract
+  - id: generated-worker-go
+    path: sdk/go/generated/worker
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - openapi-worker-runtime
+      - schema-worker-claim
+      - schema-worker-complete
+    language: go
+    owner: worker-service
+    owner_phase: P24
+    acceptance_test: make-test-worker-service
+    exposure: public-contract
+  - id: generated-worker-python
+    path: sdk/python/src/arop/generated/worker
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - openapi-worker-runtime
+      - schema-worker-claim
+      - schema-worker-complete
+    language: python
+    owner: worker-service
+    owner_phase: P24
+    acceptance_test: make-test-worker-service
+    exposure: public-contract
+  - id: generated-worker-typescript
+    path: sdk/typescript/src/generated/worker
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    derives_from:
+      - codegen-pipeline
+      - openapi-worker-runtime
+      - schema-worker-claim
+      - schema-worker-complete
+    language: typescript
+    owner: worker-service
+    owner_phase: P24
+    acceptance_test: make-test-worker-service
+    exposure: public-contract
+  - id: sdk-go-protocol-core
+    path: sdk/go/protocol/core
+    status: planned
+    kind: go-package
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - schema-identifiers
+      - schema-error
+      - schema-trace
+      - base-state-machine-fixtures
+    language: go
+    owner: protocol-foundation
+    owner_phase: P06
+    acceptance_test: make-test-protocol-foundation
+    exposure: public-contract
+  - id: audit-trace-ports
+    path: reference/control-plane/internal/ports/observability
+    status: planned
+    kind: go-package
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - control-plane-platform-foundation
+    capabilities:
+      - audit-port
+      - trace-port
+    owner: control-plane-platform
+    owner_phase: P08
+    acceptance_test: make-test-control-plane-platform
+    exposure: reference-only
+  - id: audit-trace-memory-bootstrap
+    path: reference/control-plane/internal/adapters/observability/memory
+    status: planned
+    kind: go-package
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - audit-trace-ports
+    owner: control-plane-platform
+    owner_phase: P08
+    acceptance_test: make-test-control-plane-platform
+    exposure: reference-only
+  - id: migration-engine
+    path: reference/control-plane/internal/storage/migrate/runner.go
+    status: planned
+    kind: go-package
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - control-plane-platform-foundation
+      - reliability-specification
+    owner: control-plane-storage
+    owner_phase: P09
+    acceptance_test: make-test-storage-migrations
+    exposure: reference-only
+  - id: migration-engine-fixture-versions
+    path: reference/control-plane/internal/storage/migrate/testdata/engine-versions
+    status: planned
+    kind: migration-fixtures
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+    owner: control-plane-storage
+    owner_phase: P09
+    acceptance_test: make-test-storage-migrations
+    exposure: repository-internal
+  - id: durable-audit-storage
+    path: reference/control-plane/internal/adapters/observability/durable
+    status: planned
+    kind: go-package
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - audit-trace-ports
+      - sqlite-uow-storage-adapter
+      - postgres-uow-storage-adapter
+    owner: control-plane-storage
+    owner_phase: P09
+    acceptance_test: make-test-storage-migrations
+    exposure: reference-only
+  - id: sqlite-uow-storage-adapter
+    path: reference/control-plane/internal/adapters/storage/sqlite/uow.go
+    status: planned
+    kind: go-storage-adapter
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - control-plane-platform-foundation
+      - migration-engine
+      - sqlite-migration-base
+    language: go
+    owner: control-plane-storage
+    owner_phase: P09
+    acceptance_test: make-test-storage-migrations
+    exposure: reference-only
+  - id: postgres-uow-storage-adapter
+    path: reference/control-plane/internal/adapters/storage/postgres/uow.go
+    status: planned
+    kind: go-storage-adapter
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - control-plane-platform-foundation
+      - migration-engine
+      - postgres-migration-base
+    language: go
+    owner: control-plane-storage
+    owner_phase: P09
+    acceptance_test: make-test-storage-migrations
+    exposure: reference-only
+  - id: sqlite-migration-base
+    path: reference/control-plane/migrations/sqlite/0001_base.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: control-plane-storage
+    owner_phase: P09
+    acceptance_test: make-test-storage-migrations
+    exposure: reference-only
+  - id: postgres-migration-base
+    path: reference/control-plane/migrations/postgres/0001_base.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: control-plane-storage
+    owner_phase: P09
+    acceptance_test: make-test-storage-migrations
+    exposure: reference-only
+  - id: sqlite-migration-publication
+    path: reference/control-plane/migrations/sqlite/0010_publication.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: publication-service
+    owner_phase: P12
+    acceptance_test: make-test-publication-service
+    exposure: reference-only
+  - id: postgres-migration-publication
+    path: reference/control-plane/migrations/postgres/0010_publication.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: publication-service
+    owner_phase: P12
+    acceptance_test: make-test-publication-service
+    exposure: reference-only
+  - id: sqlite-migration-asset
+    path: reference/control-plane/migrations/sqlite/0020_asset.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: asset-broker
+    owner_phase: P13
+    acceptance_test: make-test-asset-broker
+    exposure: reference-only
+  - id: postgres-migration-asset
+    path: reference/control-plane/migrations/postgres/0020_asset.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: asset-broker
+    owner_phase: P13
+    acceptance_test: make-test-asset-broker
+    exposure: reference-only
+  - id: sqlite-migration-registry
+    path: reference/control-plane/migrations/sqlite/0030_registry.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: registry-core
+    owner_phase: P14
+    acceptance_test: make-test-registry-core
+    exposure: reference-only
+  - id: postgres-migration-registry
+    path: reference/control-plane/migrations/postgres/0030_registry.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: registry-core
+    owner_phase: P14
+    acceptance_test: make-test-registry-core
+    exposure: reference-only
+  - id: sqlite-migration-run
+    path: reference/control-plane/migrations/sqlite/0040_run.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: run-service
+    owner_phase: P18
+    acceptance_test: make-test-run-lifecycle
+    exposure: reference-only
+  - id: postgres-migration-run
+    path: reference/control-plane/migrations/postgres/0040_run.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: run-service
+    owner_phase: P18
+    acceptance_test: make-test-run-lifecycle
+    exposure: reference-only
+  - id: sqlite-migration-dispatch
+    path: reference/control-plane/migrations/sqlite/0050_dispatch.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: dispatch-security
+    owner_phase: P19
+    acceptance_test: make-test-dispatch-ticket
+    exposure: reference-only
+  - id: postgres-migration-dispatch
+    path: reference/control-plane/migrations/postgres/0050_dispatch.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: dispatch-security
+    owner_phase: P19
+    acceptance_test: make-test-dispatch-ticket
+    exposure: reference-only
+  - id: sqlite-migration-event
+    path: reference/control-plane/migrations/sqlite/0060_event.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: event-ledger
+    owner_phase: P20
+    acceptance_test: make-test-event-ledger
+    exposure: reference-only
+  - id: postgres-migration-event
+    path: reference/control-plane/migrations/postgres/0060_event.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: event-ledger
+    owner_phase: P20
+    acceptance_test: make-test-event-ledger
+    exposure: reference-only
+  - id: sqlite-migration-worker
+    path: reference/control-plane/migrations/sqlite/0070_worker.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: worker-service
+    owner_phase: P24
+    acceptance_test: make-test-worker-service
+    exposure: reference-only
+  - id: postgres-migration-worker
+    path: reference/control-plane/migrations/postgres/0070_worker.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - migration-engine
+      - reliability-specification
+    language: language-neutral
+    owner: worker-service
+    owner_phase: P24
+    acceptance_test: make-test-worker-service
+    exposure: reference-only
+  - id: identity-service
+    path: reference/control-plane/internal/identity/service.go
+    status: planned
+    kind: go-service-component
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - control-plane-platform-foundation
+      - durable-audit-storage
+    owner: identity-secret-foundation
+    owner_phase: P10
+    acceptance_test: make-test-identity-secrets
+    exposure: reference-only
+  - id: credential-store
+    path: reference/control-plane/internal/identity/credential_store.go
+    status: planned
+    kind: go-service-component
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - secret-resolver-port
+      - identity-service
+      - durable-audit-storage
+      - sqlite-migration-identity
+      - postgres-migration-identity
+    owner: identity-secret-foundation
+    owner_phase: P10
+    acceptance_test: make-test-identity-secrets
+    exposure: reference-only
+  - id: secret-resolver-port
+    path: reference/control-plane/internal/ports/secrets/resolver.go
+    status: planned
+    kind: reference-port
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - schema-secret-ref
+      - security-governance-specification
+    capabilities:
+      - secret-ref-resolution-port
+      - no-secret-value-http-api
+    owner: identity-secret-foundation
+    owner_phase: P10
+    acceptance_test: make-test-identity-secrets
+    exposure: reference-only
+  - id: registry-api-service
+    path: reference/control-plane/internal/app/registryapi
+    status: planned
+    kind: go-service-component
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - registry-core-service
+      - openapi-registry-runtime
+      - openapi-discovery-runtime
+    owner: registry-api-sdk
+    owner_phase: P15
+    acceptance_test: make-test-registry-api
+    exposure: reference-only
+  - id: direct-proxy-delivery-service
+    path: reference/control-plane/internal/app/delivery
+    status: planned
+    kind: go-service-component
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - event-ledger-service
+      - openapi-agent-runtime
+    capabilities:
+      - direct
+      - proxy
+      - redirect-dns-ip-recheck
+    owner: go-provider-delivery
+    owner_phase: P21
+    acceptance_test: make-test-direct-proxy-provider
+    exposure: reference-only
+  - id: provider-durable-store-port
+    path: sdk/go/provider/durable_store.go
+    status: planned
+    kind: sdk-component
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - provider-durable-store-contract
+      - openapi-agent-runtime
+    language: go
+    capabilities:
+      - transactional-durable-store-port
+      - provider-inbox-outbox
+      - effect-deduplication
+    owner: go-provider-delivery
+    owner_phase: P21
+    acceptance_test: make-test-direct-proxy-provider
+    exposure: public-contract
+  - id: reference-provider-sqlite-adapter
+    path: reference/agents/go-http/internal/storage/sqlite
+    status: planned
+    kind: reference-adapter
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - provider-durable-store-port
+      - reference-provider-sqlite-migration
+    language: go
+    owner: go-provider-delivery
+    owner_phase: P21
+    acceptance_test: make-test-direct-proxy-provider
+    exposure: reference-only
+  - id: reference-provider-sqlite-migration
+    path: reference/agents/go-http/migrations/sqlite/0001_provider_state.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - provider-durable-store-port
+    language: language-neutral
+    owner: go-provider-delivery
+    owner_phase: P21
+    acceptance_test: make-test-direct-proxy-provider
+    exposure: reference-only
+  - id: streaming-service
+    path: reference/control-plane/internal/app/streaming
+    status: planned
+    kind: go-service-component
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - event-ledger-service
+      - asyncapi-agent-events
+    owner: streaming-delivery
+    owner_phase: P22
+    acceptance_test: make-test-streaming-resume
+    exposure: reference-only
+  - id: go-streaming-client
+    path: sdk/go/streaming
+    status: planned
+    kind: sdk-component
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - generated-streaming-go
+      - asyncapi-agent-events
+    language: go
+    owner: streaming-delivery
+    owner_phase: P22
+    acceptance_test: make-test-streaming-resume
+    exposure: public-contract
+  - id: typescript-streaming-client
+    path: sdk/typescript/src/streaming
+    status: planned
+    kind: sdk-component
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - generated-streaming-typescript
+      - asyncapi-agent-events
+    language: typescript
+    owner: streaming-delivery
+    owner_phase: P22
+    acceptance_test: make-test-streaming-resume
+    exposure: public-contract
+  - id: python-provider-sdk
+    path: sdk/python/src/arop/provider/runtime.py
+    status: planned
+    kind: sdk-component
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - python-provider-durable-store-port
+      - generated-python-models
+      - openapi-agent-runtime
+      - asyncapi-agent-events
+    language: python
+    owner: python-provider
+    owner_phase: P27
+    acceptance_test: make-test-python-provider
+    exposure: public-contract
+  - id: python-asgi-runtime
+    path: sdk/python/src/arop/asgi
+    status: planned
+    kind: sdk-component
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - python-provider-sdk
+    language: python
+    owner: python-provider
+    owner_phase: P27
+    acceptance_test: make-test-python-provider
+    exposure: public-contract
+  - id: typescript-consumer-sdk
+    path: sdk/typescript/src/consumer
+    status: planned
+    kind: sdk-component
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - generated-typescript-models
+      - typescript-streaming-client
+    language: typescript
+    owner: typescript-consumer
+    owner_phase: P28
+    acceptance_test: make-test-typescript-consumer
+    exposure: public-contract
+  - id: typescript-bff-web
+    path: sdk/typescript/examples/bff-web
+    status: planned
+    kind: reference-agent
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - typescript-consumer-sdk
+    language: typescript
+    owner: typescript-consumer
+    owner_phase: P28
+    acceptance_test: make-test-typescript-consumer
+    exposure: reference-only
+  - id: production-reference-manifests
+    path: deployments/production-reference/manifests
+    status: planned
+    kind: deployment
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - reference-control-plane
+      - postgres-migrations
+    owner: production-deployment
+    owner_phase: P37
+    acceptance_test: make-production-reference-smoke
+    exposure: reference-only
+  - id: production-upgrade-recovery-runbook
+    path: deployments/production-reference/RUNBOOK.md
+    status: planned
+    kind: runbook
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - production-reference-manifests
+      - postgres-migrations
+    owner: production-deployment
+    owner_phase: P37
+    acceptance_test: make-production-reference-smoke
+    exposure: reference-only
+  - id: release-package-orchestrator
+    path: scripts/release/orchestrate-packages.mjs
+    status: planned
+    kind: release-tooling
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - go-module-proxy-bootstrap
+      - python-package-primitive
+      - npm-package-primitive
+      - container-build-primitive
+    owner: release-supply-chain
+    owner_phase: P39
+    acceptance_test: make-test-release-supply-chain
+    exposure: repository-internal
+  - id: supply-chain-orchestrator
+    path: scripts/release/supply-chain.mjs
+    status: planned
+    kind: release-tooling
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - release-package-orchestrator
+      - portable-conformance-runner
+      - release-journal
+    capabilities:
+      - sbom
+      - provenance
+      - signing-orchestration
+      - artifact-manifest
+    owner: release-supply-chain
+    owner_phase: P39
+    acceptance_test: make-test-release-supply-chain
+    exposure: repository-internal
+  - id: release-journal
+    path: scripts/release/journal.mjs
+    status: planned
+    kind: release-tooling
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - decisions
+      - machine-report-writer
+    capabilities:
+      - durable-idempotent-step-journal
+      - immutable-digest-preflight
+      - partial-publish-resume
+    owner: release-supply-chain
+    owner_phase: P39
+    acceptance_test: make-test-release-supply-chain
+    exposure: repository-internal
+  - id: cross-commit-lineage-verifier
+    path: scripts/release/verify-lineage.mjs
+    status: planned
+    kind: release-validator
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - machine-report-verifier
+      - trusted-release-role-registry-schema
+    owner: release-lineage-tooling
+    owner_phase: P41
+    acceptance_test: make-test-release-lineage-tooling
+    exposure: repository-internal
+  - id: final-equivalence-attestation-schema
+    path: spec/schemas/final-equivalence-attestation.schema.json
+    status: planned
+    kind: planning-json-schema
+    authority: structure
+    path_role: concrete
+    derives_from:
+      - trusted-release-role-registry-schema
+      - decisions
+    language: language-neutral
+    owner: release-finalization-tooling
+    owner_phase: P42
+    acceptance_test: make-test-release-finalization-tooling
+    exposure: repository-internal
+  - id: payload-equivalence-checker
+    path: scripts/release/verify-payload-equivalence.mjs
+    status: planned
+    kind: release-validator
+    authority: implementation
+    path_role: concrete
+    derives_from:
+      - freeze-overlay-checker
+      - final-equivalence-attestation-schema
+    capabilities:
+      - payload-equivalence
+      - a-to-b-digest-bridge
+    owner: release-finalization-tooling
+    owner_phase: P42
+    acceptance_test: make-test-release-finalization-tooling
+    exposure: repository-internal
+  - id: spec-index-check-reports
+    path: build/reports/P01
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - spec-index-validation
+    producer_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+  - id: blueprint-check-reports
+    path: build/reports/P02
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - blueprint-validation
+    producer_phase: P02
+    acceptance_test: make-blueprint-check
+    exposure: repository-internal
+  - id: planning-audit-reports
+    path: build/reports/P03
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - planning-audit-validation
+    producer_phase: P03
+    acceptance_test: make-planning-audit
+    exposure: repository-internal
+  - id: planning-audit-canonical-summary
+    path: spec/evidence/P03-planning-audit-summary.json
+    status: planned
+    kind: canonical-evidence-summary
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - planning-audit-reports
+    producer_phase: P03
+    acceptance_test: make-planning-audit
+    exposure: repository-internal
   - id: user-gate-reports
     path: build/reports/P04
     status: planned
     kind: machine-reports
-    authority: derived
-    derives_from: [user-gate-validation]
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - user-gate-validation
+      - planning-audit-reports
+    producer_phase: P04
+    acceptance_test: make-gate-check
+    exposure: repository-internal
   - id: user-gate-canonical-summary
     path: spec/evidence/P04-user-gate-summary.json
     status: planned
     kind: canonical-evidence-summary
     authority: evidence
+    path_role: concrete
+    derives_from:
+      - user-gate-reports
+      - planning-audit-canonical-summary
+    producer_phase: P04
+    acceptance_test: make-gate-check
     exposure: repository-internal
-    derives_from: [user-gate-validation, user-gate-reports, planning-audit-canonical-summary]
+  - id: release-supply-chain-reports
+    path: build/reports/P39
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - release-package-orchestrator
+      - supply-chain-orchestrator
+    producer_phase: P39
+    acceptance_test: make-test-release-supply-chain
+    exposure: repository-internal
+  - id: release-evidence-tooling-reports
+    path: build/reports/P40
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - external-config-validator
+      - external-conformance-validator
+      - trusted-release-role-registry-schema
+    producer_phase: P40
+    acceptance_test: make-test-release-evidence-tooling
+    exposure: repository-internal
+  - id: release-lineage-tooling-reports
+    path: build/reports/P41
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - cross-commit-lineage-verifier
+      - public-release-aggregator
+      - report-provenance-verifier
+    producer_phase: P41
+    acceptance_test: make-test-release-lineage-tooling
+    exposure: repository-internal
+  - id: release-finalization-tooling-reports
+    path: build/reports/P42
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - rc-source-freeze-checker
+      - final-equivalence-attestation-schema
+      - freeze-overlay-checker
+      - payload-equivalence-checker
+      - final-delivery-checker
+    producer_phase: P42
+    acceptance_test: make-test-release-finalization-tooling
+    exposure: repository-internal
+  - id: release-dry-run-reports
+    path: build/reports/P43
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - release-supply-chain-reports
+      - release-evidence-tooling-reports
+      - release-lineage-tooling-reports
+      - release-finalization-tooling-reports
+    producer_phase: P43
+    acceptance_test: make-release-dry-run
+    exposure: repository-internal
+  - id: code-complete-reports
+    path: build/reports/P44
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - release-dry-run-reports
+    producer_phase: P44
+    acceptance_test: make-validate-all
+    exposure: repository-internal
+  - id: external-config-gate-reports
+    path: build/reports/P45
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - external-config-validator
+      - code-complete-reports
+    producer_phase: P45
+    acceptance_test: make-external-config-gate
+    exposure: repository-internal
+  - id: public-regeneration-reports
+    path: build/reports/P46
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - public-namespace-regeneration
+      - external-config-gate-reports
+    producer_phase: P46
+    acceptance_test: make-regenerate-public
+    exposure: repository-internal
+  - id: rc-source-freeze-reports
+    path: build/reports/P47
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - public-regeneration-reports
+      - rc-source-freeze-checker
+    producer_phase: P47
+    acceptance_test: make-freeze-rc-source
+    exposure: repository-internal
+  - id: public-namespace-verification-reports
+    path: build/reports/P48
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - rc-source-freeze-reports
+      - public-release-aggregator
+    producer_phase: P48
+    acceptance_test: make-verify-public-namespace
+    exposure: repository-internal
+  - id: v1-rc-delivery-reports
+    path: build/reports/P49
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - public-namespace-verification-reports
+      - supply-chain-orchestrator
+    producer_phase: P49
+    acceptance_test: make-deliver-v1-rc
+    exposure: repository-internal
+  - id: external-evidence-gate-reports
+    path: build/reports/P50
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - external-conformance-validator
+      - v1-rc-delivery-reports
+    producer_phase: P50
+    acceptance_test: make-external-evidence-gate
+    exposure: repository-internal
+  - id: freeze-overlay-reports
+    path: build/reports/P51
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - freeze-overlay-checker
+      - payload-equivalence-checker
+      - external-evidence-gate-reports
+    producer_phase: P51
+    acceptance_test: make-verify-v1-freeze
+    exposure: repository-internal
+  - id: overlay-approval-reports
+    path: build/reports/P52
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - final-equivalence-attestation-schema
+      - trusted-release-role-registry
+      - freeze-overlay-reports
+    producer_phase: P52
+    acceptance_test: make-approve-v1-overlay
+    exposure: repository-internal
+  - id: final-delivery-reports
+    path: build/reports/P53
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - final-delivery-checker
+      - overlay-approval-reports
+    producer_phase: P53
+    acceptance_test: make-deliver-v1
+    exposure: repository-internal
+  - id: sqlite-migration-identity
+    path: reference/control-plane/migrations/sqlite/0005_identity.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    language: language-neutral
+    owner: identity-secret-foundation
+    owner_phase: P10
+    acceptance_test: make-test-identity-secrets
+    exposure: reference-only
+    derives_from:
+      - migration-engine
+      - reliability-specification
+  - id: postgres-migration-identity
+    path: reference/control-plane/migrations/postgres/0005_identity.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    language: language-neutral
+    owner: identity-secret-foundation
+    owner_phase: P10
+    acceptance_test: make-test-identity-secrets
+    exposure: reference-only
+    derives_from:
+      - migration-engine
+      - reliability-specification
+  - id: schema-asset-exchange
+    path: schemas/resources/asset-exchange-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    owner: asset-broker
+    owner_phase: P13
+    acceptance_test: make-test-asset-broker
+    exposure: public-contract
+    derives_from:
+      - schema-asset-ref
+      - security-governance-specification
+  - id: schema-dispatch-ticket
+    path: schemas/runtime/dispatch-ticket-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    owner: dispatch-security
+    owner_phase: P19
+    acceptance_test: make-test-dispatch-ticket
+    exposure: public-contract
+    derives_from:
+      - schema-attempt
+      - security-governance-specification
+  - id: schema-jwks-metadata
+    path: schemas/runtime/jwks-metadata-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    owner: dispatch-security
+    owner_phase: P19
+    acceptance_test: make-test-dispatch-ticket
+    exposure: public-contract
+    derives_from:
+      - schema-identifiers
+      - security-governance-specification
+  - id: schema-event-session
+    path: schemas/events/event-session-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    owner: event-ledger
+    owner_phase: P20
+    acceptance_test: make-test-event-ledger
+    exposure: public-contract
+    derives_from:
+      - schema-event-envelope
+      - security-governance-specification
+  - id: schema-worker-claim
+    path: schemas/runtime/worker-claim-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    owner: worker-service
+    owner_phase: P24
+    acceptance_test: make-test-worker-service
+    exposure: public-contract
+    derives_from:
+      - schema-attempt
+      - schema-command
+  - id: schema-worker-complete
+    path: schemas/runtime/worker-complete-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    owner: worker-service
+    owner_phase: P24
+    acceptance_test: make-test-worker-service
+    exposure: public-contract
+    derives_from:
+      - schema-attempt
+      - schema-result
+      - schema-usage-events
+  - id: generated-asset-go
+    path: sdk/go/generated/asset
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    language: go
+    owner: asset-broker
+    owner_phase: P13
+    acceptance_test: make-test-asset-broker
+    exposure: public-contract
+    derives_from:
+      - codegen-pipeline
+      - schema-asset-exchange
+      - openapi-control-plane-asset-fragment
+  - id: generated-asset-python
+    path: sdk/python/src/arop/generated/asset
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    language: python
+    owner: asset-broker
+    owner_phase: P13
+    acceptance_test: make-test-asset-broker
+    exposure: public-contract
+    derives_from:
+      - codegen-pipeline
+      - schema-asset-exchange
+      - openapi-control-plane-asset-fragment
+  - id: generated-asset-typescript
+    path: sdk/typescript/src/generated/asset
+    status: planned
+    kind: generated-code
+    authority: derived
+    path_role: concrete
+    language: typescript
+    owner: asset-broker
+    owner_phase: P13
+    acceptance_test: make-test-asset-broker
+    exposure: public-contract
+    derives_from:
+      - codegen-pipeline
+      - schema-asset-exchange
+      - openapi-control-plane-asset-fragment
+  - id: reference-control-plane-server
+    path: reference/control-plane/cmd/aropd
+    status: planned
+    kind: go-command
+    authority: implementation
+    path_role: concrete
+    language: go
+    owner: control-plane-platform
+    owner_phase: P08
+    acceptance_test: make-test-control-plane-platform
+    exposure: reference-only
+    derives_from:
+      - control-plane-platform-foundation
+      - audit-trace-memory-bootstrap
+  - id: root-go-module
+    path: go.mod
+    status: present
+    kind: go-module-definition
+    authority: implementation
+    path_role: concrete
+    language: go
+    owner: repository-layout
+    owner_phase: P05
+    acceptance_test: make-test-go-workspace
+    exposure: public-contract
+    derives_from:
+      - repository-layout
+      - decisions
+  - id: nested-control-plane-go-module
+    path: reference/control-plane/go.mod
+    status: planned
+    kind: go-module-definition
+    authority: implementation
+    path_role: concrete
+    language: go
+    owner: repository-layout
+    owner_phase: P05
+    acceptance_test: make-test-go-workspace
+    exposure: reference-only
+    derives_from:
+      - root-go-module
+      - repository-layout
+  - id: go-work-example
+    path: go.work.example
+    status: planned
+    kind: workspace-template
+    authority: implementation
+    path_role: concrete
+    owner: repository-layout
+    owner_phase: P05
+    acceptance_test: make-test-go-workspace
+    exposure: repository-internal
+    derives_from:
+      - root-go-module
+      - nested-control-plane-go-module
+  - id: ci-workspace-validation
+    path: .github/workflows/go-workspace.yml
+    status: planned
+    kind: ci
+    authority: implementation
+    path_role: concrete
+    owner: repository-layout
+    owner_phase: P05
+    acceptance_test: make-test-go-workspace
+    exposure: repository-internal
+    derives_from:
+      - go-module-proxy-bootstrap
+      - root-go-module
+      - nested-control-plane-go-module
+  - id: python-provider-durable-store-port
+    path: sdk/python/src/arop/provider/durable_store.py
+    status: planned
+    kind: sdk-component
+    authority: implementation
+    path_role: concrete
+    language: python
+    owner: python-provider
+    owner_phase: P27
+    acceptance_test: make-test-python-provider
+    exposure: public-contract
+    capabilities:
+      - transactional-durable-store-port
+    derives_from:
+      - provider-durable-store-contract
+      - generated-event-python
+      - openapi-agent-runtime
+  - id: reference-python-http-agent
+    path: reference/agents/python-http/arop_agent/main.py
+    status: planned
+    kind: reference-agent
+    authority: implementation
+    path_role: concrete
+    language: python
+    owner: python-provider
+    owner_phase: P27
+    acceptance_test: make-test-python-provider
+    exposure: reference-only
+    derives_from:
+      - python-provider-sdk
+      - python-asgi-runtime
+      - reference-python-sqlite-adapter
+  - id: phase-report-p05
+    path: build/reports/P05
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P05
+    acceptance_test: make-test-go-workspace
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p06
+    path: build/reports/P06
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P06
+    acceptance_test: make-test-protocol-foundation
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p07
+    path: build/reports/P07
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P07
+    acceptance_test: make-test-codegen-pipeline
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p08
+    path: build/reports/P08
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P08
+    acceptance_test: make-test-control-plane-platform
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p09
+    path: build/reports/P09
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P09
+    acceptance_test: make-test-storage-migrations
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p10
+    path: build/reports/P10
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P10
+    acceptance_test: make-test-identity-secrets
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p11
+    path: build/reports/P11
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P11
+    acceptance_test: make-test-publication-contracts
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p12
+    path: build/reports/P12
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P12
+    acceptance_test: make-test-publication-service
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p13
+    path: build/reports/P13
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P13
+    acceptance_test: make-test-asset-broker
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p14
+    path: build/reports/P14
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P14
+    acceptance_test: make-test-registry-core
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p15
+    path: build/reports/P15
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P15
+    acceptance_test: make-test-registry-api
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p16
+    path: build/reports/P16
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P16
+    acceptance_test: make-test-registry-recovery
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p17
+    path: build/reports/P17
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P17
+    acceptance_test: make-verify-registry
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p18
+    path: build/reports/P18
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P18
+    acceptance_test: make-test-run-lifecycle
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p19
+    path: build/reports/P19
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P19
+    acceptance_test: make-test-dispatch-ticket
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p20
+    path: build/reports/P20
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P20
+    acceptance_test: make-test-event-ledger
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p21
+    path: build/reports/P21
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P21
+    acceptance_test: make-test-direct-proxy-provider
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p22
+    path: build/reports/P22
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P22
+    acceptance_test: make-test-streaming-resume
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p23
+    path: build/reports/P23
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P23
+    acceptance_test: make-verify-run-delivery
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p24
+    path: build/reports/P24
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P24
+    acceptance_test: make-test-worker-service
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p25
+    path: build/reports/P25
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P25
+    acceptance_test: make-test-go-worker-sdk
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p26
+    path: build/reports/P26
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P26
+    acceptance_test: make-verify-operations-security
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p27
+    path: build/reports/P27
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P27
+    acceptance_test: make-test-python-provider
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p28
+    path: build/reports/P28
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P28
+    acceptance_test: make-test-typescript-consumer
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p29
+    path: build/reports/P29
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P29
+    acceptance_test: make-test-interop-a2a
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p30
+    path: build/reports/P30
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P30
+    acceptance_test: make-test-interop-mcp
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p31
+    path: build/reports/P31
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P31
+    acceptance_test: make-test-interop-ard
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p32
+    path: build/reports/P32
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P32
+    acceptance_test: make-test-interop-observability
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p33
+    path: build/reports/P33
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P33
+    acceptance_test: make-test-portable-conformance
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p34
+    path: build/reports/P34
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P34
+    acceptance_test: make-test-server-conformance
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p35
+    path: build/reports/P35
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P35
+    acceptance_test: make-test-fault-ha-drivers
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p36
+    path: build/reports/P36
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P36
+    acceptance_test: make-quickstart-smoke
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p37
+    path: build/reports/P37
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P37
+    acceptance_test: make-production-reference-smoke
+    exposure: repository-internal
+    derives_from: []
+  - id: phase-report-p38
+    path: build/reports/P38
+    status: planned
+    kind: machine-reports
+    authority: evidence
+    path_role: concrete
+    producer_phase: P38
+    acceptance_test: make-verify-resilience
+    exposure: repository-internal
+    derives_from: []
+  - id: trusted-release-role-registry-schema
+    path: spec/schemas/trusted-release-roles.schema.json
+    status: planned
+    kind: planning-json-schema
+    authority: structure
+    path_role: concrete
+    language: language-neutral
+    owner: release-evidence-tooling
+    owner_phase: P40
+    acceptance_test: make-test-release-evidence-tooling
+    exposure: repository-internal
+    capabilities:
+      - project-owner
+      - independent-reviewer
+      - release-approver
+      - sigstore-identity
+    derives_from:
+      - decisions
+      - security-governance-specification
+  - id: trusted-release-role-registry
+    path: scripts/release/trust-root-policy.mjs
+    status: planned
+    kind: release-validator
+    authority: implementation
+    path_role: concrete
+    language: language-neutral
+    owner: release-evidence-tooling
+    owner_phase: P40
+    acceptance_test: make-test-release-evidence-tooling
+    exposure: repository-internal
+    capabilities:
+      - pinned-root-bootstrap
+      - threshold-registry-verification
+      - rollback-freeze-protection
+      - sigstore-tuf-fulcio-rekor-verification
+      - role-separation
+    derives_from:
+      - trusted-release-role-registry-schema
+      - security-governance-specification
+  - id: report-provenance-verifier
+    path: scripts/release/verify-report-provenance.mjs
+    status: planned
+    kind: release-validator
+    authority: implementation
+    path_role: concrete
+    owner: release-lineage-tooling
+    owner_phase: P41
+    acceptance_test: make-test-release-lineage-tooling
+    exposure: repository-internal
+    capabilities:
+      - isolated-checkout-rerun
+      - ci-oidc-attestation
+      - sigstore-bundle-verification
+    derives_from:
+      - cross-commit-lineage-verifier
+      - trusted-release-role-registry-schema
+      - machine-report-verifier
+  - id: provider-durable-store-contract
+    path: conformance/contracts/provider-durable-store.yaml
+    status: planned
+    kind: contract-fixtures
+    authority: behavior
+    path_role: concrete
+    language: language-neutral
+    owner: go-provider-delivery
+    owner_phase: P21
+    acceptance_test: make-test-direct-proxy-provider
+    exposure: public-contract
+    derives_from:
+      - provider-reliability-fixtures
+      - run-streaming-specification
+  - id: reference-python-sqlite-adapter
+    path: reference/agents/python-http/arop_agent/storage/sqlite.py
+    status: planned
+    kind: reference-adapter
+    authority: implementation
+    path_role: concrete
+    language: python
+    owner: python-provider
+    owner_phase: P27
+    acceptance_test: make-test-python-provider
+    exposure: reference-only
+    derives_from:
+      - python-provider-durable-store-port
+      - reference-python-sqlite-migration
+  - id: reference-python-sqlite-migration
+    path: reference/agents/python-http/migrations/sqlite/0001_provider_state.sql
+    status: planned
+    kind: database-migration
+    authority: implementation
+    path_role: concrete
+    language: language-neutral
+    owner: python-provider
+    owner_phase: P27
+    acceptance_test: make-test-python-provider
+    exposure: reference-only
+    derives_from:
+      - provider-durable-store-contract

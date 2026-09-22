@@ -51,15 +51,11 @@
           "authority": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
           "language": {"enum": ["go", "python", "typescript", "language-neutral"]},
           "owner": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
-          "phase": {"type": "string", "pattern": "^P(?:0[1-9]|[1-9][0-9])$"},
           "owner_phase": {"type": "string", "pattern": "^P(?:0[1-9]|[1-9][0-9])$"},
+          "completion_phase": {"type": "string", "pattern": "^P(?:0[1-9]|[1-9][0-9])$"},
+          "producer_phase": {"type": "string", "pattern": "^P(?:0[1-9]|[1-9][0-9])$"},
+          "path_role": {"enum": ["concrete", "aggregate", "container"]},
           "acceptance_test": {"type": "string", "pattern": "^make-[a-z0-9]+(?:-[a-z0-9]+)*$"},
-          "tests": {
-            "type": "array",
-            "minItems": 1,
-            "uniqueItems": true,
-            "items": {"type": "string", "pattern": "^make-[a-z0-9]+(?:-[a-z0-9]+)*$"}
-          },
           "exposure": {"enum": ["public-contract", "reference-only", "repository-internal"]},
           "capabilities": {
             "type": "array",
@@ -67,8 +63,21 @@
             "uniqueItems": true,
             "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"}
           },
-          "derives_from": {"$ref": "#/$defs/idList"}
+          "derives_from": {"$ref": "#/$defs/idList"},
+          "runtime_inputs": {"$ref": "#/$defs/idList"}
         },
+        "allOf": [
+          {
+            "if": {"properties": {"status": {"const": "planned"}}, "required": ["status"]},
+            "then": {
+              "oneOf": [
+                {"properties": {"owner_phase": {}}, "required": ["owner_phase"]},
+                {"properties": {"completion_phase": {}}, "required": ["completion_phase"]},
+                {"properties": {"producer_phase": {}}, "required": ["producer_phase"]}
+              ]
+            }
+          }
+        ],
         "additionalProperties": false
       }
     }

@@ -28,6 +28,39 @@ export async function walkFiles(directory, predicate = () => true) {
   return files;
 }
 
+export async function findPublicV01Violations(baseRoot = repositoryRoot) {
+  const topLevel = ["README.md", "SECURITY.md", "CONTRIBUTING.md"].map((filePath) =>
+    path.join(baseRoot, filePath),
+  );
+  const documentation = await walkFiles(
+    path.join(baseRoot, "docs"),
+    (filePath) => filePath.endsWith(".md"),
+  );
+  const files = [...topLevel, ...documentation];
+  const violations = [];
+  for (const filePath of files) {
+    const source = await readFile(filePath, "utf8");
+    violations.push(
+      ...publicV01ViolationsInText(
+        source,
+        path.relative(baseRoot, filePath).split(path.sep).join("/"),
+      ),
+    );
+  }
+  return { files, violations };
+}
+
+export function publicV01ViolationsInText(source, label = "<text>") {
+  const allowedNegativePolicy = /(?:取消独立公共 v0\.1|不用 v0\.1|不得用 v0\.1|no (?:separate )?public v0\.1)/iu;
+  const violations = [];
+  for (const [index, line] of source.split(/\r?\n/u).entries()) {
+    if (/\bv0\.1\b/iu.test(line) && !allowedNegativePolicy.test(line)) {
+      violations.push(`${label}:${index + 1}: ${line.trim()}`);
+    }
+  }
+  return violations;
+}
+
 export async function loadStructuredFile(filePath) {
   const source = await readFile(filePath, "utf8");
   if (filePath.endsWith(".json")) {

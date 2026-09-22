@@ -129,7 +129,7 @@ updated: 2026-09-22
 
 Reference Control Plane 使用 Go 实现，只覆盖验证协议所需的开发身份、Manifest 发布、Registry/Lease、Run/Dispatch、Event Ingest/SSE、Run 查询/取消和 Conformance 接口，不承载金运组织、飞书、业务审批、完整计费或生产 Console UI。
 
-本地 Quickstart 默认使用 SQLite，确保单进程即可启动；生产级、多节点和故障切换参考部署使用 PostgreSQL。两种存储必须运行同一套 Schema、状态机和 Conformance Fixture，不允许形成两套协议语义。Worker Pull 在首个公开 v1 RC 前完成；P41 前所有验证制品仅是 private/dev snapshot。
+本地 Quickstart 默认使用 SQLite，确保单进程即可启动；生产级、多节点和故障切换参考部署使用 PostgreSQL。两种存储必须运行同一套 Schema、状态机和 Conformance Fixture，不允许形成两套协议语义。Worker Pull 在首个公开 v1 RC 前完成；P44 及之前所有验证制品仅是 private/dev snapshot。
 
 # 7. 开发者体验目标
 

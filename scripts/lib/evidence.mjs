@@ -1,11 +1,15 @@
 import { verify } from "node:crypto";
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import canonicalize from "canonicalize";
 
 import { loadStructuredFile, repositoryRoot } from "./repository.mjs";
 import { sha256 } from "./report.mjs";
+
+const execFileAsync = promisify(execFile);
 
 export const SUMMARY_FIELDS = Object.freeze({
   "arop-planning-audit": [
@@ -63,6 +67,41 @@ export function validateResultCoverage(result, requirementIDs, phaseIDs) {
   }
   if (result?.verdict !== "PASS") problems.push("verdict is not PASS");
   return problems;
+}
+
+export async function verifyEvidenceSubjectCommit(subjectCommit) {
+  if (!/^[0-9a-f]{40}$/u.test(subjectCommit ?? "")) {
+    throw new Error(`evidence subject commit is invalid: ${subjectCommit}`);
+  }
+  const currentHead = (
+    await execFileAsync("git", ["rev-parse", "HEAD"], {
+      cwd: repositoryRoot,
+      encoding: "utf8",
+    })
+  ).stdout.trim();
+  try {
+    await execFileAsync("git", ["cat-file", "-e", `${subjectCommit}^{commit}`], {
+      cwd: repositoryRoot,
+    });
+  } catch {
+    throw new Error(`evidence subject commit does not exist: ${subjectCommit}`);
+  }
+  if (subjectCommit !== currentHead) {
+    try {
+      await execFileAsync("git", ["merge-base", "--is-ancestor", subjectCommit, currentHead], {
+        cwd: repositoryRoot,
+      });
+    } catch {
+      throw new Error(
+        `evidence subject commit ${subjectCommit} is not an ancestor of current HEAD ${currentHead}`,
+      );
+    }
+  }
+  return {
+    subject_commit: subjectCommit,
+    current_head: currentHead,
+    mode: subjectCommit === currentHead ? "current" : "ancestor",
+  };
 }
 
 function isOutsideRepository(absolutePath) {

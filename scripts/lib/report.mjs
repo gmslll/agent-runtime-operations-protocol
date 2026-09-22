@@ -9,8 +9,8 @@ import { repositoryRoot } from "./repository.mjs";
 
 const execFileAsync = promisify(execFile);
 
-function relative(filePath) {
-  return path.relative(repositoryRoot, filePath).split(path.sep).join("/");
+function relative(filePath, baseRoot = repositoryRoot) {
+  return path.relative(baseRoot, filePath).split(path.sep).join("/");
 }
 
 export function sha256(value) {
@@ -38,19 +38,23 @@ async function commandOutput(command, args, preserveLeadingWhitespace = false) {
   }
 }
 
-export async function digestFiles(inputPaths) {
+export function aggregateFileDigest(files) {
+  const aggregate = files.map((file) => `${file.path}\0${file.sha256}\0${file.bytes}\n`).join("");
+  return sha256(aggregate);
+}
+
+export async function digestFiles(inputPaths, baseRoot = repositoryRoot) {
   const files = [];
   for (const filePath of [...new Set(inputPaths)].sort()) {
-    const absolutePath = path.resolve(repositoryRoot, filePath);
+    const absolutePath = path.resolve(baseRoot, filePath);
     const content = await readFile(absolutePath);
     files.push({
-      path: relative(absolutePath),
+      path: relative(absolutePath, baseRoot),
       sha256: sha256(content),
       bytes: content.byteLength,
     });
   }
-  const aggregate = files.map((file) => `${file.path}\0${file.sha256}\0${file.bytes}\n`).join("");
-  return { sha256: sha256(aggregate), files };
+  return { sha256: aggregateFileDigest(files), files };
 }
 
 export function actualCommand(fallbackScript) {
@@ -68,7 +72,7 @@ export async function writeCheckReport({
   checkerPath,
   inputPaths,
   checks,
-  errors,
+  errors = [],
   summary,
   auditNote,
 }) {

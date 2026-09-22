@@ -7,7 +7,7 @@ closure_rule: >-
 verification_catalog:
   asset-content-part-schema-test: {status: planned, owner_artifact: conformance-fixtures}
   cancel-command-contract-test: {status: planned, owner_artifact: conformance-fixtures}
-  cancel-race-state-machine-test: {status: planned, owner_artifact: state-machine-fixtures}
+  cancel-race-state-machine-test: {status: planned, owner_artifact: base-state-machine-fixtures}
   canonical-event-batch-binding-check: {status: present, owner_artifact: spec-index-validation}
   control-plane-command-binding-check: {status: present, owner_artifact: spec-index-validation}
   core-content-part-closed-test: {status: planned, owner_artifact: conformance-fixtures}
@@ -39,7 +39,7 @@ verification_catalog:
   standalone-conformance-test: {status: planned, owner_artifact: conformance-fixtures}
   standalone-quickstart-test: {status: planned, owner_artifact: quickstart}
   strict-authoring-negative-fixtures: {status: planned, owner_artifact: conformance-fixtures}
-  terminal-immutability-test: {status: planned, owner_artifact: state-machine-fixtures}
+  terminal-immutability-test: {status: planned, owner_artifact: base-state-machine-fixtures}
   traversal-and-remote-ref-negative-test: {status: planned, owner_artifact: conformance-fixtures}
   w3c-traceparent-semantic-vectors: {status: planned, owner_artifact: conformance-fixtures}
   worker-client-contract-test: {status: planned, owner_artifact: conformance-fixtures}
@@ -185,7 +185,7 @@ conflicts:
     resolution: >-
       `cancel_requested` 是 Run 的标准非终态。接收 Cancel 只进入该状态；仅当执行已停止并
       提交 `run.cancelled` 时进入不可逆终态。其他合法终态仍由 fencing/state-version 竞争。
-    repair_locations: [protocol-specification, run-streaming-specification, state-machine-fixtures]
+    repair_locations: [protocol-specification, run-streaming-specification, base-state-machine-fixtures]
     verification: [cancel-race-state-machine-test, terminal-immutability-test]
 
   - id: CF-013

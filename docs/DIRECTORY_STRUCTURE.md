@@ -21,9 +21,9 @@ agent-runtime-operations-protocol/
 ├── Makefile
 ├── VERSION
 ├── scripts/
-│   ├── go-proxy-bootstrap/              # P05 未发布 root 时供 nested GOWORK=off 验证
+│   ├── go-proxy-bootstrap.mjs           # P05 未发布 root 时供 nested GOWORK=off 验证
 │   ├── generate.mjs                     # P07 可复用完整三语言 codegen pipeline
-│   └── release/                         # P39 编排、证据/聚合、freeze-overlay、SBOM/provenance/signing
+│   └── release/                         # P39 supply chain；P40 evidence；P41 lineage；P42 RC freeze/finalization tools
 │
 ├── docs/                                # 手写规范、决策、蓝图
 │   ├── ARCHITECTURE.md
@@ -46,6 +46,7 @@ agent-runtime-operations-protocol/
 │
 ├── schemas/                             # 手写结构权威；所有 $ref 离线闭包
 ├── openapi/                             # 手写/受控生成的 HTTP 绑定
+│   ├── fragments/control-plane/           # 各领域阶段拥有的增量源
 │   ├── control-plane-v1.yaml              # Publication/Run/JWKS/Event Session/Asset Exchange
 │   ├── agent-runtime-v1.yaml               # Direct/Proxy Runtime
 │   ├── registry-runtime-v1.yaml
@@ -105,7 +106,11 @@ agent-runtime-operations-protocol/
 │   │   └── tests/                      # integration/storage/HA/server-conformance driver
 │   └── agents/
 │       ├── go-http/
+│       │   ├── internal/storage/sqlite/   # Reference Agent 本地 DurableStore adapter
+│       │   └── migrations/sqlite/         # 仅该 Agent；非 CP 双库矩阵且不建 module
 │       ├── python-http/
+│       │   ├── arop_agent/storage/sqlite.py # Reference Python Agent 本地 DurableStore adapter
+│       │   └── migrations/sqlite/          # 仅该 Agent；非 CP 双库矩阵
 │       └── pull-worker/                    # 通用 Worker Pull，无厂商专属适配
 │
 ├── deployments/
@@ -121,6 +126,7 @@ agent-runtime-operations-protocol/
 
 ```text
 openapi/control-plane-v1.yaml
+openapi/fragments/control-plane/
 spec/evidence/
 sdk/go/generated/
 sdk/python/src/arop/
@@ -132,6 +138,7 @@ reference/control-plane/internal/domain/
 reference/control-plane/internal/ports/
 reference/control-plane/migrations/sqlite/
 reference/control-plane/migrations/postgres/
+reference/agents/go-http/
 deployments/quickstart/
 deployments/production-reference/
 .github/workflows/
@@ -173,7 +180,7 @@ Reference Control Plane application and adapters
 
 - `schemas/`、领域规范和事务语义是手写与评审对象。
 - 各 SDK 的 `generated/` 只能由锁定版本的生成器产生；CI 验证重新生成无 diff。
-- 公共 SDK 不知道 SQLite/PostgreSQL；数据库代码仅在 `reference/control-plane/internal/adapters/storage/`。
+- 公共 Go/Python SDK 各自只暴露 driver-free transactional `DurableStore` port，不导入 SQLite/PostgreSQL driver；Control Plane 数据库代码仅在 `reference/control-plane/`，Go/Python Reference Agent 的本地 SQLite adapter/migration 只允许放在各自 `reference/agents/<agent>/` subtree。
 - SQLite 与 PostgreSQL 各有独立 migration 目录，实现相同领域语义，不要求 SQL 文本相同。
 - `build/reports/` 是机器验收输出；公开 Conformance 摘要经脱敏后进入 `conformance/reports/`。
 
@@ -202,4 +209,4 @@ CLI: arop
 CLI config: ~/.config/arop/
 ```
 
-上述是预发布命名。项目域名、PyPI/npm 所有权与两名 Maintainer/安全入口在 P42 必须用外部证据确认；P43 再全量生成公共命名空间制品。P41 前只允许 private/dev snapshot；取消独立公共 v0.1，首个公开候选是 P45 的 `v1.0.0-rc.N`。
+上述是预发布命名。项目域名、PyPI/npm 所有权与两名 Maintainer/安全入口在 P45 必须用外部证据确认；P46 全量生成 RC tree，P47 再单独创建并冻结 clean RC source commit A。P44 及之前只允许 private/dev snapshot；取消独立公共 v0.1，首个公开候选是 P49 的 `v1.0.0-rc.N`。

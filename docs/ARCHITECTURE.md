@@ -306,4 +306,4 @@ Reference Control Plane、Registry、Dispatcher、Run/Event Ledger 和服务端 
 
 参考实现采用根公共 Go module 与唯一 `reference/control-plane` 嵌套 Go module；语言中立 Conformance Fixture 留在顶层，portable runner 留在根 module。详细组件边界、数据库语义、事务、codegen、测试和发布 DAG 见 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md)；最终物理布局见 [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)；唯一执行顺序见 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)。
 
-`kinglucky-agent-console` 是未来下游实现，不在本仓库 P01–P48 实施范围。Reference Control Plane、Quickstart 和 Conformance 必须独立运行；任何特定 Worker 产品都通过通用 Worker Pull/HTTP/A2A/MCP 边界接入，本仓库不提供厂商专属 Adapter。
+`kinglucky-agent-console` 是未来下游实现，不在本仓库 P01–P53 实施范围。Reference Control Plane、Quickstart 和 Conformance 必须独立运行；任何特定 Worker 产品都通过通用 Worker Pull/HTTP/A2A/MCP 边界接入，本仓库不提供厂商专属 Adapter。

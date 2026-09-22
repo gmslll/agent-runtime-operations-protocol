@@ -2,44 +2,50 @@
 
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-
-import { loadStructuredFile, repositoryRoot, walkFiles } from "./lib/repository.mjs";
+import {
+  findPublicV01Violations,
+  loadStructuredFile,
+  publicV01ViolationsInText,
+  repositoryRoot,
+  walkFiles,
+} from "./lib/repository.mjs";
 import { actualCommand, writeCheckReport } from "./lib/report.mjs";
 
 const reportDirectory = "build/reports/P02";
 const checks = [];
 const errors = [];
-
 function record(name, passed, detail) {
   checks.push({ name, passed, detail });
-  if (!passed) errors.push(`${name}: ${detail}`);
+  if (!passed) errors.push(name + ": " + detail);
 }
-
-function relative(filePath) {
+function rel(filePath) {
   return path.relative(repositoryRoot, filePath).split(path.sep).join("/");
 }
-
-async function source(relativePath) {
-  return readFile(path.join(repositoryRoot, relativePath), "utf8");
+async function source(filePath) {
+  return readFile(path.join(repositoryRoot, filePath), "utf8");
 }
 
-const [layout, blueprint, plan, readme, agents, architecture, sdk, makefile, requirements, manifest] =
-  await Promise.all([
-    source("docs/DIRECTORY_STRUCTURE.md"),
-    source("docs/IMPLEMENTATION_BLUEPRINT.md"),
-    source("docs/DEVELOPMENT_PLAN.md"),
-    source("README.md"),
-    source("AGENTS.md"),
-    source("docs/ARCHITECTURE.md"),
-    source("docs/SDK_AND_DX.md"),
-    source("Makefile"),
-    loadStructuredFile(path.join(repositoryRoot, "spec/requirements.yaml")),
-    loadStructuredFile(path.join(repositoryRoot, "spec/artifact-manifest.yaml")),
-  ]);
-const artifactByID = new Map((manifest.artifacts ?? []).map((artifact) => [artifact.id, artifact]));
+const loaded = await Promise.all([
+  source("docs/DIRECTORY_STRUCTURE.md"),
+  source("docs/IMPLEMENTATION_BLUEPRINT.md"),
+  source("docs/DEVELOPMENT_PLAN.md"),
+  source("README.md"),
+  source("AGENTS.md"),
+  source("docs/ARCHITECTURE.md"),
+  source("docs/SDK_AND_DX.md"),
+  source("docs/DECISIONS.md"),
+  source("docs/PUBLIC_PROJECT_AND_ADOPTION.md"),
+  source("Makefile"),
+  loadStructuredFile(path.join(repositoryRoot, "spec/requirements.yaml")),
+  loadStructuredFile(path.join(repositoryRoot, "spec/artifact-manifest.yaml")),
+]);
+const [layout, blueprint, plan, readme, agents, architecture, sdk, decisions, publicAdoption, makefile, requirements, manifest] = loaded;
+const artifacts = manifest.artifacts || [];
+const artifactByID = new Map(artifacts.map((artifact) => [artifact.id, artifact]));
 
-const targetTreeNeedles = [
+const treeNeedles = [
   "<!-- blueprint-target-tree:v1 -->",
+  "openapi/fragments/control-plane/",
   "openapi/control-plane-v1.yaml",
   "sdk/go/generated/",
   "sdk/python/src/arop/",
@@ -51,657 +57,432 @@ const targetTreeNeedles = [
   "internal/ports/",
   "migrations/sqlite/",
   "migrations/postgres/",
+  "reference/agents/go-http/",
   "deployments/quickstart/",
   "deployments/production-reference/",
   ".github/workflows/",
 ];
-const missingTree = targetTreeNeedles.filter((needle) => !layout.includes(needle));
-record(
-  "target-tree-declaration",
-  missingTree.length === 0,
-  missingTree.length === 0 ? `${targetTreeNeedles.length} target boundaries declared` : `missing: ${missingTree.join(", ")}`,
-);
+const missingTree = treeNeedles.filter((needle) => !layout.includes(needle));
+record("target-tree-declaration", missingTree.length === 0,
+  missingTree.length === 0 ? String(treeNeedles.length) + " target boundaries declared" : "missing " + missingTree.join(", "));
+record("review-candidate-status",
+  layout.includes("status: review-candidate") && blueprint.includes("status: review-candidate") &&
+  blueprint.includes("P04 用户 Gate 前") && readme.includes("不表示规划已冻结"),
+  "layout and blueprint remain review candidates before P04");
 
-record(
-  "review-candidate-status-before-user-gate",
-  layout.includes("status: review-candidate") &&
-    blueprint.includes("status: review-candidate") &&
-    blueprint.includes("P04 用户 Gate 前") &&
-    readme.includes("不表示规划已冻结"),
-  "layout and blueprint remain controlled review candidates until the P04 user gate",
-);
-
-const moduleDeclarations = [...layout.matchAll(/<!--\s*blueprint-module:\s*([^>]+?)\s*-->/g)].map(
-  (match) => match[1].trim(),
-);
-const expectedModules = ["go.mod", "reference/control-plane/go.mod"];
-record(
-  "two-go-modules",
-  JSON.stringify(moduleDeclarations) === JSON.stringify(expectedModules) &&
-    layout.includes("不建第三个 `go.mod`") &&
-    layout.includes("conformance/` 只包含语言中立") &&
-    layout.includes("真实 `go.work` 默认不提交") &&
-    layout.includes("临时 Go proxy"),
-  `declared modules: ${moduleDeclarations.join(", ") || "none"}`,
-);
-
-record(
-  "portable-and-neutral-boundaries",
-  layout.includes("cmd/arop-conformance") &&
-    blueprint.includes("不依赖 Reference `internal`") &&
-    !["cc-connect-adapter", "codex-adapter", "feishu-adapter"].some((needle) => layout.toLowerCase().includes(needle)) &&
-    architecture.includes("不提供厂商专属 Adapter"),
-  "portable runner is root-owned, conformance is language-neutral and no vendor adapter path is planned",
-);
+const moduleDeclarations = [...layout.matchAll(/<!--\s*blueprint-module:\s*([^>]+?)\s*-->/g)]
+  .map((match) => match[1].trim());
+record("two-module-bootstrap",
+  JSON.stringify(moduleDeclarations) === JSON.stringify(["go.mod", "reference/control-plane/go.mod"]) &&
+  layout.includes("不建第三个") && layout.includes("真实") && layout.includes("go.work") &&
+  layout.includes("临时 Go proxy") && plan.includes("GOWORK=off") && plan.includes("root pseudo-version"),
+  "declared modules: " + moduleDeclarations.join(", "));
+record("portable-vendor-neutral",
+  layout.includes("cmd/arop-conformance") && layout.includes("语言中立") &&
+  blueprint.includes("不依赖 Reference") && architecture.includes("不提供厂商专属 Adapter") &&
+  !["cc-connect-adapter", "feishu-adapter", "codex-adapter"].some((needle) =>
+    (layout + "\n" + plan).toLowerCase().includes(needle)),
+  "portable root runner, neutral fixtures and no vendor adapter");
 
 const phasePattern = /^## (P\d{2}) — ([^\n]+)\n([\s\S]*?)(?=^## P\d{2} — |^# 4\.|(?![\s\S]))/gm;
 const metadataKeys = [
-  "Type",
-  "Status",
-  "Capability owner",
-  "Components",
-  "Artifacts owned",
-  "Goal",
-  "Scope",
-  "Dependencies",
-  "First-path invariants",
-  "Machine acceptance",
-  "Rollback point",
-  "Definition of done",
+  "Type", "Status", "Capability owner", "Components", "Artifacts owned", "Goal", "Scope",
+  "Dependencies", "First-path invariants", "Machine acceptance", "Rollback point", "Definition of done",
 ];
 const phases = [];
 for (const match of plan.matchAll(phasePattern)) {
   const metadata = {};
   for (const key of metadataKeys) {
-    metadata[key] = match[3].match(new RegExp(`^- \\*\\*${key}:\\*\\* (.+)$`, "m"))?.[1];
+    metadata[key] = match[3].match(new RegExp("^- \\*\\*" + key + ":\\*\\* (.+)$", "m"))?.[1];
   }
   phases.push({ id: match[1], title: match[2].trim(), body: match[3], metadata });
 }
-const expectedPhaseIDs = phases.map((_, index) => `P${String(index + 1).padStart(2, "0")}`);
-const actualPhaseIDs = phases.map((phase) => phase.id);
-record(
-  "dynamic-phase-sequence",
-  phases.length >= 38 && JSON.stringify(actualPhaseIDs) === JSON.stringify(expectedPhaseIDs),
-  `${phases.length} phases parsed; expected a continuous P01..Pn sequence with at least 38 schedulable phases`,
-);
+const phaseIDs = phases.map((phase) => phase.id);
+const expectedPhaseIDs = phases.map((unused, index) => "P" + String(index + 1).padStart(2, "0"));
+const validPhaseIDs = new Set(phaseIDs);
+const phaseByID = new Map(phases.map((phase) => [phase.id, phase]));
+const phaseByOwner = new Map(phases.map((phase) => [phase.metadata["Capability owner"], phase]));
+record("dynamic-phase-sequence",
+  phases.length >= 50 && JSON.stringify(phaseIDs) === JSON.stringify(expectedPhaseIDs) &&
+  phases.at(-1)?.metadata["Capability owner"] === "v1-delivery",
+  String(phases.length) + " continuous phases ending with v1-delivery");
 
 const allowedTypes = new Set(["implement", "refactor", "verify · review", "verify · spec", "gate", "deliver"]);
 const componentWhitelist = new Set([
   "governance", "planning", "repository", "protocol", "codegen", "control-plane", "operations", "storage",
   "identity", "publication", "assets", "registry", "sdk-go", "run", "dispatch", "events", "delivery",
-  "streaming", "worker", "sdk-python", "sdk-typescript", "interop", "conformance", "fault-ha", "quickstart",
-  "deployment", "release",
+  "streaming", "worker", "sdk-python", "sdk-typescript", "interop", "conformance", "fault-ha",
+  "quickstart", "deployment", "release",
 ]);
 const metadataProblems = [];
+const acceptanceByPhase = new Map();
+const planOwnerByArtifact = new Map();
 const implementationOwners = new Set();
-const plannedArtifactOwners = new Map();
 for (const phase of phases) {
-  for (const key of metadataKeys) {
-    if (!phase.metadata[key]) metadataProblems.push(`${phase.id} missing ${key}`);
+  for (const key of metadataKeys) if (!phase.metadata[key]) metadataProblems.push(phase.id + " missing " + key);
+  if (!allowedTypes.has(phase.metadata.Type)) metadataProblems.push(phase.id + " illegal type " + phase.metadata.Type);
+  const acceptance = phase.metadata["Machine acceptance"] || "";
+  const phaseTests = [...acceptance.matchAll(/\bmake ([a-z0-9-]+)/g)].map((match) => "make-" + match[1]);
+  acceptanceByPhase.set(phase.id, phaseTests);
+  if (phaseTests.length !== 1) metadataProblems.push(phase.id + " needs exactly one Make command");
+  if (!acceptance.includes("build/reports/" + phase.id + "/report.json") || !acceptance.includes("junit.xml")) {
+    metadataProblems.push(phase.id + " lacks canonical JSON/JUnit report paths");
   }
-  if (!allowedTypes.has(phase.metadata.Type)) metadataProblems.push(`${phase.id} illegal type ${phase.metadata.Type}`);
-  const acceptance = phase.metadata["Machine acceptance"] ?? "";
-  const acceptanceTests = [...acceptance.matchAll(/\bmake ([a-z0-9-]+)/g)].map((match) => `make-${match[1]}`);
-  if (!new RegExp(`build/reports/${phase.id}/report\\.json`).test(acceptance) || !acceptance.includes("junit.xml")) {
-    metadataProblems.push(`${phase.id} must report to build/reports/${phase.id}/{report.json,junit.xml}`);
-  }
-  if (acceptanceTests.length !== 1) metadataProblems.push(`${phase.id} must declare exactly one Make acceptance command`);
-
-  const components = (phase.metadata.Components ?? "").split(",").map((value) => value.trim()).filter(Boolean);
-  const invalidComponents = components.filter((component) => !componentWhitelist.has(component));
-  if (components.length === 0 || invalidComponents.length > 0) {
-    metadataProblems.push(`${phase.id} invalid Components: ${invalidComponents.join(", ") || "empty"}`);
-  }
-  const owned = phase.metadata["Artifacts owned"] === "none"
-    ? []
-    : (phase.metadata["Artifacts owned"] ?? "").split(",").map((value) => value.trim()).filter(Boolean);
+  const components = (phase.metadata.Components || "").split(",").map((value) => value.trim()).filter(Boolean);
+  if (!components.length) metadataProblems.push(phase.id + " has no component");
+  for (const component of components) if (!componentWhitelist.has(component)) metadataProblems.push(phase.id + " invalid component " + component);
+  const owned = phase.metadata["Artifacts owned"] === "none" ? [] :
+    (phase.metadata["Artifacts owned"] || "").split(",").map((value) => value.trim()).filter(Boolean);
   if (["implement", "refactor"].includes(phase.metadata.Type)) {
-    const owner = phase.metadata["Capability owner"];
-    if (implementationOwners.has(owner)) metadataProblems.push(`${phase.id} reuses implement/refactor owner ${owner}`);
-    implementationOwners.add(owner);
-    if (owned.length === 0) metadataProblems.push(`${phase.id} implement/refactor owns no structured artifact`);
+    if (implementationOwners.has(phase.metadata["Capability owner"])) metadataProblems.push("duplicate implement owner " + phase.metadata["Capability owner"]);
+    implementationOwners.add(phase.metadata["Capability owner"]);
+    if (!owned.length) metadataProblems.push(phase.id + " implement/refactor owns no artifact");
+  } else if (owned.length) {
+    metadataProblems.push(phase.id + " non-implementation phase owns source artifacts");
   }
-  for (const artifactID of owned) {
-    const prior = plannedArtifactOwners.get(artifactID);
-    if (prior) metadataProblems.push(`${artifactID} is owned by both ${prior} and ${phase.id}`);
-    plannedArtifactOwners.set(artifactID, phase.id);
-    const artifact = artifactByID.get(artifactID);
-    if (!artifact) {
-      metadataProblems.push(`${phase.id} owns unknown artifact ${artifactID}`);
-      continue;
-    }
-    if (artifact.owner !== phase.metadata["Capability owner"] || artifact.owner_phase !== phase.id) {
-      metadataProblems.push(`${artifactID} owner/owner_phase does not match ${phase.id}/${phase.metadata["Capability owner"]}`);
-    }
-    if (artifact.acceptance_test !== acceptanceTests[0] || !artifact.exposure) {
-      metadataProblems.push(`${artifactID} lacks matching acceptance_test/exposure for ${phase.id}`);
-    }
+  for (const id of owned) {
+    if (planOwnerByArtifact.has(id)) metadataProblems.push(id + " is plan-owned twice");
+    planOwnerByArtifact.set(id, phase.id);
   }
 }
-record(
-  "phase-components-artifact-ownership-and-reports",
-  metadataProblems.length === 0,
-  metadataProblems.length === 0
-    ? "all phases use legal types, controlled components, unique cataloged artifact ownership and canonical reports"
-    : metadataProblems.join("; "),
-);
+record("phase-metadata-and-reports", metadataProblems.length === 0,
+  metadataProblems.length === 0 ? "all phases have legal metadata and one report-producing acceptance" : metadataProblems.join("; "));
 
-const phaseIDs = new Set(actualPhaseIDs);
 const dependencyMap = new Map();
 const dependencyProblems = [];
 for (const phase of phases) {
   const raw = phase.metadata.Dependencies;
-  const dependencies = raw === "none" ? [] : [...(raw ?? "").matchAll(/P\d{2}/g)].map((match) => match[0]);
-  if (raw !== "none" && dependencies.length === 0) dependencyProblems.push(`${phase.id} has unparseable dependencies`);
+  const dependencies = raw === "none" ? [] : [...(raw || "").matchAll(/P\d{2}/g)].map((match) => match[0]);
+  if (raw !== "none" && !dependencies.length) dependencyProblems.push(phase.id + " has unparseable dependencies");
   for (const dependency of dependencies) {
-    if (!phaseIDs.has(dependency)) dependencyProblems.push(`${phase.id} references unknown ${dependency}`);
-    if (dependency >= phase.id) dependencyProblems.push(`${phase.id} depends on non-prior ${dependency}`);
+    if (!validPhaseIDs.has(dependency)) dependencyProblems.push(phase.id + " unknown dependency " + dependency);
+    if (Number(dependency.slice(1)) >= Number(phase.id.slice(1))) dependencyProblems.push(phase.id + " non-prior dependency " + dependency);
   }
   dependencyMap.set(phase.id, dependencies);
 }
-const visiting = new Set();
-const visited = new Set();
-function visit(phaseID) {
-  if (visiting.has(phaseID)) {
-    dependencyProblems.push(`cycle reaches ${phaseID}`);
-    return;
-  }
-  if (visited.has(phaseID)) return;
-  visiting.add(phaseID);
-  for (const dependency of dependencyMap.get(phaseID) ?? []) visit(dependency);
-  visiting.delete(phaseID);
-  visited.add(phaseID);
+const visitingPhases = new Set();
+const visitedPhases = new Set();
+function visitPhase(id) {
+  if (visitingPhases.has(id)) { dependencyProblems.push("phase cycle at " + id); return; }
+  if (visitedPhases.has(id)) return;
+  visitingPhases.add(id);
+  for (const dependency of dependencyMap.get(id) || []) visitPhase(dependency);
+  visitingPhases.delete(id);
+  visitedPhases.add(id);
 }
-for (const phaseID of phaseIDs) visit(phaseID);
-record(
-  "phase-dependency-dag",
-  dependencyProblems.length === 0,
-  dependencyProblems.length === 0 ? "all dependencies resolve to prior phases; DAG is acyclic" : dependencyProblems.join("; "),
-);
+for (const id of phaseIDs) visitPhase(id);
+record("phase-dependency-dag", dependencyProblems.length === 0,
+  dependencyProblems.length === 0 ? "all phase dependencies are prior and acyclic" : dependencyProblems.join("; "));
 
-const phaseByOwner = new Map(phases.map((phase) => [phase.metadata["Capability owner"], phase]));
-const orderedOwners = [
-  "spec-governance",
-  "implementation-planning",
-  "independent-reviewer",
-  "project-owner",
-  "repository-layout",
-  "protocol-foundation",
-  "code-generation",
-  "control-plane-platform",
-  "control-plane-storage",
-  "identity-secret-foundation",
-  "publication-contracts",
-  "publication-service",
-  "asset-broker",
-  "registry-core",
-  "registry-api-sdk",
-  "registry-recovery",
-  "registry-verification",
-  "run-service",
-  "dispatch-security",
-  "event-ledger",
-  "go-provider-delivery",
-  "streaming-delivery",
-  "run-delivery-verification",
-  "worker-service",
-  "go-worker-client",
-  "operations-security-review",
-  "python-provider",
-  "typescript-consumer",
-  "interop-a2a",
-  "interop-mcp",
-  "interop-ard",
-  "interop-observability",
-  "portable-conformance",
-  "server-conformance",
-  "fault-ha-harness",
-  "sqlite-quickstart",
-  "production-deployment",
-  "resilience-verification",
-  "release-engineering",
-  "release-dry-run-verification",
-  "release-readiness-review",
-  "public-governance",
-  "public-artifact-generation",
-  "public-release-verification",
-  "v1-rc-delivery",
-  "external-conformance-review",
-  "v1-freeze-overlay-review",
-  "v1-delivery",
+const requiredOwners = [
+  "spec-governance", "implementation-planning", "independent-reviewer", "project-owner", "repository-layout",
+  "protocol-foundation", "code-generation", "control-plane-platform", "control-plane-storage",
+  "identity-secret-foundation", "publication-contracts", "publication-service", "asset-broker", "registry-core",
+  "registry-api-sdk", "registry-recovery", "registry-verification", "run-service", "dispatch-security",
+  "event-ledger", "go-provider-delivery", "streaming-delivery", "run-delivery-verification", "worker-service",
+  "go-worker-client", "operations-security-review", "python-provider", "typescript-consumer", "interop-a2a",
+  "interop-mcp", "interop-ard", "interop-observability", "portable-conformance", "server-conformance",
+  "fault-ha-harness", "sqlite-quickstart", "production-deployment", "resilience-verification",
+  "release-supply-chain", "release-evidence-tooling", "release-lineage-tooling", "release-finalization-tooling",
+  "release-dry-run-verification", "release-readiness-review", "public-governance",
+  "public-artifact-generation", "rc-source-freeze", "public-release-verification", "v1-rc-delivery",
+  "external-conformance-review", "v1-freeze-overlay-review", "v1-release-approval", "v1-delivery",
 ];
 const ownerProblems = [];
-let previousIndex = -1;
-for (const owner of orderedOwners) {
+let lastOwnerIndex = -1;
+for (const owner of requiredOwners) {
   const phase = phaseByOwner.get(owner);
-  if (!phase) {
-    ownerProblems.push(`missing capability owner ${owner}`);
-    continue;
-  }
+  if (!phase) { ownerProblems.push("missing " + owner); continue; }
   const index = phases.indexOf(phase);
-  if (index <= previousIndex) ownerProblems.push(`${owner} is out of order at ${phase.id}`);
-  previousIndex = index;
+  if (index <= lastOwnerIndex) ownerProblems.push(owner + " out of order");
+  lastOwnerIndex = index;
 }
-record(
-  "capability-owner-sequence",
-  ownerProblems.length === 0 && phaseByOwner.get("v1-delivery") === phases.at(-1),
-  ownerProblems.length === 0 ? `${orderedOwners.length} required capability owners are present in lifecycle order` : ownerProblems.join("; "),
-);
+record("capability-owner-order", ownerProblems.length === 0,
+  ownerProblems.length === 0 ? String(requiredOwners.length) + " capability owners are ordered" : ownerProblems.join("; "));
+
+const p01 = phaseByID.get("P01");
+const p02 = phaseByID.get("P02");
+const p03 = phaseByID.get("P03");
+const p04 = phaseByID.get("P04");
+record("planning-audit-user-gate",
+  p01?.metadata.Type === "implement" && p01.metadata.Status === "complete" &&
+  p02?.metadata.Type === "implement" && p02.metadata.Status === "complete" &&
+  p03?.metadata.Type === "verify · review" && p03.metadata.Status === "pending-review" &&
+  p04?.metadata.Type === "gate" && p04.metadata.Status === "blocked" &&
+  p03.body.includes("must_fix_count=0") && p04.body.includes("summary_sha256") &&
+  (dependencyMap.get("P04") || []).includes("P03"),
+  "P01/P02 complete, P03 pending re-audit and P04 blocked");
 
 function phaseHas(owner, needles) {
   const phase = phaseByOwner.get(owner);
-  return phase && needles.every((needle) => phase.body.includes(needle));
+  return Boolean(phase && needles.every((needle) => phase.body.includes(needle)));
 }
-const firstPathChecks = [
+const firstPathRules = [
   ["control-plane-platform", ["Clock/ID/Fault", "Audit/Trace"]],
-  ["control-plane-storage", ["readiness", "dirty", "backup/restore"]],
-  ["identity-secret-foundation", ["Credential", "SecretRef", "不实现 URL"]],
-  ["publication-service", ["静态 URL", "离线 `$ref`"]],
-  ["asset-broker", ["连接时 DNS/IP", "redirect"]],
+  ["control-plane-storage", ["durable Audit", "fixture versions", "readiness"]],
+  ["identity-secret-foundation", ["Credential", "SecretRef", "durable Audit"]],
+  ["publication-service", ["静态 URL", "离线"]],
+  ["asset-broker", ["DNS/IP", "redirect"]],
   ["run-service", ["Outbox", "Cancel", "Deadline", "Usage", "Audit", "Trace", "effect_id"]],
-  ["event-ledger", ["append-only", "Inbox", "终态不可逆", "capacity 释放同事务"]],
-  ["go-provider-delivery", ["provider durable Inbox/Outbox", "effect_id", "Cancel/Deadline/Usage/Trace", "crash-before/after-effect", "DNS/IP 重检"]],
+  ["dispatch-security", ["Signer/KMS/SecretRef", "public JWKS", "rotation state"]],
+  ["event-ledger", ["append-only", "Inbox", "capacity 释放同事务"]],
+  ["go-provider-delivery", ["DurableStore", "SQLite adapter/migration", "effect_id", "crash-before/after-effect", "DNS/IP 重检"]],
   ["worker-service", ["claim 与 Attempt lease 原子", "Inbox/Outbox/effect"]],
 ];
-const firstPathProblems = firstPathChecks
-  .filter(([owner, needles]) => !phaseHas(owner, needles))
-  .map(([owner]) => owner);
-record(
-  "first-path-cross-cutting-invariants",
-  firstPathProblems.length === 0,
-  firstPathProblems.length === 0
-    ? "Clock/ID/Fault, migration readiness, credentials/endpoint security, audit/trace/cancel/deadline/usage/effect/inbox/outbox are built at first use"
-    : `missing first-path invariants in: ${firstPathProblems.join(", ")}`,
-);
+const firstPathProblems = firstPathRules.filter(([owner, needles]) => !phaseHas(owner, needles)).map(([owner]) => owner);
+record("first-path-invariants", firstPathProblems.length === 0,
+  firstPathProblems.length === 0 ? "cross-cutting invariants are built at first use" : "missing " + firstPathProblems.join(", "));
 
-const migrationOwners = [
-  "control-plane-storage", "publication-service", "asset-broker", "registry-core", "registry-recovery",
-  "run-service", "dispatch-security", "event-ledger", "go-provider-delivery", "worker-service",
-];
-const migrationProblems = migrationOwners
-  .filter((owner) => !phaseHas(owner, ["SQLite/PostgreSQL", "empty", "N-1→N", "idempotent", "dirty"]))
-  .map((owner) => owner);
-record(
-  "persistence-first-path-migration-submatrices",
-  migrationProblems.length === 0,
-  migrationProblems.length === 0
-    ? "every persistence-owning phase carries dual-database migrations and its own empty/N-1/idempotent/dirty submatrix"
-    : `missing migration submatrix in: ${migrationProblems.join(", ")}`,
-);
-
-record(
-  "bounded-bootstrap-quickstart-deployment-release-scopes",
-  phaseHas("repository-layout", ["本地 Go module proxy/bootstrap", "GOWORK=off", "root pseudo-version"]) &&
-    phaseHas("sqlite-quickstart", ["只编排", "禁止在本阶段新写四套示例"]) &&
-    phaseHas("production-deployment", ["Container build primitive", "不实现语言包打包"]) &&
-    phaseHas("release-engineering", ["P05 Go proxy", "P27 Python", "P28 npm", "P37 Container", "不重新实现"]),
-  "P05 owns bootstrap, P36 only composes examples, P37 owns deployment/container primitive and P39 only orchestrates prior primitives",
-);
-
-const p03 = phaseByOwner.get("independent-reviewer");
-const p04 = phaseByOwner.get("project-owner");
-const p01 = phaseByOwner.get("spec-governance");
-const p02 = phaseByOwner.get("implementation-planning");
-record(
-  "planning-audit-and-user-gate",
-  p01?.metadata.Type === "implement" &&
-    p01?.metadata.Status === "complete" &&
-    p02?.metadata.Type === "implement" &&
-    p02?.metadata.Status === "complete" &&
-    p03?.metadata.Type === "verify · review" &&
-    p03?.metadata.Status === "pending-review" &&
-    p03.body.includes("IR-01–IR-14") &&
-    p03.body.includes("must_fix_count=0") &&
-    p03.body.includes("summary_sha256") &&
-    p03.body.includes("TRUSTED_KEYS") &&
-    p03.body.includes("make planning-audit") &&
-    p04?.metadata.Type === "gate" &&
-    p04?.metadata.Status === "blocked" &&
-    p04.body.includes("summary_sha256") &&
-    p04.body.includes("make gate-check") &&
-    (dependencyMap.get(p04.id) ?? []).includes(p03.id),
-  "P01/P02 are completed implementation work; P03 is pending external review with zero must-fix; P04 is blocked on the explicit user gate",
-);
-
-const releaseToolchain = phaseByOwner.get("release-engineering");
-const releaseDryRun = phaseByOwner.get("release-dry-run-verification");
-record(
-  "release-toolchain-before-read-only-dry-run",
-  releaseToolchain?.metadata.Type === "implement" &&
-    releaseToolchain.body.includes("P05 Go proxy") &&
-    releaseToolchain.body.includes("P27 Python") &&
-    releaseToolchain.body.includes("P28 npm") &&
-    releaseToolchain.body.includes("P37 Container") &&
-    releaseToolchain.body.includes("validator/aggregator/freeze/delivery") &&
-    releaseToolchain.body.includes("SBOM/provenance") &&
-    releaseDryRun?.metadata.Type === "verify · spec" &&
-    releaseDryRun.body.includes("只读") &&
-    releaseDryRun.body.includes("不得在 verify 阶段补代码") &&
-    (dependencyMap.get(releaseDryRun.id) ?? []).includes(releaseToolchain.id),
-  "release tooling is implemented by one owner before a dependent read-only reproducibility verification",
-);
-
-const acceptanceTestsByPhase = new Map();
-for (const phase of phases) {
-  acceptanceTestsByPhase.set(
-    phase.id,
-    [...phase.metadata["Machine acceptance"].matchAll(/\bmake ([a-z0-9-]+)/g)].map((match) => `make-${match[1]}`),
-  );
+const artifactProblems = [];
+const lifecycleFields = ["owner_phase", "completion_phase", "producer_phase"];
+function phaseNumber(id) { return Number(id?.slice(1)); }
+function availability(artifact) {
+  const field = lifecycleFields.find((candidate) => artifact?.[candidate]);
+  return field ? phaseNumber(artifact[field]) : 0;
 }
-const implementedMakeTargets = new Set(
-  [...makefile.matchAll(/^([a-z0-9]+(?:-[a-z0-9]+)*):(?:\s|$)/gm)].map((match) => `make-${match[1]}`),
-);
-const currentPhaseIDs = new Set(["P01", "P02", "P03", "P04"]);
-const currentTargetProblems = [];
-for (const phaseID of currentPhaseIDs) {
-  for (const testID of acceptanceTestsByPhase.get(phaseID) ?? []) {
-    if (!implementedMakeTargets.has(testID)) currentTargetProblems.push(`${phaseID} missing implemented ${testID}`);
+for (const artifact of artifacts) {
+  const roles = lifecycleFields.filter((field) => artifact[field]);
+  if (artifact.status === "planned" && roles.length !== 1) artifactProblems.push(artifact.id + " planned lifecycle roles=" + roles.length);
+  if (roles.some((field) => !validPhaseIDs.has(artifact[field]))) artifactProblems.push(artifact.id + " unknown lifecycle phase");
+  if (artifact.owner_phase) {
+    if (!artifact.owner || !artifact.acceptance_test || !artifact.exposure || artifact.path_role !== "concrete") {
+      artifactProblems.push(artifact.id + " invalid concrete source metadata");
+    }
+    const ownerPhase = phaseByID.get(artifact.owner_phase);
+    if (ownerPhase?.metadata["Capability owner"] !== artifact.owner) artifactProblems.push(artifact.id + " owner mismatch");
+    if (acceptanceByPhase.get(artifact.owner_phase)?.[0] !== artifact.acceptance_test) artifactProblems.push(artifact.id + " acceptance mismatch");
+    if (planOwnerByArtifact.get(artifact.id) !== artifact.owner_phase) artifactProblems.push(artifact.id + " missing plan ownership");
   }
-}
-const plannedFutureTargets = new Set(
-  phases
-    .filter((phase) => !currentPhaseIDs.has(phase.id))
-    .flatMap((phase) => acceptanceTestsByPhase.get(phase.id) ?? [])
-    .filter((testID) => !implementedMakeTargets.has(testID)),
-);
-record(
-  "implemented-vs-planned-make-targets",
-  currentTargetProblems.length === 0,
-  currentTargetProblems.length === 0
-    ? `${implementedMakeTargets.size} Make targets currently exist; P01-P04 acceptance targets are implemented; ${plannedFutureTargets.size} unique future acceptance targets remain planned`
-    : currentTargetProblems.join("; "),
-);
-const requirementProblems = [];
-for (const requirement of requirements.requirements ?? []) {
-  const allowedTests = new Set(
-    (requirement.phases ?? []).flatMap((phaseID) => acceptanceTestsByPhase.get(phaseID) ?? []),
-  );
-  for (const phaseID of requirement.phases ?? []) {
-    if (!phaseIDs.has(phaseID)) requirementProblems.push(`${requirement.id} maps unknown ${phaseID}`);
-    if (!(acceptanceTestsByPhase.get(phaseID) ?? []).some((testID) => requirement.tests.includes(testID))) {
-      requirementProblems.push(`${requirement.id} lacks acceptance for ${phaseID}`);
+  if (artifact.completion_phase && !["aggregate", "container"].includes(artifact.path_role)) artifactProblems.push(artifact.id + " completion is not aggregate/container");
+  if (artifact.producer_phase && !["machine-reports", "canonical-evidence-summary"].includes(artifact.kind)) artifactProblems.push(artifact.id + " invalid producer kind");
+  for (const dependencyID of artifact.derives_from || []) {
+    const dependency = artifactByID.get(dependencyID);
+    if (!dependency) { artifactProblems.push(artifact.id + " unknown dependency " + dependencyID); continue; }
+    if (availability(dependency) > availability(artifact)) {
+      artifactProblems.push(artifact.id + "@" + availability(artifact) + " depends on future " + dependencyID + "@" + availability(dependency));
     }
   }
-  for (const testID of requirement.tests ?? []) {
-    if (!allowedTests.has(testID)) requirementProblems.push(`${requirement.id} maps non-phase test ${testID}`);
-  }
+  for (const inputID of artifact.runtime_inputs || []) if (!artifactByID.has(inputID)) artifactProblems.push(artifact.id + " unknown runtime input " + inputID);
 }
-record(
-  "requirement-phase-test-traceability",
-  (requirements.requirements ?? []).length === 14 && requirementProblems.length === 0,
-  requirementProblems.length === 0
-    ? "IR-01..IR-14 map uniquely to existing phases and declared acceptance target names; future targets are planning references, not claimed as implemented"
-    : requirementProblems.join("; "),
-);
-
-const contractArtifacts = [
-  ["openapi-control-plane", "P11", "public-contract", ["publication", "jwks-discovery", "event-session-exchange", "asset-token-exchange"]],
-  ["openapi-agent-runtime", "P21", "public-contract", ["agent-runtime-direct", "agent-runtime-proxy"]],
-  ["openapi-registry-runtime", "P15", "public-contract", ["runtime-registration", "lease-keepalive"]],
-  ["openapi-discovery-runtime", "P15", "public-contract", ["discovery-snapshot", "discovery-watch"]],
-  ["openapi-worker-runtime", "P24", "public-contract", ["worker-claim", "attempt-lease"]],
-  ["reference-secret-exchange", "P10", "reference-only", ["secret-ref-resolution"]],
-  ["asset-broker-service", "P13", "reference-only", ["asset-storage", "asset-token-exchange", "redirect-dns-ip-recheck"]],
-];
-const contractProblems = [];
-for (const [id, phase, exposure, capabilities] of contractArtifacts) {
+for (const [id, phaseID] of planOwnerByArtifact) {
   const artifact = artifactByID.get(id);
-  if (!artifact) {
-    contractProblems.push(`missing ${id}`);
-    continue;
-  }
-  if (artifact.phase !== phase || artifact.owner_phase !== phase || artifact.exposure !== exposure || !artifact.owner || !(artifact.tests?.length > 0)) {
-    contractProblems.push(`${id} lacks owner/phase/owner_phase/tests/exposure ownership`);
-  }
-  const ownerPhase = phases.find((candidate) => candidate.id === phase);
-  if (artifact.owner !== ownerPhase?.metadata["Capability owner"]) {
-    contractProblems.push(`${id} owner ${artifact.owner} does not match ${phase} owner`);
-  }
-  if (!(acceptanceTestsByPhase.get(phase) ?? []).some((testID) => artifact.tests?.includes(testID))) {
-    contractProblems.push(`${id} tests do not include the Make acceptance of ${phase}`);
-  }
-  if (!(acceptanceTestsByPhase.get(phase) ?? []).includes(artifact.acceptance_test)) {
-    contractProblems.push(`${id} acceptance_test does not match ${phase}`);
-  }
-  for (const capability of capabilities) {
-    if (!artifact.capabilities?.includes(capability)) contractProblems.push(`${id} lacks capability ${capability}`);
+  if (!artifact) artifactProblems.push(phaseID + " owns unknown " + id);
+  else if (artifact.owner_phase !== phaseID) artifactProblems.push(id + " plan-to-manifest mismatch");
+}
+record("artifact-lifecycle-temporal-bidirectional", artifactProblems.length === 0,
+  artifactProblems.length === 0 ? String(artifacts.length) + " artifacts satisfy lifecycle, temporal and owner closure" : artifactProblems.join("; "));
+
+const artifactDAGProblems = [];
+const visitingArtifacts = new Set();
+const visitedArtifacts = new Set();
+function visitArtifact(id) {
+  if (visitingArtifacts.has(id)) { artifactDAGProblems.push("artifact cycle at " + id); return; }
+  if (visitedArtifacts.has(id)) return;
+  visitingArtifacts.add(id);
+  for (const dependency of artifactByID.get(id)?.derives_from || []) visitArtifact(dependency);
+  visitingArtifacts.delete(id);
+  visitedArtifacts.add(id);
+}
+for (const id of artifactByID.keys()) visitArtifact(id);
+record("artifact-dag-all-kinds", artifactDAGProblems.length === 0,
+  artifactDAGProblems.length === 0 ? "artifact derives graph is acyclic" : artifactDAGProblems.join("; "));
+
+const pathProblems = [];
+for (let leftIndex = 0; leftIndex < artifacts.length; leftIndex += 1) {
+  for (let rightIndex = leftIndex + 1; rightIndex < artifacts.length; rightIndex += 1) {
+    const left = artifacts[leftIndex];
+    const right = artifacts[rightIndex];
+    if (left.path === right.path) { pathProblems.push("duplicate " + left.path); continue; }
+    if (right.path.startsWith(left.path + "/") && !["aggregate", "container"].includes(left.path_role)) pathProblems.push(left.id + " covers " + right.id);
+    if (left.path.startsWith(right.path + "/") && !["aggregate", "container"].includes(right.path_role)) pathProblems.push(right.id + " covers " + left.id);
   }
 }
-record(
-  "public-reference-api-ownership",
-  contractProblems.length === 0 && blueprint.includes("SecretRef resolution/exchange"),
-  contractProblems.length === 0
-    ? "Publication/Control Plane, JWKS, Event Session, Asset and reference-only Secret ownership is explicit"
-    : contractProblems.join("; "),
-);
+record("artifact-path-overlap", pathProblems.length === 0,
+  pathProblems.length === 0 ? "only aggregate/container paths contain children" : pathProblems.join("; "));
 
-const plannedExecutableKinds = new Set([
-  "generated-code", "sdk", "go-reference-implementation", "reference-port-adapter", "database-migrations",
-  "reference-implementations", "deployment", "adapters", "go-cli", "tooling", "release-tooling", "go-package",
-  "go-service-component", "sdk-component", "reference-agent", "build-primitive", "adapter", "conformance-driver",
-  "release-validator", "release-aggregator",
-]);
-const executableArtifactProblems = [];
-for (const artifact of manifest.artifacts ?? []) {
-  if (artifact.status !== "planned" || !plannedExecutableKinds.has(artifact.kind)) continue;
-  if (!artifact.owner || !artifact.phase || !artifact.owner_phase || !artifact.tests?.length || !artifact.acceptance_test || !artifact.exposure) {
-    executableArtifactProblems.push(`${artifact.id} lacks owner/phase/tests/owner_phase/acceptance_test/exposure`);
-    continue;
-  }
-  if (artifact.phase !== artifact.owner_phase || !artifact.tests.includes(artifact.acceptance_test)) {
-    executableArtifactProblems.push(`${artifact.id} phase/tests disagree with owner_phase/acceptance_test`);
-  }
-  const ownerPhase = phases.find((phase) => phase.id === artifact.owner_phase);
-  if (ownerPhase?.metadata["Capability owner"] !== artifact.owner) {
-    executableArtifactProblems.push(`${artifact.id} owner does not match ${artifact.owner_phase}`);
-  }
-  if (!(acceptanceTestsByPhase.get(artifact.owner_phase) ?? []).includes(artifact.acceptance_test)) {
-    executableArtifactProblems.push(`${artifact.id} acceptance_test does not match ${artifact.owner_phase}`);
-  }
-}
-record(
-  "planned-executable-artifact-metadata",
-  executableArtifactProblems.length === 0,
-  executableArtifactProblems.length === 0
-    ? "all planned executable artifacts have matching owner_phase, acceptance_test and exposure metadata"
-    : executableArtifactProblems.join("; "),
-);
-
-const releaseArtifactExpectations = [
-  ["release-engineering-toolchain", "P39", "release-engineering", "make-build-release-toolchain"],
-  ["external-config-evidence-schema", "P39", "release-engineering", "make-build-release-toolchain"],
-  ["external-config-validator", "P39", "release-engineering", "make-build-release-toolchain"],
-  ["public-release-aggregator", "P39", "release-engineering", "make-build-release-toolchain"],
-  ["external-conformance-evidence-schema", "P39", "release-engineering", "make-build-release-toolchain"],
-  ["external-conformance-validator", "P39", "release-engineering", "make-build-release-toolchain"],
-  ["freeze-overlay-checker", "P39", "release-engineering", "make-build-release-toolchain"],
-  ["final-delivery-checker", "P39", "release-engineering", "make-build-release-toolchain"],
-  ["release-report-integration", "P39", "release-engineering", "make-build-release-toolchain"],
-  ["release-toolchain-reports", "P39", "release-engineering", "make-build-release-toolchain"],
-  ["release-dry-run-reports", "P40", "release-dry-run-verification", "make-release-dry-run"],
+const criticalArtifacts = [
+  "sdk-go-protocol-core", "base-state-machine-fixtures", "conformance-harness-base", "codegen-pipeline",
+  "codegen-representative-spike", "reference-control-plane-server", "audit-trace-ports",
+  "audit-trace-memory-bootstrap", "migration-engine", "migration-engine-fixture-versions",
+  "sqlite-uow-storage-adapter", "postgres-uow-storage-adapter", "durable-audit-storage",
+  "identity-service", "credential-store", "reference-secret-exchange", "registry-api-service",
+  "direct-proxy-delivery-service", "provider-durable-store-port", "reference-provider-sqlite-adapter",
+  "reference-provider-sqlite-migration", "streaming-service", "go-streaming-client",
+  "typescript-streaming-client", "release-package-orchestrator", "supply-chain-orchestrator",
+  "trusted-release-role-registry", "cross-commit-lineage-verifier", "rc-source-freeze-checker",
+  "final-equivalence-attestation-schema",
+  "freeze-overlay-checker", "payload-equivalence-checker", "final-delivery-checker",
 ];
-const releaseArtifactProblems = [];
-for (const [id, phase, owner, test] of releaseArtifactExpectations) {
-  const artifact = artifactByID.get(id);
-  if (!artifact) {
-    releaseArtifactProblems.push(`missing ${id}`);
-    continue;
-  }
-  if (artifact.phase !== phase || artifact.owner_phase !== phase || artifact.owner !== owner || artifact.acceptance_test !== test || !artifact.tests?.includes(test)) {
-    releaseArtifactProblems.push(`${id} must be owned by ${owner}/${phase} and tested by ${test}`);
+const missingArtifacts = criticalArtifacts.filter((id) => !artifactByID.has(id));
+record("critical-artifact-owners", missingArtifacts.length === 0,
+  missingArtifacts.length === 0 ? String(criticalArtifacts.length) + " critical artifacts cataloged" : "missing " + missingArtifacts.join(", "));
+
+const generatedDomains = ["control-plane", "asset", "registry", "run", "dispatch", "event", "streaming", "worker"];
+const codegenProblems = [];
+for (const domain of generatedDomains) {
+  for (const language of ["go", "python", "typescript"]) {
+    const artifact = artifactByID.get("generated-" + domain + "-" + language);
+    if (!artifact?.derives_from?.includes("codegen-pipeline")) codegenProblems.push(domain + "/" + language);
   }
 }
-record(
-  "release-toolchain-artifact-ownership",
-  releaseArtifactProblems.length === 0,
-  releaseArtifactProblems.length === 0
-    ? "release implementation and read-only dry-run reports have explicit artifact owner/phase/test mappings"
-    : releaseArtifactProblems.join("; "),
-);
+if ((artifactByID.get("codegen-pipeline")?.derives_from || []).some((id) => id.startsWith("generated-"))) codegenProblems.push("pipeline reverse dependency");
+record("schema-fixture-codegen-increments", codegenProblems.length === 0,
+  codegenProblems.length === 0 ? "all contract domains own three-language increments from one pipeline" : codegenProblems.join("; "));
 
-const releaseTitles = [
-  "External public configuration gate",
-  "Real public namespace regeneration",
-  "Read-only public namespace verification",
-  "Deliver v1 release candidate from commit A",
-  "Independent implementation and partner evidence gate",
-  "Read-only freeze and deterministic final overlay verification",
-  "Deliver exact verified final release commit B",
+const migrationDomains = [
+  ["base", "P09"], ["identity", "P10"], ["publication", "P12"], ["asset", "P13"], ["registry", "P14"],
+  ["run", "P18"], ["dispatch", "P19"], ["event", "P20"], ["worker", "P24"],
 ];
-const releasePhases = releaseTitles.map((title) => phases.find((phase) => phase.title === title));
+const migrationProblems = [];
+for (const [domain, phaseID] of migrationDomains) {
+  for (const engine of ["sqlite", "postgres"]) {
+    if (artifactByID.get(engine + "-migration-" + domain)?.owner_phase !== phaseID) migrationProblems.push(engine + "/" + domain);
+  }
+  const body = phaseByID.get(phaseID)?.body || "";
+  if (!["empty", "N-1→N", "idempotent", "dirty"].every((needle) => body.includes(needle))) migrationProblems.push(phaseID + " matrix");
+}
+if (!phaseByID.get("P16")?.body.includes("不新增 migration")) migrationProblems.push("P16 no-migration rule");
+if ((phaseByID.get("P21")?.metadata["Artifacts owned"] || "").includes("postgres")) migrationProblems.push("P21 provider postgres");
+record("concrete-migration-increments", migrationProblems.length === 0,
+  migrationProblems.length === 0 ? "nine CP stages own dual migrations; P16 reuses and Provider remains local" : migrationProblems.join("; "));
+
+record("provider-storage-boundary",
+  artifactByID.get("provider-durable-store-port")?.path === "sdk/go/provider/durable_store.go" &&
+  artifactByID.get("reference-provider-sqlite-adapter")?.path === "reference/agents/go-http/internal/storage/sqlite" &&
+  artifactByID.get("reference-provider-sqlite-migration")?.path.startsWith("reference/agents/go-http/migrations/sqlite/") &&
+  layout.includes("DurableStore") && sdk.includes("不属于 Control Plane 双库矩阵"),
+  "public SDK ports are driver-free and reference agents keep local SQLite in their subtree");
+
+const reportProblems = [];
+for (const phase of phases) {
+  const report = artifacts.find((artifact) => artifact.kind === "machine-reports" && artifact.path === "build/reports/" + phase.id);
+  if (!report || report.producer_phase !== phase.id || report.owner_phase ||
+      report.acceptance_test !== acceptanceByPhase.get(phase.id)?.[0]) {
+    reportProblems.push(phase.id);
+  }
+}
+record("all-phase-report-producers", reportProblems.length === 0,
+  reportProblems.length === 0 ? "all phases have producer_phase report artifacts" : "invalid report artifacts " + reportProblems.join(", "));
+
+const releaseSequence = [
+  ["release-supply-chain", "P39", "implement"], ["release-evidence-tooling", "P40", "implement"],
+  ["release-lineage-tooling", "P41", "implement"], ["release-finalization-tooling", "P42", "implement"],
+  ["release-dry-run-verification", "P43", "verify · spec"],
+  ["release-readiness-review", "P44", "verify · review"], ["public-governance", "P45", "gate"],
+  ["public-artifact-generation", "P46", "implement"], ["rc-source-freeze", "P47", "deliver"],
+  ["public-release-verification", "P48", "verify · review"], ["v1-rc-delivery", "P49", "deliver"],
+  ["external-conformance-review", "P50", "gate"], ["v1-freeze-overlay-review", "P51", "verify · review"],
+  ["v1-release-approval", "P52", "gate"], ["v1-delivery", "P53", "deliver"],
+];
 const releaseProblems = [];
-for (const [index, phase] of releasePhases.entries()) {
-  if (!phase) releaseProblems.push(`missing ${releaseTitles[index]}`);
-  if (index > 0 && phase && !(dependencyMap.get(phase.id) ?? []).includes(releasePhases[index - 1]?.id)) {
-    releaseProblems.push(`${phase.id} does not directly depend on prior release-chain phase`);
-  }
+for (let index = 0; index < releaseSequence.length; index += 1) {
+  const [owner, id, type] = releaseSequence[index];
+  const phase = phaseByOwner.get(owner);
+  if (phase?.id !== id || phase?.metadata.Type !== type) releaseProblems.push(owner + " mapping");
+  if (index && !(dependencyMap.get(id) || []).includes(releaseSequence[index - 1][1])) releaseProblems.push(id + " dependency");
 }
-const [configGate, regenerate, finalVerify, v1RC, evidenceGate, freeze, v1Deliver] = releasePhases;
-if (v1RC && !v1RC.body.includes("v1.0.0-rc.N")) {
-  releaseProblems.push("v1 RC stage is not final-v1-RC specific");
-}
-if (v1RC && !["commit A", "nested `go.mod`", "root `v1.0.0-rc.N`"].every((needle) => v1RC.body.includes(needle))) {
-  releaseProblems.push("v1 RC stage does not bind nested root RC dependency to commit A");
-}
-if (evidenceGate && !["commit A", "Schema Bundle", "Runner", "Artifact digest"].every((needle) => evidenceGate.body.includes(needle))) {
-  releaseProblems.push("external evidence lacks exact source/schema/runner/artifact binding");
-}
-if (freeze && !(freeze.metadata.Type === "verify · review" && ["临时树", "commit B tree digest", "payload equivalence", "A→B equivalence attestation", "不关闭 RFC", "不修 Matrix"].every((needle) => freeze.body.includes(needle)))) {
-  releaseProblems.push("freeze lacks deterministic final overlay/tree digest and A-to-B attestation");
-}
-if (v1Deliver && !["release-metadata-only commit B", "B tree digest", "root final→proxy 可解析→nested final", "Conformance/SBOM/provenance"].every((needle) => v1Deliver.body.includes(needle))) {
-  releaseProblems.push("v1 delivery lacks exact approved commit B, root-before-nested order or final verification");
-}
-record(
-  "v1-rc-evidence-freeze-delivery-chain",
-  releaseProblems.length === 0,
-  releaseProblems.length === 0
-    ? `${configGate.id}->${regenerate.id}->${finalVerify.id}->${v1RC.id}(A)->${evidenceGate.id}->${freeze.id}(overlay/tree)->${v1Deliver.id}(B) enforces the signed two-commit equivalence chain`
-    : releaseProblems.join("; "),
-);
-
 const releaseNeedles = [
-  "真实 `go.work` 默认不提交",
-  "临时 Go proxy",
-  "root pseudo-version",
-  "GOWORK=off",
-  "commit A",
-  "commit B",
-  "final overlay",
-  "root final→proxy 可解析→nested final",
-  "A→B equivalence attestation",
-  "payload equivalence",
-  "SBOM",
-  "provenance",
+  ["P39", ["P05 Go proxy/bootstrap", "P27 Python", "P28 npm", "P37 Container", "不重新实现"]],
+  ["P40", ["root→timestamp→snapshot→targets", "TRUST_ROOT", "protected/pinned root", "Sigstore", "dry-run key", "不自动生成"]],
+  ["P41", ["隔离 checkout", "CI provenance", "current inputs", "A 到 B"]],
+  ["P42", ["unsigned canonical candidate", "parent=A", "release_approver", "bridged_reports"]],
+  ["P43", ["只读", "不得在 verify 阶段补代码", "private/dev snapshot"]],
+  ["P44", ["private code-complete", "不伪造外部配置/伙伴证据", "P49 v1 RC"]],
+  ["P45", ["pinned trust root", "两名 Maintainer", "任意 CLI registry", "rollback/freeze"]],
+  ["P46", ["RC source tree", "不创建 commit/tag", "nested `go.mod` 精确 root RC dependency"]],
+  ["P47", ["clean RC source commit A", "expected tree digest", "不创 tag/package"]],
+  ["P48", ["clean commit A", "只读", "不创建 commit/tag", "tracked tree 前后保持同一 digest"]],
+  ["P49", ["reference/control-plane/v1.0.0-rc.N", "create-only", "annotated tag-object", "incident-blocked", "同一 A/digest", "绝不重标旧 A"]],
+  ["P50", ["exact A commit/tree", "Schema Bundle", "Runner", "Artifact digests", "distinct `principal_id`"]],
+  ["P51", ["unsigned canonical final overlay", "expected B tree", "parent=A", "不包含自签 attestation"]],
+  ["P52", ["release_approver", "Sigstore", "expected B tree", "phase-policy digest", "bridged_reports", "dry-run key"]],
+  ["P53", ["metadata-only commit B", "parent=A", "expected-previous CAS", "同一 B/同一 digest", "incident-blocked", "Conformance/SBOM/provenance"]],
 ];
-const missingReleaseRules = releaseNeedles.filter((needle) => !`${layout}\n${blueprint}`.includes(needle));
-record(
-  "two-module-release-procedure",
-  missingReleaseRules.length === 0 && !blueprint.includes("正式 v1 使用同一 source commit"),
-  missingReleaseRules.length === 0 ? "bootstrap proxy and the reviewed commit-A to metadata-only commit-B release chain are explicit" : `missing: ${missingReleaseRules.join(", ")}`,
-);
+for (const [id, needles] of releaseNeedles) if (!needles.every((needle) => phaseByID.get(id)?.body.includes(needle))) releaseProblems.push(id + " invariants");
+record("release-a-b-chain", releaseProblems.length === 0,
+  releaseProblems.length === 0 ? "P39-P53 enforces tool ownership, clean A, public RC, external evidence, signed overlay and exact B" : releaseProblems.join("; "));
 
-record(
-  "first-public-release-is-v1-rc",
-  plan.includes("取消独立公共 v0.1") &&
-    blueprint.includes("首个公开候选是 P45") &&
-    readme.includes("取消独立公共 v0.1") &&
-    !`${plan}\n${blueprint}`.includes("## 8.2 公共 v0.1"),
-  "P41 and earlier remain private/dev snapshots; the first public candidate is v1.0.0-rc.N",
-);
+record("cross-commit-report-policy",
+  blueprint.includes("历史普通 success 报告") && blueprint.includes("隔离 checkout") &&
+  blueprint.includes("受信 CI/OIDC/Sigstore provenance") && blueprint.includes("current-input") &&
+  blueprint.includes("P03/P04 的外部规划签署是独立类型") &&
+  blueprint.includes("混合 commit 聚合不要求所有报告来自同一 commit") &&
+  blueprint.includes("P53 使用 commit A 报告") && blueprint.includes("P52 attestation 是唯一 A→B bridge") &&
+  decisions.includes("P03/P04 历史规划签署与机器报告分类") &&
+  decisions.includes("混合 commit 聚合") && decisions.includes("P52 专用外部签名 equivalence attestation"),
+  "ordinary reports, planning signatures, mixed commits and A-to-B bridge are distinct");
+record("first-public-v1-rc",
+  plan.includes("取消独立公共 v0.1") && plan.includes("P44 前所有产物都是 private/dev snapshot") &&
+  blueprint.includes("P44 及之前所有制品只允许 private/dev snapshot") && blueprint.includes("首个公开候选是 P49") &&
+  readme.includes("P44 及之前均为 private/dev snapshot") && readme.includes("首个公开候选是 P49") &&
+  publicAdoption.includes("P44 及之前所有验证制品仅是 private/dev snapshot"),
+  "P44 and earlier are private/dev and first public candidate is P49 v1 RC");
 
-const auditArtifacts = [
-  "planning-audit-evidence-schema",
-  "user-gate-evidence-schema",
-  "planning-audit-validation",
-  "planning-audit-reports",
-  "planning-audit-canonical-summary",
-  "user-gate-validation",
-  "user-gate-reports",
-  "user-gate-canonical-summary",
-  "check-report-meta-schema",
-  "machine-report-verifier",
-  "evidence-validation-library",
-];
-const missingAuditArtifacts = auditArtifacts.filter((id) => !artifactByID.has(id));
-const expectedAuditPaths = new Map([
-  ["planning-audit-evidence-schema", "spec/schemas/planning-audit-evidence.schema.json"],
-  ["user-gate-evidence-schema", "spec/schemas/user-gate-evidence.schema.json"],
-  ["planning-audit-validation", "scripts/planning-audit.mjs"],
-  ["planning-audit-reports", "build/reports/P03"],
-  ["planning-audit-canonical-summary", "spec/evidence/P03-planning-audit-summary.json"],
-  ["user-gate-validation", "scripts/gate-check.mjs"],
-  ["user-gate-reports", "build/reports/P04"],
-  ["user-gate-canonical-summary", "spec/evidence/P04-user-gate-summary.json"],
-  ["check-report-meta-schema", "spec/schemas/check-report.schema.json"],
-  ["machine-report-verifier", "scripts/verify-report.mjs"],
-  ["evidence-validation-library", "scripts/lib/evidence.mjs"],
-]);
-const wrongAuditPaths = [...expectedAuditPaths].filter(
-  ([id, expectedPath]) => artifactByID.get(id)?.path !== expectedPath,
+const publicV01Scan = await findPublicV01Violations();
+record("controlled-v01-language", publicV01Scan.violations.length === 0,
+  publicV01Scan.violations.length === 0 ? String(publicV01Scan.files.length) + " controlled files scanned" : publicV01Scan.violations.join("; "));
+const publicV01NegativeProbe = publicV01ViolationsInText(
+  "Release plan: publish public v0.1 before v1.0.0-rc.1.",
+  "negative-probe.md",
 );
-record(
-  "audit-gate-tooling-catalog",
-  missingAuditArtifacts.length === 0 &&
-    wrongAuditPaths.length === 0 &&
-    makefile.includes("planning-audit:") &&
-    makefile.includes("gate-check:") &&
-    plan.includes("原始外部证据") &&
-    agents.includes("原始外部证据不入 Git"),
-  missingAuditArtifacts.length === 0 && wrongAuditPaths.length === 0
-    ? "P03/P04 schemas, validators and planned reports are cataloged; raw evidence remains outside Git"
-    : `missing: ${missingAuditArtifacts.join(", ")}; wrong paths: ${wrongAuditPaths.map(([id]) => id).join(", ")}`,
-);
+record("controlled-v01-negative-probe", publicV01NegativeProbe.length === 1,
+  publicV01NegativeProbe.length === 1
+    ? "synthetic positive public-v0.1 milestone is rejected"
+    : "positive public-v0.1 probe escaped detection");
 
-record(
-  "console-isolation",
-  blueprint.includes("`kinglucky-agent-console` 不在本实施范围内") &&
-    architecture.includes("不在本仓库 P01–P48 实施范围") &&
-    readme.includes("不依赖 Console") &&
-    agents.includes("不得依赖 `kinglucky-agent-console`") &&
-    !layout.includes("kinglucky-agent-console/"),
-  "Console remains a downstream consumer and outside all implementation phases",
-);
+const implementedMakeTargets = new Set(
+  [...makefile.matchAll(/^([a-z0-9]+(?:-[a-z0-9]+)*):(?:\s|$)/gm)].map((match) => "make-" + match[1]));
+const makeProblems = [];
+for (const phaseID of ["P01", "P02", "P03", "P04"]) {
+  for (const test of acceptanceByPhase.get(phaseID) || []) if (!implementedMakeTargets.has(test)) makeProblems.push(phaseID + " missing " + test);
+}
+record("current-make-targets", makeProblems.length === 0,
+  makeProblems.length === 0 ? "P01-P04 Make targets are implemented" : makeProblems.join("; "));
 
+const requirementProblems = [];
+for (const requirement of requirements.requirements || []) {
+  const allowedTests = new Set((requirement.phases || []).flatMap((phaseID) => acceptanceByPhase.get(phaseID) || []));
+  for (const phaseID of requirement.phases || []) {
+    if (!validPhaseIDs.has(phaseID)) requirementProblems.push(requirement.id + " unknown " + phaseID);
+    if (!(acceptanceByPhase.get(phaseID) || []).some((test) => requirement.tests?.includes(test))) requirementProblems.push(requirement.id + " lacks " + phaseID + " acceptance");
+  }
+  for (const test of requirement.tests || []) if (!allowedTests.has(test)) requirementProblems.push(requirement.id + " non-phase test " + test);
+  for (const id of requirement.artifacts || []) if (!artifactByID.has(id)) requirementProblems.push(requirement.id + " unknown artifact " + id);
+}
+record("requirement-traceability", requirements.requirements?.length === 14 && requirementProblems.length === 0,
+  requirementProblems.length === 0 ? "IR-01..IR-14 map to valid artifacts/phases/tests" : requirementProblems.join("; "));
+
+record("console-isolation",
+  blueprint.includes("kinglucky-agent-console") && blueprint.includes("不在本实施范围内") &&
+  blueprint.includes("P01–P53") && architecture.includes("P01–P53") &&
+  plan.includes("本仓库 P01–P53 不修改 `kinglucky-agent-console`") && readme.includes("不依赖 Console") &&
+  agents.includes("kinglucky-agent-console") && !layout.includes("kinglucky-agent-console/"),
+  "Console is a downstream consumer outside P01-P53");
 const semanticNeedles = [
-  "Authoring strict",
-  "Consumer forward compatible",
-  "Offline closure",
-  "原始事件是不可变 append-only",
-  "语义一致”而非“SQL 一致",
-  "可复用的完整三语言 pipeline",
-  "预期子报告 ID/数量",
-  "原始外部证据保存在仓库外",
+  "Authoring strict", "Consumer forward compatible", "Offline closure", "原始事件是不可变 append-only",
+  "语义一致”而非“SQL 一致", "P16 明确复用 P14 ledger/watermark",
+  "P07 交付可复用的三语言 pipeline", "预期子报告 ID/数量", "release_approver", "Sigstore identity",
 ];
-const missingSemantics = semanticNeedles.filter((needle) => !`${blueprint}\n${sdk}`.includes(needle));
-record(
-  "blueprint-cross-cutting-rules",
-  missingSemantics.length === 0,
-  missingSemantics.length === 0 ? "contract, event, storage, codegen, aggregate-report and evidence rules are explicit" : `missing: ${missingSemantics.join(", ")}`,
-);
+const missingSemantics = semanticNeedles.filter((needle) => !(blueprint + "\n" + sdk).includes(needle));
+record("blueprint-cross-cutting-rules", missingSemantics.length === 0,
+  missingSemantics.length === 0 ? "contract/storage/codegen/report/signing rules explicit" : "missing " + missingSemantics.join(", "));
 
 const markdownFiles = await walkFiles(repositoryRoot, (filePath) => filePath.endsWith(".md"));
 const markdownProblems = [];
-const markdownLinkPattern = /\[[^\]]+\]\(([^)]+)\)/g;
+const linkPattern = /\[[^\]]+\]\(([^)]+)\)/g;
 for (const markdownFile of markdownFiles) {
   const markdown = await readFile(markdownFile, "utf8");
-  for (const match of markdown.matchAll(markdownLinkPattern)) {
+  for (const match of markdown.matchAll(linkPattern)) {
     let target = match[1].trim().replace(/^<|>$/g, "");
     target = target.split(/\s+["']/u, 1)[0];
     const localTarget = target.split("#", 1)[0].split("?", 1)[0];
     if (!localTarget || /^(?:https?:|mailto:)/i.test(localTarget)) continue;
-    try {
-      await stat(path.resolve(path.dirname(markdownFile), decodeURIComponent(localTarget)));
-    } catch {
-      markdownProblems.push(`${relative(markdownFile)} -> ${target}`);
-    }
+    try { await stat(path.resolve(path.dirname(markdownFile), decodeURIComponent(localTarget))); }
+    catch { markdownProblems.push(rel(markdownFile) + " -> " + target); }
   }
 }
-record(
-  "markdown-local-link-closure",
-  markdownProblems.length === 0,
-  markdownProblems.length === 0 ? `${markdownFiles.length} Markdown files have closed local links` : markdownProblems.join(", "),
-);
+record("markdown-local-link-closure", markdownProblems.length === 0,
+  markdownProblems.length === 0 ? String(markdownFiles.length) + " Markdown files checked" : markdownProblems.join(", "));
 
 await writeCheckReport({
   reportDirectory,
@@ -710,44 +491,32 @@ await writeCheckReport({
   command: actualCommand("scripts/blueprint-check.mjs"),
   checkerPath: "scripts/blueprint-check.mjs",
   inputPaths: [
-    "README.md",
-    "AGENTS.md",
-    "Makefile",
-    "docs/ARCHITECTURE.md",
-    "docs/DEVELOPMENT_PLAN.md",
-    "docs/DIRECTORY_STRUCTURE.md",
-    "docs/IMPLEMENTATION_BLUEPRINT.md",
-    "docs/SDK_AND_DX.md",
-    "spec/artifact-manifest.yaml",
-    "spec/requirements.yaml",
-  "scripts/blueprint-check.mjs",
-  "scripts/verify-report.mjs",
-  "scripts/lib/report.mjs",
-  "scripts/lib/repository.mjs",
-  "spec/schemas/check-report.schema.json",
+    "README.md", "AGENTS.md", "Makefile", "docs/ARCHITECTURE.md", "docs/DECISIONS.md",
+    "docs/DEVELOPMENT_PLAN.md", "docs/DIRECTORY_STRUCTURE.md", "docs/IMPLEMENTATION_BLUEPRINT.md",
+    "docs/PUBLIC_PROJECT_AND_ADOPTION.md", "docs/SDK_AND_DX.md",
+    ...publicV01Scan.files.map(rel), "spec/artifact-manifest.yaml", "spec/requirements.yaml",
+    "spec/schemas/artifact-manifest.schema.json", "scripts/blueprint-check.mjs",
+    "scripts/verify-report.mjs", "scripts/test-report-verifier.mjs", "scripts/lib/report.mjs",
+    "scripts/lib/repository.mjs", "spec/schemas/check-report.schema.json",
   ],
   checks,
   errors,
   summary: {
     phases: phases.length,
+    artifacts: artifacts.length,
+    checks: checks.length,
+    failures: errors.length,
     implement_or_refactor_phases: phases.filter((phase) => ["implement", "refactor"].includes(phase.metadata.Type)).length,
     verify_phases: phases.filter((phase) => phase.metadata.Type?.startsWith("verify ·")).length,
     gates: phases.filter((phase) => phase.metadata.Type === "gate").length,
     deliveries: phases.filter((phase) => phase.metadata.Type === "deliver").length,
-    immutable_requirements: requirements.requirements?.length ?? 0,
-    declared_go_modules: moduleDeclarations.length,
-    markdown_files: markdownFiles.length,
-    implemented_make_targets: implementedMakeTargets.size,
-    planned_future_make_targets: plannedFutureTargets.size,
   },
-  auditNote: "This repeatable self-check cannot replace the independent P03 planning audit or the explicit P04 user gate.",
+  auditNote:
+    "Machine blueprint checks enforce declared structure and negative probes; they do not replace the independent P03 planning audit or external release gates.",
 });
-
-if (errors.length > 0) {
-  console.error(`AROP blueprint check failed with ${errors.length} error(s):`);
-  for (const error of errors) console.error(`- ${error}`);
-  console.error(`Reports: ${reportDirectory}/report.json and junit.xml`);
+if (errors.length) {
+  console.error("AROP blueprint check failed with " + errors.length + " issue(s):");
+  for (const error of errors) console.error("- " + error);
   process.exit(1);
 }
-console.log(`AROP blueprint check passed: ${phases.length} continuous phases, ${checks.length} checks and ${moduleDeclarations.length} Go modules.`);
-console.log(`Reports: ${reportDirectory}/report.json and junit.xml`);
+console.log("AROP blueprint check passed: " + phases.length + " phases, " + artifacts.length + " artifacts, " + checks.length + " checks.");

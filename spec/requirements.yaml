@@ -1,94 +1,488 @@
 schema_version: 1
 updated: 2026-09-22
 source: epic-immutable-requirements
-immutability_rule: >-
-  本文件中的 statement_original_zh 是实施期不可静默改写的原始要求。若用户后续明确变更，
-  必须新增变更记录、更新 Decision 和所有受影响映射，不得直接覆盖历史。
+immutability_rule: 本文件中的 statement_original_zh 是实施期不可静默改写的原始要求。若用户后续明确变更， 必须新增变更记录、更新 Decision 和所有受影响映射，不得直接覆盖历史。
 statements_digest_algorithm: sha256-jcs
 statements_digest: sha256:ae16611e5286beaf050f505dd603f3bc761a96bf03d4c145a27d14d69c89d8fd
-
 requirements:
   - id: IR-01
-    statement_original_zh: "先把全量实现规划落到仓库权威文档；之后实现必须按核心文档推进。"
-    translation_en: "First plan the full implementation in authoritative repository documents; subsequent implementation must follow the core documents."
-    artifacts: [decisions, artifact-catalog, immutable-requirements, conflict-ledger, development-plan]
-    phases: [P01, P02, P03, P04]
-    tests: [make-spec-index-check, make-blueprint-check, make-planning-audit, make-gate-check]
+    statement_original_zh: 先把全量实现规划落到仓库权威文档；之后实现必须按核心文档推进。
+    translation_en: First plan the full implementation in authoritative repository documents; subsequent implementation must follow the core documents.
+    artifacts:
+      - decisions
+      - artifact-catalog
+      - immutable-requirements
+      - conflict-ledger
+      - development-plan
+    phases:
+      - P01
+      - P02
+      - P03
+      - P04
+    tests:
+      - make-spec-index-check
+      - make-blueprint-check
+      - make-planning-audit
+      - make-gate-check
   - id: IR-02
-    statement_original_zh: "协议仓保持厂商中立，不依赖 Console、飞书、cc-connect 或具体 Agent 框架；不得修改 `kinglucky-agent-console`。"
-    translation_en: "Keep the protocol repository vendor-neutral and independent of Console, Feishu, cc-connect, or a specific Agent framework; do not modify `kinglucky-agent-console`."
-    artifacts: [architecture, protocol-specification, security-governance-specification, sdk-dx-specification, immutable-requirements, development-plan]
-    phases: [P01, P02, P05, P10, P11, P21, P24, P25, P26, P27, P28, P29, P30, P31, P32, P33, P34, P35, P36, P37, P39, P40, P41]
-    tests: [make-spec-index-check, make-blueprint-check, make-test-go-workspace, make-test-identity-secrets, make-test-publication-contracts, make-test-direct-proxy-provider, make-test-worker-service, make-test-go-worker-sdk, make-verify-operations-security, make-test-python-provider, make-test-typescript-consumer, make-test-interop-a2a, make-test-interop-mcp, make-test-interop-ard, make-test-interop-observability, make-test-portable-conformance, make-test-server-conformance, make-test-fault-ha-drivers, make-quickstart-smoke, make-production-reference-smoke, make-build-release-toolchain, make-release-dry-run, make-validate-all]
+    statement_original_zh: 协议仓保持厂商中立，不依赖 Console、飞书、cc-connect 或具体 Agent 框架；不得修改 `kinglucky-agent-console`。
+    translation_en: Keep the protocol repository vendor-neutral and independent of Console, Feishu, cc-connect, or a specific Agent framework; do not modify `kinglucky-agent-console`.
+    artifacts:
+      - architecture
+      - protocol-specification
+      - security-governance-specification
+      - sdk-dx-specification
+      - immutable-requirements
+      - development-plan
+    phases:
+      - P01
+      - P02
+      - P05
+      - P10
+      - P11
+      - P21
+      - P24
+      - P25
+      - P26
+      - P27
+      - P28
+      - P29
+      - P30
+      - P31
+      - P32
+      - P33
+      - P34
+      - P35
+      - P36
+      - P37
+      - P39
+      - P40
+      - P41
+      - P42
+      - P43
+      - P44
+    tests:
+      - make-spec-index-check
+      - make-blueprint-check
+      - make-test-go-workspace
+      - make-test-identity-secrets
+      - make-test-publication-contracts
+      - make-test-direct-proxy-provider
+      - make-test-worker-service
+      - make-test-go-worker-sdk
+      - make-verify-operations-security
+      - make-test-python-provider
+      - make-test-typescript-consumer
+      - make-test-interop-a2a
+      - make-test-interop-mcp
+      - make-test-interop-ard
+      - make-test-interop-observability
+      - make-test-portable-conformance
+      - make-test-server-conformance
+      - make-test-fault-ha-drivers
+      - make-quickstart-smoke
+      - make-production-reference-smoke
+      - make-test-release-supply-chain
+      - make-test-release-evidence-tooling
+      - make-test-release-lineage-tooling
+      - make-test-release-finalization-tooling
+      - make-release-dry-run
+      - make-validate-all
   - id: IR-03
-    statement_original_zh: "后端采用 Go：Reference Control Plane、Registry、Dispatcher、Run/Event Ledger、服务端 Conformance/故障驱动；Node 仅用于 Schema/TS 工具，Python 做 Provider SDK，TypeScript 做 Consumer SDK。"
-    translation_en: "Use Go for the Reference Control Plane, Registry, Dispatcher, Run/Event Ledger, and server conformance/fault drivers; Node only for Schema/TS tooling, Python for the Provider SDK, and TypeScript for the Consumer SDK."
-    artifacts: [architecture, sdk-dx-specification, reference-control-plane, sdk-go, sdk-python, sdk-typescript]
-    phases: [P02, P05, P08, P09, P10, P12, P13, P14, P15, P16, P18, P19, P20, P21, P22, P24, P25, P26, P27, P28, P33, P34, P35, P37, P39, P40]
-    tests: [make-blueprint-check, make-test-go-workspace, make-test-control-plane-platform, make-test-storage-migrations, make-test-identity-secrets, make-test-publication-service, make-test-asset-broker, make-test-registry-core, make-test-registry-api, make-test-registry-recovery, make-test-run-lifecycle, make-test-dispatch-ticket, make-test-event-ledger, make-test-direct-proxy-provider, make-test-streaming-resume, make-test-worker-service, make-test-go-worker-sdk, make-verify-operations-security, make-test-python-provider, make-test-typescript-consumer, make-test-portable-conformance, make-test-server-conformance, make-test-fault-ha-drivers, make-production-reference-smoke, make-build-release-toolchain, make-release-dry-run]
+    statement_original_zh: 后端采用 Go：Reference Control Plane、Registry、Dispatcher、Run/Event Ledger、服务端 Conformance/故障驱动；Node 仅用于 Schema/TS 工具，Python 做 Provider SDK，TypeScript 做 Consumer SDK。
+    translation_en: Use Go for the Reference Control Plane, Registry, Dispatcher, Run/Event Ledger, and server conformance/fault drivers; Node only for Schema/TS tooling, Python for the Provider SDK, and TypeScript for the Consumer SDK.
+    artifacts:
+      - architecture
+      - sdk-dx-specification
+      - reference-control-plane
+      - sdk-go
+      - sdk-python
+      - sdk-typescript
+    phases:
+      - P02
+      - P05
+      - P08
+      - P09
+      - P10
+      - P12
+      - P13
+      - P14
+      - P15
+      - P16
+      - P18
+      - P19
+      - P20
+      - P21
+      - P22
+      - P24
+      - P25
+      - P26
+      - P27
+      - P28
+      - P33
+      - P34
+      - P35
+      - P37
+      - P39
+      - P40
+      - P41
+      - P42
+      - P43
+    tests:
+      - make-blueprint-check
+      - make-test-go-workspace
+      - make-test-control-plane-platform
+      - make-test-storage-migrations
+      - make-test-identity-secrets
+      - make-test-publication-service
+      - make-test-asset-broker
+      - make-test-registry-core
+      - make-test-registry-api
+      - make-test-registry-recovery
+      - make-test-run-lifecycle
+      - make-test-dispatch-ticket
+      - make-test-event-ledger
+      - make-test-direct-proxy-provider
+      - make-test-streaming-resume
+      - make-test-worker-service
+      - make-test-go-worker-sdk
+      - make-verify-operations-security
+      - make-test-python-provider
+      - make-test-typescript-consumer
+      - make-test-portable-conformance
+      - make-test-server-conformance
+      - make-test-fault-ha-drivers
+      - make-production-reference-smoke
+      - make-test-release-supply-chain
+      - make-test-release-evidence-tooling
+      - make-test-release-lineage-tooling
+      - make-test-release-finalization-tooling
+      - make-release-dry-run
   - id: IR-04
-    statement_original_zh: "覆盖发布、注册、发现、鉴权、Run/Attempt、Direct/Proxy/Worker Pull、结构化流式、结果、usage、审计、trace、drain/升级全生命周期。"
-    translation_en: "Cover the full lifecycle of publication, registration, discovery, authentication, Run/Attempt, Direct/Proxy/Worker Pull, structured streaming, results, usage, audit, trace, drain, and upgrade."
-    artifacts: [architecture, protocol-specification, registry-specification, run-streaming-specification, reliability-specification]
-    phases: [P11, P12, P13, P14, P15, P16, P17, P18, P19, P20, P21, P22, P23, P24, P25, P26, P36, P37]
-    tests: [make-test-publication-contracts, make-test-publication-service, make-test-asset-broker, make-test-registry-core, make-test-registry-api, make-test-registry-recovery, make-verify-registry, make-test-run-lifecycle, make-test-dispatch-ticket, make-test-event-ledger, make-test-direct-proxy-provider, make-test-streaming-resume, make-verify-run-delivery, make-test-worker-service, make-test-go-worker-sdk, make-verify-operations-security, make-quickstart-smoke, make-production-reference-smoke]
+    statement_original_zh: 覆盖发布、注册、发现、鉴权、Run/Attempt、Direct/Proxy/Worker Pull、结构化流式、结果、usage、审计、trace、drain/升级全生命周期。
+    translation_en: Cover the full lifecycle of publication, registration, discovery, authentication, Run/Attempt, Direct/Proxy/Worker Pull, structured streaming, results, usage, audit, trace, drain, and upgrade.
+    artifacts:
+      - architecture
+      - protocol-specification
+      - registry-specification
+      - run-streaming-specification
+      - reliability-specification
+    phases:
+      - P11
+      - P12
+      - P13
+      - P14
+      - P15
+      - P16
+      - P17
+      - P18
+      - P19
+      - P20
+      - P21
+      - P22
+      - P23
+      - P24
+      - P25
+      - P26
+      - P36
+      - P37
+    tests:
+      - make-test-publication-contracts
+      - make-test-publication-service
+      - make-test-asset-broker
+      - make-test-registry-core
+      - make-test-registry-api
+      - make-test-registry-recovery
+      - make-verify-registry
+      - make-test-run-lifecycle
+      - make-test-dispatch-ticket
+      - make-test-event-ledger
+      - make-test-direct-proxy-provider
+      - make-test-streaming-resume
+      - make-verify-run-delivery
+      - make-test-worker-service
+      - make-test-go-worker-sdk
+      - make-verify-operations-security
+      - make-quickstart-smoke
+      - make-production-reference-smoke
   - id: IR-05
-    statement_original_zh: "所有新调用先经 Control Plane 鉴权并创建 Run；可信服务拿 Dispatch Ticket 后可 Direct；浏览器 v1 走 BFF/Proxy。"
-    translation_en: "Every new call must first pass Control Plane authentication and create a Run; trusted services may use Direct after obtaining a Dispatch Ticket; browsers use BFF/Proxy in v1."
-    artifacts: [architecture, run-streaming-specification, security-governance-specification, openapi-control-plane, openapi-agent-runtime]
-    phases: [P18, P19, P21, P28]
-    tests: [make-test-run-lifecycle, make-test-dispatch-ticket, make-test-direct-proxy-provider, make-test-typescript-consumer]
+    statement_original_zh: 所有新调用先经 Control Plane 鉴权并创建 Run；可信服务拿 Dispatch Ticket 后可 Direct；浏览器 v1 走 BFF/Proxy。
+    translation_en: Every new call must first pass Control Plane authentication and create a Run; trusted services may use Direct after obtaining a Dispatch Ticket; browsers use BFF/Proxy in v1.
+    artifacts:
+      - architecture
+      - run-streaming-specification
+      - security-governance-specification
+      - openapi-control-plane
+      - openapi-agent-runtime
+    phases:
+      - P18
+      - P19
+      - P21
+      - P28
+    tests:
+      - make-test-run-lifecycle
+      - make-test-dispatch-ticket
+      - make-test-direct-proxy-provider
+      - make-test-typescript-consumer
   - id: IR-06
-    statement_original_zh: "自研 Registry，借鉴 Lease/Revision/Watch/CAS/Fencing，不依赖 etcd/Nacos。"
-    translation_en: "Build the Registry in-house, borrowing Lease/Revision/Watch/CAS/Fencing concepts without depending on etcd or Nacos."
-    artifacts: [registry-specification, reliability-specification, openapi-registry-runtime, openapi-discovery-runtime]
-    phases: [P14, P15, P16, P17]
-    tests: [make-test-registry-core, make-test-registry-api, make-test-registry-recovery, make-verify-registry]
+    statement_original_zh: 自研 Registry，借鉴 Lease/Revision/Watch/CAS/Fencing，不依赖 etcd/Nacos。
+    translation_en: Build the Registry in-house, borrowing Lease/Revision/Watch/CAS/Fencing concepts without depending on etcd or Nacos.
+    artifacts:
+      - registry-specification
+      - reliability-specification
+      - openapi-registry-runtime
+      - openapi-discovery-runtime
+    phases:
+      - P14
+      - P15
+      - P16
+      - P17
+    tests:
+      - make-test-registry-core
+      - make-test-registry-api
+      - make-test-registry-recovery
+      - make-verify-registry
   - id: IR-07
-    statement_original_zh: "交付语义为 at-least-once，包含幂等、durable inbox/outbox、`effect_id`、终态不可变、final Snapshot。"
-    translation_en: "Delivery semantics are at-least-once, including idempotency, durable inbox/outbox, `effect_id`, immutable terminal state, and a final Snapshot."
-    artifacts: [protocol-specification, run-streaming-specification, reliability-specification, state-machine-fixtures]
-    phases: [P18, P20, P21, P22, P24, P25, P35, P38]
-    tests: [make-test-run-lifecycle, make-test-event-ledger, make-test-direct-proxy-provider, make-test-streaming-resume, make-test-worker-service, make-test-go-worker-sdk, make-test-fault-ha-drivers, make-verify-resilience]
+    statement_original_zh: 交付语义为 at-least-once，包含幂等、durable inbox/outbox、`effect_id`、终态不可变、final Snapshot。
+    translation_en: Delivery semantics are at-least-once, including idempotency, durable inbox/outbox, `effect_id`, immutable terminal state, and a final Snapshot.
+    artifacts:
+      - protocol-specification
+      - run-streaming-specification
+      - reliability-specification
+      - base-state-machine-fixtures
+    phases:
+      - P18
+      - P20
+      - P21
+      - P22
+      - P24
+      - P25
+      - P35
+      - P38
+    tests:
+      - make-test-run-lifecycle
+      - make-test-event-ledger
+      - make-test-direct-proxy-provider
+      - make-test-streaming-resume
+      - make-test-worker-service
+      - make-test-go-worker-sdk
+      - make-test-fault-ha-drivers
+      - make-verify-resilience
   - id: IR-08
-    statement_original_zh: "SDK 放协议仓；Quickstart/Conformance 不依赖 Console 可独立运行。"
-    translation_en: "Keep SDKs in the protocol repository; Quickstart and Conformance must run independently without Console."
-    artifacts: [sdk-dx-specification, sdk-bundle, quickstart, conformance-fixtures]
-    phases: [P15, P21, P25, P27, P28, P33, P34, P36]
-    tests: [make-test-registry-api, make-test-direct-proxy-provider, make-test-go-worker-sdk, make-test-python-provider, make-test-typescript-consumer, make-test-portable-conformance, make-test-server-conformance, make-quickstart-smoke]
+    statement_original_zh: SDK 放协议仓；Quickstart/Conformance 不依赖 Console 可独立运行。
+    translation_en: Keep SDKs in the protocol repository; Quickstart and Conformance must run independently without Console.
+    artifacts:
+      - sdk-dx-specification
+      - sdk-bundle
+      - quickstart
+      - conformance-fixtures
+    phases:
+      - P15
+      - P21
+      - P25
+      - P27
+      - P28
+      - P33
+      - P34
+      - P36
+    tests:
+      - make-test-registry-api
+      - make-test-direct-proxy-provider
+      - make-test-go-worker-sdk
+      - make-test-python-provider
+      - make-test-typescript-consumer
+      - make-test-portable-conformance
+      - make-test-server-conformance
+      - make-quickstart-smoke
   - id: IR-09
-    statement_original_zh: "Core/Profile/Extension 分层；兼容 A2A/MCP/ARD/CloudEvents/OpenTelemetry。"
-    translation_en: "Use Core/Profile/Extension layers and interoperate with A2A, MCP, ARD, CloudEvents, and OpenTelemetry."
-    artifacts: [architecture, protocol-specification, interoperability-specification, interoperability-adapters]
-    phases: [P29, P30, P31, P32]
-    tests: [make-test-interop-a2a, make-test-interop-mcp, make-test-interop-ard, make-test-interop-observability]
+    statement_original_zh: Core/Profile/Extension 分层；兼容 A2A/MCP/ARD/CloudEvents/OpenTelemetry。
+    translation_en: Use Core/Profile/Extension layers and interoperate with A2A, MCP, ARD, CloudEvents, and OpenTelemetry.
+    artifacts:
+      - architecture
+      - protocol-specification
+      - interoperability-specification
+      - interoperability-adapters
+    phases:
+      - P29
+      - P30
+      - P31
+      - P32
+    tests:
+      - make-test-interop-a2a
+      - make-test-interop-mcp
+      - make-test-interop-ard
+      - make-test-interop-observability
   - id: IR-10
-    statement_original_zh: "SQLite Quickstart 与 PostgreSQL production reference 语义一致。"
-    translation_en: "SQLite Quickstart and the PostgreSQL production reference have identical semantics."
-    artifacts: [reliability-specification, reference-control-plane, quickstart, conformance-fixtures]
-    phases: [P09, P12, P13, P14, P16, P18, P19, P20, P21, P24, P26, P36, P37, P38]
-    tests: [make-test-storage-migrations, make-test-publication-service, make-test-asset-broker, make-test-registry-core, make-test-registry-recovery, make-test-run-lifecycle, make-test-dispatch-ticket, make-test-event-ledger, make-test-direct-proxy-provider, make-test-worker-service, make-verify-operations-security, make-quickstart-smoke, make-production-reference-smoke, make-verify-resilience]
+    statement_original_zh: SQLite Quickstart 与 PostgreSQL production reference 语义一致。
+    translation_en: SQLite Quickstart and the PostgreSQL production reference have identical semantics.
+    artifacts:
+      - reliability-specification
+      - reference-control-plane
+      - quickstart
+      - conformance-fixtures
+    phases:
+      - P09
+      - P12
+      - P13
+      - P14
+      - P16
+      - P18
+      - P19
+      - P20
+      - P21
+      - P24
+      - P26
+      - P36
+      - P37
+      - P38
+    tests:
+      - make-test-storage-migrations
+      - make-test-publication-service
+      - make-test-asset-broker
+      - make-test-registry-core
+      - make-test-registry-recovery
+      - make-test-run-lifecycle
+      - make-test-dispatch-ticket
+      - make-test-event-ledger
+      - make-test-direct-proxy-provider
+      - make-test-worker-service
+      - make-verify-operations-security
+      - make-quickstart-smoke
+      - make-production-reference-smoke
+      - make-verify-resilience
   - id: IR-11
-    statement_original_zh: "最终目录必须清晰分离手写源码、生成代码、公共 SDK、Go 内部后端、迁移、参考实现、conformance、部署与 CI。"
-    translation_en: "The final layout must clearly separate handwritten source, generated code, public SDKs, internal Go backend, migrations, reference implementations, conformance, deployments, and CI."
-    artifacts: [repository-layout, artifact-catalog, generated-models, sdk-bundle, reference-control-plane, conformance-fixtures, quickstart]
-    phases: [P02, P05]
-    tests: [make-blueprint-check, make-test-go-workspace]
+    statement_original_zh: 最终目录必须清晰分离手写源码、生成代码、公共 SDK、Go 内部后端、迁移、参考实现、conformance、部署与 CI。
+    translation_en: The final layout must clearly separate handwritten source, generated code, public SDKs, internal Go backend, migrations, reference implementations, conformance, deployments, and CI.
+    artifacts:
+      - repository-layout
+      - artifact-catalog
+      - generated-models
+      - sdk-bundle
+      - reference-control-plane
+      - conformance-fixtures
+      - quickstart
+    phases:
+      - P02
+      - P05
+    tests:
+      - make-blueprint-check
+      - make-test-go-workspace
   - id: IR-12
-    statement_original_zh: "对外发布受 domain/package ownership、双 maintainer/security 入口等外部条件门控。"
-    translation_en: "Public release is gated by external conditions including domain/package ownership and two maintainers/security entry points."
-    artifacts: [decisions, public-adoption-policy, compatibility-matrix]
-    phases: [P42, P43, P44, P45, P46, P47, P48]
-    tests: [make-external-config-gate, make-regenerate-public, make-verify-public-namespace, make-deliver-v1-rc, make-external-evidence-gate, make-verify-v1-freeze, make-deliver-v1]
+    statement_original_zh: 对外发布受 domain/package ownership、双 maintainer/security 入口等外部条件门控。
+    translation_en: Public release is gated by external conditions including domain/package ownership and two maintainers/security entry points.
+    artifacts:
+      - decisions
+      - public-adoption-policy
+      - compatibility-matrix
+    phases:
+      - P44
+      - P45
+      - P46
+      - P47
+      - P48
+      - P49
+      - P50
+      - P51
+      - P52
+      - P53
+    tests:
+      - make-validate-all
+      - make-external-config-gate
+      - make-regenerate-public
+      - make-freeze-rc-source
+      - make-verify-public-namespace
+      - make-deliver-v1-rc
+      - make-external-evidence-gate
+      - make-verify-v1-freeze
+      - make-approve-v1-overlay
+      - make-deliver-v1
   - id: IR-13
-    statement_original_zh: "全部验收机器可测，覆盖跨语言、故障注入、HA、replay/out-of-order/cancel/fencing。"
-    translation_en: "All acceptance must be machine-testable, covering cross-language behavior, fault injection, HA, replay, out-of-order delivery, cancel, and fencing."
-    artifacts: [conformance-fixtures, conformance-reports, compatibility-matrix, state-machine-fixtures, release-engineering-toolchain, release-dry-run-reports]
-    phases: [P06, P07, P17, P23, P26, P27, P28, P33, P34, P35, P38, P39, P40, P41, P44, P47, P48]
-    tests: [make-test-protocol-foundation, make-test-codegen-pipeline, make-verify-registry, make-verify-run-delivery, make-verify-operations-security, make-test-python-provider, make-test-typescript-consumer, make-test-portable-conformance, make-test-server-conformance, make-test-fault-ha-drivers, make-verify-resilience, make-build-release-toolchain, make-release-dry-run, make-validate-all, make-verify-public-namespace, make-verify-v1-freeze, make-deliver-v1]
+    statement_original_zh: 全部验收机器可测，覆盖跨语言、故障注入、HA、replay/out-of-order/cancel/fencing。
+    translation_en: All acceptance must be machine-testable, covering cross-language behavior, fault injection, HA, replay, out-of-order delivery, cancel, and fencing.
+    artifacts:
+      - conformance-fixtures
+      - conformance-reports
+      - compatibility-matrix
+      - base-state-machine-fixtures
+      - release-engineering-toolchain
+      - release-dry-run-reports
+    phases:
+      - P06
+      - P07
+      - P17
+      - P23
+      - P26
+      - P27
+      - P28
+      - P33
+      - P34
+      - P35
+      - P38
+      - P39
+      - P40
+      - P41
+      - P42
+      - P43
+      - P44
+      - P46
+      - P48
+      - P49
+      - P50
+      - P51
+      - P53
+    tests:
+      - make-test-protocol-foundation
+      - make-test-codegen-pipeline
+      - make-verify-registry
+      - make-verify-run-delivery
+      - make-verify-operations-security
+      - make-test-python-provider
+      - make-test-typescript-consumer
+      - make-test-portable-conformance
+      - make-test-server-conformance
+      - make-test-fault-ha-drivers
+      - make-verify-resilience
+      - make-test-release-supply-chain
+      - make-test-release-evidence-tooling
+      - make-test-release-lineage-tooling
+      - make-test-release-finalization-tooling
+      - make-release-dry-run
+      - make-validate-all
+      - make-regenerate-public
+      - make-verify-public-namespace
+      - make-deliver-v1-rc
+      - make-external-evidence-gate
+      - make-verify-v1-freeze
+      - make-deliver-v1
   - id: IR-14
-    statement_original_zh: "不得把外部合作伙伴/独立实现等外部条件伪造为完成。"
-    translation_en: "External conditions such as partners or independent implementations must never be fabricated as complete."
-    artifacts: [decisions, public-adoption-policy, compatibility-matrix, immutable-requirements]
-    phases: [P03, P04, P41, P42, P46, P47, P48]
-    tests: [make-planning-audit, make-gate-check, make-validate-all, make-external-config-gate, make-external-evidence-gate, make-verify-v1-freeze, make-deliver-v1]
+    statement_original_zh: 不得把外部合作伙伴/独立实现等外部条件伪造为完成。
+    translation_en: External conditions such as partners or independent implementations must never be fabricated as complete.
+    artifacts:
+      - decisions
+      - public-adoption-policy
+      - compatibility-matrix
+      - immutable-requirements
+    phases:
+      - P03
+      - P04
+      - P43
+      - P44
+      - P45
+      - P48
+      - P49
+      - P50
+      - P51
+      - P52
+      - P53
+    tests:
+      - make-planning-audit
+      - make-gate-check
+      - make-release-dry-run
+      - make-validate-all
+      - make-external-config-gate
+      - make-verify-public-namespace
+      - make-deliver-v1-rc
+      - make-external-evidence-gate
+      - make-verify-v1-freeze
+      - make-approve-v1-overlay
+      - make-deliver-v1

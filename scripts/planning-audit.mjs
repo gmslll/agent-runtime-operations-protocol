@@ -1,9 +1,7 @@
 #!/usr/bin/env node
 
-import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
@@ -13,11 +11,11 @@ import {
   canonicalSummaryDigest,
   validateResultCoverage,
   verifyEvidenceAuthentication,
+  verifyEvidenceSubjectCommit,
 } from "./lib/evidence.mjs";
 import { loadStructuredFile, repositoryRoot } from "./lib/repository.mjs";
 import { actualCommand, digestFiles, sha256, writeCheckReport } from "./lib/report.mjs";
 
-const execFileAsync = promisify(execFile);
 const checks = [];
 const errors = [];
 const evidenceArgument = process.env.EVIDENCE ?? process.argv[2];
@@ -79,11 +77,16 @@ if (evidence) {
   }
 }
 
-let head = "unavailable";
+let subjectLineage = { mode: "unverified" };
 try {
-  head = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot })).stdout.trim();
+  subjectLineage = await verifyEvidenceSubjectCommit(evidence?.subject?.commit);
+  record(
+    "subject-commit-lineage",
+    true,
+    `evidence subject is ${subjectLineage.mode} commit ${subjectLineage.subject_commit}; current HEAD is ${subjectLineage.current_head}`,
+  );
 } catch (error) {
-  record("subject-commit", false, error.message);
+  record("subject-commit-lineage", false, error.message);
 }
 
 let phaseIDs = [];
@@ -96,7 +99,6 @@ try {
   const requirements = await loadStructuredFile(path.join(repositoryRoot, "spec/requirements.yaml"));
   requirementIDs = requirements.requirements.map((requirement) => requirement.id);
   const expected = {
-    commit: head,
     plan_last_phase: phaseIDs.at(-1),
     requirements_sha256: byPath.get("spec/requirements.yaml"),
     plan_sha256: byPath.get("docs/DEVELOPMENT_PLAN.md"),
@@ -108,10 +110,10 @@ try {
     .map(([key, value]) => `${key} expected ${value}, got ${evidence?.subject?.[key]}`);
   record(
     "audit-subject-binding",
-    mismatches.length === 0,
-    mismatches.length === 0
-      ? "subject commit and requirements/plan/blueprint/artifact-manifest digests match current inputs"
-      : mismatches.join("; "),
+    subjectLineage.mode !== "unverified" && mismatches.length === 0,
+    subjectLineage.mode !== "unverified" && mismatches.length === 0
+      ? "subject commit is current/ancestor and requirements/plan/blueprint/artifact-manifest digests match current inputs"
+      : mismatches.join("; ") || "subject commit lineage is invalid",
   );
 } catch (error) {
   record("audit-subject-binding", false, error.message);
