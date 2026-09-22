@@ -1,358 +1,321 @@
 ---
-title: Agent Runtime Operations Protocol 开发计划
-status: proposed
+title: Agent Runtime Operations Protocol 开发与发布计划
+status: execution-blueprint
 updated: 2026-09-22
 ---
 
-# 1. 最终目标
-
-交付一套可被任意兼容 Control Plane、普通 HTTP Agent、cc-connect/Codex Worker、Web、Bot 和外部 A2A Agent 共同使用的开放企业 Agent 运行协议：
-
-```text
-定义 Manifest
-→ 本地验证
-→ 发布 AgentVersion
-→ Runtime 注册和续租
-→ 用户授权发现
-→ Control Plane 创建 Run
-→ Direct / Proxy / Worker Pull 执行
-→ 结构化流式输出
-→ 最终结果、Usage、审计和追踪
-```
-
-协议仓先稳定机器可校验的契约，再实现 SDK、Conformance 和参考运行时。金运 Console 只能作为一个实现消费协议，不得维护第二份协议定义或成为唯一测试环境。
-
-# 2. 发布分层与完成定义
-
-## 2.1 公共 v0.1
-
-公共 v0.1 用来验证接入体验和外部边界，必须包含：
-
-- Core Manifest、Run、Attempt、Event、Result 和 Error Schema。
-- Agent Runtime OpenAPI 和 Streaming AsyncAPI。
-- Python Provider SDK 和 Reference Agent。
-- Go SDK 和 Go Reference Control Plane；Registry、Dispatcher、Run/Event Ledger 等参考后端不使用 Python/Node 实现。
-- TypeScript Generated Models、SSE Consumer 和 Event Reducer。
-- Docker Compose Quickstart、Event Viewer 和 Conformance CLI。
-- A2A Agent Card/Task Adapter、ARD Exporter 和 MCP Integration Example。
-- 明确的实验性版本、兼容性和不稳定字段标记。
-
-v0.1 的成功标准：全新环境十分钟内完成首次流式 Run，不安装金运 Console也能运行。
-
-## 2.2 Protocol v1.0
-
-Protocol v1.0 满足以下条件才可以冻结：
-
-- Manifest、Run、Attempt、Event、Registry、Worker 和公共类型 Schema 完整。
-- Agent Runtime、Registry、Worker、Asset 和 Event Ingest OpenAPI 完整。
-- 流式事件 AsyncAPI 完整。
-- Go 和 Python 有独立兼容实现，TypeScript 可以消费 Run 和流式事件。
-- Direct、Proxy 和 Worker Pull 使用同一套 Run/Event 语义。
-- Registry Lease、Generation、Revision、Watch 和 Resync 通过契约测试。
-- 重复、断线、乱序、重试、取消、超时和 Fencing 有测试向量。
-- 普通 HTTP Agent 和 cc-connect/Codex Worker 完成端到端接入。
-- Web 与飞书 Bot 能调用同一个 AgentDefinition，并获得一致权限结果。
-- 至少三个金运以外的设计伙伴完成真实接入。
-- 至少两个独立 Runtime 实现和一个非金运 Control Plane/Validator 通过 Conformance。
-- 公共名称、许可证、治理、命名空间和安全响应流程稳定。
-
-# 3. 阶段 0：决策冻结与仓库基线
-
-目标：把已经确认的跨语言和 wire format 决策落实为仓库基线，并填写公共发布所需的真实账户配置。
-
-任务：
-
-- 在 `gmslll/agent-runtime-operations-protocol` 创建初始仓库；不等待公共组织成立。
-- 为协议文本、Schema、SDK、Conformance 和 Reference Implementation 添加 Apache-2.0。
-- 落地 RFC、双 Maintainer 审核、DCO 和私密安全报告流程。
-- 按 D-020～D-040 落地 UUIDv7、UTF-8 Offset、CloudEvents 命名、JCS Digest、Lease、Token、Usage 和 Capability 规则。
-- 核验 `arop-sdk`、`@arop/sdk` 和 `arop` CLI 的注册表所有权；Go Module 使用最终个人 GitHub 地址。
-- 填写项目域名并冻结 Schema `$id`、Event Type Prefix 和 Extension Namespace。
-- 首批 A2A Fixture 固定到 v1.0.1；其他外部标准在 Compatibility Matrix 中固定精确版本或 commit。
-- 建立 Git 基线、变更审查和兼容性检查规则。
-- 建立 `make validate`、lint、Schema 校验和文档链接检查。
-
-验收：
-
-- `docs/DECISIONS.md` 中影响阶段 1～3 的架构和 wire 问题均有结论。
-- 全新克隆可运行仓库验证命令。
-- 个人 GitHub Remote、包名、域名与 Registry 完成冲突和所有权核验。
-- 仓库具备 `CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md` 和 RFC 模板。
-
-# 4. 阶段 1：Core 公共模型与 Manifest
-
-目标：开发者能提交机器可校验、可发布的 Agent 能力定义。
-
-交付：
-
-```text
-schemas/common/identifiers.schema.json
-schemas/common/error.schema.json
-schemas/common/trace.schema.json
-schemas/common/content-part.schema.json
-schemas/resources/asset-ref-v1.schema.json
-schemas/resources/data-ref-v1.schema.json
-schemas/resources/secret-ref-v1.schema.json
-schemas/manifest/agent-manifest-v1.schema.json
-examples/manifest/
-```
-
-覆盖：
-
-- AgentDefinition、AgentVersion 和 AgentSkill。
-- 参数与对话调用模式。
-- Input/Output Schema 和 ContentPart。
-- Asset、Data、Secret 和网络能力。
-- Session、Timeout、并发和流式能力。
-- 副作用、幂等和 Usage Meter。
-- Owner、Visibility、Maturity 和 Risk。
-
-验收：
-
-- Go、Python 对同一 Fixture 得到相同 Digest。
-- 非法 Endpoint、Secret、飞书字段和本机路径不能进入 Manifest。
-- 最小、完整和非法黄金样例通过预期校验。
-- Manifest 可以确定性导出 A2A Agent Card 和 ARD Entry 的基础字段。
-
-# 5. 阶段 2：Run、Attempt 与事件
-
-目标：冻结调用和流式通信的核心语义。
-
-交付：
-
-- RunRequest、RunAccepted、RunStatus 和 RunResult。
-- Attempt、DispatchTicket 和 DeliveryPlan。
-- Event Envelope 与首期 Event Data。
-- Command、Cancel、InputRequired 和 Approval。
-- Usage、Error、ResultRef 和 Output Snapshot。
-- Run/Attempt 状态迁移 Fixture。
-
-事件至少覆盖：
-
-```text
-run.accepted / run.started / run.waiting_input
-run.succeeded / run.failed / run.cancelled / run.timed_out
-output.started / output.delta / output.snapshot / output.reset / output.completed
-progress.updated / step.started / step.completed
-tool.started / tool.completed / asset.created
-usage.updated / error.raised / heartbeat
-```
-
-验收：
-
-- `run_id` 跨重试稳定，每次执行使用新的 `attempt_id`。
-- Producer Sequence 与 Run Sequence 分离。
-- 终态不可逆并带最终 Snapshot 或 ResultRef。
-- Event 冲突、迟到终态、Cancel 竞态和 Effect 幂等有测试。
-- 中英文文本 Offset 跨语言一致。
-
-# 6. 阶段 3：Agent Runtime OpenAPI
-
-目标：普通 HTTP Agent 不理解 Console 内部结构也能接入。
-
-Agent 侧：
-
-```text
-POST /v1/runs
-GET  /v1/runs/{run_id}
-GET  /v1/runs/{run_id}/events
-POST /v1/runs/{run_id}/commands
-GET  /v1/health/live
-GET  /v1/health/ready
-```
-
-Control Plane 侧：
-
-```text
-POST /v1/agent-runs/{run_id}/event-session
-POST /v1/agent-runs/{run_id}/events:batch
-GET  /v1/agent-runs/{run_id}/events
-```
-
-任务：
-
-- 完成 Run Token/JWKS 校验和 Event Session Token 交换。
-- 固定 SSE Event ID、Resume 和错误结束语义。
-- 固定 Event Batch、ACK、重复和 Partial Failure。
-- 完成 Mock Control Plane 和 Mock Agent。
-
-验收：
-
-- Direct 与 Proxy 使用同一 RunRequest。
-- Direct Stream 与 Relay Stream 可断点恢复。
-- Token Claims 不匹配时拒绝。
-- Control Plane 短暂不可用时 Outbox 可重试。
-
-# 7. 阶段 4：注册与发现
-
-目标：实现多个 Dispatcher 可安全消费的 Runtime Discovery 契约。
-
-接口：
-
-```text
-PUT    /v1/registry/instances/{instance_id}
-POST   /v1/registry/leases/{lease_id}/keepalive
-PATCH  /v1/registry/instances/{instance_id}
-POST   /v1/registry/instances/{instance_id}/drain
-DELETE /v1/registry/instances/{instance_id}
-GET    /v1/discovery/agents/{agent_id}/instances
-GET    /v1/discovery/changes
-```
-
-任务：
-
-- Deployment Credential、Manifest Digest 和 Binding 校验。
-- `instance_id + session_id + generation`、Lease 和服务端时间。
-- Runtime/Operator Metadata 和正交健康状态。
-- Resource Version、ETag、CAS 和全局 Revision。
-- Snapshot、Watch、Compaction、Resync 和 Router Cache。
-
-验收：
-
-- 旧 Session 被 Fencing，Lease 到期实例不可发现。
-- Watch 丢通知后可 Replay，压缩后可全量 Resync。
-- Drain 实例不接收新 Attempt。
-
-# 8. 阶段 5：Worker Pull
-
-目标：让 cc-connect、Mac mini 和内网 Agent 无需入站地址也能接入。
-
-接口：
-
-```text
-POST /v1/workers/{worker_id}/claims:next
-POST /v1/attempts/{attempt_id}/lease:renew
-POST /v1/attempts/{attempt_id}/accept
-POST /v1/attempts/{attempt_id}/events:batch
-POST /v1/attempts/{attempt_id}/complete
-```
-
-任务：
-
-- 长轮询 Claim、Attempt Lease 和 Fencing Token。
-- Accept 前后超时、Session Affinity、Capacity 和 Drain。
-- cc-connect/Codex Adapter 参考实现。
-
-验收：
-
-- Worker 崩溃后可重新分配 Attempt。
-- 旧 Worker 不能覆盖新 Attempt 的终态。
-- Pull 和 Direct 产生相同标准事件。
-
-# 9. 阶段 6：公共 v0.1 SDK 与 Quickstart
-
-Go 交付：Generated Models、Validator、Provider/Consumer、Registry、Worker、Token Validator、Inbox/Outbox、SSE、Trace 和 Drain。
-
-Python 交付：Generated Models、FastAPI/ASGI、`Agent.from_manifest()`、`@agent.skill()`、Async Event Emitter、SQLite Inbox/Outbox 和 Pytest Fixture。
-
-TypeScript 交付：Generated Models、Relay SSE Client、Event Reducer、Snapshot/Delta 合并器、Resume 和去重。
-
-公共开发环境交付：
-
-- Go Reference Control Plane。
-- Python 和 Go Reference Agent。
-- Docker Compose Quickstart。
-- Web Streaming Demo。
-- Conformance CLI。
-
-验收：
-
-- Python、Go 和 TypeScript 通过同一组公共 Fixture。
-- 全新环境十分钟内完成首次流式 Run。
-- 现有 Python Agent 的核心业务改造目标不超过约三十行。
-- Web 断线重连不丢失事件，最终 Snapshot 能纠正中间 Delta。
-- 所有流程不依赖金运 Console。
-
-# 10. 阶段 7：外部标准 Adapter
-
-交付：
-
-- A2A Agent Card Import/Export。
-- A2A Task/Message/Artifact Adapter。
-- ARD/AI Catalog Exporter 和 Import Review Fixture。
-- MCP Dependency Declaration 和 Tool Trace 示例。
-- CloudEvents Structured、Binary 和 Batch Fixture。
-- OpenTelemetry Trace/Metric/Log 映射。
-
-验收：
-
-- A2A 生命周期、取消、错误和产物映射有自动测试。
-- ARD 导出不泄露 RuntimeInstance、Lease 或内网 Endpoint。
-- Direct、Proxy、Pull、A2A 和 MCP Adapter 保持 Trace 关联。
-- 任何有损映射都能被检测并在报告中说明。
-
-# 11. 阶段 8：外部设计伙伴与独立实现
-
-目标：证明协议不是金运内部接口。
-
-任务：
-
-- 支持至少三个外部团队接入不同类型的 Agent。
-- 提供独立实现指南，不要求复制参考实现内部结构。
-- 邀请外部团队实现第二个 Runtime 或 Control Plane/Validator。
-- 把实际互操作问题形成 RFC、Fixture 和 Compatibility Matrix。
-- 统计首次运行时间、业务改造行数和 Conformance 结果。
-
-验收：
-
-- 外部 Agent 可以在 Reference Control Plane 和金运 Console 间迁移。
-- 两个独立实现对同一 Schema、Digest、Event 和 Error 解释一致。
-- 至少一名非金运贡献者参与协议变更评审。
-
-# 12. 阶段 9：Conformance 与故障注入
-
-测试矩阵：
-
-```text
-合法/非法 Manifest、Digest 不匹配、协议版本无交集
-重复 Run、重复 Event、Event ID 冲突、Sequence 缺口
-Direct/Relay Stream 断线恢复、Outbox 重试
-Lease 过期、Generation Fencing、Attempt Fencing、Drain
-Cancel 竞态、Deadline、副作用重试、Asset Token 过期
-Registry Watch Compaction、Control Plane 多节点切换
-A2A 映射、ARD 数据泄露、CloudEvents 三种 HTTP 编码
-OpenTelemetry Trace 跨 Adapter 传播、未知 Extension 降级
-```
-
-交付 Provider、Consumer、Registry Client 和 Worker Conformance Suite，以及故障代理和测试报告模板。
-
-# 13. 阶段 10：金运生产集成
-
-1. Console 导入并发布 Manifest。
-2. Runtime 注册、续租并进入 Discovery View。
-3. Web 与飞书发现同一个 Agent。
-4. 两端创建 Run 时经过同一权限判断。
-5. Dispatcher 选择 Deployment。
-6. Direct、Proxy 或 Worker Pull 完成执行。
-7. 两端接收流式事件和最终结果。
-8. Usage、审计和 Trace 可查询。
-9. 撤权后新 Run 立即拒绝。
-10. Drain/升级不破坏已有 Run。
-
-金运集成产生的新需求必须先判断是公共能力还是 `x-kinglucky-*` 扩展，不得直接把飞书、组织表或 Console 数据库字段写入核心协议。
-
-# 14. 发布流程
-
-每次发布包含 Schema、OpenAPI、AsyncAPI、黄金样例、SDK、Adapter、兼容矩阵、Changelog、迁移说明、SBOM 和 Conformance Report。
-
-```text
-冻结规范和 Schema
-→ 生成模型
-→ SDK 与参考实现测试
-→ Conformance Matrix
-→ Release Candidate
-→ Reference Control Plane 与独立实现验证
-→ 金运跨仓集成验证
-→ 正式发布
-```
-
-# 15. 延后内容
-
-以下能力保留架构位置，但不阻塞第一个可运行闭环：
-
-- gRPC、WebSocket Transport Binding。
-- Portable Session Checkpoint 和 Hedged Execution。
-- 多区域调度、公共 Agent 市场和多租户 SaaS。
-- 重型工作流引擎。
-
-延后实现不等于删除协议位置；提前实现必须先更新决策文档和兼容性测试。
+# 1. 执行规则
+
+本计划将实施分为连续的 P01–P24。开发者必须先阅读 [DECISIONS](DECISIONS.md)、[IMPLEMENTATION_BLUEPRINT](IMPLEMENTATION_BLUEPRINT.md) 和相关领域规范，不能跳过 Gate，也不能把“代码写完”与“已达到公开 v1”混为一个状态。
+
+状态只使用 `complete`、`in-progress`、`pending`、`blocked-user-evidence` 和 `blocked-external-evidence`。只有对应 JSON/JUnit 报告可重现且所有完成定义均满足时才可标记 `complete`。每个阶段的验收输出为 `build/reports/<phase>/report.json` 和 `junit.xml`；Gate 也必须把外部证据摘要转换为这两种机器报告，但不得用内部模拟伪造外部证据。
+
+# 2. 里程碑与状态
+
+| 里程碑 | 阶段 | 完成的真实含义 |
+| --- | --- | --- |
+| 规划冻结 | P01–P04 | 权威、冲突、布局、依赖和验收被审核，用户明确同意开始实现 |
+| 可运行纵向闭环 | P05–P17 | 完成契约、Go 后端、SDK、参考实现、Conformance、故障/HA 和发布 dry-run |
+| Code-complete | P18 | 内部可自证的要求全部通过，但尚未声称公开 RC/v1 |
+| Public RC | P19–P21 | 真实公开配置完成、全量再生成并发布可验证 v0.1 RC |
+| v1 evidence/freeze | P22–P23 | 独立实现与外部伙伴证据绑定 RC，再做 v1 冻结验证 |
+| v1 delivery | P24 | 签名、可重现、带 SBOM/provenance 的正式交付 |
+
+# 3. 阶段详情
+
+## P01 — Contract authority and conflict closure
+
+- **Type:** planning
+- **Status:** complete
+- **Goal:** 冻结权威链、14 条不可静默改写的要求、机器制品目录和全部已知冲突决议。
+- **Scope:** `docs/DECISIONS.md`、`spec/artifact-manifest.yaml`、`spec/requirements.yaml`、`spec/conflicts.yaml` 和被冲突影响的规范文本。
+- **Dependencies:** none
+- **Built-in invariants:** Authoring strict/Consumer forward compatible；`$ref` 离线闭包；发布必须先校验再 Digest；不含 Console/飞书/厂商字段。
+- **Machine acceptance:** `make spec-index-check` → `build/reports/spec-index-check/report.json` 和 `junit.xml`。
+- **Rollback point:** 回到 P01 开始前的文档基线；不允许带未解冲突进入 P02。
+- **Definition of done:** 14 条 statement 逐字保留，冲突零未解，Decision/链接/Schema 本地引用闭包报告全绿。
+
+## P02 — Implementation blueprint freeze
+
+- **Type:** planning
+- **Status:** complete
+- **Goal:** 冻结最终目录、双 Go Module、依赖 DAG、存储/迁移语义、测试与发布闭环。
+- **Scope:** `DIRECTORY_STRUCTURE.md`、`IMPLEMENTATION_BLUEPRINT.md`、本计划、README/AGENTS/架构/SDK 导航与 Phase-2 检查器。
+- **Dependencies:** P01
+- **Built-in invariants:** 根公共 module + 唯一 `reference/control-plane` 嵌套 module；portable runner 在根 module；Conformance 语言中立；无厂商 Adapter；Console 隔离。
+- **Machine acceptance:** `make blueprint-check` → `build/reports/blueprint-check/report.json` 和 `junit.xml`。
+- **Rollback point:** 仅回退 P02 文档/检查器，不物理搬迁当前基线。
+- **Definition of done:** 24 阶段连续无环、双 module/发布/Gate/报告约束可机器验证，需求映射只指向有效阶段。
+
+## P03 — Independent plan audit
+
+- **Type:** audit
+- **Status:** pending
+- **Goal:** 由未参与 P01/P02 撰写的审核者进行反向审查，找出过度范围、循环依赖、不可测验收和安全缺口。
+- **Scope:** 只读全部核心文档与 `spec/*`，输出审核台账和 must-fix 闭环。
+- **Dependencies:** P02
+- **Built-in invariants:** 审核者不以内部模拟替代外部证据；不跳过必修项。
+- **Machine acceptance:** `make planning-audit` → `build/reports/P03/report.json` 和 `junit.xml`。
+- **Rollback point:** must-fix 返回 P01 或 P02 修改并重跑审核。
+- **Definition of done:** 审核报告具有独立审核身份、exact commit、问题严重度，must-fix 为零。
+
+## P04 — User implementation gate
+
+- **Type:** user-gate
+- **Status:** blocked-user-evidence
+- **Goal:** 在任何物理重构或新业务实现前，获得用户对核心文档和计划的明确确认。
+- **Scope:** P01–P03 报告、用户确认记录、确认时的 exact commit。
+- **Dependencies:** P03
+- **Built-in invariants:** “继续”必须能明确对应已展示的计划版本；无证据不得自动通过。
+- **Machine acceptance:** `make gate-check GATE=P04 EVIDENCE=<user-approval-record>` → `build/reports/P04/report.json` 和 `junit.xml`。
+- **Rollback point:** 用户要求改计划时回 P01/P02，审核后重新请求确认。
+- **Definition of done:** 用户确认记录绑定计划 commit，Gate 报告成功；此前 P05 必须保持未开始。
+
+## P05 — Physical repository refactor
+
+- **Type:** implementation
+- **Status:** pending
+- **Goal:** 按冻结树迁移现有基线，建立双 module 和分层边界，不改变协议行为。
+- **Scope:** 根 module、嵌套 Reference CP module、portable runner 骨架、`go.work.example`、路径/导入检查。
+- **Dependencies:** P04
+- **Built-in invariants:** 只有两个 `go.mod`；无永久 `replace`；公共 module 不导入 Reference `internal`。
+- **Machine acceptance:** `make test-go-workspace` → `build/reports/P05/report.json` 和 `junit.xml`。
+- **Rollback point:** 保留迁移前基线；路径映射不完整时整体回退，不长期并行两套实现。
+- **Definition of done:** 两 module 在 `GOWORK=off` 分别测试，当前 CLI/基线行为不变，仓库分层检查通过。
+
+## P06 — Foundation corrections and codegen spike
+
+- **Type:** implementation
+- **Status:** pending
+- **Goal:** 修复先校验再 Digest、重复 JSON Key、错误码、Fixture 路径等基线债务，用代表 Schema 验证三语言 codegen。
+- **Scope:** 公共验证内核、Digest Corpus、Go/Python/TypeScript 生成 spike、生成器锁版、漂移检查。
+- **Dependencies:** P05
+- **Built-in invariants:** 严格作者/兼容消费模式分离；所有 `$ref` 离线；生成代码禁止手改。
+- **Machine acceptance:** `make test-foundation` → `build/reports/P06/report.json` 和 `junit.xml`。
+- **Rollback point:** spike 不通过则更换生成器/映射策略，不扩大 Schema 生成面。
+- **Definition of done:** 三语言编译/类型检查、JSON round-trip 和重新生成零 diff，Go/Node 对非法输入结论一致。
+
+## P07 — Publication contracts and vertical slice
+
+- **Type:** implementation
+- **Status:** pending
+- **Goal:** 完成 AgentVersion Bundle 的 Schema/API/Go 发布纵向路径。
+- **Scope:** Manifest/Resource 契约、包内 Schema 闭包、Digest/Extension/Governance、发布仓储与 Audit。
+- **Dependencies:** P06
+- **Built-in invariants:** 发布过程禁网络 `$ref`；校验、Digest、不可变版本和 Audit 同事务。
+- **Machine acceptance:** `make test-publication` → `build/reports/P07/report.json` 和 `junit.xml`。
+- **Rollback point:** 停留在未发布 draft；不修改已发布 AgentVersion。
+- **Definition of done:** SQLite/PostgreSQL 契约同过，并发/重放幂等，非法引用、Digest 冲突和 Governance 缺失按规则拒绝。
+
+## P08 — Registry and discovery vertical slice
+
+- **Type:** implementation
+- **Status:** pending
+- **Goal:** 实现自研 Lease/Revision/Watch/CAS/Fencing 注册发现。
+- **Scope:** Runtime Instance/Session/Generation、Keepalive、Drain、Snapshot/Watch/Compaction/Resync、Discovery Filter、双库存储。
+- **Dependencies:** P07
+- **Built-in invariants:** 服务端 Clock、Generation Fencing、原始 Registry Event 不可变、Audit/Trace 从首条路径内建。
+- **Machine acceptance:** `make test-registry-all` → `build/reports/P08/report.json` 和 `junit.xml`。
+- **Rollback point:** 可回退通知/Cache，Ledger 修订号不回退；失效实例 fail closed。
+- **Definition of done:** 旧 Session 被 fencing，Lease 过期即退出路由，Watch 丢通知能 Replay，压缩后能 Resync。
+
+## P09 — Run, authorization, attempt and ticket
+
+- **Type:** implementation
+- **Status:** pending
+- **Goal:** 原子完成授权、Run/Attempt 建立、路由与短期 Ticket 签发。
+- **Scope:** Run/Attempt 状态机、Authz 快照、Dispatcher、JWKS/Token、Cancel/Deadline、Usage 骨架、Audit/Trace。
+- **Dependencies:** P08
+- **Built-in invariants:** 所有新调用先过 Control Plane；`run_id` 跨重试稳定；Attempt/Ticket/Fencing 逐次更新；浏览器不得 Direct。
+- **Machine acceptance:** `make test-run-ticket` → `build/reports/P09/report.json` 和 `junit.xml`。
+- **Rollback point:** 调度失败创建可审计失败/待重试状态，不删 Run 历史。
+- **Definition of done:** 鉴权与建 Run 不存在 TOCTOU，Token claims/audience/scope/TTL/旋转契约全过，Cancel/Deadline 竞态可重现。
+
+## P10 — Direct, proxy, event ledger and streaming
+
+- **Type:** implementation
+- **Status:** pending
+- **Goal:** 用同一 Run/Event 语义交付 Direct 与 Proxy，实现断线恢复和最终结果。
+- **Scope:** Agent Runtime/Event Ingest API、Event Session Token、SSE/Event Batch、Run Sequence、Snapshot/ResultRef、Usage、Inbox/Outbox、`effect_id`。
+- **Dependencies:** P09
+- **Built-in invariants:** 原始事件 append-only；Producer/Run Sequence 分离；终态不可逆；迟到事件仅审计；Cancel/Deadline/Usage/Effect 从首条路径完整处理。
+- **Machine acceptance:** `make test-direct-proxy-streaming` → `build/reports/P10/report.json` 和 `junit.xml`。
+- **Rollback point:** 停止新 Attempt/Stream，保留 Ledger 和 Final Snapshot；不回写历史事件。
+- **Definition of done:** 中英文 UTF-8 offset、重复/乱序/冲突 Event、SSE Resume、Batch Partial Failure、Outbox 重试全过。
+
+## P11 — Worker Pull vertical slice
+
+- **Type:** implementation
+- **Status:** pending
+- **Goal:** 为无入站端点的通用 Worker 实现 Claim/Lease/Fencing/Complete。
+- **Scope:** Worker API、长轮询、Capacity/Drain、Session Affinity、Attempt 重分配、通用 Pull Worker 参考。
+- **Dependencies:** P10
+- **Built-in invariants:** 无厂商专属 Adapter；旧 Worker 不得覆盖新 Attempt；Pull/Direct/Proxy 共用事件和终态。
+- **Machine acceptance:** `make test-worker-pull` → `build/reports/P11/report.json` 和 `junit.xml`。
+- **Rollback point:** 停止 Claim，等待 Lease 过期后安全重分配，不强行改写 Attempt。
+- **Definition of done:** crash-before/after-accept、renew 超时、双完成竞态、fencing、drain 和 sticky 路由契约通过。
+
+## P12 — Operations, security and retention
+
+- **Type:** implementation
+- **Status:** pending
+- **Goal:** 完成生产级安全、运维、保留、备份和观测闭环。
+- **Scope:** SSRF/DNS 重绑、限流/限额、密钥旋转、脱敏、Retention/Compaction、Backup/Restore、Readiness、OTel、SLO 报表。
+- **Dependencies:** P11
+- **Built-in invariants:** Token 类型不混用；Secret/Asset URL 不进日志；未完成 migration 不 ready；审计不依赖可丢通知。
+- **Machine acceptance:** `make test-operations-security` → `build/reports/P12/report.json` 和 `junit.xml`。
+- **Rollback point:** 配置或旋转失败时 fail closed，使用上一有效密钥重叠窗口/完整备份恢复。
+- **Definition of done:** 安全反向契约、保留边界、备份恢复后 Contract Suite、审计/Trace 链路均通过。
+
+## P13 — Standards interoperability
+
+- **Type:** implementation
+- **Status:** pending
+- **Goal:** 在不重定义上游标准的前提下实现 A2A/MCP/ARD/CloudEvents/OTel 映射。
+- **Scope:** Adapter、精确上游版本 Fixture、`exact/extended/lossy/unsupported` 报告、Trace 传播。
+- **Dependencies:** P12
+- **Built-in invariants:** RuntimeInstance/Lease/内网 Endpoint 不导出到公开发现；有损映射必须显式。
+- **Machine acceptance:** `make interoperability` → `build/reports/P13/report.json` 和 `junit.xml`。
+- **Rollback point:** 单个 Adapter 可独立禁用，不影响 Core/Profile 语义。
+- **Definition of done:** 所有支持的上游版本有锁定记录、往返 Fixture、损失报告和 Trace 连续性。
+
+## P14 — Public SDKs, reference agents and quickstart
+
+- **Type:** implementation
+- **Status:** pending
+- **Goal:** 交付 Go SDK、Python Provider SDK、TypeScript Consumer，以及不依赖 Console 的参考 Agent/Quickstart。
+- **Scope:** 三语言生成类型与手写 runtime、Go/Python HTTP Agent、Pull Worker、SQLite Quickstart、PostgreSQL production reference。
+- **Dependencies:** P13
+- **Built-in invariants:** SDK 不嵌入 Reference CP internal；Python 不是后端；TypeScript v1 为 Consumer；默认安全设置不降级。
+- **Machine acceptance:** `make test-sdks && make quickstart-smoke` → `build/reports/P14/report.json` 和 `junit.xml`。
+- **Rollback point:** 单语言包可回退到上一可生成版本，但不改写已冻结 wire 语义。
+- **Definition of done:** 全新环境十分钟内流式 Run，三语言共用 Fixture，无 Console 前置，安装/升级文档完整。
+
+## P15 — Portable and server conformance
+
+- **Type:** verification
+- **Status:** pending
+- **Goal:** 交付语言中立场景和根 module portable runner，验证 Provider/Consumer/Registry/Worker/Control Plane Profile。
+- **Scope:** `conformance/`、`cmd/arop-conformance`、Reference CP server driver、报告签名/摘要。
+- **Dependencies:** P14
+- **Built-in invariants:** runner 不依赖 Reference `internal`；外部实现只需黑盒 Endpoint/制品；不宣传未测 Profile。
+- **Machine acceptance:** `make conformance` → `build/reports/P15/report.json` 和 `junit.xml`。
+- **Rollback point:** 不符合的 Profile 从认证列表移除，保留失败证据，不降低 Fixture 适配实现。
+- **Definition of done:** 级别、场景、预期错误和运行器版本入报告，自身参考实现通过声明的全部 Profile。
+
+## P16 — Migration, fault injection and HA
+
+- **Type:** verification
+- **Status:** pending
+- **Goal:** 用真实双库、多节点和故障注入证明恢复、幂等、Fencing 和迁移语义。
+- **Scope:** 空库/N-1/幂等/并发/dirty/backup-restore；duplicate/replay/reorder/cancel/deadline/crash/partition；PostgreSQL 多节点。
+- **Dependencies:** P15
+- **Built-in invariants:** SQLite/PostgreSQL 语义一致非 SQL 一致；通知可丢而 Ledger 不可丢；终态不可覆盖。
+- **Machine acceptance:** `make migration-test && make fault-test && make ha-test` → `build/reports/P16/report.json` 和 `junit.xml`。
+- **Rollback point:** dirty migration 禁止 ready；破坏性变更使用验证过的 backup restore，不伪造 downgrade。
+- **Definition of done:** 迁移矩阵全绿，故障后无重复副作用/终态翻转，多节点恢复指标有报告。
+
+## P17 — Reproducible release dry-run
+
+- **Type:** verification
+- **Status:** pending
+- **Goal:** 在不公开发布的情况下验证双 Go tag、多语言包、Container、SBOM、provenance 和恢复流程。
+- **Scope:** clean clone、临时 Go proxy、`GOWORK=off`、本地 package registries、签名测试键、制品 digest manifest。
+- **Dependencies:** P16
+- **Built-in invariants:** 根 tag 先于嵌套 tag；两 tag 同 commit；嵌套 module 依赖精确根版本且无 `replace`。
+- **Machine acceptance:** `make release-dry-run` → `build/reports/P17/report.json` 和 `junit.xml`。
+- **Rollback point:** 销毁临时 registry/proxy 和测试签名材料，不创建公开 tag/package。
+- **Definition of done:** 两次独立构建 digest 一致，SBOM/provenance 可验，发布/撤回 runbook 通过演练。
+
+## P18 — Code-complete verification
+
+- **Type:** verification-gate
+- **Status:** pending
+- **Goal:** 集中验证所有可由仓库内部自证的不变量，宣告 code-complete 而非 public/v1 complete。
+- **Scope:** P01–P17 报告、IR-01–IR-14 追溯、干净环境全量测试、已知风险清单。
+- **Dependencies:** P17
+- **Built-in invariants:** 不将 C-002–C-004 或独立实现标记为完成；Console 不是验收依赖。
+- **Machine acceptance:** `make validate-all` → `build/reports/P18/report.json` 和 `junit.xml`。
+- **Rollback point:** 任一回归失败回到首个引入阶段，修复后重跑后续报告。
+- **Definition of done:** 全量内部检查通过，制品与报告 digest 归档，状态仅标记 code-complete。
+
+## P19 — External public-configuration gate
+
+- **Type:** external-gate
+- **Status:** blocked-external-evidence
+- **Goal:** 以可核验外部证据确认项目域名、PyPI/npm 所有权、两名 Maintainer/恢复权限和私密安全入口。
+- **Scope:** C-002–C-004、DNS/账户所有权证据、治理与安全联系记录。
+- **Dependencies:** P18
+- **Built-in invariants:** 内部 Fixture、占位域名或单人自我签字不能通过；敏感凭据不写入报告。
+- **Machine acceptance:** `make external-config-gate EVIDENCE_DIR=<verified-records>` → `build/reports/P19/report.json` 和 `junit.xml`。
+- **Rollback point:** 证据过期/所有权失效则 Gate 重新阻塞，不继续发布。
+- **Definition of done:** 每个外部项有可核验来源、时间、审核人与非敏感摘要，P19 报告全绿。
+
+## P20 — Public namespace regeneration
+
+- **Type:** implementation-verification
+- **Status:** pending
+- **Goal:** 将 P19 确认的真实域名/包信息写入源，全量再生成并重跑所有验证。
+- **Scope:** Schema `$id`、Event Type/Extension Namespace、OpenAPI/AsyncAPI、SDK、文档、Fixture、Digest/Compatibility Matrix。
+- **Dependencies:** P19
+- **Built-in invariants:** 不手工批量替换生成物；公共命名变更后旧内部报告不得复用。
+- **Machine acceptance:** `make regenerate-public && make validate-all` → `build/reports/P20/report.json` 和 `junit.xml`。
+- **Rollback point:** 恢复到 P19 后、再生成前 commit；未全绿不发 RC。
+- **Definition of done:** 占位 namespace 清零，重生成零 diff，全量合同/跨语言/故障/HA/发布检查在真实命名空间下通过。
+
+## P21 — Public v0.1 release candidate delivery
+
+- **Type:** release
+- **Status:** pending
+- **Goal:** 发布可给外部团队验证的签名 v0.1 RC。
+- **Scope:** 根/嵌套 Go tag、Python/npm/CLI/Container、Schema/API Bundle、SBOM、provenance、Conformance runner、升级说明。
+- **Dependencies:** P20
+- **Built-in invariants:** 先根 Go tag/proxy 可解析，再同 commit 嵌套 tag；所有制品绑定 source/schema digest。
+- **Machine acceptance:** `make release-rc VERSION=<v0.1.0-rc.N>` → `build/reports/P21/report.json` 和 `junit.xml`。
+- **Rollback point:** 撤回可变渠道/标记 RC 废弃；不重写已发 tag/package，使用新 RC。
+- **Definition of done:** 清洁外部环境能下载、验签、安装、跑 Quickstart/Conformance，公开 digest manifest 可核验。
+
+## P22 — Independent implementation and partner evidence gate
+
+- **Type:** external-gate
+- **Status:** blocked-external-evidence
+- **Goal:** 证明 AROP 不是只有自己参考实现能通过的内部接口。
+- **Scope:** 至少两个独立 Runtime 实现、一个非金运 Control Plane/Validator、三个外部设计伙伴的可验证报告。
+- **Dependencies:** P21
+- **Built-in invariants:** 证据绑定 exact commit SHA、Schema Bundle Digest、Runner Digest 和被测制品 Digest；内部 fork/模拟不算独立实现。
+- **Machine acceptance:** `make external-evidence-gate RC=<exact-rc> EVIDENCE_DIR=<verified-records>` → `build/reports/P22/report.json` 和 `junit.xml`。
+- **Rollback point:** 任何规范/Schema/传输/Runner/安全语义变化立即使相关证据失效，必须回 P20、产生新 RC，再重跑 P22。
+- **Definition of done:** 满足数量和独立性，每条证据来源可核验且与 exact RC 的四类 digest 一致。
+
+## P23 — Protocol v1 freeze verification
+
+- **Type:** verification-gate
+- **Status:** pending
+- **Goal:** 在外部证据通过后冻结 v1 wire 语义、兼容性和治理承诺。
+- **Scope:** RC 反馈/RFC 关闭、Compatibility Matrix、破坏性变更扫描、全套回归、证据有效性重检。
+- **Dependencies:** P22
+- **Built-in invariants:** 冻结后不原地修改已发 Schema；规范变更必须先使旧证据失效并重走 P20–P22。
+- **Machine acceptance:** `make v1-freeze-check` → `build/reports/P23/report.json` 和 `junit.xml`。
+- **Rollback point:** 存在未解 RFC/不兼容/证据失效时取消 freeze，回到首个受影响阶段。
+- **Definition of done:** 无未解 blocker，全套报告指向同一 freeze commit/bundle，升级和弃用政策可执行。
+
+## P24 — Protocol v1 signed delivery
+
+- **Type:** release
+- **Status:** pending
+- **Goal:** 交付签名、可重现、可安装并有公开 Conformance 证据的 v1。
+- **Scope:** 全部版本/tag/package/container、Schema/OpenAPI/AsyncAPI、SDK/CLI、SBOM/provenance、Changelog/迁移/安全/兼容报告。
+- **Dependencies:** P23
+- **Built-in invariants:** 双 Go tag 同 commit 且顺序正确；不重写已发制品；发布权限和恢复至少两人持有。
+- **Machine acceptance:** `make release-v1 VERSION=<v1.x.y>` → `build/reports/P24/report.json` 和 `junit.xml`。
+- **Rollback point:** 使用安全公告、废弃标记和新 patch；不删除/替换已发 tag、Schema 或包。
+- **Definition of done:** 所有公开制品 digest/签名/SBOM/provenance 可验，Quickstart 与外部 Conformance 可重现，证据与 freeze commit 一致。
+
+# 4. 延后且不影响 v1 的内容
+
+- gRPC 和 WebSocket Transport Binding。
+- Portable Session Checkpoint、Hedged Execution 和多区域调度。
+- 公共 Agent 市场、多租户 SaaS 产品、通用工作流引擎。
+- Console 集成：由下游单独计划，不进入本仓库 P01–P24 实施范围。
+
+延后不等于没有扩展位置；提前实现必须经 RFC 修改 Decision、蓝图、要求映射和 Conformance。

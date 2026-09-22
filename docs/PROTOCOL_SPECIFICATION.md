@@ -39,7 +39,8 @@ Core 是所有实现的共同语义；Runtime Management、Delivery、Streaming 
 - 主版本变化表示可能破坏兼容性。
 - 次版本只允许增加可选字段、事件类型或能力。
 - 补丁版本修正文档、约束或实现错误，不改变数据语义。
-- 消费者必须忽略未知可选字段。
+- 作者和发布端必须使用文档声明的精确 Schema 严格校验；未知字段是作者错误。
+- 同一主版本的兼容消费者必须保留或忽略未知可选字段；但影响授权、签名、幂等、副作用或必需扩展的未知语义必须拒绝。
 - 生产者不得改变既有字段类型、含义、必填性或枚举语义。
 - 新的必填字段必须进入新的主版本。
 
@@ -178,6 +179,15 @@ presentation:
 
 `write` 和 `irreversible` Agent 必须声明业务幂等能力。Control Plane 可以要求人工确认和更严格的 Token Scope。
 
+## 5.5 Schema Declaration 与发布包
+
+Skill 的 Input/Output Schema 必须使用且只使用以下一种形式：
+
+- 内联 JSON Schema。
+- AgentVersion 发布包内的 POSIX 相对 `$ref`。
+
+禁止绝对路径、`file:`、带 URI authority 的引用、HTTP(S) 远程引用和越界 `..`。Publisher 必须上传完整的不可变发布包；Control Plane 在不访问网络的情况下解析全部引用，限制文件数、总字节和引用深度，验证引用闭包后才允许发布。
+
 # 6. 内容模型
 
 ## 6.1 ContentPart
@@ -200,6 +210,19 @@ presentation:
 
 未知类型必须通过 Capability/Extension 协商，不得把任意二进制直接塞入 JSON。
 
+Core ContentPart 保持闭合。非核心内容不得直接创造新的 `type`，而必须使用统一扩展包装：
+
+```json
+{
+  "type": "extension",
+  "extension_id": "com.example.arop.chart.v1",
+  "schema_digest": "sha256:...",
+  "data": {}
+}
+```
+
+扩展 ContentPart 必须先完成 Capability/Extension 协商和 Schema 校验。
+
 ## 6.2 Message
 
 ```json
@@ -208,12 +231,14 @@ presentation:
   "role": "user",
   "parts": [
     {"type": "text", "text": "分析这张商品图"},
-    {"type": "asset_ref", "asset": {"asset_id": "asset_01..."}}
+    {"type": "asset_ref", "asset": {"asset_id": "asset_019...", "name": "product.png", "media_type": "image/png", "size_bytes": 238291, "access": {"mode": "brokered"}}}
   ]
 }
 ```
 
 `role` 首期支持 `user`、`assistant`、`system`、`tool`。是否允许调用方传入 `system` 必须由 Agent 和安全策略共同决定。
+
+`type=asset_ref` 的 `asset` 必须是完整 AssetRef，不存在只传 `asset_id` 的第二种 v1 AssetPart 形状。
 
 ## 6.3 AssetRef
 
@@ -245,7 +270,7 @@ DataRef 表示受控业务资源范围；SecretRef 表示通过凭据代理解�
 {
   "protocol_version": "1.0",
   "run_id": "run_01...",
-  "attempt_id": "attempt_01...",
+  "attempt_id": "att_019...",
   "agent": {
     "id": "image.generate",
     "version": "1.0.0",
@@ -290,14 +315,14 @@ DataRef 表示受控业务资源范围；SecretRef 表示通过凭据代理解�
 ## 8.1 Run 状态
 
 ```text
-queued
--> dispatching
--> running
--> waiting_input
--> succeeded | failed | cancelled | timed_out
+queued -> dispatching -> running <-> waiting_input
+queued | dispatching | running | waiting_input -> cancel_requested
+任一非终态 -> succeeded | failed | cancelled | timed_out
 ```
 
 终态不可逆。迟到事件保留审计，但不得覆盖终态。
+
+`cancel_requested` 是非终态；收到 Cancel 不表示执行已停止。终态由第一个通过 State Version 和 Fencing 校验的合法终态事件决定。
 
 未授权请求不创建可执行 Run。拒绝记录属于 Authorization Audit，不进入 Runtime 状态机。
 
@@ -326,7 +351,7 @@ Run 可以有多个 Attempt，但同一时刻只允许一个 Attempt 拥有有�
   "datacontenttype": "application/json",
   "dataschema": "https://schemas.example/jinyun/output-delta-v1.json",
   "runid": "run_01...",
-  "attemptid": "attempt_01...",
+  "attemptid": "att_019...",
   "producersequence": 18,
   "traceparent": "00-...",
   "data": {}
@@ -379,6 +404,16 @@ Run 可以有多个 Attempt，但同一时刻只允许一个 Attempt 拥有有�
 - `asset.updated`
 - `usage.updated`
 - `checkpoint.created`
+
+## 10.5 工具、错误与心跳
+
+- `tool.started`
+- `tool.completed`
+- `tool.failed`
+- `error.raised`
+- `heartbeat`
+
+`heartbeat` 是 Agent 产生、可持久化的运行事件，与仅用于保持连接的 SSE Comment Heartbeat 不是同一个概念。
 
 终态事件必须包含最终输出快照或可解析的 ResultRef，不允许只依赖历史 Delta 重建最终结果。
 
@@ -463,6 +498,10 @@ Manifest、Capability、ContentPart 和 Event 可以通过命名空间扩展。�
 
 扩展不得改变核心字段语义。依赖某扩展才能安全执行的 Agent 必须在注册时声明 `required_extensions`，不支持的实例不得进入发现视图。
 
+`required_extensions` 必须是 `extensions` 键的子集。每个 Extension 载荷必须使用包含 `schema_ref`、`schema_digest` 和 `data` 的统一信封；`schema_ref` 只能指向 AgentVersion 发布包内容。扩展载荷必须先校验，其绑定和载荷一起进入 Manifest Digest。
+
+Core Manifest 可以省略 Governance。但当 Manifest 声明 Enterprise Governance Extension，或发布到受治理 Control Plane 时，必须提供完整 Governance 字段或由发布 API 绑定等价的签名治理元数据。
+
 # 15. HTTP 通用规则
 
 - Content-Type 使用 `application/json`；SSE 使用 `text/event-stream`。
@@ -471,7 +510,8 @@ Manifest、Capability、ContentPart 和 Event 可以通过命名空间扩展。�
 - 限流返回 `429` 和 `Retry-After`。
 - 临时不可用返回 `503` 和可选 `Retry-After`。
 - 乐观并发使用 `ETag` / `If-Match` 或显式 `resource_version`。
-- 未知字段不得导致兼容版本消费者失败。
+- `traceparent` 必须通过 W3C 语义校验：禁止 `ff` 版本、全零 Trace ID、全零 Parent ID，v00 禁止多余字段。
+- 未知字段按第 2.2 节的作者/发布与兼容消费双模式处理。
 - 生产 Endpoint 必须使用 TLS。
 
 # 16. A2A 映射

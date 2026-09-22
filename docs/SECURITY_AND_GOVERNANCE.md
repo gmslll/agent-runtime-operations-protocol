@@ -23,7 +23,7 @@ updated: 2026-09-22
 | Human Subject | Web 用户、飞书用户 |
 | Calling Client | Web BFF、Bot Gateway、后台服务 |
 | Publisher | 创建 AgentVersion 的开发者或团队 |
-| RuntimeService | Python 服务、cc-connect Adapter |
+| RuntimeService | Python 服务、通用 HTTP 或 Worker Pull Bridge |
 | RuntimeInstance | 某台机器上的具体进程 Session |
 | Approver | 对高风险操作进行批准的人 |
 
@@ -65,7 +65,7 @@ Run Token 默认使用 ES256 非对称签名。Control Plane 必须通过 HTTPS 
   "azp": "bot-gateway",
   "jti": "token_01...",
   "run_id": "run_01...",
-  "attempt_id": "attempt_01...",
+  "attempt_id": "att_019...",
   "agent_id": "image.generate",
   "agent_version": "1.0.0",
   "skill_id": "default",
@@ -104,6 +104,8 @@ Direct 模式扩大了 Caller 与 Agent 的信任边界，必须增加：
 - 后续 Browser Direct Extension 必须使用一次性短期 Token、严格 CORS Origin 白名单，并禁止暴露内网 Endpoint。
 - 高安全环境可以要求 mTLS 或公钥绑定 Token。
 
+Publisher 提交的 Manifest、Schema 和 Extension `$ref` 必须由离线包解析器处理，校验器禁止因为这些引用发起 HTTP 或 DNS 请求。Runtime Endpoint、Callback URL 和 Asset URL 属于另一类受控网络资源，必须在每次连接及重定向后重新校验 Scheme、Host、Port 和解析 IP，阻止 Loopback、Link-local、云元数据地址、未授权内网段及 DNS Rebinding。
+
 调用方不得根据 Discovery Cache 自行切换实例；切换必须由 Control Plane 创建新 Attempt。
 
 # 6. 发布与所有权治理
@@ -120,6 +122,8 @@ risk_level
 data_classification
 support_contact
 ```
+
+这是受治理发布的必填条件，不表示 Core Manifest 在本地实验模式下必须内联 Governance。Control Plane 可以接受 Manifest 中的 Governance Extension，也可以在发布 API 中绑定等价的签名元数据；两者都必须可审计并绑定到确定 AgentVersion。
 
 建议值：
 

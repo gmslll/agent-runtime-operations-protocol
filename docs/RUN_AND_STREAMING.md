@@ -39,7 +39,7 @@ Dispatcher 选择实例后创建 Attempt，并返回调用计划：
 ```json
 {
   "run_id": "run_01...",
-  "attempt_id": "attempt_01...",
+  "attempt_id": "att_019...",
   "agent": {
     "id": "image.generate",
     "version": "1.0.0",
@@ -78,11 +78,11 @@ Agent 校验并持久化接收记录后返回：
 ```json
 {
   "run_id": "run_01...",
-  "attempt_id": "attempt_01...",
+  "attempt_id": "att_019...",
   "status": "accepted",
   "status_url": "/v1/runs/run_01",
   "events_url": "/v1/runs/run_01/events",
-  "cancel_url": "/v1/runs/run_01/cancel"
+  "commands_url": "/v1/runs/run_01/commands"
 }
 ```
 
@@ -109,13 +109,13 @@ Proxy 是 Transport Profile，不改变 Agent 的业务协议。
 ## 6.1 Claim
 
 ```http
-POST /v1/workers/{worker_id}/claim
+POST /v1/workers/{worker_id}/claims:next
 Authorization: Bearer <worker-session-token>
 ```
 
 ```json
 {
-  "session_id": "boot_01...",
+  "session_id": "ses_019...",
   "generation": 7,
   "available_slots": 2,
   "supported_bindings": [
@@ -158,7 +158,7 @@ Authorization: Bearer <runtime-session-token>
 
 ```json
 {
-  "attempt_id": "attempt_01...",
+  "attempt_id": "att_019...",
   "deployment_id": "dep_01...",
   "generation": 7,
   "fencing_token": 43
@@ -184,7 +184,7 @@ Event Token 只能写当前 Run/Attempt 的事件，不能执行 Agent、读取�
 Agent/Worker 将事件批量上报 Control Plane：
 
 ```http
-POST /v1/agent-runs/{run_id}/events
+POST /v1/agent-runs/{run_id}/events:batch
 Authorization: Bearer <event-token>
 Idempotency-Key: <batch-id>
 ```
@@ -192,7 +192,7 @@ Idempotency-Key: <batch-id>
 ```json
 {
   "batch_id": "batch_01...",
-  "attempt_id": "attempt_01...",
+  "attempt_id": "att_019...",
   "fencing_token": 43,
   "events": [
     {
@@ -348,7 +348,7 @@ replay_window_seconds
 {
   "output_id": "answer",
   "reason": "attempt_restarted",
-  "replacement_attempt_id": "attempt_02..."
+  "replacement_attempt_id": "att_019..."
 }
 ```
 
@@ -418,6 +418,8 @@ running
 ```
 
 Agent 不支持强制终止时必须明确 `cancellation=best_effort`。
+
+v1 取消不定义独立 `/cancel` 路径。Direct Agent 与 Control Plane 都通过 `POST /v1/runs/{run_id}/commands` 提交幂等 `run.cancel` Command；Agent Accepted 响应因此返回 `commands_url`。
 
 ## 15.2 Deadline
 

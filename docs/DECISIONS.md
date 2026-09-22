@@ -49,6 +49,17 @@ updated: 2026-09-22
 | D-039 | 发布安全 | GitHub 强制 2FA 和分支保护；正式包使用 OIDC Trusted Publishing；Release 使用签名 Tag；发布与恢复权限至少由两人持有 |
 | D-040 | 公共命名空间 | Schema `$id`、CloudEvents Type Prefix 和 Extension Namespace 使用项目控制域名；域名确定前保留占位符且不得发布稳定包 |
 | D-041 | 后端语言 | Reference Control Plane、Registry、Dispatcher、Run/Event Ledger 和服务端 Conformance Harness 使用 Go 实现；Python 主要用于 Agent Provider SDK，TypeScript 主要用于 Web/BFF Consumer |
+| D-042 | 权威来源链 | Decision 约束语义；领域规范和状态机 Fixture 是行为权威；JSON Schema 是结构权威；OpenAPI/AsyncAPI 只绑定传输；生成物均非权威 |
+| D-043 | 未知字段兼容 | 发布和作者校验对其声明版本严格拒绝未知字段；同一主版本的兼容消费者必须保留或忽略未知可选字段，安全相关未知语义不得默认放行 |
+| D-044 | Schema 封装与引用 | AgentVersion 发布包的 Schema 只能内联或使用包内相对引用；服务端不得为校验 Publisher 提交的 Schema 访问网络；必须校验引用闭包和 Digest |
+| D-045 | Extension 绑定 | `required_extensions` 必须是 `extensions` 键的子集；每个扩展载荷必须绑定包内 Schema 及 Digest，Manifest Digest 覆盖该绑定与载荷 |
+| D-046 | Governance 分层 | Core Manifest 允许省略 Governance；声明 Governance Extension 或发布到受治理 Control Plane 时必须提供完整治理元数据 |
+| D-047 | ContentPart 扩展 | Core ContentPart 保持闭合；非核心内容统一使用 `type=extension` 包装并携带 `extension_id`、Schema Digest 和 `data`，不直接新增未协商的 `type` |
+| D-048 | Trace Context 校验 | `traceparent` 除结构匹配外必须遵循 W3C 语义：禁止 `ff` 版本、全零 Trace/Parent ID，v00 禁止多余字段 |
+| D-049 | v1 HTTP 规范路径 | Worker Claim 使用 `/v1/workers/{worker_id}/claims:next`；Event Batch 使用 `/v1/agent-runs/{run_id}/events:batch`；Cancel 使用 `/v1/runs/{run_id}/commands` 的 `run.cancel` Command，不设第二条取消语义 |
+| D-050 | v1 运行命名与分类 | `session_id` 值前缀固定为 `ses_`，`attempt_id` 固定为 `att_`；Run 状态机包含非终态 `cancel_requested`；v1 标准事件补齐 Tool、Error 和 Agent Heartbeat |
+| D-051 | Asset ContentPart | `type=asset_ref` 的 ContentPart 在 `asset` 中携带完整 AssetRef；仅有 `asset_id` 的简写不是合法 v1 ContentPart |
+| D-052 | 外部证据 Gate | 域名、包所有权、维护者/安全入口和独立实现/外部伙伴均是发布 Gate；没有可核验外部证据时不得标记完成或用内部模拟替代 |
 
 # 2. 实现默认值
 
@@ -82,7 +93,21 @@ updated: 2026-09-22
 
 在 C-002～C-004 填写完成前可以开发和运行本地 Fixture，但不得发布稳定包或宣称公共命名空间已经永久冻结。
 
-# 4. 与现有上层架构文档的差异
+这些配置和 v1 所需的独立实现、外部设计伙伴、非金运评审记录都是 **Gate**，不是可由代码库内部 Fixture 替代的交付物。只有存在可核验的外部链接、报告或签字记录时才能标记为完成；否则必须保持 `blocked` 或 `pending-external-evidence`。
+
+# 4. 规范权威与冲突处理
+
+权威顺序固定如下：
+
+1. 本文档的 Decision 约束其他所有产物，新冲突必须先修改 Decision。
+2. 领域规范与状态机 Fixture 共同定义可观测行为；二者不一致时不得发布。
+3. JSON Schema 定义数据结构、必填性、格式和枚举。
+4. OpenAPI 和 AsyncAPI 定义 HTTP/SSE/Event Batch 等传输绑定，不可重新定义载荷语义。
+5. SDK 生成模型、生成文档和参考实现均为派生物，不得被当作反向修改规范的权威。
+
+唯一机器可读制品目录是 [`spec/artifact-manifest.yaml`](../spec/artifact-manifest.yaml)；需求映射和冲突决议分别记录在 [`spec/requirements.yaml`](../spec/requirements.yaml) 与 [`spec/conflicts.yaml`](../spec/conflicts.yaml)。`DIRECTORY_STRUCTURE.md` 只是面向人的布局说明，不是另一份机器清单。
+
+# 5. 与现有上层架构文档的差异
 
 工作区早期架构曾将以下内容列为第一阶段暂缓：
 
@@ -96,7 +121,7 @@ updated: 2026-09-22
 
 在开始跨仓实现前，应同步更新工作区 `AI中台/ARCHITECTURE.md`，避免两个仓库持有冲突描述。
 
-# 5. 公共化后的文档边界
+# 6. 公共化后的文档边界
 
 - 公共定位、开放治理和采用路径以 `PUBLIC_PROJECT_AND_ADOPTION.md` 为准。
 - MCP、A2A、ARD、CloudEvents 和 OpenTelemetry 映射以 `INTEROPERABILITY.md` 为准。

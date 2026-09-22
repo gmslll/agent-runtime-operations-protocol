@@ -51,9 +51,19 @@ A2A / MCP / ARD 互操作 Adapter
 7. [SDK 与开发者体验](docs/SDK_AND_DX.md)
 8. [外部标准互操作](docs/INTEROPERABILITY.md)
 9. [公共项目与采用策略](docs/PUBLIC_PROJECT_AND_ADOPTION.md)
-10. [目录规划](docs/DIRECTORY_STRUCTURE.md)
-11. [开发计划](docs/DEVELOPMENT_PLAN.md)
-12. [架构决策与发布配置](docs/DECISIONS.md)
+10. [最终仓库布局](docs/DIRECTORY_STRUCTURE.md)
+11. [实施蓝图](docs/IMPLEMENTATION_BLUEPRINT.md)
+12. [P01–P24 开发与发布计划](docs/DEVELOPMENT_PLAN.md)
+13. [架构决策与发布配置](docs/DECISIONS.md)
+14. [机器可读制品目录](spec/artifact-manifest.yaml)
+15. [不可变需求映射](spec/requirements.yaml)
+16. [冲突决议台账](spec/conflicts.yaml)
+
+## 规范权威链
+
+AROP 的权威顺序为：`DECISIONS` 约束 → 领域规范与状态机 Fixture 定义行为 → JSON Schema 定义结构 → OpenAPI/AsyncAPI 定义传输绑定。SDK 生成模型、参考实现和生成文档都是派生物，不得反向定义规范。
+
+[`spec/artifact-manifest.yaml`](spec/artifact-manifest.yaml) 是当前和规划协议制品的唯一机器可读目录。目录规划文档只是人类可读视图，不维护第二份制品清单。
 
 ## 与 Console 的边界
 
@@ -81,10 +91,12 @@ A2A / MCP / ARD 互操作 Adapter
 
 ```bash
 npm ci
+make spec-index-check
+make blueprint-check
 make validate
 ```
 
-`make validate` 会校验全部 JSON Schema、有效和无效 Manifest Fixture、RFC 8785 Manifest Digest、Markdown 本地链接，并运行 Go 测试。
+`make spec-index-check` 校验权威链、机器目录、14 条不可变需求、冲突、Decision ID 和本地引用闭包。`make blueprint-check` 校验双 Go Module、最终布局、24 阶段 DAG、Gate/发布顺序、需求映射、Console 隔离与报告约定。两者都产生 JSON/JUnit 报告，并由 `make validate` 强制执行。
 
 计算 Manifest Digest：
 

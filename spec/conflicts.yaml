@@ -1,0 +1,190 @@
+schema_version: 1
+updated: 2026-09-22
+closure_rule: >-
+  每个冲突只能在决议、修复位置和可执行验证均明确后标记 resolved。
+  resolved 不等于实现已完成；implementation_state 必须如实表示当前进度。
+
+conflicts:
+  - id: CF-001
+    title: strict-authoring-vs-forward-compatible-consumer
+    status: resolved
+    implementation_state: specification-fixed-implementation-planned
+    decisions: [D-043]
+    resolution: >-
+      作者/发布模式必须按文档声明的精确 Schema 严格校验，包括
+      additionalProperties 约束。同一主版本的兼容消费模式必须保留或忽略未知
+      可选字段；未知字段一旦影响授权、签名、幂等、副作用或必需扩展，
+      必须拒绝，不得以“忽略未知字段”放行。
+    repair_locations: [protocol-specification, schema-bundle, sdk-bundle, conformance-fixtures]
+    verification: [strict-authoring-negative-fixtures, forward-consumer-fixtures, security-sensitive-unknown-field-fixtures]
+
+  - id: CF-002
+    title: schema-declaration-and-reference-closure
+    status: resolved
+    implementation_state: specification-fixed-schema-and-fixtures-planned
+    decisions: [D-044]
+    resolution: >-
+      schemaDeclaration 必须二选一：内联的 JSON Schema，或 AgentVersion 发布包内的
+      POSIX 相对 `$ref`。禁止绝对路径、`file:`、带 authority 的 URI、网络 URI 和
+      越界 `..`。发布前必须在离线、有大小上限的包解析器中验证整个引用闭包。
+    repair_locations: [protocol-specification, schema-manifest, manifest-fixtures, conformance-fixtures]
+    verification: [schema-declaration-one-of-test, package-reference-closure-test, traversal-and-remote-ref-negative-test]
+
+  - id: CF-003
+    title: required-extensions-schema-and-digest-binding
+    status: resolved
+    implementation_state: specification-fixed-schema-and-fixtures-planned
+    decisions: [D-023, D-045]
+    resolution: >-
+      `required_extensions` 必须是 `extensions` 键的子集。每个 Extension 值使用统一信封，
+      包含包内 `schema_ref`、`schema_digest` 和 `data`。先用已校验的扩展 Schema 校验
+      data，再对包含该绑定和载荷的完整 Manifest 计算 Digest。
+    repair_locations: [protocol-specification, schema-manifest, manifest-fixtures, manifest-digest-vectors]
+    verification: [required-extension-subset-test, extension-schema-digest-test, manifest-digest-cross-language-test]
+
+  - id: CF-004
+    title: optional-governance-vs-managed-publication
+    status: resolved
+    implementation_state: documented
+    decisions: [D-017, D-046]
+    resolution: >-
+      Governance 不是 Core Manifest 必填字段，以保持本地实验和不受治理的核心互操作。
+      声明 Enterprise Governance Extension，或向受治理 Control Plane 发布时，发布 API
+      必须要求 Manifest Governance 或等价的签名发布元数据，并固定其来源。
+    repair_locations: [protocol-specification, security-governance-specification, openapi-bundle]
+    verification: [core-manifest-without-governance-test, governed-publication-requires-metadata-test]
+
+  - id: CF-005
+    title: digest-must-not-run-before-validation
+    status: resolved
+    implementation_state: implementation-debt
+    decisions: [D-023]
+    resolution: >-
+      对外暴露的任何 Manifest Digest API/CLI 必须先完成 Schema、语义、引用闭包和
+      Extension Schema 校验，之后才可 JCS + SHA-256。只能把不校验的 JCS 函数作为
+      不对外的内部原语。当前 Go/Node 入口属于已登记的实现债务，不能作为规范反例。
+    repair_locations: [repository-validation, sdk-go, sdk-python, manifest-digest-vectors]
+    verification: [invalid-manifest-digest-rejected-test, duplicate-key-rejected-test, digest-cross-language-test]
+
+  - id: CF-006
+    title: closed-content-part-vs-extension
+    status: resolved
+    implementation_state: specification-fixed-schema-and-fixtures-planned
+    decisions: [D-047]
+    resolution: >-
+      Core ContentPart 的 `text/json/asset_ref/data_ref` 保持闭合。扩展内容使用唯一标准分支
+      `type=extension`，其中必须携带 `extension_id`、`schema_digest` 和 `data`。未协商的
+      任意新 `type` 仍必须拒绝。
+    repair_locations: [protocol-specification, schema-content-part, conformance-fixtures]
+    verification: [core-content-part-closed-test, negotiated-extension-content-part-test]
+
+  - id: CF-007
+    title: traceparent-regex-vs-w3c-semantics
+    status: resolved
+    implementation_state: specification-fixed-validator-planned
+    decisions: [D-011, D-048]
+    resolution: >-
+      Schema 负责基本 wire shape，公共 Validator 另行强制 W3C Trace Context 语义：版本不能为
+      `ff`，Trace ID 和 Parent ID 不能全零，v00 不允许额外字段，未来版本按 W3C
+      的 forward-compatible 规则处理。
+    repair_locations: [protocol-specification, schema-trace, generated-models, conformance-fixtures]
+    verification: [w3c-traceparent-semantic-vectors]
+
+  - id: CF-008
+    title: worker-claim-path
+    status: resolved
+    implementation_state: documentation-fixed-transport-planned
+    decisions: [D-049]
+    resolution: "v1 唯一规范路径是 `POST /v1/workers/{worker_id}/claims:next`。"
+    repair_locations: [run-streaming-specification, registry-specification, openapi-worker-runtime, sdk-bundle]
+    verification: [openapi-canonical-path-check, worker-client-contract-test]
+
+  - id: CF-009
+    title: event-batch-path
+    status: resolved
+    implementation_state: documentation-fixed-transport-planned
+    decisions: [D-049]
+    resolution: "v1 上报 Event Batch 的唯一规范路径是 `POST /v1/agent-runs/{run_id}/events:batch`。"
+    repair_locations: [run-streaming-specification, openapi-agent-runtime, asyncapi-agent-events, sdk-bundle]
+    verification: [openapi-canonical-path-check, event-batch-contract-test]
+
+  - id: CF-010
+    title: cancel-path-vs-command
+    status: resolved
+    implementation_state: documentation-fixed-transport-planned
+    decisions: [D-049]
+    resolution: >-
+      v1 取消只通过 `POST /v1/runs/{run_id}/commands` 提交幂等 `run.cancel` Command。
+      Accepted 响应返回 `commands_url`，不再声明 `/cancel` 第二条路径。
+    repair_locations: [run-streaming-specification, openapi-agent-runtime, sdk-bundle]
+    verification: [cancel-command-contract-test, no-cancel-alias-check]
+
+  - id: CF-011
+    title: session-and-attempt-id-prefixes
+    status: resolved
+    implementation_state: documentation-fixed-fixtures-planned
+    decisions: [D-020, D-050]
+    resolution: >-
+      v1 wire 值固定为 `ses_<uuidv7>` 和 `att_<uuidv7>`。`boot_`、`attempt_` 只是旧文档
+      示例，不构成别名，不得被 Validator 或 SDK 接受。
+    repair_locations: [protocol-specification, registry-specification, run-streaming-specification, schema-identifiers, conformance-fixtures]
+    verification: [id-prefix-positive-and-negative-vectors]
+
+  - id: CF-012
+    title: cancel-requested-run-state
+    status: resolved
+    implementation_state: documentation-fixed-state-fixtures-planned
+    decisions: [D-050]
+    resolution: >-
+      `cancel_requested` 是 Run 的标准非终态。接收 Cancel 只进入该状态；仅当执行已停止并
+      提交 `run.cancelled` 时进入不可逆终态。其他合法终态仍由 fencing/state-version 竞争。
+    repair_locations: [protocol-specification, run-streaming-specification, state-machine-fixtures]
+    verification: [cancel-race-state-machine-test, terminal-immutability-test]
+
+  - id: CF-013
+    title: missing-tool-error-heartbeat-event-types
+    status: resolved
+    implementation_state: documentation-fixed-schema-and-fixtures-planned
+    decisions: [D-007, D-050]
+    resolution: >-
+      v1 标准事件分类包含 `tool.started/tool.completed/tool.failed`、`error.raised` 和
+      `heartbeat`。Agent Heartbeat 是可持久化的运行事件；SSE comment heartbeat 只是连接保活，
+      两者不得混用。
+    repair_locations: [protocol-specification, run-streaming-specification, schema-event-envelope, asyncapi-agent-events]
+    verification: [event-type-coverage-test, heartbeat-semantics-test]
+
+  - id: CF-014
+    title: asset-part-vs-asset-ref
+    status: resolved
+    implementation_state: documentation-fixed
+    decisions: [D-010, D-051]
+    resolution: >-
+      v1 不定义第二个 AssetPart 资源形状。`type=asset_ref` ContentPart 的 `asset`
+      必须是完整 AssetRef；文档中的简短 JSON 仅可在明确标记为省略字段的说明性示例中出现。
+    repair_locations: [protocol-specification, schema-content-part, schema-asset-ref]
+    verification: [asset-content-part-schema-test]
+
+  - id: CF-015
+    title: remote-schema-ref-and-ssrf
+    status: resolved
+    implementation_state: specification-fixed-security-tests-planned
+    decisions: [D-044]
+    resolution: >-
+      Publisher 提交的 Schema/Extension `$ref` 只从已上传的 AgentVersion 包内解析，绝不发起
+      HTTP/DNS 请求。`https://arop.invalid/...` 仅是发布前的 Schema ID，Validator 必须映射到
+      本地 Bundle，不得访问网络。Runtime/Asset/Callback URL 则使用独立 URL 策略，校验
+      scheme、host、port、解析后 IP、重定向和 DNS 重绑。
+    repair_locations: [protocol-specification, security-governance-specification, repository-validation, conformance-fixtures]
+    verification: [offline-ref-resolution-test, no-network-schema-loader-test, ssrf-and-dns-rebinding-suite]
+
+  - id: CF-016
+    title: console-cc-connect-and-framework-neutrality
+    status: resolved
+    implementation_state: documented
+    decisions: [D-001, D-002, D-014, D-018]
+    resolution: >-
+      Core wire 不得出现 Console 数据库、飞书、cc-connect、Codex 或具体 Agent 框架的专属字段。
+      它们只能作为消费方、Adapter 或带自有命名空间的扩展。独立 Quickstart 和 Conformance
+      不得连接金运 Console 才能运行。
+    repair_locations: [architecture, protocol-specification, sdk-dx-specification, conformance-fixtures]
+    verification: [neutral-boundary-lint, standalone-quickstart-test, standalone-conformance-test]

@@ -270,7 +270,7 @@ Registry Discovery View 可以根据环境要求过滤不满足认证等级的�
 - Python Function Agent。
 - Go HTTP Agent。
 - Pull Worker Reference。
-- cc-connect/Codex Adapter 示例。
+- 通用 Worker Pull/HTTP Bridge 示例，不包含任何厂商专属 Adapter。
 - A2A Agent Card/Task Adapter。
 - ARD/AI Catalog Exporter。
 - MCP Integration Example。
@@ -294,13 +294,17 @@ schemas/
 生成代码与手写代码分目录：
 
 ```text
-sdk/go/generated
-sdk/go/runtime
-sdk/python/generated
-sdk/python/runtime
+sdk/go/generated/                  # generated
+sdk/go/protocol|provider|consumer/ # handwritten
+sdk/python/src/arop/generated/     # generated
+sdk/python/src/arop/provider/      # handwritten
+sdk/typescript/src/generated/      # generated
+sdk/typescript/src/consumer/       # handwritten
 ```
 
-CI 必须验证重新生成后无未提交差异。
+Python 和 TypeScript 的最终生成路径分别是 `sdk/python/src/arop/generated/` 和 `sdk/typescript/src/generated/`；Go 是 `sdk/go/generated/`。CI 必须验证重新生成后无未提交差异。
+
+全量 codegen 前必须先执行代表 Schema spike，验证 union、nullable/optional、format、`additionalProperties`、Extension 与离线 `$ref` 在 Go/Python/TypeScript 中的一致映射。严格作者校验与前向兼容消费模式必须是显式独立 API，不能用一个全局开关混用。完整 pipeline 和 module 边界见 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md)。
 
 # 12. SDK 稳定性
 

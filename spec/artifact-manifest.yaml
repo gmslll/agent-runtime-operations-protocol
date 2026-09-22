@@ -1,0 +1,588 @@
+schema_version: 1
+catalog_id: arop-artifact-catalog-v1
+updated: 2026-09-22
+purpose: >-
+  AROP 唯一机器可读的当前与规划制品目录。面向人的目录树不得
+  被解释为第二份制品清单。
+
+authority_chain:
+  - rank: 1
+    role: decision_constraints
+    sources: [decisions]
+    rule: 已确认 Decision 约束所有规范、Schema、传输绑定和实现。
+  - rank: 2
+    role: behavioral_authority
+    sources: [protocol-specification, registry-specification, run-streaming-specification, state-machine-fixtures]
+    rule: 领域规范与状态机 Fixture 共同定义可观测行为。
+  - rank: 3
+    role: structural_authority
+    sources: [schema-bundle]
+    rule: JSON Schema 定义结构、必填性、格式和枚举。
+  - rank: 4
+    role: transport_binding
+    sources: [openapi-bundle, asyncapi-bundle]
+    rule: OpenAPI 和 AsyncAPI 只定义传输绑定，不重新定义数据语义。
+  - rank: 5
+    role: derived_non_authoritative
+    sources: [generated-models, sdk-bundle, reference-control-plane, conformance-reports]
+    rule: 生成物、SDK、参考实现和报告均非规范权威。
+
+statuses:
+  present: 路径当前必须存在。
+  planned: 已冻结职责和路径，但尚未实现；不可宣称已交付。
+
+artifacts:
+  - id: repository-readme
+    path: README.md
+    status: present
+    kind: human-document
+    authority: explanatory
+    derives_from: [decisions, artifact-catalog]
+  - id: repository-license
+    path: LICENSE
+    status: present
+    kind: legal
+    authority: evidence
+    derives_from: [decisions]
+  - id: contribution-policy
+    path: CONTRIBUTING.md
+    status: present
+    kind: governance-document
+    authority: behavior
+    derives_from: [decisions]
+  - id: security-policy
+    path: SECURITY.md
+    status: present
+    kind: governance-document
+    authority: behavior
+    derives_from: [decisions]
+  - id: code-of-conduct
+    path: CODE_OF_CONDUCT.md
+    status: present
+    kind: governance-document
+    authority: behavior
+    derives_from: [decisions]
+  - id: rfc-process
+    path: rfcs/README.md
+    status: present
+    kind: governance-document
+    authority: behavior
+    derives_from: [decisions]
+  - id: rfc-template
+    path: rfcs/template.md
+    status: present
+    kind: template
+    authority: derived
+    derives_from: [rfc-process]
+  - id: artifact-catalog
+    path: spec/artifact-manifest.yaml
+    status: present
+    kind: catalog
+    authority: catalog
+    derives_from: [decisions]
+  - id: immutable-requirements
+    path: spec/requirements.yaml
+    status: present
+    kind: traceability
+    authority: evidence
+    derives_from: [decisions, artifact-catalog]
+  - id: conflict-ledger
+    path: spec/conflicts.yaml
+    status: present
+    kind: decision-evidence
+    authority: evidence
+    derives_from: [decisions]
+  - id: decisions
+    path: docs/DECISIONS.md
+    status: present
+    kind: normative-document
+    authority: decision
+    derives_from: []
+  - id: architecture
+    path: docs/ARCHITECTURE.md
+    status: present
+    kind: normative-document
+    authority: behavior
+    derives_from: [decisions]
+  - id: protocol-specification
+    path: docs/PROTOCOL_SPECIFICATION.md
+    status: present
+    kind: normative-document
+    authority: behavior
+    derives_from: [decisions]
+  - id: registry-specification
+    path: docs/REGISTRY_AND_DISCOVERY.md
+    status: present
+    kind: normative-document
+    authority: behavior
+    derives_from: [decisions, protocol-specification]
+  - id: run-streaming-specification
+    path: docs/RUN_AND_STREAMING.md
+    status: present
+    kind: normative-document
+    authority: behavior
+    derives_from: [decisions, protocol-specification]
+  - id: security-governance-specification
+    path: docs/SECURITY_AND_GOVERNANCE.md
+    status: present
+    kind: normative-document
+    authority: behavior
+    derives_from: [decisions, protocol-specification]
+  - id: reliability-specification
+    path: docs/RELIABILITY_AND_OPERATIONS.md
+    status: present
+    kind: normative-document
+    authority: behavior
+    derives_from: [decisions, protocol-specification]
+  - id: interoperability-specification
+    path: docs/INTEROPERABILITY.md
+    status: present
+    kind: normative-document
+    authority: behavior
+    derives_from: [decisions, protocol-specification]
+  - id: sdk-dx-specification
+    path: docs/SDK_AND_DX.md
+    status: present
+    kind: normative-document
+    authority: behavior
+    derives_from: [decisions, protocol-specification]
+  - id: public-adoption-policy
+    path: docs/PUBLIC_PROJECT_AND_ADOPTION.md
+    status: present
+    kind: governance-document
+    authority: behavior
+    derives_from: [decisions]
+  - id: repository-layout
+    path: docs/DIRECTORY_STRUCTURE.md
+    status: present
+    kind: human-document
+    authority: explanatory
+    derives_from: [artifact-catalog, decisions]
+  - id: development-plan
+    path: docs/DEVELOPMENT_PLAN.md
+    status: present
+    kind: plan
+    authority: explanatory
+    derives_from: [immutable-requirements, artifact-catalog, decisions]
+  - id: implementation-blueprint
+    path: docs/IMPLEMENTATION_BLUEPRINT.md
+    status: present
+    kind: implementation-blueprint
+    authority: explanatory
+    derives_from: [decisions, immutable-requirements, artifact-catalog, repository-layout]
+
+  - id: schema-identifiers
+    path: schemas/common/identifiers.schema.json
+    status: present
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, protocol-specification]
+  - id: schema-error
+    path: schemas/common/error.schema.json
+    status: present
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, protocol-specification]
+  - id: schema-trace
+    path: schemas/common/trace.schema.json
+    status: present
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, protocol-specification]
+  - id: schema-content-part
+    path: schemas/common/content-part.schema.json
+    status: present
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, protocol-specification]
+  - id: schema-manifest
+    path: schemas/manifest/agent-manifest-v1.schema.json
+    status: present
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, protocol-specification]
+  - id: schema-asset-ref
+    path: schemas/resources/asset-ref-v1.schema.json
+    status: present
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, protocol-specification]
+  - id: schema-data-ref
+    path: schemas/resources/data-ref-v1.schema.json
+    status: present
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, protocol-specification]
+  - id: schema-secret-ref
+    path: schemas/resources/secret-ref-v1.schema.json
+    status: present
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, protocol-specification]
+  - id: schema-registry-runtime-instance
+    path: schemas/registry/runtime-instance-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, registry-specification]
+  - id: schema-registry-lease
+    path: schemas/registry/lease-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, registry-specification]
+  - id: schema-discovery-snapshot
+    path: schemas/registry/discovery-snapshot-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, registry-specification]
+  - id: schema-registry-event
+    path: schemas/registry/registry-event-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, registry-specification]
+  - id: schema-run-request
+    path: schemas/runtime/run-request-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, run-streaming-specification]
+  - id: schema-run-status
+    path: schemas/runtime/run-status-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, run-streaming-specification]
+  - id: schema-attempt
+    path: schemas/runtime/attempt-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, run-streaming-specification]
+  - id: schema-command
+    path: schemas/runtime/command-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, run-streaming-specification]
+  - id: schema-result
+    path: schemas/runtime/result-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, run-streaming-specification]
+  - id: schema-event-envelope
+    path: schemas/events/event-envelope-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, run-streaming-specification]
+  - id: schema-lifecycle-events
+    path: schemas/events/lifecycle-events-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, run-streaming-specification]
+  - id: schema-output-events
+    path: schemas/events/output-events-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, run-streaming-specification]
+  - id: schema-progress-events
+    path: schemas/events/progress-events-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, run-streaming-specification]
+  - id: schema-usage-events
+    path: schemas/events/usage-events-v1.schema.json
+    status: planned
+    kind: json-schema
+    authority: structure
+    derives_from: [decisions, run-streaming-specification]
+  - id: schema-bundle
+    path: schemas
+    status: present
+    kind: bundle
+    authority: structure
+    derives_from:
+      - schema-identifiers
+      - schema-error
+      - schema-trace
+      - schema-content-part
+      - schema-manifest
+      - schema-asset-ref
+      - schema-data-ref
+      - schema-secret-ref
+      - schema-registry-runtime-instance
+      - schema-registry-lease
+      - schema-discovery-snapshot
+      - schema-registry-event
+      - schema-run-request
+      - schema-run-status
+      - schema-attempt
+      - schema-command
+      - schema-result
+      - schema-event-envelope
+      - schema-lifecycle-events
+      - schema-output-events
+      - schema-progress-events
+      - schema-usage-events
+
+  - id: openapi-agent-runtime
+    path: openapi/agent-runtime-v1.yaml
+    status: planned
+    kind: openapi
+    authority: transport
+    derives_from: [schema-bundle, run-streaming-specification]
+  - id: openapi-registry-runtime
+    path: openapi/registry-runtime-v1.yaml
+    status: planned
+    kind: openapi
+    authority: transport
+    derives_from: [schema-bundle, registry-specification]
+  - id: openapi-discovery-runtime
+    path: openapi/discovery-runtime-v1.yaml
+    status: planned
+    kind: openapi
+    authority: transport
+    derives_from: [schema-bundle, registry-specification]
+  - id: openapi-worker-runtime
+    path: openapi/worker-runtime-v1.yaml
+    status: planned
+    kind: openapi
+    authority: transport
+    derives_from: [schema-bundle, run-streaming-specification]
+  - id: openapi-bundle
+    path: openapi
+    status: planned
+    kind: bundle
+    authority: transport
+    derives_from: [openapi-agent-runtime, openapi-registry-runtime, openapi-discovery-runtime, openapi-worker-runtime]
+  - id: asyncapi-agent-events
+    path: asyncapi/agent-events-v1.yaml
+    status: planned
+    kind: asyncapi
+    authority: transport
+    derives_from: [schema-event-envelope, run-streaming-specification]
+  - id: asyncapi-bundle
+    path: asyncapi
+    status: planned
+    kind: bundle
+    authority: transport
+    derives_from: [asyncapi-agent-events]
+
+  - id: manifest-fixtures
+    path: examples/manifests
+    status: present
+    kind: golden-fixtures
+    authority: evidence
+    derives_from: [schema-manifest, protocol-specification]
+  - id: registry-fixtures
+    path: examples/registry
+    status: planned
+    kind: golden-fixtures
+    authority: evidence
+    derives_from: [registry-specification, schema-registry-event]
+  - id: run-fixtures
+    path: examples/runs
+    status: planned
+    kind: golden-fixtures
+    authority: evidence
+    derives_from: [run-streaming-specification, schema-run-request, schema-run-status]
+  - id: event-fixtures
+    path: examples/events
+    status: planned
+    kind: golden-fixtures
+    authority: evidence
+    derives_from: [run-streaming-specification, schema-event-envelope]
+  - id: error-fixtures
+    path: examples/errors
+    status: planned
+    kind: golden-fixtures
+    authority: evidence
+    derives_from: [schema-error, protocol-specification]
+  - id: manifest-digest-vectors
+    path: examples/manifests/digests.json
+    status: present
+    kind: golden-fixtures
+    authority: evidence
+    derives_from: [schema-manifest, decisions]
+  - id: state-machine-fixtures
+    path: conformance/fixtures/state-machines
+    status: planned
+    kind: behavioral-fixtures
+    authority: behavior
+    derives_from: [protocol-specification, registry-specification, run-streaming-specification]
+  - id: conformance-fixtures
+    path: conformance/fixtures
+    status: planned
+    kind: conformance
+    authority: evidence
+    derives_from: [schema-bundle, state-machine-fixtures, openapi-bundle, asyncapi-bundle]
+  - id: conformance-reports
+    path: conformance/reports
+    status: planned
+    kind: reports
+    authority: derived
+    derives_from: [conformance-fixtures]
+  - id: compatibility-matrix
+    path: compatibility/implementation-matrix.yaml
+    status: present
+    kind: compatibility-evidence
+    authority: evidence
+    derives_from: [conformance-reports]
+  - id: upstream-version-matrix
+    path: compatibility/upstream-versions.yaml
+    status: present
+    kind: compatibility-evidence
+    authority: evidence
+    derives_from: [interoperability-specification]
+
+  - id: generated-models
+    path: sdk/go/generated
+    status: planned
+    kind: generated-code
+    authority: derived
+    derives_from: [schema-bundle]
+  - id: generated-python-models
+    path: sdk/python/src/arop/generated
+    status: planned
+    kind: generated-code
+    authority: derived
+    derives_from: [schema-bundle]
+  - id: generated-typescript-models
+    path: sdk/typescript/src/generated
+    status: planned
+    kind: generated-code
+    authority: derived
+    derives_from: [schema-bundle]
+  - id: sdk-go
+    path: sdk/go
+    status: planned
+    kind: sdk
+    authority: derived
+    derives_from: [generated-models, openapi-bundle, asyncapi-bundle]
+  - id: go-manifest-library-baseline
+    path: sdk/go/protocol/manifest
+    status: present
+    kind: sdk-baseline
+    authority: implementation
+    derives_from: [schema-manifest, manifest-digest-vectors]
+  - id: sdk-python
+    path: sdk/python
+    status: planned
+    kind: sdk
+    authority: derived
+    derives_from: [generated-models, openapi-bundle, asyncapi-bundle]
+  - id: sdk-typescript
+    path: sdk/typescript
+    status: planned
+    kind: sdk
+    authority: derived
+    derives_from: [generated-models, openapi-bundle, asyncapi-bundle]
+  - id: sdk-bundle
+    path: sdk
+    status: planned
+    kind: bundle
+    authority: derived
+    derives_from: [sdk-go, sdk-python, sdk-typescript]
+  - id: reference-control-plane
+    path: reference/control-plane
+    status: planned
+    kind: go-reference-implementation
+    authority: implementation
+    derives_from: [schema-bundle, openapi-bundle, asyncapi-bundle, state-machine-fixtures]
+  - id: sqlite-migrations
+    path: reference/control-plane/migrations/sqlite
+    status: planned
+    kind: database-migrations
+    authority: implementation
+    derives_from: [reference-control-plane, reliability-specification]
+  - id: postgres-migrations
+    path: reference/control-plane/migrations/postgres
+    status: planned
+    kind: database-migrations
+    authority: implementation
+    derives_from: [reference-control-plane, reliability-specification]
+  - id: reference-control-plane-lite-baseline
+    path: reference/control-plane-lite
+    status: present
+    kind: go-reference-baseline
+    authority: implementation
+    derives_from: [architecture, decisions]
+  - id: reference-agents
+    path: reference/agents
+    status: planned
+    kind: reference-implementations
+    authority: implementation
+    derives_from: [sdk-bundle, conformance-fixtures]
+  - id: quickstart
+    path: deployments/quickstart
+    status: planned
+    kind: deployment
+    authority: implementation
+    derives_from: [reference-control-plane, reference-agents]
+  - id: production-reference-deployment
+    path: deployments/production-reference
+    status: planned
+    kind: deployment
+    authority: implementation
+    derives_from: [reference-control-plane, postgres-migrations]
+  - id: interoperability-adapters
+    path: adapters
+    status: planned
+    kind: adapters
+    authority: implementation
+    derives_from: [interoperability-specification, sdk-bundle]
+  - id: repository-validation
+    path: scripts/validate.mjs
+    status: present
+    kind: tooling
+    authority: derived
+    derives_from: [schema-bundle, manifest-fixtures, manifest-digest-vectors]
+  - id: arop-cli-baseline
+    path: cmd/arop
+    status: present
+    kind: go-cli-baseline
+    authority: implementation
+    derives_from: [go-manifest-library-baseline]
+  - id: portable-conformance-runner
+    path: cmd/arop-conformance
+    status: planned
+    kind: go-cli
+    authority: implementation
+    derives_from: [conformance-fixtures, sdk-go]
+  - id: codegen-pipeline
+    path: scripts/generate.mjs
+    status: planned
+    kind: tooling
+    authority: derived
+    derives_from: [schema-bundle, generated-models, generated-python-models, generated-typescript-models]
+  - id: ci-validation
+    path: .github/workflows/validate.yml
+    status: present
+    kind: ci
+    authority: derived
+    derives_from: [repository-validation, spec-index-validation]
+  - id: spec-index-validation
+    path: scripts/spec-index-check.mjs
+    status: present
+    kind: tooling
+    authority: derived
+    derives_from: [artifact-catalog, immutable-requirements, conflict-ledger]
+  - id: blueprint-validation
+    path: scripts/blueprint-check.mjs
+    status: present
+    kind: tooling
+    authority: derived
+    derives_from: [implementation-blueprint, repository-layout, development-plan, immutable-requirements]
+  - id: blueprint-check-reports
+    path: build/reports/blueprint-check
+    status: planned
+    kind: machine-reports
+    authority: derived
+    derives_from: [blueprint-validation]

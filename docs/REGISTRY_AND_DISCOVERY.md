@@ -64,7 +64,7 @@ Idempotency-Key: <registration-key>
 
 ```json
 {
-  "session_id": "boot_01...",
+  "session_id": "ses_019...",
   "service_id": "image-agent-runtime",
   "environment": "production",
   "runtime_version": "2026.09.21",
@@ -153,7 +153,7 @@ POST /v1/registry/leases/{lease_id}/keepalive
 ```json
 {
   "instance_id": "macmini-004-image-agent",
-  "session_id": "boot_01...",
+  "session_id": "ses_019...",
   "generation": 7,
   "heartbeat_sequence": 128,
   "reported_at": "2026-09-21T08:00:00Z",
@@ -425,7 +425,7 @@ Pull Worker 也是 RuntimeInstance，使用同一 Lease、Generation、Binding �
 ```json
 {
   "worker": {
-    "claim_url": "https://control.example/v1/workers/worker_01/claim",
+    "claim_url": "https://control.example/v1/workers/worker_01/claims:next",
     "claim_wait_seconds": 30,
     "attempt_lease_seconds": 60
   }

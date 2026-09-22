@@ -170,7 +170,7 @@ safe_to_retry_effect
 支持 Status Query 的 Agent：
 
 ```http
-GET /v1/runs/{run_id}?attempt_id=attempt_01
+GET /v1/runs/{run_id}?attempt_id=att_019...
 ```
 
 对账修正必须写新事件，不直接静默改数据库。

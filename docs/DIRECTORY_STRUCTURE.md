@@ -1,23 +1,27 @@
 ---
-title: Agent Runtime Operations Protocol 目录规划
-status: proposed
+title: Agent Runtime Operations Protocol 仓库布局
+status: frozen-blueprint
 updated: 2026-09-22
 ---
 
-# 1. 目标目录
+# 1. 用途与权威
+
+本文档是最终目标布局的人类可读视图，用来约束后续物理重构、代码生成和发布。唯一机器可读制品目录是 [`spec/artifact-manifest.yaml`](../spec/artifact-manifest.yaml)；两者不一致时必须先停止实现并修复蓝图，不能在代码中自行选择。
+
+<!-- blueprint-target-tree:v1 -->
+
+# 2. 最终目标树
 
 ```text
 agent-runtime-operations-protocol/
-├── README.md
-├── AGENTS.md
-├── LICENSE
-├── CONTRIBUTING.md
-├── CODE_OF_CONDUCT.md
-├── SECURITY.md
-├── VERSION
+├── go.mod                              # 公共 Go module：SDK、生成模型、CLI/portable runner
+├── go.sum
+├── go.work.example                     # 仅本地联调模板，发布不依赖
+├── package.json                         # Schema/TypeScript/文档工具链，不是后端运行时
 ├── Makefile
+├── VERSION
 │
-├── docs/
+├── docs/                                # 手写规范、决策、蓝图
 │   ├── ARCHITECTURE.md
 │   ├── PROTOCOL_SPECIFICATION.md
 │   ├── REGISTRY_AND_DISCOVERY.md
@@ -28,159 +32,163 @@ agent-runtime-operations-protocol/
 │   ├── INTEROPERABILITY.md
 │   ├── PUBLIC_PROJECT_AND_ADOPTION.md
 │   ├── DIRECTORY_STRUCTURE.md
+│   ├── IMPLEMENTATION_BLUEPRINT.md
 │   ├── DEVELOPMENT_PLAN.md
 │   └── DECISIONS.md
-│
+├── spec/                                # 机器可读制品索引、需求和冲突台账
 ├── rfcs/
-│   ├── README.md
-│   └── template.md
-│
 ├── compatibility/
-│   ├── upstream-versions.yaml
-│   └── implementation-matrix.yaml
 │
-├── schemas/
-│   ├── common/
-│   │   ├── identifiers.schema.json
-│   │   ├── error.schema.json
-│   │   ├── trace.schema.json
-│   │   └── content-part.schema.json
-│   ├── manifest/
-│   │   └── agent-manifest-v1.schema.json
-│   ├── registry/
-│   │   ├── runtime-instance-v1.schema.json
-│   │   ├── lease-v1.schema.json
-│   │   ├── discovery-snapshot-v1.schema.json
-│   │   └── registry-event-v1.schema.json
-│   ├── runtime/
-│   │   ├── run-request-v1.schema.json
-│   │   ├── run-status-v1.schema.json
-│   │   ├── attempt-v1.schema.json
-│   │   ├── command-v1.schema.json
-│   │   └── result-v1.schema.json
-│   ├── events/
-│   │   ├── event-envelope-v1.schema.json
-│   │   ├── lifecycle-events-v1.schema.json
-│   │   ├── output-events-v1.schema.json
-│   │   ├── progress-events-v1.schema.json
-│   │   └── usage-events-v1.schema.json
-│   └── resources/
-│       ├── asset-ref-v1.schema.json
-│       ├── data-ref-v1.schema.json
-│       └── secret-ref-v1.schema.json
-│
-├── openapi/
-│   ├── agent-runtime-v1.yaml
-│   ├── registry-runtime-v1.yaml
-│   ├── discovery-runtime-v1.yaml
-│   └── worker-runtime-v1.yaml
-│
-├── asyncapi/
-│   └── agent-events-v1.yaml
-│
-├── examples/
-│   ├── manifests/
-│   ├── registry/
-│   ├── runs/
-│   ├── events/
-│   ├── errors/
-│   └── compatibility/
-│
-├── conformance/
-│   ├── fixtures/
-│   ├── provider/
-│   ├── consumer/
-│   ├── fault-injection/
-│   └── reports/
+├── schemas/                             # 手写结构权威；所有 $ref 离线闭包
+├── openapi/                             # 手写/受控生成的 HTTP 绑定
+├── asyncapi/                            # 手写/受控生成的事件与流式绑定
+├── examples/                            # 黄金样例，不含真实凭据
 │
 ├── sdk/
 │   ├── go/
-│   │   ├── generated/
-│   │   ├── protocol/
+│   │   ├── generated/                 # 生成；禁止手改
+│   │   ├── protocol/                  # 手写核心、验证、状态机
 │   │   ├── provider/
 │   │   ├── consumer/
 │   │   ├── registry/
 │   │   └── worker/
 │   ├── python/
-│   │   ├── generated/
 │   │   └── src/arop/
+│   │       ├── generated/              # 生成；禁止手改
+│   │       ├── provider/
+│   │       └── protocol/
 │   └── typescript/
-│       ├── generated/
 │       └── src/
+│           ├── generated/                  # 生成；禁止手改
+│           ├── consumer/
+│           └── reducer/
 │
-├── cli/
-│   └── arop/
+├── cmd/
+│   ├── arop/                               # 公共 CLI，属于根 Go module
+│   └── arop-conformance/                   # portable runner，不依赖 Reference CP internal
 │
-├── reference/
-│   ├── go-http-agent/
-│   ├── python-agent/
-│   ├── pull-worker/
-│   ├── cc-connect-adapter/
-│   ├── control-plane-lite/
-│   ├── web-streaming-demo/
-│   └── docker-compose/
+├── conformance/                         # 语言中立；不允许 go.mod
+│   ├── fixtures/
+│   ├── scenarios/
+│   ├── profiles/
+│   ├── fault-injection/
+│   └── reports/                            # 公开认证报告与摘要
 │
-├── adapters/
+├── adapters/                            # 仅开放标准互操适配器
 │   ├── a2a/
 │   ├── mcp/
 │   └── ard/
 │
-├── scripts/
-│   ├── generate.sh
-│   ├── validate.sh
-│   ├── compatibility.sh
-│   └── release.sh
+├── reference/
+│   ├── control-plane/
+│   │   ├── go.mod                       # 唯一嵌套 Go module
+│   │   ├── go.sum
+│   │   ├── cmd/aropd/
+│   │   ├── internal/
+│   │   │   ├── app/                      # use case / transaction orchestration
+│   │   │   ├── domain/                   # publication/registry/run/event/worker
+│   │   │   ├── ports/                    # storage/clock/id/token/event interfaces
+│   │   │   └── adapters/                 # HTTP、storage、auth、telemetry、fault seam
+│   │   ├── migrations/
+│   │   │   ├── sqlite/
+│   │   │   └── postgres/
+│   │   └── tests/                      # integration/storage/HA/server-conformance driver
+│   └── agents/
+│       ├── go-http/
+│       ├── python-http/
+│       └── pull-worker/                    # 通用 Worker Pull，无厂商专属适配
 │
-└── .github/workflows/
-    ├── validate.yml
-    ├── conformance.yml
-    └── release.yml
+├── deployments/
+│   ├── quickstart/                          # SQLite 单进程
+│   └── production-reference/                # PostgreSQL 多节点参考部署
+├── scripts/                              # 校验、生成、迁移、发布编排
+├── build/reports/                       # CI 产生，默认不入库
+└── .github/workflows/                   # validate/conformance/release/provenance
 ```
 
-# 2. 权威来源
+## 2.1 冻结路径锚点
 
-依赖方向：
+以下是检查器用的路径锚点，是上述树的平铺表达，不是第二份制品目录：
 
 ```text
-JSON Schema
-  ├── OpenAPI / AsyncAPI 引用
-  ├── SDK Generated Models
-  ├── Golden Examples 校验
-  └── Conformance Fixtures
-
-Handwritten SDK Runtime
-  → 只依赖 Generated Models 和标准库/最小运行依赖
+sdk/go/generated/
+sdk/python/src/arop/
+sdk/typescript/
+cmd/arop-conformance/
+conformance/
+reference/control-plane/
+reference/control-plane/internal/domain/
+reference/control-plane/internal/ports/
+reference/control-plane/migrations/sqlite/
+reference/control-plane/migrations/postgres/
+deployments/quickstart/
+deployments/production-reference/
+.github/workflows/
 ```
 
-# 3. 不应出现的目录
+# 3. Go Module 冻结
 
-- Console 数据库实现。
-- 飞书 Adapter。
-- Console Web UI。
-- 具体客户配置。
-- 真实 Deployment Credential。
-- 具体 Agent 业务逻辑。
-- 可被 Console 反向导入的 Console Internal Package。
-- 金运专属的公共 wire namespace。
-- 只有连接金运 Console 才能运行的 Conformance Test。
+<!-- blueprint-module: go.mod -->
+<!-- blueprint-module: reference/control-plane/go.mod -->
 
-# 4. 渐进创建原则
+仓库最终只允许两个 Go module：
 
-目录规划表示最终结构，不要求第一提交创建全部空目录。按开发阶段创建有真实内容的目录，避免空占位文件。
+| Module | 职责 | 允许导入 | 禁止 |
+| --- | --- | --- | --- |
+| `github.com/gmslll/agent-runtime-operations-protocol` | 公共 Go SDK、生成类型、`arop`、`arop-conformance` | 标准库和审核过的公共依赖 | 不得导入 Reference CP `internal` 或数据库驱动 |
+| `github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane` | Go Reference Control Plane 和服务端 Conformance Driver | 精确版本的根公共 module | 不得被根 module 或 SDK 反向导入 |
 
-# 5. 包命名建议
+`conformance/` 只包含语言中立的 Fixture、Scenario 和 Profile，不建第三个 `go.mod`。根 `cmd/arop-conformance` 读取这些资源；Reference Control Plane 的服务端驱动留在嵌套 module 内。`go.work.example` 只是开发便利层，CI 发布测试必须在不启用 `go.work` 的情况下通过。
 
-公共项目名、仓库名、首选包名和 CLI 已确定。GitHub 用户名、域名和包注册表所有权仍需填写或核验，在此之前不得发布稳定包：
+# 4. 分层和依赖方向
 
 ```text
-Go: github.com/gmslll/agent-runtime-operations-protocol
+DECISIONS + domain specifications + state-machine fixtures
+                         ↓
+JSON Schema (structural authority, offline reference closure)
+                         ↓
+OpenAPI / AsyncAPI bindings
+                         ↓
+generated models (never handwritten)
+                         ↓
+handwritten public SDKs / portable conformance runner
+                         ↓
+Reference Control Plane application and adapters
+```
+
+嵌套 Control Plane 内部依赖只能从 Adapter 指向 Port，从 App 指向 Domain/Port；Domain 不导入 HTTP、SQL、具体 Clock/ID 或 Fault 实现。完整边界和事务见 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md)。
+
+# 5. 手写、生成与存储边界
+
+- `schemas/`、领域规范和事务语义是手写与评审对象。
+- 各 SDK 的 `generated/` 只能由锁定版本的生成器产生；CI 验证重新生成无 diff。
+- 公共 SDK 不知道 SQLite/PostgreSQL；数据库代码仅在 `reference/control-plane/internal/adapters/storage/`。
+- SQLite 与 PostgreSQL 各有独立 migration 目录，实现相同领域语义，不要求 SQL 文本相同。
+- `build/reports/` 是机器验收输出；公开 Conformance 摘要经脱敏后进入 `conformance/reports/`。
+
+# 6. 不允许的布局
+
+- 第三个 Go module，或为 `conformance/` 单独建 module。
+- Console 数据库、Web UI、组织模型或内部权限实现。
+- 飞书、cc-connect、Codex 或其他厂商专属 Adapter；它们应通过通用 HTTP/Worker/A2A/MCP 边界接入。
+- 金运专属 wire namespace、真实 Credential 或客户数据。
+- SDK 导入 Reference Control Plane `internal` 包，或将 Reference 内部模型当作公共协议类型。
+- 只有连接金运 Console 才能运行的 Quickstart 或 Conformance。
+
+# 7. 渐进建立
+
+目标树不要求创建空目录。P05 才执行物理重构，每个后续阶段只在存在真实制品时创建路径。当前的 `reference/control-plane-lite` 是待迁移基线，不是第三个长期实现。
+
+# 8. 包名与发布前置
+
+```text
+Go root module: github.com/gmslll/agent-runtime-operations-protocol
+Go nested module: github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane
 Python distribution: arop-sdk
 Python import: arop
 TypeScript: @arop/sdk
 CLI: arop
 CLI config: ~/.config/arop/
-Schema ID: https://<public-domain>/schemas/...
-Event Type: <public.namespace>.agent.<event>.v1
 ```
 
-初期仓库位于 `gmslll/agent-runtime-operations-protocol`。正式发布前必须确认域名并核验 PyPI/npm 包所有权。项目简称为 AROP，不得缩写为已经被其他项目使用的 ARP。
+上述是预发布命名。项目域名、PyPI/npm 所有权与两名 Maintainer/安全入口在 P19 必须用外部证据确认；P20 再全量生成公共命名空间制品。

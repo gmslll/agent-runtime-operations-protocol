@@ -4,10 +4,11 @@
 
 ## 开始工作前
 
-1. 阅读本仓库 `README.md`、`docs/DECISIONS.md` 和任务相关的完整文档。
+1. 实现前按顺序完整阅读 `README.md` → `docs/DECISIONS.md` → `docs/IMPLEMENTATION_BLUEPRINT.md` → `docs/DEVELOPMENT_PLAN.md` →任务所属领域规范；目录与制品状态另核对 `spec/artifact-manifest.yaml`。
 2. 仅当仓库位于金运内部工作区且上层文件存在时，再阅读上层 `AGENTS.md`、`CLAUDE.md`、`BOT_DEPLOYMENT.md` 和 `AI中台/` 文档；公共独立克隆不得依赖这些内部文件。
 3. 涉及历史结论或“为什么这样设计”时，按工作区 `jinyun-memory-brain` 规则检索本工作区会话。
 4. 开始实现前检查 [docs/DECISIONS.md](docs/DECISIONS.md) 中的已确认决策和发布配置待填写项。
+5. P04 用户 Gate 通过前不得进行 P05 物理重构或新协议行为实现；实施时不得跳过 `docs/DEVELOPMENT_PLAN.md` 的阶段依赖。
 
 ## 固定边界
 
