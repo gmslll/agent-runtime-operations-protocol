@@ -27,6 +27,33 @@ func TestBoundaryNegativeProbesAreIndividuallyRejected(t *testing.T) {
 	}
 }
 
+func TestNodeASTRejectsComputedAndReflectiveEscapes(t *testing.T) {
+	t.Parallel()
+	for name, source := range map[string]string{
+		"computed-child-process": `process["get" + "BuiltinModule"]("node:child_process")`,
+		"reflective-binding":     `Reflect.get(process, "binding")("fs")`,
+		"dynamic-import":         `import("node:http")`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			analysis, err := analyzeNodeSource(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(analysis.Problems) == 0 {
+				t.Fatalf("AST escape accepted; analysis=%+v", analysis)
+			}
+		})
+	}
+}
+
+func TestCommandNormalizationRejectsWorkflowAliases(t *testing.T) {
+	t.Parallel()
+	source := "env:\n  NODE_BIN: node\njobs:\n  x:\n    steps:\n      - run: $NODE_BIN scripts/release/evil.mjs\n"
+	if problems := commandSourceProblems("workflow", source, false, []Artifact{}); len(problems) == 0 {
+		t.Fatal("workflow environment alias escaped normalization")
+	}
+}
+
 func TestPositivePublicV01ProbeIsRejected(t *testing.T) {
 	t.Parallel()
 	problems := publicV01LineProblems("Milestone: publish public v0.1 before v1 RC.", "probe")
@@ -37,6 +64,7 @@ func TestPositivePublicV01ProbeIsRejected(t *testing.T) {
 
 func TestRuntimeBoundaryRejectsRealFilesystemEscapes(t *testing.T) {
 	t.Parallel()
+	entry := Artifact{ID: "allowed", Path: "scripts/allowed.mjs", Kind: "tooling", Status: "present", PathRole: "concrete", ImplementationRuntime: "node", ToolScope: "schema-validation"}
 	for _, tc := range []struct {
 		name        string
 		makefile    string
@@ -46,16 +74,39 @@ func TestRuntimeBoundaryRejectsRealFilesystemEscapes(t *testing.T) {
 		symlink     string
 		want        string
 	}{
-		{name: "extensionless env-S node", packageJSON: `{"scripts":{}}`, files: map[string]string{"tools/release-runner": "\ufeff  #!/usr/bin/env -S node\r\nconsole.log('x')\n"}, want: "executable Node file is not covered"},
-		{name: "recursive package alias", packageJSON: `{"scripts":{"a":"npm run b","b":"npm run c","c":"node tools/evil"}}`, want: "unapproved Node target"},
+		{name: "extensionless env-S node", packageJSON: `{"scripts":{}}`, files: map[string]string{"tools/release-runner": "\ufeff  #!/usr/bin/env -S node\r\nconsole.log('x')\n"}, want: "not covered by an exact"},
+		{name: "recursive package alias", packageJSON: `{"scripts":{"a":"npm run b","b":"npm run c","c":"node tools/evil"}}`, want: "unapproved exact Node entry"},
 		{name: "cyclic package alias", packageJSON: `{"scripts":{"a":"npm run b","b":"npm run a"}}`, want: "alias cycle"},
 		{name: "package runtime trampoline", packageJSON: `{"scripts":{"escape":"npm exec tsx tools/evil.ts"}}`, want: "non-allowlisted runtime"},
 		{name: "make variable alias", makefile: "NODE_BIN:=node\nx:\n\t$(NODE_BIN) -e x\n", packageJSON: `{"scripts":{}}`, want: "non-allowlisted Node runtime"},
+		{name: "make continuation", makefile: "x:\n\tnode \\\n\t  --permission --allow-fs-read=. --disable-proto=throw --no-addons tools/evil.mjs\n", packageJSON: `{"scripts":{}}`, want: "unapproved exact Node entry"},
 		{name: "workflow env alias", packageJSON: `{"scripts":{}}`, files: map[string]string{".github/workflows/evil.yml": "env:\n  NODE_BIN: node\njobs:\n  x:\n    steps:\n      - run: $NODE_BIN scripts/release/evil.mjs\n"}, want: "invokes"},
 		{name: "production Containerfile", packageJSON: `{"scripts":{}}`, files: map[string]string{"deploy/Containerfile.prod": "FROM scratch\nRUN node tools/evil.js\n"}, want: "production image contains Node runtime/tooling"},
-		{name: "allowed tool undeclared helper", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import './helper.mjs'\n", "scripts/helper.mjs": "export const ok = true\n"}, artifacts: []Artifact{{ID: "allowed", Path: "scripts/allowed.mjs", Kind: "tooling", Status: "present", PathRole: "concrete", ImplementationRuntime: "node", ToolScope: "schema-validation"}, {ID: "helper", Path: "scripts/helper.mjs", Kind: "tooling", Status: "present", PathRole: "concrete", ImplementationRuntime: "node", ToolScope: "schema-validation"}}, want: "without manifest derives_from"},
-		{name: "allowlisted tool child-process escape", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import { execSync } from 'node:child_process';\nexecSync('git status');\n"}, artifacts: []Artifact{{ID: "allowed", Path: "scripts/allowed.mjs", Kind: "tooling", Status: "present", PathRole: "concrete", ImplementationRuntime: "node", ToolScope: "schema-validation"}}, want: "imports child_process"},
-		{name: "allowlisted tool dynamic execution escape", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "const moduleName = process.argv[2];\nawait import(moduleName);\neval('1');\nnew Function('return 1')();\nrequire(moduleName);\n"}, artifacts: []Artifact{{ID: "allowed", Path: "scripts/allowed.mjs", Kind: "tooling", Status: "present", PathRole: "concrete", ImplementationRuntime: "node", ToolScope: "schema-validation"}}, want: "uses dynamic import"},
+		{name: "allowed tool undeclared helper", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import './helper.mjs'\n", "scripts/helper.mjs": "export const ok = true\n"}, artifacts: []Artifact{entry, {ID: "helper", Path: "scripts/helper.mjs", Kind: "tooling-helper", Status: "present", PathRole: "concrete", ImplementationRuntime: "node", ToolScope: "schema-validation"}}, want: "without manifest derives_from"},
+		{name: "allowlisted tool child-process escape", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import { execSync } from 'node:child_process';\nexecSync('git status');\n"}, artifacts: []Artifact{entry}, want: "forbidden Node builtin"},
+		{name: "dynamic import", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "await import(process.argv[2])\n"}, artifacts: []Artifact{entry}, want: "uses dynamic import"},
+		{name: "commonjs require", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "require('node:fs')\n"}, artifacts: []Artifact{entry}, want: "require"},
+		{name: "create require", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "createRequire(import.meta.url)\n"}, artifacts: []Artifact{entry}, want: "createRequire"},
+		{name: "eval", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "eval('1')\n"}, artifacts: []Artifact{entry}, want: "eval"},
+		{name: "function constructor", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "new Function('return 1')\n"}, artifacts: []Artifact{entry}, want: "Function"},
+		{name: "process binding", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "process.binding('fs')\n"}, artifacts: []Artifact{entry}, want: "binding"},
+		{name: "process dlopen", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "process.dlopen(module, './x.node')\n"}, artifacts: []Artifact{entry}, want: "dlopen"},
+		{name: "process get builtin", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "process.getBuiltinModule('node:fs')\n"}, artifacts: []Artifact{entry}, want: "getBuiltinModule"},
+		{name: "computed getBuiltinModule child-process", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "process['get' + 'BuiltinModule']('node:child_process')\n"}, artifacts: []Artifact{entry}, want: "dangerous computed"},
+		{name: "node http builtin", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import http from 'node:http'\n"}, artifacts: []Artifact{entry}, want: "forbidden Node builtin"},
+		{name: "node net builtin", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import net from 'node:net'\n"}, artifacts: []Artifact{entry}, want: "forbidden Node builtin"},
+		{name: "node tls builtin", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import tls from 'node:tls'\n"}, artifacts: []Artifact{entry}, want: "forbidden Node builtin"},
+		{name: "node dgram builtin", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import dgram from 'node:dgram'\n"}, artifacts: []Artifact{entry}, want: "forbidden Node builtin"},
+		{name: "node cluster builtin", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import cluster from 'node:cluster'\n"}, artifacts: []Artifact{entry}, want: "forbidden Node builtin"},
+		{name: "node worker builtin", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import { Worker } from 'node:worker_threads'\n"}, artifacts: []Artifact{entry}, want: "forbidden Node builtin"},
+		{name: "computed global require", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "globalThis['requ' + 'ire']('node:fs')\n"}, artifacts: []Artifact{entry}, want: "dangerous computed"},
+		{name: "vm builtin", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import vm from 'node:vm'\n"}, artifacts: []Artifact{entry}, want: "forbidden Node builtin"},
+		{name: "data import", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import 'data:text/javascript,export default 1'\n"}, artifacts: []Artifact{entry}, want: "data/file imports are forbidden"},
+		{name: "file import", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import 'file:///tmp/escape.mjs'\n"}, artifacts: []Artifact{entry}, want: "data/file imports are forbidden"},
+		{name: "absolute import", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import '/tmp/escape.mjs'\n"}, artifacts: []Artifact{entry}, want: "absolute imports are forbidden"},
+		{name: "undeclared bare import", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "import x from 'not-declared'\n"}, artifacts: []Artifact{entry}, want: "undeclared bare import"},
+		{name: "reflection escape", packageJSON: `{"scripts":{}}`, files: map[string]string{"scripts/allowed.mjs": "Reflect.get(process, 'binding')('fs')\n"}, artifacts: []Artifact{entry}, want: "dangerous reflection"},
+		{name: "native addon import", packageJSON: `{"scripts":{},"dependencies":{"bindings":"1.5.0"}}`, files: map[string]string{"scripts/allowed.mjs": "import bindings from 'bindings'\n"}, artifacts: []Artifact{entry}, want: "native addon imports are forbidden"},
 		{name: "external symlink escape", packageJSON: `{"scripts":{}}`, symlink: "external", want: "symlink escapes repository"},
 		{name: "internal unregistered symlink", packageJSON: `{"scripts":{}}`, symlink: "unregistered", want: "symlink enters an unregistered artifact"},
 	} {
@@ -105,6 +156,18 @@ func TestRuntimeBoundaryRejectsRealFilesystemEscapes(t *testing.T) {
 				t.Fatalf("wanted %q, got:\n%s", tc.want, detail)
 			}
 		})
+	}
+}
+
+func TestExactSafeNodePackageTemplatePasses(t *testing.T) {
+	t.Parallel()
+	entry := Artifact{ID: "allowed", Path: "scripts/allowed.mjs", Kind: "tooling", Status: "present", PathRole: "concrete", ImplementationRuntime: "node", ToolScope: "schema-validation"}
+	scripts := map[string]any{
+		"entry": "node --permission --allow-fs-read=. --disable-proto=throw --no-addons scripts/allowed.mjs",
+		"alias": "npm run entry",
+	}
+	if problems := packageScriptProblems(scripts, []Artifact{entry}); len(problems) != 0 {
+		t.Fatalf("exact safe Node package template rejected: %v", problems)
 	}
 }
 

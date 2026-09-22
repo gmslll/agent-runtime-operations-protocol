@@ -110,8 +110,16 @@
             },
             "then": {
               "properties": {
+                "path_role": {"const": "concrete"},
                 "tool_scope": {"enum": ["schema-validation", "schema-codegen", "typescript-sdk", "npm-packaging"]}
-              }
+              },
+              "required": ["path_role", "tool_scope"],
+              "oneOf": [
+                {"properties": {"tool_scope": {"const": "schema-validation"}, "kind": {"enum": ["tooling", "tooling-baseline", "tooling-helper"]}}},
+                {"properties": {"tool_scope": {"const": "schema-codegen"}, "kind": {"enum": ["tooling", "tooling-helper"]}}},
+                {"properties": {"tool_scope": {"const": "typescript-sdk"}, "kind": {"enum": ["typescript-source", "tooling-helper"]}}},
+                {"properties": {"tool_scope": {"const": "npm-packaging"}, "kind": {"enum": ["build-primitive", "tooling-helper"]}}}
+              ]
             }
           },
           {

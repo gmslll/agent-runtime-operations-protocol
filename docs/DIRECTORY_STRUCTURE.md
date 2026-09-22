@@ -25,7 +25,7 @@ agent-runtime-operations-protocol/
 │   ├── spec-index-check.mjs             # 仅结构化 Schema/spec/catalog 检查结果；Go 写报告
 │   ├── manifest-digest.mjs              # P06 repair-retain 的 Schema/Manifest 工具
 │   ├── generate.mjs                     # P07 Schema-driven 三语言 codegen
-│   └── lib/repository.mjs               # 仅 Node Schema/YAML/JSON loader/walker
+│   └── lib/repository.mjs               # exact tooling-helper；仅 Node Schema/YAML/JSON loader/walker
 ├── internal/tooling/                    # 根 module 私有 Go 治理与发布工具
 │   ├── cmd/                             # blueprint/report/planning/Gate/proxy/build/release 私有入口
 │   ├── structuredfile/                  # Go JSON/YAML/Git-safe repository helpers

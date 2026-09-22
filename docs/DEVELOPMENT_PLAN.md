@@ -37,7 +37,7 @@ updated: 2026-09-23
 - **First-path invariants:** Authoring strict/Consumer forward compatible；离线 `$ref`；先校验再 Digest；制品路径唯一、DAG 无环、语言派生正确。
 - **Machine acceptance:** `make spec-index-check` → `build/reports/P01/report.json` 和 `junit.xml`。
 - **Rollback point:** 恢复上一份规划元数据；冲突或 DAG 错误时不进入 P02。
-- **Definition of done:** Meta-Schema、路径、DAG、Decision/链接/引用闭包和反例探针全绿；P01 实际 package/test 终态集合与 tracked inventory 完全一致且全部 pass，fail/skip/cache/no-tests 均为零，`GOFLAGS=-run`、TestMain/no-tests、cache、缺测试和多测试负例失败闭合；报告带 commit/dirty/command/runtime/input/checker digest，current-worktree 精确重验 Node/Go/OS，ancestor 只标记 archive-only；allowlisted Node 工具仍拒绝 child process、动态加载和 eval/Function。
+- **Definition of done:** Meta-Schema、路径、DAG、Decision/链接/引用闭包和反例探针全绿；P01 实际 package/test 终态集合与 tracked inventory 完全一致且全部 pass，fail/skip/cache/no-tests 均为零，`GOFLAGS=-run`、TestMain/no-tests、cache、缺测试和多测试负例失败闭合；报告带 commit/dirty/command/runtime/input/checker digest，current-worktree 精确重验 Node/Go/OS，ancestor 只标记 archive-only；allowlisted Node 工具由 Go JavaScript AST 强制 exact entry/helper 与静态 import 闭包，执行路径无 symlink，并拒绝 child process/网络/worker/native addon、动态加载、eval/Function 和 computed/reflection 绕过。
 
 ## P02 — Schedulable implementation blueprint
 

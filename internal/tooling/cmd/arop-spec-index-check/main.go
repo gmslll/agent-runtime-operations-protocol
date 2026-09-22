@@ -27,7 +27,14 @@ func main() {
 	dir := filepath.Join(root, "build/reports/P01")
 	fatal(os.MkdirAll(dir, 0o755))
 	resultPath := filepath.Join(dir, "spec-index-results.json")
-	node := exec.Command("node", "scripts/spec-index-check.mjs")
+	node := exec.Command("node",
+		"--permission",
+		"--allow-fs-read="+root,
+		"--allow-fs-write="+dir,
+		"--disable-proto=throw",
+		"--no-addons",
+		"scripts/spec-index-check.mjs",
+	)
 	node.Dir = root
 	node.Env = append(os.Environ(), "AROP_RESULT_FILE="+resultPath)
 	node.Stdout = os.Stdout

@@ -1717,7 +1717,7 @@ artifacts:
   - id: structured-file-tools
     path: scripts/lib/repository.mjs
     status: present
-    kind: tooling
+    kind: tooling-helper
     authority: derived
     implementation_runtime: node
     tool_scope: schema-validation
