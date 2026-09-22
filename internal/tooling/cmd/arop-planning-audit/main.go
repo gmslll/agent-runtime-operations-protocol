@@ -70,10 +70,7 @@ func main() {
 	record("canonical-summary-content-binding", derr == nil && doc["summary_sha256"] == digest, detail(derr, "canonical summary digest matches"))
 	auth, aerr := evidence.Authenticate(root, doc, "independent_reviewer", os.Getenv("TRUSTED_KEYS"), os.Getenv("TRUSTED_CHANNEL_CONFIRMATION"))
 	record("reviewer-authenticity-gate", aerr == nil, detail(aerr, fmt.Sprint(auth.Candidate["mode"])))
-	candidate := map[string]any{"schema_version": 1, "kind": "arop-planning-audit-summary", "subject": subject, "reviewer_id": nested(doc, "reviewer", "id"), "result": result, "attested_at": doc["attested_at"], "summary_sha256": doc["summary_sha256"], "authentication": auth.Candidate, "raw_evidence_sha256": "sha256:" + report.Hash(raw)}
-	if auth.Candidate["mode"] == "trusted-key-attestation" {
-		candidate["attestation"] = doc["attestation"]
-	}
+	candidate := evidence.PlanningAuditCandidate(doc, auth, raw)
 	candidateData, candidateErr := json.MarshalIndent(candidate, "", "  ")
 	if candidateErr == nil {
 		candidateErr = schema.ValidateFile(root, "spec/schemas/canonical-evidence-summary.schema.json", candidate)
@@ -85,20 +82,21 @@ func main() {
 	subjectJCS, subjectErr := evidence.JCSDigest(subject)
 	resultJCS, resultErr := evidence.JCSDigest(result)
 	authJCS, authErr := evidence.JCSDigest(auth.Candidate)
-	record("canonical-summary-component-digests", subjectErr == nil && resultErr == nil && authErr == nil, detail(first(subjectErr, resultErr, authErr), "subject/result/auth JCS digests computed"))
+	candidateJCS, candidateJCSErr := evidence.JCSDigest(candidate)
+	record("canonical-summary-component-digests", subjectErr == nil && resultErr == nil && authErr == nil && candidateJCSErr == nil, detail(first(subjectErr, resultErr, authErr, candidateJCSErr), "subject/result/auth/candidate JCS digests computed"))
 	if allPassed(checks) {
 		fatal(os.MkdirAll(filepath.Join(root, "build/reports/P03"), 0o755))
 		fatal(os.WriteFile(filepath.Join(root, "build/reports/P03/canonical-summary.json"), candidateData, 0o644))
 	}
 	command := os.Getenv("AROP_CHECK_COMMAND")
 	if command == "" {
-		command = "go run ./internal/tooling/cmd/arop-planning-audit"
+		command = evidence.P03Command
 	}
 	runtimeEvidence := []report.RuntimeEvidence{{Kind: "canonical-summary-candidate", SHA256: report.Hash(candidateData), Bytes: int64(len(candidateData))}, {Kind: "external-planning-audit-evidence", SHA256: report.Hash(raw), Bytes: int64(len(raw))}}
 	if auth.MaterialSHA256 != "" {
 		runtimeEvidence = append(runtimeEvidence, report.RuntimeEvidence{Kind: "external-authentication-material", SHA256: auth.MaterialSHA256, Bytes: auth.MaterialBytes})
 	}
-	r, werr := report.Write(report.WriteOptions{Root: root, Directory: "build/reports/P03", Suite: "arop-planning-audit", Class: "arop.planning-audit", Command: command, CheckerPath: "internal/tooling/cmd/arop-planning-audit/main.go", InputPaths: []string{"go.mod", "go.sum", "spec/requirements.yaml", "docs/DEVELOPMENT_PLAN.md", "docs/IMPLEMENTATION_BLUEPRINT.md", "spec/artifact-manifest.yaml", "spec/schemas/planning-audit-evidence.schema.json", "spec/schemas/canonical-evidence-summary.schema.json", "spec/schemas/trusted-key-registry.schema.json", "spec/schemas/check-report.schema.json", "internal/tooling/cmd/arop-planning-audit/main.go", "internal/tooling/evidence/validation.go", "internal/tooling/report/writer.go", "internal/tooling/report/verifier.go", "internal/tooling/schema/validator.go", "internal/tooling/structuredfile/files.go"}, RuntimeEvidence: runtimeEvidence, Checks: checks, Summary: map[string]any{"candidate_file_sha256": "sha256:" + report.Hash(candidateData), "canonical_summary_sha256": digest, "subject_jcs": subjectJCS, "result_jcs": resultJCS, "raw_evidence": map[string]any{"sha256": "sha256:" + report.Hash(raw), "bytes": len(raw)}, "auth_jcs": authJCS, "authentication_mode": auth.Candidate["mode"], "raw_evidence_committed": false}, AuditNote: "Reviewer authenticity comes from external trusted material recorded only by digest and byte count; this tool never infers independence."})
+	r, werr := report.Write(report.WriteOptions{Root: root, Directory: "build/reports/P03", Suite: "arop-planning-audit", Class: "arop.planning-audit", Command: command, CheckerPath: "internal/tooling/cmd/arop-planning-audit/main.go", InputPaths: evidence.P03StaticInputs, RuntimeEvidence: runtimeEvidence, Checks: checks, Summary: map[string]any{"candidate_file_sha256": "sha256:" + report.Hash(candidateData), "candidate_jcs_sha256": candidateJCS, "canonical_summary_sha256": digest, "subject_jcs": subjectJCS, "result_jcs": resultJCS, "raw_evidence": map[string]any{"sha256": "sha256:" + report.Hash(raw), "bytes": len(raw)}, "auth_jcs": authJCS, "authentication_mode": auth.Candidate["mode"], "raw_evidence_committed": false}, AuditNote: "Reviewer authenticity comes from external trusted material recorded only by digest and byte count; this tool never infers independence."})
 	fatal(werr)
 	if r.Success {
 		fmt.Println("AROP planning audit evidence passed; canonical summary candidate is in build/reports/P03/.")
@@ -137,7 +135,6 @@ func detail(err error, ok string) string {
 	}
 	return ok
 }
-func nested(m map[string]any, a, b string) any { x, _ := m[a].(map[string]any); return x[b] }
 func allPassed(checks []report.Check) bool {
 	for _, check := range checks {
 		if !check.Passed {

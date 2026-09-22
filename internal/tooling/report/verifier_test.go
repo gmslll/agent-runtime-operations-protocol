@@ -264,6 +264,72 @@ func TestVerifierHistoricalLineage(t *testing.T) {
 	}
 }
 
+func TestVerifierRediscoverControlledInputsForCurrentAndAncestorReports(t *testing.T) {
+	root := t.TempDir()
+	gitTest(t, root, "init", "-q")
+	gitTest(t, root, "config", "user.name", "AROP Controlled Report Test")
+	gitTest(t, root, "config", "user.email", "controlled-report@invalid.example")
+	schemaSource := filepath.Join("..", "..", "..", "spec", "schemas", "check-report.schema.json")
+	schemaData, err := os.ReadFile(schemaSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for path, data := range map[string][]byte{
+		"spec/schemas/check-report.schema.json": schemaData,
+		"checker.go":                            []byte("package fixture\n"),
+		"input.txt":                             []byte("stable\n"),
+		".gitignore":                            []byte("build/\n"),
+	} {
+		absolute := filepath.Join(root, filepath.FromSlash(path))
+		if err := os.MkdirAll(filepath.Dir(absolute), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(absolute, data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitTest(t, root, "add", ".")
+	gitTest(t, root, "commit", "-q", "-m", "controlled report")
+	_, err = Write(WriteOptions{Root: root, Directory: "build/reports/P01", Suite: "controlled", Class: "controlled", Command: "make spec-index-check", CheckerPath: "checker.go", InputPaths: []string{"input.txt"}, Checks: []Check{{Name: "fixture", Passed: true, Detail: "ok"}}, ControlledInputScope: "P01", AuditNote: "controlled fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportPath := "build/reports/P01/report.json"
+	if _, mode, err := Verify(VerifyOptions{Root: root, ReportPath: reportPath}); err != nil || mode != "current-worktree" {
+		t.Fatalf("current controlled report rejected mode=%s err=%v", mode, err)
+	}
+	original, err := os.ReadFile(filepath.Join(root, reportPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tampered Report
+	if err := json.Unmarshal(original, &tampered); err != nil {
+		t.Fatal(err)
+	}
+	tampered.Provenance.ControlledInputs.Entries[0].SHA256 = strings.Repeat("f", 64)
+	tamperedData, err := json.MarshalIndent(tampered, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, reportPath), append(tamperedData, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Verify(VerifyOptions{Root: root, ReportPath: reportPath}); err == nil || !strings.Contains(err.Error(), "controlled input manifest") {
+		t.Fatalf("tampered controlled manifest accepted: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, reportPath), original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "descendant.txt"), []byte("new tracked input\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitTest(t, root, "add", "descendant.txt")
+	gitTest(t, root, "commit", "-q", "-m", "descendant")
+	if _, mode, err := Verify(VerifyOptions{Root: root, ReportPath: reportPath, AllowAncestor: true}); err != nil || mode != "ancestor-archive-only" {
+		t.Fatalf("ancestor controlled report rejected mode=%s err=%v", mode, err)
+	}
+}
+
 func gitTest(t *testing.T, root string, args ...string) string {
 	t.Helper()
 	c := exec.Command("git", args...)

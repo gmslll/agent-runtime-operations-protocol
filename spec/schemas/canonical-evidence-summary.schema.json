@@ -89,7 +89,7 @@
     },
     "gate_subject": {
       "type": "object",
-      "required": ["commit", "plan_last_phase", "requirements_sha256", "plan_sha256", "blueprint_sha256", "artifact_manifest_sha256", "planning_audit_summary_sha256"],
+      "required": ["commit", "plan_last_phase", "requirements_sha256", "plan_sha256", "blueprint_sha256", "artifact_manifest_sha256", "planning_audit_summary_sha256", "planning_audit_promoted_jcs_sha256", "planning_audit_promoted_file_sha256"],
       "properties": {
         "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "plan_last_phase": {"$ref": "#/$defs/phase_id"},
@@ -97,7 +97,9 @@
         "plan_sha256": {"$ref": "#/$defs/sha256"},
         "blueprint_sha256": {"$ref": "#/$defs/sha256"},
         "artifact_manifest_sha256": {"$ref": "#/$defs/sha256"},
-        "planning_audit_summary_sha256": {"$ref": "#/$defs/prefixed_sha256"}
+        "planning_audit_summary_sha256": {"$ref": "#/$defs/prefixed_sha256"},
+        "planning_audit_promoted_jcs_sha256": {"$ref": "#/$defs/prefixed_sha256"},
+        "planning_audit_promoted_file_sha256": {"$ref": "#/$defs/prefixed_sha256"}
       },
       "additionalProperties": false
     },

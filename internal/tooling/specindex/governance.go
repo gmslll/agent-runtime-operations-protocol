@@ -106,7 +106,7 @@ func controlledWalk(root string, match func(string) bool, visit func(string, []b
 			return err
 		}
 		rel = filepath.ToSlash(rel)
-		if entry.IsDir() && (rel == ".git" || rel == "node_modules" || rel == "build" || strings.HasPrefix(rel, ".git/") || strings.HasPrefix(rel, "node_modules/") || strings.HasPrefix(rel, "build/")) {
+		if entry.IsDir() && (rel == ".git" || rel == ".worktrees" || rel == "node_modules" || rel == "build" || strings.HasPrefix(rel, ".git/") || strings.HasPrefix(rel, ".worktrees/") || strings.HasPrefix(rel, "node_modules/") || strings.HasPrefix(rel, "build/")) {
 			return filepath.SkipDir
 		}
 		if entry.IsDir() || !match(rel) {

@@ -72,6 +72,7 @@
           "type": "array",
           "items": {"$ref": "#/$defs/runtime_evidence"}
         },
+        "controlled_inputs": {"$ref": "#/$defs/controlled_inputs"},
         "testcase_count": {"type": "integer", "minimum": 1},
         "audit_note": {"type": "string", "minLength": 1}
       },
@@ -132,6 +133,36 @@
         "kind": {"type": "string", "pattern": "^[a-z][a-z0-9-]{2,63}$"},
         "sha256": {"$ref": "#/$defs/sha256"},
         "bytes": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "controlled_inputs": {
+      "type": "object",
+      "required": ["policy", "scope", "source", "tree", "sha256", "entries"],
+      "properties": {
+        "policy": {"const": "tracked-repository-tree-v1"},
+        "scope": {"enum": ["P01", "P02"]},
+        "source": {"const": "current-index-worktree"},
+        "tree": {"type": "string", "pattern": "^[0-9a-f]{40,64}$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "required": ["path", "type", "mode", "link_target", "sha256", "bytes"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "type": {"const": "blob"},
+              "mode": {"enum": ["100644", "100755"]},
+              "link_target": {"const": ""},
+              "sha256": {"$ref": "#/$defs/sha256"},
+              "bytes": {"type": "integer", "minimum": 0}
+            },
+            "additionalProperties": false
+          }
+        }
       },
       "additionalProperties": false
     }

@@ -48,57 +48,20 @@ func main() {
 	record("external-evidence-location", outside, "raw Gate evidence must remain outside repository")
 	record("external-evidence-readable", loadErr == nil && len(raw) > 0, detail(loadErr, "strict external evidence loaded"))
 	record("user-gate-evidence-schema", loadErr == nil, detail(loadErr, "Draft 2020-12 schema and format assertions passed"))
-	audit, mode, aerr := report.Verify(report.VerifyOptions{Root: root, ReportPath: "build/reports/P03/report.json"})
+	audit, mode, aerr := report.Verify(report.VerifyOptions{Root: root, ReportPath: "build/reports/P03/report.json", AllowAncestor: true})
 	record("planning-audit-report-integrity", aerr == nil, detail(aerr, "P03 report verified in "+mode))
 	record("planning-audit-prerequisite", aerr == nil && audit.Success, "P03 report must be successful")
 	promotedPath := filepath.Join(root, "spec/evidence/P03-planning-audit-summary.json")
-	promoted := map[string]any{}
-	promotedValue, promotedRaw, perr := structuredfile.LoadAny(promotedPath)
-	if perr == nil {
-		perr = schema.ValidateFile(root, "spec/schemas/canonical-evidence-summary.schema.json", promotedValue)
-		promoted, _ = promotedValue.(map[string]any)
-	}
-	record("promoted-planning-audit-summary", perr == nil && promoted["kind"] == "arop-planning-audit-summary", detail(perr, "promoted P03 canonical summary loaded and schema validated"))
-	promotedExternal := map[string]any{"schema_version": promoted["schema_version"], "kind": "arop-planning-audit", "subject": promoted["subject"], "reviewer": map[string]any{"id": promoted["reviewer_id"]}, "result": promoted["result"], "attested_at": promoted["attested_at"]}
-	promotedExternal["summary_sha256"] = promoted["summary_sha256"]
-	if promoted["attestation"] != nil {
-		promotedExternal["attestation"] = promoted["attestation"]
-	}
-	if perr == nil {
-		perr = schema.ValidateFile(root, "spec/schemas/planning-audit-evidence.schema.json", promotedExternal)
-	}
-	promotedCanonical, promotedCanonicalErr := evidence.CanonicalSummaryDigest(promotedExternal)
-	promotedSubjectJCS, promotedSubjectErr := evidence.JCSDigest(promoted["subject"])
-	promotedResultJCS, promotedResultErr := evidence.JCSDigest(promoted["result"])
-	promotedAuthJCS, promotedAuthErr := evidence.JCSDigest(promoted["authentication"])
-	p03Binding := []string{}
-	if aerr == nil {
-		if audit.Summary["candidate_file_sha256"] != "sha256:"+report.Hash(promotedRaw) {
-			p03Binding = append(p03Binding, "candidate_file_sha256")
-		}
-		if promotedCanonicalErr != nil || promoted["summary_sha256"] != promotedCanonical || audit.Summary["canonical_summary_sha256"] != promotedCanonical {
-			p03Binding = append(p03Binding, "canonical_summary_sha256")
-		}
-		if promotedSubjectErr != nil || audit.Summary["subject_jcs"] != promotedSubjectJCS {
-			p03Binding = append(p03Binding, "subject_jcs")
-		}
-		if promotedResultErr != nil || audit.Summary["result_jcs"] != promotedResultJCS {
-			p03Binding = append(p03Binding, "result_jcs")
-		}
-		if promotedAuthErr != nil || audit.Summary["auth_jcs"] != promotedAuthJCS || audit.Summary["authentication_mode"] != nested(promoted, "authentication", "mode") {
-			p03Binding = append(p03Binding, "authentication")
-		}
-		rawBinding, _ := audit.Summary["raw_evidence"].(map[string]any)
-		if rawBinding["sha256"] != promoted["raw_evidence_sha256"] {
-			p03Binding = append(p03Binding, "raw_evidence_sha256")
-		}
-	}
-	record("planning-audit-promoted-summary-binding", aerr == nil && perr == nil && len(p03Binding) == 0, strings.Join(p03Binding, "; "))
+	phases, requirements := ids(root)
+	p03, p03err := evidence.RevalidateP03(root, os.Getenv("P03_EVIDENCE"), os.Getenv("P03_TRUSTED_KEYS"), os.Getenv("P03_TRUSTED_CHANNEL_CONFIRMATION"), requirements, phases, audit, promotedPath)
+	record("planning-audit-raw-evidence-revalidation", p03err == nil, detail(p03err, "P03 raw evidence passed strict/schema/content/lineage checks"))
+	record("planning-audit-reviewer-authentication-revalidation", p03err == nil, detail(p03err, fmt.Sprint(p03.Authentication.Candidate["mode"])))
+	record("planning-audit-report-policy", p03err == nil, detail(p03err, "P03 checker, command, static inputs, checks, runtime inputs and runtime evidence match fixed policy"))
+	record("planning-audit-promoted-summary-binding", p03err == nil, detail(p03err, "P03 raw/auth/report/promoted envelope bindings match"))
 	subject, _ := doc["subject"].(map[string]any)
 	commit, _ := subject["commit"].(string)
 	lineage, lerr := evidence.VerifySubjectCommit(root, commit, subject)
 	record("subject-commit-lineage", lerr == nil, detail(lerr, lineage.Mode))
-	phases, requirements := ids(root)
 	mismatch := []string{}
 	for k, v := range lineage.Digests {
 		if subject[k] != v {
@@ -108,10 +71,16 @@ func main() {
 	if subject["plan_last_phase"] != last(phases) {
 		mismatch = append(mismatch, "plan_last_phase")
 	}
-	if subject["planning_audit_summary_sha256"] != promotedCanonical {
+	if subject["planning_audit_summary_sha256"] != p03.CanonicalSummarySHA256 {
 		mismatch = append(mismatch, "planning_audit_summary_sha256 must bind promoted P03 canonical summary")
 	}
-	record("gate-subject-binding", lerr == nil && perr == nil && len(mismatch) == 0, strings.Join(mismatch, "; "))
+	if subject["planning_audit_promoted_jcs_sha256"] != p03.PromotedEnvelopeJCSSHA256 {
+		mismatch = append(mismatch, "planning_audit_promoted_jcs_sha256 must bind the complete promoted P03 envelope")
+	}
+	if subject["planning_audit_promoted_file_sha256"] != p03.PromotedEnvelopeFileSHA256 {
+		mismatch = append(mismatch, "planning_audit_promoted_file_sha256 must bind the exact promoted P03 file")
+	}
+	record("gate-subject-binding", lerr == nil && p03err == nil && len(mismatch) == 0, strings.Join(mismatch, "; "))
 	result, _ := doc["result"].(map[string]any)
 	coverage := evidence.ValidateCoverage(result, requirements, phases)
 	record("complete-gate-results", len(coverage) == 0, strings.Join(coverage, "; "))
@@ -147,7 +116,13 @@ func main() {
 	if auth.MaterialSHA256 != "" {
 		runtimeEvidence = append(runtimeEvidence, report.RuntimeEvidence{Kind: "external-authentication-material", SHA256: auth.MaterialSHA256, Bytes: auth.MaterialBytes})
 	}
-	r, werr := report.Write(report.WriteOptions{Root: root, Directory: "build/reports/P04", Suite: "arop-user-gate", Class: "arop.user-gate", Command: command, CheckerPath: "internal/tooling/cmd/arop-gate-check/main.go", InputPaths: []string{"go.mod", "go.sum", "spec/requirements.yaml", "docs/DEVELOPMENT_PLAN.md", "docs/IMPLEMENTATION_BLUEPRINT.md", "spec/artifact-manifest.yaml", "spec/schemas/user-gate-evidence.schema.json", "spec/schemas/canonical-evidence-summary.schema.json", "spec/schemas/trusted-key-registry.schema.json", "spec/schemas/check-report.schema.json", "internal/tooling/cmd/arop-gate-check/main.go", "internal/tooling/evidence/validation.go", "internal/tooling/report/writer.go", "internal/tooling/report/verifier.go", "internal/tooling/schema/validator.go", "internal/tooling/structuredfile/files.go"}, RuntimeInputPaths: []string{"build/reports/P03/report.json", "build/reports/P03/junit.xml", "spec/evidence/P03-planning-audit-summary.json"}, RuntimeEvidence: runtimeEvidence, Checks: checks, Summary: map[string]any{"gate": "P04", "candidate_file_sha256": "sha256:" + report.Hash(candidateData), "canonical_summary_sha256": digest, "subject_jcs": subjectJCS, "result_jcs": resultJCS, "raw_evidence": map[string]any{"sha256": "sha256:" + report.Hash(raw), "bytes": len(raw)}, "auth_jcs": authJCS, "authentication_mode": auth.Candidate["mode"], "promoted_planning_audit_summary_sha256": promotedCanonical, "raw_evidence_committed": false}, AuditNote: "P04 consumes and cross-checks the P03 report, JUnit, and promoted summary; external authentication material is recorded only by digest and byte count."})
+	if p03err == nil {
+		runtimeEvidence = append(runtimeEvidence,
+			report.RuntimeEvidence{Kind: "external-p03-planning-audit-evidence", SHA256: report.Hash(p03.Raw), Bytes: int64(len(p03.Raw))},
+			report.RuntimeEvidence{Kind: "external-p03-authentication-material", SHA256: p03.Authentication.MaterialSHA256, Bytes: p03.Authentication.MaterialBytes},
+		)
+	}
+	r, werr := report.Write(report.WriteOptions{Root: root, Directory: "build/reports/P04", Suite: "arop-user-gate", Class: "arop.user-gate", Command: command, CheckerPath: "internal/tooling/cmd/arop-gate-check/main.go", InputPaths: []string{"go.mod", "go.sum", "spec/requirements.yaml", "docs/DEVELOPMENT_PLAN.md", "docs/IMPLEMENTATION_BLUEPRINT.md", "spec/artifact-manifest.yaml", "spec/schemas/planning-audit-evidence.schema.json", "spec/schemas/user-gate-evidence.schema.json", "spec/schemas/canonical-evidence-summary.schema.json", "spec/schemas/trusted-key-registry.schema.json", "spec/schemas/check-report.schema.json", "internal/tooling/cmd/arop-gate-check/main.go", "internal/tooling/controlledinput/manifest.go", "internal/tooling/evidence/validation.go", "internal/tooling/report/writer.go", "internal/tooling/report/verifier.go", "internal/tooling/schema/validator.go", "internal/tooling/structuredfile/files.go"}, RuntimeInputPaths: []string{"build/reports/P03/report.json", "build/reports/P03/junit.xml", "spec/evidence/P03-planning-audit-summary.json"}, RuntimeEvidence: runtimeEvidence, Checks: checks, Summary: map[string]any{"gate": "P04", "candidate_file_sha256": "sha256:" + report.Hash(candidateData), "canonical_summary_sha256": digest, "subject_jcs": subjectJCS, "result_jcs": resultJCS, "raw_evidence": map[string]any{"sha256": "sha256:" + report.Hash(raw), "bytes": len(raw)}, "auth_jcs": authJCS, "authentication_mode": auth.Candidate["mode"], "promoted_planning_audit_summary_sha256": p03.CanonicalSummarySHA256, "promoted_planning_audit_envelope_jcs_sha256": p03.PromotedEnvelopeJCSSHA256, "promoted_planning_audit_envelope_file_sha256": p03.PromotedEnvelopeFileSHA256, "raw_evidence_committed": false}, AuditNote: "P04 revalidates P03 raw evidence and reviewer authentication, then cross-checks raw/trust/report/promoted bindings before validating the owner Gate."})
 	fatal(werr)
 	if r.Success {
 		fmt.Println("AROP P04 Gate passed; canonical summary candidate is in build/reports/P04/.")

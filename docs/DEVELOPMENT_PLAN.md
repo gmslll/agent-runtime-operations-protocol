@@ -30,7 +30,7 @@ updated: 2026-09-23
 - **Status:** complete
 - **Capability owner:** spec-governance
 - **Components:** governance
-- **Artifacts owned:** spec-index-validation, spec-index-report-orchestrator, spec-index-governance, spec-index-governance-tests, go-structured-file-tools, go-structured-file-tools-tests, go-schema-validator, go-schema-validator-tests, check-report-meta-schema, planning-canonical-evidence-summary-schema, planning-trusted-key-registry-schema, machine-report-writer, machine-report-verifier-library, machine-report-verifier, machine-report-verifier-tests, evidence-lineage-tests, evidence-validation-tests, planning-audit-evidence-schema, user-gate-evidence-schema, evidence-validation-library, planning-audit-validation, user-gate-validation
+- **Artifacts owned:** spec-index-validation, spec-index-report-orchestrator, spec-index-governance, spec-index-governance-tests, go-structured-file-tools, go-structured-file-tools-tests, go-schema-validator, go-schema-validator-tests, check-report-meta-schema, planning-canonical-evidence-summary-schema, planning-trusted-key-registry-schema, controlled-input-manifest-library, controlled-input-manifest-tests, machine-report-writer, machine-report-verifier-library, machine-report-verifier, machine-report-verifier-tests, evidence-lineage-tests, evidence-validation-tests, planning-audit-evidence-schema, user-gate-evidence-schema, evidence-validation-library, planning-audit-validation, user-gate-validation
 - **Goal:** 建立 Decision 权威链、14 条不可变 `statement_original_zh`、冲突台账、制品 DAG 和规划 Meta-Schema 候选。
 - **Scope:** `docs/DECISIONS.md`、`spec/*`、Node 仅执行无进程逃逸的 Schema/spec/manifest 校验，Go 编排并生成公共 report、evidence、planning/Gate 验证；统一执行 separator-aware、symlink-aware 路径边界和 current runtime 复核；不改业务实现。
 - **Dependencies:** none
@@ -79,8 +79,8 @@ updated: 2026-09-23
 - **Goal:** 在任何物理重构和新协议行为前获得用户对已审计计划的明确确认。
 - **Scope:** P03 成功报告与稳定 canonical summary Digest、计划 subject commit/digest、仓库外用户批准证据。
 - **Dependencies:** P03
-- **First-path invariants:** Gate 绑定已审计版本的 P03 canonical summary；P04 同样对 requirements/plan/blueprint/artifact-manifest 做证据字段、subject Git blob、current closure 三方校验，并拒绝 changed→reverted/deleted ancestry；IR-01–IR-14 与 P01–最后阶段逐条 `PASS`，严格整数 count、零 must-fix，`summary_sha256` 可重算；三类外部材料执行同一 lexical/canonical containment，工具只验证而不自动批准。
-- **Machine acceptance:** `make gate-check GATE=P04 EVIDENCE=<outside-repo-approval> TRUSTED_KEYS=<outside-repo-key-registry>`，或人工 Gate 提供 `TRUSTED_CHANNEL_CONFIRMATION=<outside-repo-record>` → `build/reports/P04/report.json` 和 `junit.xml`。
+- **First-path invariants:** Gate 绑定已审计版本的 P03 canonical summary 及 promoted envelope 的 JCS/file digest；P04 重新 strict/schema 验证 P03 原始 evidence 和 reviewer trust/confirmation，重跑 `Authenticate`，并将 raw/trust/P03 report/promoted envelope 逐项交叉核对；P03 checker path、command、required checks、static input closure、runtime inputs/evidence 使用固定政策；P04 同样对 requirements/plan/blueprint/artifact-manifest 做证据字段、subject Git blob、current closure 三方校验，并拒绝 changed→reverted/deleted ancestry；IR-01–IR-14 与 P01–最后阶段逐条 `PASS`，严格整数 count、零 must-fix，`summary_sha256` 可重算；三类外部材料执行同一 lexical/canonical containment，工具只验证而不自动批准。
+- **Machine acceptance:** `make gate-check GATE=P04 EVIDENCE=<outside-repo-approval> TRUSTED_KEYS=<outside-repo-owner-key-registry> P03_EVIDENCE=<outside-repo-review> P03_TRUSTED_KEYS=<outside-repo-reviewer-key-registry>`，两个角色均可分别改用对应的 `*_TRUSTED_CHANNEL_CONFIRMATION=<outside-repo-record>` → `build/reports/P04/report.json` 和 `junit.xml`。
 - **Rollback point:** 用户要求修改时回 P02/P03；任一受审输入新 Digest 使旧批准失效，仅 commit 前进且输入不变时不要求重复批准。
 - **Definition of done:** canonical hash 可重算，批准者由受信 `project_owner` key 或人工可信渠道确认；此前 P05 保持未开始。
 

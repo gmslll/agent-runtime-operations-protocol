@@ -1767,6 +1767,7 @@ artifacts:
     derives_from:
       - go-structured-file-tools
       - check-report-meta-schema
+      - controlled-input-manifest-library
     path_role: concrete
     owner: spec-governance
     owner_phase: P01
@@ -1820,6 +1821,36 @@ artifacts:
       - go-schema-validator
       - go-structured-file-tools
       - machine-report-writer
+      - controlled-input-manifest-library
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+  - id: controlled-input-manifest-library
+    path: internal/tooling/controlledinput/manifest.go
+    status: present
+    kind: tooling
+    authority: derived
+    implementation_runtime: go
+    tool_scope: report
+    derives_from:
+      - decisions
+      - check-report-meta-schema
+    path_role: concrete
+    owner: spec-governance
+    owner_phase: P01
+    acceptance_test: make-spec-index-check
+    exposure: repository-internal
+  - id: controlled-input-manifest-tests
+    path: internal/tooling/controlledinput/manifest_test.go
+    status: present
+    kind: tooling-test
+    authority: evidence
+    implementation_runtime: go
+    tool_scope: report
+    derives_from:
+      - controlled-input-manifest-library
     path_role: concrete
     owner: spec-governance
     owner_phase: P01
@@ -2175,6 +2206,7 @@ artifacts:
       - spec-index-validation
       - spec-index-governance
       - machine-report-writer
+      - controlled-input-manifest-library
       - go-structured-file-tools
     path_role: concrete
   - id: spec-index-governance
@@ -4105,6 +4137,8 @@ artifacts:
       - evidence-validation-tests
       - spec-index-governance
       - spec-index-governance-tests
+      - controlled-input-manifest-library
+      - controlled-input-manifest-tests
     producer_phase: P01
     acceptance_test: make-spec-index-check
     exposure: repository-internal

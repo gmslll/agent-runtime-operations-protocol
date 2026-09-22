@@ -98,6 +98,8 @@ func TestPlanningAndGateSummarySchemasAreStrict(t *testing.T) {
 	delete(gate, "reviewer_id")
 	gate["approver_id"] = "owner-1"
 	gate["subject"].(map[string]any)["planning_audit_summary_sha256"] = "sha256:" + digest
+	gate["subject"].(map[string]any)["planning_audit_promoted_jcs_sha256"] = "sha256:" + digest
+	gate["subject"].(map[string]any)["planning_audit_promoted_file_sha256"] = "sha256:" + digest
 	if err := ValidateFile(root, "spec/schemas/canonical-evidence-summary.schema.json", gate); err != nil {
 		t.Fatalf("valid Gate candidate rejected: %v", err)
 	}

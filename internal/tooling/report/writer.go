@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/controlledinput"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/schema"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile"
 )
@@ -59,15 +60,16 @@ type DigestedPath struct {
 	SHA256 string `json:"sha256"`
 }
 type Provenance struct {
-	Git             GitProvenance     `json:"git"`
-	Command         string            `json:"command"`
-	Runtime         Runtime           `json:"runtime"`
-	Checker         DigestedPath      `json:"checker"`
-	Inputs          InputDigest       `json:"inputs"`
-	RuntimeInputs   InputDigest       `json:"runtime_inputs"`
-	RuntimeEvidence []RuntimeEvidence `json:"runtime_evidence"`
-	TestcaseCount   int               `json:"testcase_count"`
-	AuditNote       string            `json:"audit_note"`
+	Git              GitProvenance             `json:"git"`
+	Command          string                    `json:"command"`
+	Runtime          Runtime                   `json:"runtime"`
+	Checker          DigestedPath              `json:"checker"`
+	Inputs           InputDigest               `json:"inputs"`
+	RuntimeInputs    InputDigest               `json:"runtime_inputs"`
+	RuntimeEvidence  []RuntimeEvidence         `json:"runtime_evidence"`
+	ControlledInputs *controlledinput.Manifest `json:"controlled_inputs,omitempty"`
+	TestcaseCount    int                       `json:"testcase_count"`
+	AuditNote        string                    `json:"audit_note"`
 }
 type Report struct {
 	SchemaVersion int            `json:"schema_version"`
@@ -85,6 +87,7 @@ type WriteOptions struct {
 	RuntimeEvidence                                                []RuntimeEvidence
 	Checks                                                         []Check
 	Summary                                                        map[string]any
+	ControlledInputScope                                           string
 }
 
 func Hash(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
@@ -172,6 +175,14 @@ func Write(options WriteOptions) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
+	var controlled *controlledinput.Manifest
+	if options.ControlledInputScope != "" {
+		manifest, manifestErr := controlledinput.Current(options.Root, options.ControlledInputScope)
+		if manifestErr != nil {
+			return nil, manifestErr
+		}
+		controlled = &manifest
+	}
 	checkerData, err := os.ReadFile(filepath.Join(options.Root, filepath.FromSlash(options.CheckerPath)))
 	if err != nil {
 		return nil, err
@@ -223,7 +234,7 @@ func Write(options WriteOptions) (*Report, error) {
 	summary["testcase_count"] = len(checks)
 	evidence := append([]RuntimeEvidence{}, options.RuntimeEvidence...)
 	sort.Slice(evidence, func(i, j int) bool { return evidence[i].Kind < evidence[j].Kind })
-	report := &Report{1, time.Now().UTC().Format(time.RFC3339Nano), failed == 0, Provenance{GitProvenance{head, len(dirty) > 0, dirty}, options.Command, runtimeSnapshot, DigestedPath{options.CheckerPath, Hash(checkerData)}, inputs, runtimeInputs, evidence, len(checks), options.AuditNote}, summary, checks, errors}
+	report := &Report{1, time.Now().UTC().Format(time.RFC3339Nano), failed == 0, Provenance{Git: GitProvenance{head, len(dirty) > 0, dirty}, Command: options.Command, Runtime: runtimeSnapshot, Checker: DigestedPath{options.CheckerPath, Hash(checkerData)}, Inputs: inputs, RuntimeInputs: runtimeInputs, RuntimeEvidence: evidence, ControlledInputs: controlled, TestcaseCount: len(checks), AuditNote: options.AuditNote}, summary, checks, errors}
 	data, err := marshalValidated(options.Root, report)
 	if err != nil {
 		return nil, err

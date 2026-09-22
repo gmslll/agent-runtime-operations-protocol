@@ -89,6 +89,12 @@ func TestAuthenticateStrictEd25519Registry(t *testing.T) {
 			v["attestation"].(map[string]any)["signature"] = base64.StdEncoding.EncodeToString(make([]byte, 63))
 		},
 		"invalid base64": func(v map[string]any) { v["attestation"].(map[string]any)["signature"] = strings.Repeat("!", 88) },
+		"nonzero base64 padding bits": func(v map[string]any) {
+			// Both strings decode to the same final byte with permissive RFC 4648
+			// decoders. Strict decoding must reject the non-zero unused bits.
+			signature := v["attestation"].(map[string]any)["signature"].(string)
+			v["attestation"].(map[string]any)["signature"] = signature[:len(signature)-2] + "B="
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			copyDoc := deepCopy(t, doc)
@@ -263,6 +269,8 @@ func TestValidP03AndP04EvidenceEndToEnd(t *testing.T) {
 			subjectCopy := deepCopy(t, baseSubject)
 			if tc.gate {
 				subjectCopy["planning_audit_summary_sha256"] = "sha256:" + strings.Repeat("c", 64)
+				subjectCopy["planning_audit_promoted_jcs_sha256"] = "sha256:" + strings.Repeat("d", 64)
+				subjectCopy["planning_audit_promoted_file_sha256"] = "sha256:" + strings.Repeat("e", 64)
 			}
 			doc := map[string]any{"schema_version": 1, "kind": tc.kind, "subject": subjectCopy, tc.identityField: map[string]any{"id": tc.identity}, "result": deepCopy(t, result), "attested_at": "2026-09-23T01:02:03Z"}
 			if tc.gate {
@@ -353,11 +361,70 @@ func TestP03AndP04CommandsAcceptCompleteValidEvidenceEndToEnd(t *testing.T) {
 	}
 	write(t, root, "spec/evidence/P03-planning-audit-summary.json", string(marshalJSONLine(t, p03Candidate)))
 	gateCommit := commit(t, root, "promote P03 canonical summary")
-	runCommand(t, root, map[string]string{"EVIDENCE": p03Evidence, "TRUSTED_KEYS": p03Registry, "AROP_CHECK_COMMAND": "e2e planning audit"}, "go", "run", "./internal/tooling/cmd/arop-planning-audit")
+	runCommand(t, root, map[string]string{"EVIDENCE": p03Evidence, "TRUSTED_KEYS": p03Registry, "AROP_CHECK_COMMAND": P03Command}, "go", "run", "./internal/tooling/cmd/arop-planning-audit")
+	p03Report, _, err := report.Verify(report.VerifyOptions{Root: root, ReportPath: "build/reports/P03/report.json"})
+	if err != nil {
+		t.Fatalf("P03 report fixture did not verify: %v", err)
+	}
+	requirementIDs, phaseIDs := completeIDs()
+	promotedPath := filepath.Join(root, "spec/evidence/P03-planning-audit-summary.json")
+	if _, err := RevalidateP03(root, p03Evidence, p03Registry, "", requirementIDs, phaseIDs, p03Report, promotedPath); err != nil {
+		t.Fatalf("valid P03 revalidation rejected: %v", err)
+	}
+
+	originalEvidence := append([]byte{}, p03Raw...)
+	tamperedEvidence := append([]byte{}, p03Raw...)
+	tamperedEvidence[len(tamperedEvidence)-2] = ' '
+	if err := os.WriteFile(p03Evidence, tamperedEvidence, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RevalidateP03(root, p03Evidence, p03Registry, "", requirementIDs, phaseIDs, p03Report, promotedPath); err == nil {
+		t.Fatal("tampered P03 raw evidence accepted")
+	}
+	if err := os.WriteFile(p03Evidence, originalEvidence, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	originalRegistry := append([]byte{}, registryRaw...)
+	if err := os.WriteFile(p03Registry, append(originalRegistry, ' '), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RevalidateP03(root, p03Evidence, p03Registry, "", requirementIDs, phaseIDs, p03Report, promotedPath); err == nil {
+		t.Fatal("P03 trust material digest drift accepted")
+	}
+	if err := os.WriteFile(p03Registry, originalRegistry, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tamperedReport := *p03Report
+	tamperedReport.Summary = cloneAnyMap(t, p03Report.Summary)
+	tamperedReport.Summary["candidate_jcs_sha256"] = "sha256:" + strings.Repeat("f", 64)
+	if _, err := RevalidateP03(root, p03Evidence, p03Registry, "", requirementIDs, phaseIDs, &tamperedReport, promotedPath); err == nil {
+		t.Fatal("tampered P03 report binding accepted")
+	}
+	originalPromoted, err := os.ReadFile(promotedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tamperedPromoted := deepCopy(t, p03Candidate)
+	tamperedPromoted["reviewer_id"] = "different-reviewer"
+	if err := os.WriteFile(promotedPath, marshalJSONLine(t, tamperedPromoted), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RevalidateP03(root, p03Evidence, p03Registry, "", requirementIDs, phaseIDs, p03Report, promotedPath); err == nil {
+		t.Fatal("tampered promoted P03 envelope accepted")
+	}
+	if err := os.WriteFile(promotedPath, originalPromoted, 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	subjectP04 := subject(t, root, gateCommit)
 	subjectP04["plan_last_phase"] = "P53"
 	subjectP04["planning_audit_summary_sha256"] = p03Doc["summary_sha256"]
+	promotedJCS, err := JCSDigest(p03Candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subjectP04["planning_audit_promoted_jcs_sha256"] = promotedJCS
+	subjectP04["planning_audit_promoted_file_sha256"] = "sha256:" + hash(marshalJSONLine(t, p03Candidate))
 	p04Doc, p04Pub := signedCompleteEvidence(t, "arop-user-gate", subjectP04, "approver", "owner-command", result, true)
 	p04Registry := filepath.Join(externalDir, "owner-keys.json")
 	writeRegistryRole(t, p04Registry, p04Pub, "project_owner", nil)
@@ -365,7 +432,7 @@ func TestP03AndP04CommandsAcceptCompleteValidEvidenceEndToEnd(t *testing.T) {
 	if err := os.WriteFile(p04Evidence, marshalJSONLine(t, p04Doc), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	runCommand(t, root, map[string]string{"GATE": "P04", "EVIDENCE": p04Evidence, "TRUSTED_KEYS": p04Registry, "AROP_CHECK_COMMAND": "e2e user gate"}, "go", "run", "./internal/tooling/cmd/arop-gate-check")
+	runCommand(t, root, map[string]string{"GATE": "P04", "EVIDENCE": p04Evidence, "TRUSTED_KEYS": p04Registry, "P03_EVIDENCE": p03Evidence, "P03_TRUSTED_KEYS": p03Registry, "AROP_CHECK_COMMAND": "e2e user gate"}, "go", "run", "./internal/tooling/cmd/arop-gate-check")
 	for _, phase := range []string{"P03", "P04"} {
 		verified, mode, err := report.Verify(report.VerifyOptions{Root: root, ReportPath: "build/reports/" + phase + "/report.json"})
 		if err != nil || mode != "current-worktree" || !verified.Success {
@@ -384,6 +451,18 @@ func completePassingResult() map[string]any {
 		phases[i] = map[string]any{"id": fmt.Sprintf("P%02d", i+1), "result": "PASS"}
 	}
 	return map[string]any{"requirements": requirements, "phases": phases, "must_fix_count": 0, "must_fix": []any{}, "should_fix_count": 0, "should_fix": []any{}, "verdict": "PASS"}
+}
+
+func completeIDs() ([]string, []string) {
+	requirements := make([]string, 14)
+	for i := range requirements {
+		requirements[i] = fmt.Sprintf("IR-%02d", i+1)
+	}
+	phases := make([]string, 53)
+	for i := range phases {
+		phases[i] = fmt.Sprintf("P%02d", i+1)
+	}
+	return requirements, phases
 }
 
 func signedCompleteEvidence(t *testing.T, kind string, subject map[string]any, identityField, identity string, result map[string]any, gate bool) (map[string]any, ed25519.PublicKey) {
@@ -480,6 +559,21 @@ func deepCopy(t *testing.T, value map[string]any) map[string]any {
 	}
 	var copied map[string]any
 	if err := json.Unmarshal(raw, &copied); err != nil {
+		t.Fatal(err)
+	}
+	return copied
+}
+
+func cloneAnyMap(t *testing.T, value map[string]any) map[string]any {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var copied map[string]any
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&copied); err != nil {
 		t.Fatal(err)
 	}
 	return copied

@@ -1065,7 +1065,7 @@ func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact
 				return nil
 			}
 			rel = filepath.ToSlash(rel)
-			if d.IsDir() && (rel == ".git" || rel == "node_modules" || rel == "build" || strings.HasPrefix(rel, ".git/") || strings.HasPrefix(rel, "node_modules/") || strings.HasPrefix(rel, "build/")) {
+			if d.IsDir() && (rel == ".git" || rel == ".worktrees" || rel == "node_modules" || rel == "build" || strings.HasPrefix(rel, ".git/") || strings.HasPrefix(rel, ".worktrees/") || strings.HasPrefix(rel, "node_modules/") || strings.HasPrefix(rel, "build/")) {
 				return filepath.SkipDir
 			}
 			info, lstatErr := os.Lstat(path)
@@ -1348,6 +1348,10 @@ func localLinks(root string) []string {
 		if e != nil {
 			p = append(p, "walk/read "+path+": "+e.Error())
 			return nil
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr == nil && d.IsDir() && (rel == ".git" || rel == ".worktrees" || rel == "node_modules" || rel == "build") {
+			return filepath.SkipDir
 		}
 		if d.IsDir() || !strings.HasSuffix(path, ".md") || strings.Contains(path, string(filepath.Separator)+"node_modules"+string(filepath.Separator)) {
 			return nil

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/controlledinput"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/schema"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile"
 )
@@ -38,11 +39,20 @@ func safePath(root, value, label string) (string, error) {
 }
 
 func Verify(options VerifyOptions) (*Report, string, error) {
+	rootAbs, err := filepath.Abs(options.Root)
+	if err != nil {
+		return nil, "", fmt.Errorf("repository root is invalid: %w", err)
+	}
+	rootCanonical, err := filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return nil, "", fmt.Errorf("repository root is unreadable: %w", err)
+	}
+	options.Root = rootCanonical
 	reportPath := options.ReportPath
 	if !filepath.IsAbs(reportPath) {
 		reportPath = filepath.Join(options.Root, reportPath)
 	}
-	reportPath, err := structuredfile.RequireInsideFile(options.Root, reportPath, "report")
+	reportPath, err = structuredfile.RequireInsideFile(options.Root, reportPath, "report")
 	if err != nil {
 		return nil, "", fmt.Errorf("report must be inside repository")
 	}
@@ -162,6 +172,34 @@ func Verify(options VerifyOptions) (*Report, string, error) {
 		} else if c := exec.Command("git", "merge-base", "--is-ancestor", claimed, current); func() error { c.Dir = options.Root; return c.Run() }() != nil {
 			problems = append(problems, "report claimed HEAD is not an ancestor of current HEAD")
 		}
+	}
+	phase := ""
+	relReport, relErr := filepath.Rel(options.Root, reportPath)
+	if relErr == nil {
+		parts := strings.Split(filepath.ToSlash(relReport), "/")
+		if len(parts) == 4 && parts[0] == "build" && parts[1] == "reports" && (parts[2] == "P01" || parts[2] == "P02") && parts[3] == "report.json" {
+			phase = parts[2]
+		}
+	}
+	if phase != "" {
+		if r.Provenance.ControlledInputs == nil {
+			problems = append(problems, phase+" report is missing controlled_inputs")
+		} else {
+			var discovered controlledinput.Manifest
+			var discoverErr error
+			if mode == "ancestor-archive-only" && options.AllowAncestor {
+				discovered, discoverErr = controlledinput.AtCommit(options.Root, claimed, phase)
+			} else {
+				discovered, discoverErr = controlledinput.Current(options.Root, phase)
+			}
+			if discoverErr != nil {
+				problems = append(problems, "cannot rediscover controlled inputs: "+discoverErr.Error())
+			} else if r.Provenance.ControlledInputs.Source != "current-index-worktree" || !controlledinput.Equal(*r.Provenance.ControlledInputs, discovered) {
+				problems = append(problems, "controlled input manifest does not exactly match independently discovered tracked tree")
+			}
+		}
+	} else if r.Provenance.ControlledInputs != nil {
+		problems = append(problems, "controlled_inputs is only valid for P01/P02 repository-wide reports")
 	}
 	checkerAbs, e := safePath(options.Root, r.Provenance.Checker.Path, "checker path")
 	if e != nil {

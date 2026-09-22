@@ -98,7 +98,7 @@ func main() {
 		{Kind: "go-governance-test-log", SHA256: report.Hash(testOut), Bytes: int64(len(testOut))},
 		{Kind: "node-schema-validation-result", SHA256: report.Hash(nodeResultBytes), Bytes: int64(len(nodeResultBytes))},
 	}
-	r, err := report.Write(report.WriteOptions{Root: root, Directory: "build/reports/P01", Suite: "arop-spec-index-check", Class: "arop.spec-index", Command: command, CheckerPath: "internal/tooling/cmd/arop-spec-index-check/main.go", InputPaths: inputs, RuntimeEvidence: runtimeEvidence, Checks: result.Checks, Summary: result.Summary, AuditNote: "Node is confined to strict Schema/spec/manifest validation; Go owns governance, evidence, negative tests and canonical report generation."})
+	r, err := report.Write(report.WriteOptions{Root: root, Directory: "build/reports/P01", Suite: "arop-spec-index-check", Class: "arop.spec-index", Command: command, CheckerPath: "internal/tooling/cmd/arop-spec-index-check/main.go", InputPaths: inputs, RuntimeEvidence: runtimeEvidence, Checks: result.Checks, Summary: result.Summary, ControlledInputScope: "P01", AuditNote: "Node is confined to strict Schema/spec/manifest validation; Go owns governance, evidence, negative tests and canonical report generation."})
 	fatal(err)
 	verified, mode, verifyErr := report.Verify(report.VerifyOptions{Root: root, ReportPath: "build/reports/P01/report.json"})
 	if verifyErr != nil {
@@ -141,7 +141,7 @@ func structuredGoTestChecks(data []byte) ([]report.Check, map[string]int, error)
 }
 
 func governanceStaticInputs(root string) ([]string, error) {
-	inputs := []string{"go.mod", "go.sum", "Makefile", "package.json", "internal/tooling/cmd/arop-spec-index-check/main.go", "scripts/spec-index-check.mjs", "scripts/lib/repository.mjs", "spec/schemas/check-report.schema.json", "spec/schemas/artifact-manifest.schema.json", "spec/schemas/requirements.schema.json", "spec/schemas/conflicts.schema.json", "spec/schemas/planning-audit-evidence.schema.json", "spec/schemas/user-gate-evidence.schema.json", "spec/schemas/canonical-evidence-summary.schema.json", "spec/schemas/trusted-key-registry.schema.json"}
+	inputs := []string{"go.mod", "go.sum", "Makefile", "package.json", "internal/tooling/cmd/arop-spec-index-check/main.go", "internal/tooling/controlledinput/manifest.go", "internal/tooling/controlledinput/manifest_test.go", "scripts/spec-index-check.mjs", "scripts/lib/repository.mjs", "spec/schemas/check-report.schema.json", "spec/schemas/artifact-manifest.schema.json", "spec/schemas/requirements.schema.json", "spec/schemas/conflicts.schema.json", "spec/schemas/planning-audit-evidence.schema.json", "spec/schemas/user-gate-evidence.schema.json", "spec/schemas/canonical-evidence-summary.schema.json", "spec/schemas/trusted-key-registry.schema.json"}
 	err := filepath.WalkDir(filepath.Join(root, "internal/tooling"), func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
