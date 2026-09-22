@@ -8,7 +8,13 @@ import { promisify } from "node:util";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
-import { loadStructuredFile, repositoryRoot } from "./lib/repository.mjs";
+import {
+  SUMMARY_FIELDS,
+  canonicalSummaryDigest,
+  validateResultCoverage,
+  verifyEvidenceAuthentication,
+} from "./lib/evidence.mjs";
+import { loadStructuredFile, parseJSONWithUniqueKeys, repositoryRoot } from "./lib/repository.mjs";
 import { actualCommand, digestFiles, sha256, writeCheckReport } from "./lib/report.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -23,12 +29,12 @@ function record(name, passed, detail) {
   if (!passed) errors.push(`${name}: ${detail}`);
 }
 
-record("supported-gate", gate === "P04", gate === "P04" ? "validating P04 user approval" : `unsupported GATE=${gate || "<empty>"}`);
+record("supported-gate", gate === "P04", gate === "P04" ? "validating P04 user Gate" : `unsupported GATE=${gate || "<empty>"}`);
 
 let evidence;
 let evidenceDigest = "unavailable";
 if (!evidenceArgument) {
-  record("external-evidence-argument", false, "EVIDENCE must point to an external user-approval JSON/YAML document");
+  record("external-evidence-argument", false, "EVIDENCE must point to an external P04 Gate JSON/YAML document");
 } else {
   const evidencePath = path.resolve(evidenceArgument);
   const relative = path.relative(repositoryRoot, evidencePath);
@@ -36,7 +42,7 @@ if (!evidenceArgument) {
   record(
     "external-evidence-location",
     outsideRepository,
-    outsideRepository ? "raw approval evidence is outside the Git repository" : "raw approval evidence must remain outside the Git repository",
+    outsideRepository ? "raw Gate evidence is outside the Git repository" : "raw Gate evidence must remain outside the Git repository",
   );
   try {
     const raw = await readFile(evidencePath);
@@ -61,7 +67,7 @@ if (evidence) {
       "user-gate-evidence-schema",
       valid,
       valid
-        ? "explicit user approval, P04 gate, subject digests and signed summary are structurally attested"
+        ? "Gate subject, per-requirement/per-phase results, findings, digest and optional attestation are structurally valid"
         : (validate.errors ?? []).map((error) => `${error.instancePath || "/"} ${error.message}`).join("; "),
     );
   } catch (error) {
@@ -72,13 +78,21 @@ if (evidence) {
 let auditReport;
 let auditReportDigest = "unavailable";
 try {
+  await execFileAsync(process.execPath, ["scripts/verify-report.mjs", auditReportPath], {
+    cwd: repositoryRoot,
+  });
+  record("planning-audit-report-integrity", true, "P03 JSON/JUnit report HEAD and digests pass the independent report verifier");
+} catch (error) {
+  record("planning-audit-report-integrity", false, error.stderr?.trim() || error.message);
+}
+try {
   const raw = await readFile(auditReportPath);
   auditReportDigest = sha256(raw);
-  auditReport = JSON.parse(raw);
+  auditReport = parseJSONWithUniqueKeys(raw.toString("utf8"), auditReportPath);
   record(
     "planning-audit-prerequisite",
     auditReport.success === true && auditReport.summary?.failed === 0,
-    auditReport.success === true ? "P03 report is successful" : "P03 report is absent or unsuccessful",
+    auditReport.success === true ? "P03 report is successful; standalone report verification remains required" : "P03 report is absent or unsuccessful",
   );
 } catch (error) {
   record("planning-audit-prerequisite", false, error.message);
@@ -91,17 +105,23 @@ try {
   record("subject-commit", false, error.message);
 }
 
+let phaseIDs = [];
+let requirementIDs = [];
 try {
   const digests = await digestFiles([
+    "spec/requirements.yaml",
     "docs/DEVELOPMENT_PLAN.md",
     "docs/IMPLEMENTATION_BLUEPRINT.md",
   ]);
   const byPath = new Map(digests.files.map((file) => [file.path, file.sha256]));
   const planText = await readFile(path.join(repositoryRoot, "docs/DEVELOPMENT_PLAN.md"), "utf8");
-  const planPhases = [...planText.matchAll(/^## (P\d{2}) —/gm)].map((match) => match[1]);
+  phaseIDs = [...planText.matchAll(/^## (P\d{2}) —/gm)].map((match) => match[1]);
+  const requirements = await loadStructuredFile(path.join(repositoryRoot, "spec/requirements.yaml"));
+  requirementIDs = requirements.requirements.map((requirement) => requirement.id);
   const expected = {
     commit: head,
-    plan_last_phase: planPhases.at(-1),
+    plan_last_phase: phaseIDs.at(-1),
+    requirements_sha256: byPath.get("spec/requirements.yaml"),
     plan_sha256: byPath.get("docs/DEVELOPMENT_PLAN.md"),
     blueprint_sha256: byPath.get("docs/IMPLEMENTATION_BLUEPRINT.md"),
     planning_audit_report_sha256: auditReportDigest,
@@ -110,21 +130,57 @@ try {
     .filter(([key, value]) => evidence?.subject?.[key] !== value)
     .map(([key, value]) => `${key} expected ${value}, got ${evidence?.subject?.[key]}`);
   record(
-    "approval-subject-binding",
+    "gate-subject-binding",
     mismatches.length === 0,
     mismatches.length === 0
-      ? "approval binds the current commit, plan, blueprint and successful P03 report"
+      ? "Gate evidence binds the current commit, requirements, plan, blueprint and successful P03 report"
       : mismatches.join("; "),
   );
 } catch (error) {
-  record("approval-subject-binding", false, error.message);
+  record("gate-subject-binding", false, error.message);
 }
 
+const coverageProblems = validateResultCoverage(evidence?.result, requirementIDs, phaseIDs);
 record(
-  "explicit-user-approval",
-  evidence?.gate === "P04" && evidence?.approval?.approved === true,
-  "approval must explicitly set gate=P04 and approved=true",
+  "complete-gate-results",
+  evidence?.gate === "P04" && coverageProblems.length === 0,
+  evidence?.gate === "P04" && coverageProblems.length === 0
+    ? `${requirementIDs.length} immutable requirements and ${phaseIDs.length} phases each PASS; must_fix_count=0 with empty detail list`
+    : coverageProblems.join("; ") || "evidence gate is not P04",
 );
+
+let computedSummaryDigest = "unavailable";
+try {
+  computedSummaryDigest = canonicalSummaryDigest(evidence);
+  record(
+    "canonical-summary-content-binding",
+    evidence?.summary_sha256 === computedSummaryDigest,
+    evidence?.summary_sha256 === computedSummaryDigest
+      ? `summary_sha256 matches RFC 8785/JCS canonical fields: ${SUMMARY_FIELDS["arop-user-gate"].join(", ")}`
+      : `summary_sha256 mismatch: expected ${computedSummaryDigest}, got ${evidence?.summary_sha256}`,
+  );
+} catch (error) {
+  record("canonical-summary-content-binding", false, error.message);
+}
+
+let authentication = { mode: "unverified" };
+try {
+  authentication = await verifyEvidenceAuthentication({
+    evidence,
+    expectedRole: "project_owner",
+    trustedKeysArgument: process.env.TRUSTED_KEYS,
+    trustedChannelArgument: process.env.TRUSTED_CHANNEL_CONFIRMATION,
+  });
+  record(
+    "owner-authenticity-gate",
+    true,
+    authentication.mode === "trusted-key-attestation"
+      ? `Ed25519 attestation verified for trusted ${authentication.key_role} key ${authentication.key_id}`
+      : "external manual trusted-channel confirmation supplied; tool does not assert approver identity or channel authenticity",
+  );
+} catch (error) {
+  record("owner-authenticity-gate", false, error.message);
+}
 
 await writeCheckReport({
   reportDirectory: "build/reports/P04",
@@ -133,10 +189,14 @@ await writeCheckReport({
   command: actualCommand("scripts/gate-check.mjs"),
   checkerPath: "scripts/gate-check.mjs",
   inputPaths: [
+    "spec/requirements.yaml",
     "docs/DEVELOPMENT_PLAN.md",
     "docs/IMPLEMENTATION_BLUEPRINT.md",
     "spec/schemas/user-gate-evidence.schema.json",
+    "spec/schemas/check-report.schema.json",
     "scripts/gate-check.mjs",
+    "scripts/verify-report.mjs",
+    "scripts/lib/evidence.mjs",
     "scripts/lib/report.mjs",
     "scripts/lib/repository.mjs",
   ],
@@ -145,10 +205,13 @@ await writeCheckReport({
   summary: {
     gate: "P04",
     evidence_sha256: evidenceDigest,
+    canonical_summary_sha256: computedSummaryDigest,
+    authentication_mode: authentication.mode,
     planning_audit_report_sha256: auditReportDigest,
     raw_evidence_committed: false,
   },
-  auditNote: "Raw user-approval evidence remains outside Git; the tool validates but never creates approval.",
+  auditNote:
+    "The canonical digest binds content only. Project-owner authenticity is established by a trusted-key role/signature or confirmed through a human-owned trusted-channel Gate; this tool never creates or infers approval.",
 });
 
 if (errors.length === 0) {
@@ -157,21 +220,23 @@ if (errors.length === 0) {
     kind: "arop-user-gate-summary",
     gate: "P04",
     subject: evidence.subject,
-    approver_id: evidence.approval.approver_id,
-    approved: true,
-    approved_at: evidence.approved_at,
-    signed_summary: evidence.signed_summary,
+    approver_id: evidence.approver.id,
+    result: evidence.result,
+    attested_at: evidence.attested_at,
+    summary_sha256: evidence.summary_sha256,
+    ...(authentication.mode === "trusted-key-attestation" ? { attestation: evidence.attestation } : {}),
+    authentication,
     raw_evidence_sha256: `sha256:${evidenceDigest}`,
   };
   await writeFile(
-    path.join(repositoryRoot, "build/reports/P04/attestation-summary.json"),
+    path.join(repositoryRoot, "build/reports/P04/canonical-summary.json"),
     `${JSON.stringify(sanitizedSummary, null, 2)}\n`,
     "utf8",
   );
 }
 
 if (errors.length > 0) {
-  console.error(`AROP user gate validation failed with ${errors.length} error(s).`);
+  console.error(`AROP user Gate validation failed with ${errors.length} error(s).`);
   process.exit(1);
 }
-console.log("AROP P04 user gate evidence passed; sanitized report and attestation candidate are in build/reports/P04/.");
+console.log("AROP P04 Gate evidence passed; sanitized report and canonical summary candidate are in build/reports/P04/.");

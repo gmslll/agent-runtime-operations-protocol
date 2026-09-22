@@ -8,6 +8,12 @@ import { promisify } from "node:util";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
+import {
+  SUMMARY_FIELDS,
+  canonicalSummaryDigest,
+  validateResultCoverage,
+  verifyEvidenceAuthentication,
+} from "./lib/evidence.mjs";
 import { loadStructuredFile, repositoryRoot } from "./lib/repository.mjs";
 import { actualCommand, digestFiles, sha256, writeCheckReport } from "./lib/report.mjs";
 
@@ -29,11 +35,10 @@ function record(name, passed, detail) {
 
 let evidence;
 let evidenceDigest = "unavailable";
-let evidencePath;
 if (!evidenceArgument) {
   record("external-evidence-argument", false, "EVIDENCE must point to an external planning-audit JSON/YAML document");
 } else {
-  evidencePath = path.resolve(evidenceArgument);
+  const evidencePath = path.resolve(evidenceArgument);
   const relative = path.relative(repositoryRoot, evidencePath);
   const outsideRepository = relative.startsWith("..") || path.isAbsolute(relative);
   record(
@@ -66,7 +71,7 @@ if (evidence) {
       "planning-audit-evidence-schema",
       valid,
       valid
-        ? "independent reviewer, YES coverage, PASS verdict and zero must-fix are structurally attested"
+        ? "audit subject, per-requirement/per-phase results, findings, digest and optional attestation are structurally valid"
         : (validate.errors ?? []).map((error) => `${error.instancePath || "/"} ${error.message}`).join("; "),
     );
   } catch (error) {
@@ -81,14 +86,18 @@ try {
   record("subject-commit", false, error.message);
 }
 
+let phaseIDs = [];
+let requirementIDs = [];
 try {
   const digests = await digestFiles(subjectPaths);
   const byPath = new Map(digests.files.map((file) => [file.path, file.sha256]));
   const planText = await readFile(path.join(repositoryRoot, "docs/DEVELOPMENT_PLAN.md"), "utf8");
-  const planPhases = [...planText.matchAll(/^## (P\d{2}) —/gm)].map((match) => match[1]);
+  phaseIDs = [...planText.matchAll(/^## (P\d{2}) —/gm)].map((match) => match[1]);
+  const requirements = await loadStructuredFile(path.join(repositoryRoot, "spec/requirements.yaml"));
+  requirementIDs = requirements.requirements.map((requirement) => requirement.id);
   const expected = {
     commit: head,
-    plan_last_phase: planPhases.at(-1),
+    plan_last_phase: phaseIDs.at(-1),
     requirements_sha256: byPath.get("spec/requirements.yaml"),
     plan_sha256: byPath.get("docs/DEVELOPMENT_PLAN.md"),
     blueprint_sha256: byPath.get("docs/IMPLEMENTATION_BLUEPRINT.md"),
@@ -108,14 +117,47 @@ try {
   record("audit-subject-binding", false, error.message);
 }
 
+const coverageProblems = validateResultCoverage(evidence?.result, requirementIDs, phaseIDs);
 record(
-  "independent-pass-verdict",
-  evidence?.reviewer?.independent === true &&
-    evidence?.result?.requirements_phase_coverage === "YES" &&
-    evidence?.result?.must_fix_count === 0 &&
-    evidence?.result?.verdict === "PASS",
-  "reviewer must be independent, requirements/phase coverage YES, must_fix_count=0 and verdict PASS",
+  "complete-audit-results",
+  coverageProblems.length === 0,
+  coverageProblems.length === 0
+    ? `${requirementIDs.length} immutable requirements and ${phaseIDs.length} phases each PASS; must_fix_count=0 with empty detail list`
+    : coverageProblems.join("; "),
 );
+
+let computedSummaryDigest = "unavailable";
+try {
+  computedSummaryDigest = canonicalSummaryDigest(evidence);
+  record(
+    "canonical-summary-content-binding",
+    evidence?.summary_sha256 === computedSummaryDigest,
+    evidence?.summary_sha256 === computedSummaryDigest
+      ? `summary_sha256 matches RFC 8785/JCS canonical fields: ${SUMMARY_FIELDS["arop-planning-audit"].join(", ")}`
+      : `summary_sha256 mismatch: expected ${computedSummaryDigest}, got ${evidence?.summary_sha256}`,
+  );
+} catch (error) {
+  record("canonical-summary-content-binding", false, error.message);
+}
+
+let authentication = { mode: "unverified" };
+try {
+  authentication = await verifyEvidenceAuthentication({
+    evidence,
+    expectedRole: "independent_reviewer",
+    trustedKeysArgument: process.env.TRUSTED_KEYS,
+    trustedChannelArgument: process.env.TRUSTED_CHANNEL_CONFIRMATION,
+  });
+  record(
+    "reviewer-authenticity-gate",
+    true,
+    authentication.mode === "trusted-key-attestation"
+      ? `Ed25519 attestation verified for trusted ${authentication.key_role} key ${authentication.key_id}`
+      : "external manual trusted-channel confirmation supplied; tool does not assert reviewer independence or channel authenticity",
+  );
+} catch (error) {
+  record("reviewer-authenticity-gate", false, error.message);
+}
 
 await writeCheckReport({
   reportDirectory: "build/reports/P03",
@@ -126,14 +168,23 @@ await writeCheckReport({
   inputPaths: [
     ...subjectPaths,
     "spec/schemas/planning-audit-evidence.schema.json",
+    "spec/schemas/check-report.schema.json",
     "scripts/planning-audit.mjs",
+    "scripts/verify-report.mjs",
+    "scripts/lib/evidence.mjs",
     "scripts/lib/report.mjs",
     "scripts/lib/repository.mjs",
   ],
   checks,
   errors,
-  summary: { evidence_sha256: evidenceDigest, raw_evidence_committed: false },
-  auditNote: "Raw independent-review evidence remains outside Git; this report stores only validation results and its digest.",
+  summary: {
+    evidence_sha256: evidenceDigest,
+    canonical_summary_sha256: computedSummaryDigest,
+    authentication_mode: authentication.mode,
+    raw_evidence_committed: false,
+  },
+  auditNote:
+    "The canonical digest binds content only. Reviewer independence is established by a trusted-key role/signature or confirmed through a human-owned trusted-channel Gate; this tool never infers it from a boolean.",
 });
 
 if (errors.length === 0) {
@@ -144,11 +195,13 @@ if (errors.length === 0) {
     reviewer_id: evidence.reviewer.id,
     result: evidence.result,
     attested_at: evidence.attested_at,
-    signed_summary: evidence.signed_summary,
+    summary_sha256: evidence.summary_sha256,
+    ...(authentication.mode === "trusted-key-attestation" ? { attestation: evidence.attestation } : {}),
+    authentication,
     raw_evidence_sha256: `sha256:${evidenceDigest}`,
   };
   await writeFile(
-    path.join(repositoryRoot, "build/reports/P03/attestation-summary.json"),
+    path.join(repositoryRoot, "build/reports/P03/canonical-summary.json"),
     `${JSON.stringify(sanitizedSummary, null, 2)}\n`,
     "utf8",
   );
@@ -158,4 +211,4 @@ if (errors.length > 0) {
   console.error(`AROP planning audit validation failed with ${errors.length} error(s).`);
   process.exit(1);
 }
-console.log("AROP planning audit evidence passed; sanitized report and attestation candidate are in build/reports/P03/.");
+console.log("AROP planning audit evidence passed; sanitized report and canonical summary candidate are in build/reports/P03/.");

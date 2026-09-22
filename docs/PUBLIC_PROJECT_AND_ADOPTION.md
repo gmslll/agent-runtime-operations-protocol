@@ -129,7 +129,7 @@ updated: 2026-09-22
 
 Reference Control Plane 使用 Go 实现，只覆盖验证协议所需的开发身份、Manifest 发布、Registry/Lease、Run/Dispatch、Event Ingest/SSE、Run 查询/取消和 Conformance 接口，不承载金运组织、飞书、业务审批、完整计费或生产 Console UI。
 
-本地 Quickstart 默认使用 SQLite，确保单进程即可启动；生产级、多节点和故障切换参考部署使用 PostgreSQL。两种存储必须运行同一套 Schema、状态机和 Conformance Fixture，不允许形成两套协议语义。Worker Pull 可以在 v0.1 作为可选模块加入，不阻塞最小 Direct/Proxy 闭环。
+本地 Quickstart 默认使用 SQLite，确保单进程即可启动；生产级、多节点和故障切换参考部署使用 PostgreSQL。两种存储必须运行同一套 Schema、状态机和 Conformance Fixture，不允许形成两套协议语义。Worker Pull 在首个公开 v1 RC 前完成；P41 前所有验证制品仅是 private/dev snapshot。
 
 # 7. 开发者体验目标
 
@@ -165,7 +165,7 @@ Reference Control Plane 使用 Go 实现，只覆盖验证协议所需的开发�
 
 它们必须复用同一套 Schema 和 Conformance，而不是各写一条特殊路径。
 
-## 8.2 公共 v0.1
+## 8.2 首个公开 v1 RC
 
 必须包含：
 
@@ -229,7 +229,7 @@ v1.0 前至少需要：
 - 公共名称：Agent Runtime Operations Protocol。
 - 简称：AROP。
 - 仓库名：`agent-runtime-operations-protocol`。
-- 初期仓库位置：私有的 `gmslll/agent-runtime-operations-protocol`；域名、包所有权、维护者和安全渠道就绪后，在公共 v0.1 前转为公开。
+- 初期仓库位置：私有的 `gmslll/agent-runtime-operations-protocol`；取消独立公共 v0.1，域名、包所有权、维护者和安全渠道就绪后，在首个公开 `v1.0.0-rc.N` 前转为公开。
 - Go Module：`github.com/gmslll/agent-runtime-operations-protocol`。
 - Python Distribution：`arop-sdk`；Import Package：`arop`。
 - TypeScript Package：`@arop/sdk`。

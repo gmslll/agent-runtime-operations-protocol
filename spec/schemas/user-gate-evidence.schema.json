@@ -1,40 +1,84 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://arop.invalid/spec/schemas/user-gate-evidence.schema.json",
-  "title": "External P04 user approval evidence",
+  "title": "External P04 user gate evidence",
   "type": "object",
-  "required": ["schema_version", "kind", "gate", "subject", "approval", "approved_at", "signed_summary"],
+  "required": ["schema_version", "kind", "gate", "subject", "approver", "result", "attested_at", "summary_sha256"],
   "properties": {
     "schema_version": {"const": 1},
     "kind": {"const": "arop-user-gate"},
     "gate": {"const": "P04"},
     "subject": {
       "type": "object",
-      "required": ["commit", "plan_last_phase", "plan_sha256", "blueprint_sha256", "planning_audit_report_sha256"],
+      "required": ["commit", "plan_last_phase", "requirements_sha256", "plan_sha256", "blueprint_sha256", "planning_audit_report_sha256"],
       "properties": {
         "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
         "plan_last_phase": {"$ref": "#/$defs/phase_id"},
+        "requirements_sha256": {"$ref": "#/$defs/sha256"},
         "plan_sha256": {"$ref": "#/$defs/sha256"},
         "blueprint_sha256": {"$ref": "#/$defs/sha256"},
         "planning_audit_report_sha256": {"$ref": "#/$defs/sha256"}
       },
       "additionalProperties": false
     },
-    "approval": {
+    "approver": {
       "type": "object",
-      "required": ["approver_id", "approved"],
-      "properties": {
-        "approver_id": {"type": "string", "minLength": 1, "maxLength": 200},
-        "approved": {"const": true}
-      },
+      "required": ["id"],
+      "properties": {"id": {"type": "string", "minLength": 1, "maxLength": 200}},
       "additionalProperties": false
     },
-    "approved_at": {"type": "string", "format": "date-time"},
-    "signed_summary": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+    "result": {"$ref": "#/$defs/results"},
+    "attested_at": {"type": "string", "format": "date-time"},
+    "summary_sha256": {"$ref": "#/$defs/prefixed_sha256"},
+    "attestation": {"$ref": "#/$defs/attestation"}
   },
   "$defs": {
     "phase_id": {"type": "string", "pattern": "^P(?:0[1-9]|[1-9][0-9])$"},
-    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "prefixed_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "result_item": {
+      "type": "object",
+      "required": ["id", "result"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "result": {"enum": ["PASS", "FAIL"]},
+        "detail": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "required": ["id", "detail"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "detail": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "results": {
+      "type": "object",
+      "required": ["requirements", "phases", "must_fix_count", "must_fix", "should_fix_count", "should_fix", "verdict"],
+      "properties": {
+        "requirements": {"type": "array", "minItems": 14, "items": {"$ref": "#/$defs/result_item"}},
+        "phases": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/result_item"}},
+        "must_fix_count": {"const": 0},
+        "must_fix": {"type": "array", "maxItems": 0, "items": {"$ref": "#/$defs/finding"}},
+        "should_fix_count": {"type": "integer", "minimum": 0},
+        "should_fix": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
+        "verdict": {"const": "PASS"}
+      },
+      "additionalProperties": false
+    },
+    "attestation": {
+      "type": "object",
+      "required": ["algorithm", "key_id", "signature"],
+      "properties": {
+        "algorithm": {"const": "Ed25519"},
+        "key_id": {"type": "string", "minLength": 1, "maxLength": 200},
+        "signature": {"type": "string", "pattern": "^[A-Za-z0-9+/]+={0,2}$"}
+      },
+      "additionalProperties": false
+    }
   },
   "additionalProperties": false
 }

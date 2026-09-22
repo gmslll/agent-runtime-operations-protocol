@@ -53,7 +53,7 @@ A2A / MCP / ARD 互操作 Adapter
 9. [公共项目与采用策略](docs/PUBLIC_PROJECT_AND_ADOPTION.md)
 10. [最终仓库布局](docs/DIRECTORY_STRUCTURE.md)
 11. [实施蓝图](docs/IMPLEMENTATION_BLUEPRINT.md)
-12. [P01–P46 可调度开发与发布计划](docs/DEVELOPMENT_PLAN.md)
+12. [P01–P48 可调度开发与发布计划](docs/DEVELOPMENT_PLAN.md)
 13. [架构决策与发布配置](docs/DECISIONS.md)
 14. [机器可读制品目录](spec/artifact-manifest.yaml)
 15. [不可变需求映射](spec/requirements.yaml)
@@ -85,7 +85,7 @@ AROP 的权威顺序为：`DECISIONS` 约束 → 领域规范与状态机 Fixtur
 
 当前是 **Protocol v1 规划候选**：P01 权威/元数据基线与 P02 可调度蓝图候选已完成，正在等待 P03 重新独立审计和 P04 用户明确确认；此前不执行目录重构或新协议行为实现。现有首批 Schema、Fixture 和 Go 基线仅是起点，不表示规划已冻结或 v1 已可发布。
 
-项目域名、包注册表所有权和初始维护者名单仍属 P40 真实外部 Gate，未完成前不发布稳定软件包。
+项目域名、包注册表所有权和初始维护者名单仍属 P42 真实外部 Gate。P41 前均为 private/dev snapshot；取消独立公共 v0.1，首个公开候选是 P45 的 `v1.0.0-rc.N`。
 
 预发布源码暂存于私有仓库 [`gmslll/agent-runtime-operations-protocol`](https://github.com/gmslll/agent-runtime-operations-protocol)，完成公开发布配置和安全入口后再转为公开。
 
@@ -98,11 +98,13 @@ make blueprint-check
 make validate
 ```
 
-`make spec-index-check` 校验权威链、机器目录/DAG、14 条不可变需求、冲突、Decision ID 和本地引用闭包。`make blueprint-check` 动态校验双 Go Module、最终布局、P01..Pn 连续阶段 DAG、paseo-epic type、单组件范围、Gate/v1 RC/发布顺序、需求映射和报告约定。两者都产生 JSON/JUnit 报告，并由 `make validate` 强制执行。
+`make spec-index-check` 校验权威链、机器目录/DAG、14 条不可变需求、冲突、Decision ID 和本地引用闭包。`make blueprint-check` 动态校验双 Go Module、最终布局、P01..Pn 连续阶段 DAG、paseo-epic type、受控组件集合、关键制品唯一 owner/phase/test/exposure、双库 migration 子矩阵、commit A→审核 overlay→metadata-only commit B 发布链、需求映射和报告约定。两者都产生 JSON/JUnit 报告，并由 `make validate` 强制执行。
 
-P03/P04 另使用仓库外证据：`make planning-audit EVIDENCE=...` 和 `make gate-check GATE=P04 EVIDENCE=...`。两个工具只校验证据和生成脱敏摘要，不会自动伪造审计或用户批准。
+`make verify-report REPORT=build/reports/P01/report.json` 使用独立验证器重新核对报告 Schema、JSON/JUnit testcase 与 failure 数、HEAD、Checker Digest 及全部输入 Digest。
 
-检查器内的固定要求和反例只用于防止仓库漂移，不能替代 P03 的独立计划审计。报告会记录精确 HEAD、dirty 状态、实际命令、Node/Go/OS、输入 Digest、Checker Digest 和 Testcase 数。
+P03/P04 另使用仓库外证据：`make planning-audit EVIDENCE=... TRUSTED_KEYS=...` 和 `make gate-check GATE=P04 EVIDENCE=... TRUSTED_KEYS=...`；也可由人工 Gate 通过 `TRUSTED_CHANNEL_CONFIRMATION=...` 引用仓库外可信渠道记录。证据的 `summary_sha256` 是对明确字段按 RFC 8785/JCS 规范化后的内容绑定，不是签名。只有受信 key registry 中角色为 `independent_reviewer`/`project_owner` 的 Ed25519 验签，或人工可信渠道 Gate，才能建立审核者/批准者真实性。工具只验证内容和证据链，不会从布尔字段推断“独立”或“已批准”。
+
+不可变需求的权威原文是 [`spec/requirements.yaml`](spec/requirements.yaml) 中的 `statement_original_zh`；`translation_en` 只是非权威翻译。检查器内的固定原文、整组内容摘要和反例只用于防止仓库漂移，不能替代 P03 的独立计划审计；独立审计仍是最终把关。报告会记录精确 HEAD、dirty 状态、实际命令、Node/Go/OS、输入 Digest、Checker Digest 和 Testcase 数。
 
 计算 Manifest Digest：
 

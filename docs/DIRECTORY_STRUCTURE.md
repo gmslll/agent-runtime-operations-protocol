@@ -21,7 +21,9 @@ agent-runtime-operations-protocol/
 ├── Makefile
 ├── VERSION
 ├── scripts/
-│   └── release/                         # P37 发布工具链：临时 proxy、打包、SBOM/provenance/signing 编排
+│   ├── go-proxy-bootstrap/              # P05 未发布 root 时供 nested GOWORK=off 验证
+│   ├── generate.mjs                     # P07 可复用完整三语言 codegen pipeline
+│   └── release/                         # P39 编排、证据/聚合、freeze-overlay、SBOM/provenance/signing
 │
 ├── docs/                                # 手写规范、决策、蓝图
 │   ├── ARCHITECTURE.md
@@ -38,7 +40,7 @@ agent-runtime-operations-protocol/
 │   ├── DEVELOPMENT_PLAN.md
 │   └── DECISIONS.md
 ├── spec/                                # 机器可读制品索引、需求和冲突台账
-│   └── evidence/                          # 仅脱敏签名摘要；原始外部证据不入库
+│   └── evidence/                          # 仅脱敏 canonical 内容摘要/可选验签；原始外部证据不入库
 ├── rfcs/
 ├── compatibility/
 │
@@ -109,7 +111,6 @@ agent-runtime-operations-protocol/
 ├── deployments/
 │   ├── quickstart/                          # SQLite 单进程
 │   └── production-reference/                # PostgreSQL 多节点参考部署
-├── scripts/                              # 校验、生成、迁移、发布编排
 ├── build/reports/                       # CI 产生，默认不入库
 └── .github/workflows/                   # validate/conformance/release/provenance
 ```
@@ -201,4 +202,4 @@ CLI: arop
 CLI config: ~/.config/arop/
 ```
 
-上述是预发布命名。项目域名、PyPI/npm 所有权与两名 Maintainer/安全入口在 P40 必须用外部证据确认；P41 再全量生成公共命名空间制品。
+上述是预发布命名。项目域名、PyPI/npm 所有权与两名 Maintainer/安全入口在 P42 必须用外部证据确认；P43 再全量生成公共命名空间制品。P41 前只允许 private/dev snapshot；取消独立公共 v0.1，首个公开候选是 P45 的 `v1.0.0-rc.N`。

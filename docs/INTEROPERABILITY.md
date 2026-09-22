@@ -24,7 +24,7 @@ A2A 是独立 Agent 系统之间的互操作边界。本项目同时支持：
 - 通过 A2A Adapter 调用外部 Agent。
 - 把本项目 Runtime 暴露为 A2A Server。
 
-AROP v0.1/v1 的目标协议线固定为 A2A 1.0，首批兼容 Fixture 固定到 A2A v1.0.1 Release。后续补丁版本可以进入 Compatibility Matrix，但不得在不更新 Fixture 和报告的情况下仅写 `latest`。
+AROP v1 的目标协议线固定为 A2A 1.0，首个公开 `v1.0.0-rc.N` 的兼容 Fixture 固定到 A2A v1.0.1 Release。取消独立公共 v0.1；后续补丁版本可以进入 Compatibility Matrix，但不得在不更新 Fixture 和报告的情况下仅写 `latest`。
 
 映射等级固定为：
 

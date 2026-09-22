@@ -45,7 +45,7 @@ updated: 2026-09-22
 | D-035 | SDK 与 CLI 命名 | Go Module 使用 `github.com/gmslll/agent-runtime-operations-protocol`；Python Distribution 使用 `arop-sdk`、Import 使用 `arop`；npm 使用 `@arop/sdk`；CLI 使用 `arop` |
 | D-036 | 开源许可证 | 协议文本、Schema、SDK、Conformance 和 Reference Implementation 统一采用 Apache-2.0 |
 | D-037 | 公共治理 | 规范性变更走公开 RFC 并需两名 Maintainer 审核；初期使用 DCO，不使用 CLA；安全漏洞走私密报告渠道 |
-| D-038 | 仓库归属 | 初期 GitHub 仓库为私有的 `gmslll/agent-runtime-operations-protocol`；C-002～C-004 完成后、公共 v0.1 前转为公开；未来迁移组织应保留 GitHub Redirect 与 Go Module 兼容策略 |
+| D-038 | 仓库归属 | 初期 GitHub 仓库为私有的 `gmslll/agent-runtime-operations-protocol`；取消独立公共 v0.1，C-002～C-004 完成后、首个公开 `v1.0.0-rc.N` 前转为公开；未来迁移组织应保留 GitHub Redirect 与 Go Module 兼容策略 |
 | D-039 | 发布安全 | GitHub 强制 2FA 和分支保护；正式包使用 OIDC Trusted Publishing；Release 使用签名 Tag；发布与恢复权限至少由两人持有 |
 | D-040 | 公共命名空间 | Schema `$id`、CloudEvents Type Prefix 和 Extension Namespace 使用项目控制域名；域名确定前保留占位符且不得发布稳定包 |
 | D-041 | 后端语言 | Reference Control Plane、Registry、Dispatcher、Run/Event Ledger 和服务端 Conformance Harness 使用 Go 实现；Python 主要用于 Agent Provider SDK，TypeScript 主要用于 Web/BFF Consumer |
@@ -60,8 +60,9 @@ updated: 2026-09-22
 | D-050 | v1 运行命名与分类 | `session_id` 值前缀固定为 `ses_`，`attempt_id` 固定为 `att_`；Run 状态机包含非终态 `cancel_requested`；v1 标准事件补齐 Tool、Error 和 Agent Heartbeat |
 | D-051 | Asset ContentPart | `type=asset_ref` 的 ContentPart 在 `asset` 中携带完整 AssetRef；仅有 `asset_id` 的简写不是合法 v1 ContentPart |
 | D-052 | 外部证据 Gate | 域名、包所有权、维护者/安全入口和独立实现/外部伙伴均是发布 Gate；没有可核验外部证据时不得标记完成或用内部模拟替代 |
-| D-053 | v1 证据与发布闭环 | 外部证据必须绑定最终 `v1.0.0-rc.N` 的 exact source/schema/runner/artifact digest；取证后 freeze 严格只读；正式 v1 使用同一 source commit，只允许 channel/tag/version metadata 差异并必须证明 payload 等价 |
+| D-053 | v1 两提交证据与发布闭环 | P45 RC commit A 的 nested `go.mod` 精确 require root RC，外部证据绑定 A 的 exact source/schema/runner/artifact digest；P47 在临时树生成确定性 final overlay，只允许版本/channel/tag 元数据、nested root 依赖 RC→`v1.0.0` 及必要 lock/checksum，并批准 overlay/tree digest 与 payload equivalence；P48 精确应用该 overlay 创建 release-metadata-only commit B，B tree digest 必须等于批准值，再按 root final→proxy 可解析→nested final 发布；Schema/API/Runner/生成模型/逻辑不得变化，A→B 由签名 equivalence attestation 连接 |
 | D-054 | Control Plane 公共 API 与 Secret 边界 | Publication、Run、JWKS、Event Session 和 Asset Token Exchange 进公共 `control-plane-v1` OpenAPI；SecretRef 的具体值解析是部署内 Reference port/adapter，不定义通用 Secret value HTTP API |
+| D-055 | 规划证据真实性 | P03/P04 证据的 `summary_sha256` 只绑定 RFC 8785/JCS canonical 内容，不构成签名或身份证明；独立审核者/项目所有者真实性只能由外部受信 key registry 的 Ed25519 角色验签或人工可信渠道 Gate 确认；自检工具不得从布尔值推断真实性，也不取代独立审计的最终把关 |
 
 # 2. 实现默认值
 
@@ -74,12 +75,12 @@ updated: 2026-09-22
 | P-003 | 事件使用 CloudEvents 兼容信封 |
 | P-004 | Agent 到 Control Plane 使用小批量事件上报和 ACK |
 | P-005 | Control Plane 到 Web/Gateway 使用 SSE |
-| P-006 | Go 与 Python 首批提供完整 SDK；TypeScript 在公共 v0.1 提供生成模型和流式 Consumer，完整 Provider 随后实现 |
+| P-006 | Go 与 Python 在首个公开 v1 RC 提供完整 SDK；TypeScript 同时提供生成模型和流式 Consumer，完整 Provider 随后实现 |
 | P-007 | Reference Control Plane 的本地 Quickstart 使用 SQLite，生产/多节点模式使用 PostgreSQL |
 | P-008 | 简单 Agent 默认授权到 AgentDefinition，高风险 Skill 使用 Skill 级覆盖规则 |
 | P-009 | 浏览器默认使用 Proxy/BFF；可信服务优先 Direct |
 | P-010 | Agent Manifest 支持一个 AgentVersion 包含多个 Skill |
-| P-011 | 公共 v0.1 同时提供 Python Provider、Go SDK 和 TypeScript Streaming Consumer |
+| P-011 | 首个公开 `v1.0.0-rc.N` 同时提供 Python Provider、Go SDK 和 TypeScript Streaming Consumer；此前均为 private/dev snapshot |
 | P-012 | 提供最小 Reference Control Plane 和 Docker Compose Quickstart |
 | P-013 | Registry 和 Run/Event Ledger 的实时通知只用于降低延迟，持久化 Ledger 才是真值 |
 
@@ -108,6 +109,8 @@ updated: 2026-09-22
 5. SDK 生成模型、生成文档和参考实现均为派生物，不得被当作反向修改规范的权威。
 
 唯一机器可读制品目录是 [`spec/artifact-manifest.yaml`](../spec/artifact-manifest.yaml)；需求映射和冲突决议分别记录在 [`spec/requirements.yaml`](../spec/requirements.yaml) 与 [`spec/conflicts.yaml`](../spec/conflicts.yaml)。`DIRECTORY_STRUCTURE.md` 只是面向人的布局说明，不是另一份机器清单。
+
+14 条不可变需求以 `statement_original_zh` 为权威原文，`translation_en` 仅供阅读。仓内硬编码原文与整组 JCS 内容摘要只负责检测漂移；P03 独立审计仍负责最终把关，不得以自检通过代替。
 
 # 5. 与现有上层架构文档的差异
 

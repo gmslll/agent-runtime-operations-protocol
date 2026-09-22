@@ -4,6 +4,8 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import Ajv2020 from "ajv/dist/2020.js";
+import canonicalize from "canonicalize";
+import { createHash } from "node:crypto";
 
 import {
   loadStructuredFile,
@@ -411,21 +413,22 @@ const expectedRequirementIDs = Array.from(
   (_, index) => `IR-${String(index + 1).padStart(2, "0")}`,
 );
 const expectedRequirementStatements = [
-  "First plan into authoritative docs; later implementation must follow core docs.",
-  "Protocol repo vendor-neutral; no dependency on Console/Feishu/cc-connect/framework. Do not modify kinglucky-agent-console in this implementation.",
-  "Go for Reference Control Plane, Registry, Dispatcher, Run/Event Ledger, server Conformance; Node only schema/TS tooling, Python Provider SDK, TS Consumer.",
-  "Full lifecycle: publish, register, discover, auth, Run/Attempt, Direct/Proxy/Worker Pull, structured streaming, result, usage, audit, trace, drain/upgrade.",
-  "All new calls pass Control Plane auth/create Run; trusted service can Direct after ticket; browser v1 BFF/Proxy.",
-  "Self-built registry inspired by Lease/Revision/Watch/CAS/Fencing, no etcd/Nacos dependency.",
-  "At-least-once, idempotency, durable inbox/outbox, effect_id, immutable terminal state, final Snapshot.",
-  "SDKs in protocol repo, independent Quickstart/Conformance without Console.",
-  "Core/Profile/Extension layers; interop A2A/MCP/ARD/CloudEvents/OTel.",
-  "SQLite Quickstart and PostgreSQL production reference have identical semantics.",
-  "Final layout clearly separates handwritten sources, generated code, public SDKs, internal Go backend, migrations, reference, conformance, deployments, CI.",
-  "Public release externally gated by domain, package ownership, two maintainers/security entry.",
-  "Machine-test acceptance including cross-language, fault injection, HA, replay/out-of-order/cancel/fencing.",
-  "Never fake external partner/independent implementation conditions as complete.",
+  "先把全量实现规划落到仓库权威文档；之后实现必须按核心文档推进。",
+  "协议仓保持厂商中立，不依赖 Console、飞书、cc-connect 或具体 Agent 框架；不得修改 `kinglucky-agent-console`。",
+  "后端采用 Go：Reference Control Plane、Registry、Dispatcher、Run/Event Ledger、服务端 Conformance/故障驱动；Node 仅用于 Schema/TS 工具，Python 做 Provider SDK，TypeScript 做 Consumer SDK。",
+  "覆盖发布、注册、发现、鉴权、Run/Attempt、Direct/Proxy/Worker Pull、结构化流式、结果、usage、审计、trace、drain/升级全生命周期。",
+  "所有新调用先经 Control Plane 鉴权并创建 Run；可信服务拿 Dispatch Ticket 后可 Direct；浏览器 v1 走 BFF/Proxy。",
+  "自研 Registry，借鉴 Lease/Revision/Watch/CAS/Fencing，不依赖 etcd/Nacos。",
+  "交付语义为 at-least-once，包含幂等、durable inbox/outbox、`effect_id`、终态不可变、final Snapshot。",
+  "SDK 放协议仓；Quickstart/Conformance 不依赖 Console 可独立运行。",
+  "Core/Profile/Extension 分层；兼容 A2A/MCP/ARD/CloudEvents/OpenTelemetry。",
+  "SQLite Quickstart 与 PostgreSQL production reference 语义一致。",
+  "最终目录必须清晰分离手写源码、生成代码、公共 SDK、Go 内部后端、迁移、参考实现、conformance、部署与 CI。",
+  "对外发布受 domain/package ownership、双 maintainer/security 入口等外部条件门控。",
+  "全部验收机器可测，覆盖跨语言、故障注入、HA、replay/out-of-order/cancel/fencing。",
+  "不得把外部合作伙伴/独立实现等外部条件伪造为完成。",
 ];
+const approvedRequirementsDigest = "sha256:ae16611e5286beaf050f505dd603f3bc761a96bf03d4c145a27d14d69c89d8fd";
 const actualRequirementIDs = requirements.map((requirement) => requirement.id);
 if (JSON.stringify(actualRequirementIDs) !== JSON.stringify(expectedRequirementIDs)) {
   requirementProblems.push(
@@ -433,8 +436,11 @@ if (JSON.stringify(actualRequirementIDs) !== JSON.stringify(expectedRequirementI
   );
 }
 for (const [index, requirement] of requirements.entries()) {
-  if (requirement.statement !== expectedRequirementStatements[index]) {
+  if (requirement.statement_original_zh !== expectedRequirementStatements[index]) {
     requirementProblems.push(`${requirement.id} immutable statement changed`);
+  }
+  if (typeof requirement.translation_en !== "string" || requirement.translation_en.length === 0) {
+    requirementProblems.push(`${requirement.id} lacks non-authoritative translation_en`);
   }
   for (const artifactID of requirement.artifacts ?? []) {
     if (!artifactIDs.has(artifactID)) {
@@ -447,11 +453,24 @@ for (const [index, requirement] of requirements.entries()) {
     }
   }
 }
+const canonicalRequirementStatements = canonicalize(
+  requirements.map(({ id, statement_original_zh }) => ({ id, statement_original_zh })),
+);
+const computedRequirementsDigest = `sha256:${createHash("sha256").update(canonicalRequirementStatements).digest("hex")}`;
+if (
+  requirementsDocument?.statements_digest_algorithm !== "sha256-jcs" ||
+  requirementsDocument?.statements_digest !== computedRequirementsDigest ||
+  computedRequirementsDigest !== approvedRequirementsDigest
+) {
+  requirementProblems.push(
+    `approved Chinese requirement-set digest mismatch: file=${requirementsDocument?.statements_digest}, computed=${computedRequirementsDigest}, approved=${approvedRequirementsDigest}`,
+  );
+}
 record(
   "immutable-requirements",
   requirementProblems.length === 0,
   requirementProblems.length === 0
-    ? "14 immutable requirements map to artifacts, phases, and tests"
+    ? `14 original Chinese immutable requirements and approved JCS set digest ${approvedRequirementsDigest} map to artifacts, phases, and tests`
     : requirementProblems.join("; "),
 );
 record(
@@ -711,8 +730,10 @@ const reportInputPaths = [
   ...textFiles.map(relative),
   ...jsonFiles.map(relative),
   "scripts/spec-index-check.mjs",
+  "scripts/verify-report.mjs",
   "scripts/lib/report.mjs",
   "scripts/lib/repository.mjs",
+  "spec/schemas/check-report.schema.json",
 ];
 await writeCheckReport({
   reportDirectory,
