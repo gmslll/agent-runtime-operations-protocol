@@ -211,6 +211,8 @@ func main() {
 	nestedSumBefore, nestedSumReadErr := os.ReadFile(nestedSumPath)
 	if nestedSumReadErr != nil {
 		nestedErr = fmt.Errorf("nested go.sum must be generated with --bootstrap-go-sum before acceptance: %w", nestedSumReadErr)
+	} else if nestedContractErr == nil {
+		nestedErr = validateNestedRootSums(nestedSumBefore, rootVersion)
 	}
 	if bootstrapErr == nil && nestedContractErr == nil && nestedErr == nil {
 		downloadOutput, nestedErr = runGo(nestedRoot, proxyEnvironment, "mod", "download", "-json", rootModulePath+"@"+rootVersion)
@@ -1014,6 +1016,10 @@ func prepareNestedGoSum(root string) error {
 			_ = os.Remove(goSumPath)
 		}
 	}()
+	filteredSum := filterRootModuleSums(oldSum)
+	if err := os.WriteFile(goSumPath, filteredSum, 0o644); err != nil {
+		return fmt.Errorf("prepare nested go.sum: %w", err)
+	}
 	proxyURL := (&url.URL{Scheme: "file", Path: proxyRoot}).String() + ",off"
 	environment := goEnvironment(map[string]string{
 		"GOCACHE":    buildCache,
@@ -1038,10 +1044,59 @@ func prepareNestedGoSum(root string) error {
 	if err != nil {
 		return fmt.Errorf("go sum bootstrap did not create nested go.sum: %w", err)
 	}
-	if !bytes.Contains(newSum, []byte(rootModulePath+" "+version+" h1:")) || !bytes.Contains(newSum, []byte(rootModulePath+" "+version+"/go.mod h1:")) {
-		return errors.New("generated nested go.sum does not bind both the root module zip and go.mod")
+	if err := validateNestedRootSums(newSum, version); err != nil {
+		return err
 	}
 	prepared = true
+	return nil
+}
+
+func filterRootModuleSums(data []byte) []byte {
+	kept := make([]string, 0)
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line == "" || strings.HasPrefix(line, rootModulePath+" ") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	return []byte(strings.Join(kept, "\n") + "\n")
+}
+
+func validateNestedRootSums(data []byte, version string) error {
+	want := map[string]bool{
+		rootModulePath + " " + version:             false,
+		rootModulePath + " " + version + "/go.mod": false,
+	}
+	rootLines := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if !strings.HasPrefix(line, rootModulePath+" ") {
+			continue
+		}
+		rootLines++
+		fields := strings.Fields(line)
+		if len(fields) != 3 || !strings.HasPrefix(fields[2], "h1:") {
+			return fmt.Errorf("malformed root module checksum line %q", line)
+		}
+		key := fields[0] + " " + fields[1]
+		if _, ok := want[key]; !ok {
+			return fmt.Errorf("nested go.sum contains stale or unexpected root module checksum %q", key)
+		}
+		if want[key] {
+			return fmt.Errorf("nested go.sum contains duplicate root module checksum %q", key)
+		}
+		want[key] = true
+	}
+	if rootLines != len(want) {
+		return fmt.Errorf("nested go.sum root checksum count = %d, want %d for %s", rootLines, len(want), version)
+	}
+	for key, found := range want {
+		if !found {
+			return fmt.Errorf("nested go.sum is missing %s", key)
+		}
+	}
 	return nil
 }
 
