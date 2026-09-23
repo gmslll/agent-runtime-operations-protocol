@@ -136,12 +136,20 @@ func main() {
 	workspaceErr := validateWorkspaceExample(root)
 	record("go-work-example", workspaceErr, "template uses exactly root and reference/control-plane")
 	record("retired-control-plane-lite", validateRetiredBaseline(root), "control-plane-lite contains only a non-executable README tombstone")
+	record("control-plane-baseline-source-parity", validateBaselineSourceParity(root), "migrated command, handler, and wire tests match the approved baseline except for the module import path")
 	record("root-nested-import-boundary", validateRootImportBoundary(root), "root module has no imports of the nested Reference Control Plane")
-	record("ci-workspace-policy", validateWorkflow(root), "CI preserves full history and runs only the exact read-only P05 Make target with minimal permissions")
+	record("ci-workspace-policy", validateWorkflow(root), "strict CI structure preserves full history and runs the exact P05 Make target unconditionally with minimal permissions")
 
 	record("negative-third-module", negativeThirdModuleProbe(), "a third go.mod is rejected")
 	record("negative-permanent-replace", negativeReplaceProbe(), "a permanent replace directive is rejected")
 	record("negative-version-mismatch", negativeVersionProbe(), "a non-pseudo or mismatched root version is rejected")
+	record("negative-module-archive-paths", negativeModuleArchiveProbe(), "nested vendor directories, unsafe paths, and case-fold collisions are rejected or excluded")
+
+	rootProxy, rootProxyErr := rootPrefetchProxy()
+	record("root-prefetch-proxy-policy", rootProxyErr, "root dependencies use one credential-free HTTPS or file proxy with no direct fallback")
+	trackedInputs, trackedInputsErr := trackedRepositoryInputs(root)
+	record("tracked-input-closure", trackedInputsErr, fmt.Sprintf("all %d tracked repository files are bound into the report", len(trackedInputs)))
+	record("clean-source-tree", sourceTreeClean(root), "P05 acceptance runs from a clean tracked and untracked source tree")
 
 	temporaryRoot, temporaryErr := os.MkdirTemp("", "arop-go-proxy-")
 	if temporaryErr != nil {
@@ -149,7 +157,7 @@ func main() {
 		record("root-gowork-off-tests", errors.New("isolated caches were not created"), "")
 		record("nested-local-proxy-tests", errors.New("temporary proxy was not created"), "")
 		record("temporary-proxy-cleanup", errors.New("temporary proxy was not created"), "")
-		writeReport(root, checks, nil, nil, nil)
+		writeReport(root, checks, nil, nil, nil, rootProxy, trackedInputs)
 		os.Exit(1)
 	}
 
@@ -165,11 +173,14 @@ func main() {
 			temporaryErr = errors.Join(temporaryErr, err)
 		}
 	}
-	rootProxy, rootProxyErr := rootPrefetchProxy()
 	rootEnvironment := map[string]string{"GOCACHE": rootBuildCache, "GOMODCACHE": rootModuleCache, "GOTMPDIR": rootTemp}
 	rootPrefetchEnvironment := cloneMap(rootEnvironment)
 	rootPrefetchEnvironment["GOPROXY"] = rootProxy
-	rootPrefetch, rootPrefetchErr := runGoOnline(root, rootPrefetchEnvironment, "mod", "download")
+	var rootPrefetch []byte
+	rootPrefetchErr := rootProxyErr
+	if rootPrefetchErr == nil {
+		rootPrefetch, rootPrefetchErr = runGoOnline(root, rootPrefetchEnvironment, "mod", "download")
+	}
 	rootVerify, rootVerifyErr := runGo(root, rootEnvironment, "mod", "verify")
 	rootTest, rootTestErr := runGo(root, rootEnvironment, "test", "-count=1", "./...")
 	rootCombinedOutput := bytes.Join([][]byte{rootPrefetch, rootVerify, rootTest}, []byte("\n"))
@@ -239,7 +250,7 @@ func main() {
 	}
 	record("temporary-proxy-cleanup", cleanupErr, "temporary proxy and isolated caches were removed")
 
-	writeReport(root, checks, rootCombinedOutput, downloadOutput, nestedCombinedOutput)
+	writeReport(root, checks, rootCombinedOutput, downloadOutput, nestedCombinedOutput, rootProxy, trackedInputs)
 	for _, check := range checks {
 		if !check.Passed {
 			os.Exit(1)
@@ -255,17 +266,41 @@ type bootstrapCommit struct {
 }
 
 func discoverModuleFiles(root string) ([]string, error) {
-	command := controlledinput.GitCommand(root, "ls-files", "--cached", "--others", "--exclude-standard", "-z")
-	output, err := command.Output()
-	if err != nil {
-		return nil, fmt.Errorf("list repository files: %w", err)
-	}
 	modules := []string{}
-	for _, raw := range bytes.Split(output, []byte{0}) {
-		path := filepath.ToSlash(string(raw))
-		if path != "" && filepath.Base(path) == "go.mod" {
-			modules = append(modules, path)
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		relative = filepath.ToSlash(relative)
+		if entry.IsDir() {
+			switch relative {
+			case ".git", ".worktrees", "build", "coverage", "dist", "node_modules":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Base(relative) != "go.mod" {
+			return nil
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("go.mod path is a symlink: %s", relative)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("go.mod path is not a regular file: %s", relative)
+		}
+		modules = append(modules, relative)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("discover repository modules: %w", err)
 	}
 	sort.Strings(modules)
 	return modules, nil
@@ -419,6 +454,51 @@ func validateRetiredBaseline(root string) error {
 	return nil
 }
 
+func validateBaselineSourceParity(root string) error {
+	files := []struct {
+		path       string
+		wantSHA256 string
+		normalize  func([]byte) ([]byte, error)
+	}{
+		{
+			path:       nestedDirectory + "/internal/server/server.go",
+			wantSHA256: "1de7a69dec00c8746f67f5b274529399d9f3d06d8420cf86d1bb8b22a2e9c950",
+		},
+		{
+			path:       nestedDirectory + "/internal/server/server_test.go",
+			wantSHA256: "671cdc8b7352f1fb9dc6a094d93b05029381aa49ba2ed444ef49274e9c60790d",
+		},
+		{
+			path:       nestedDirectory + "/cmd/aropd/main.go",
+			wantSHA256: "f059d98c9a35abd1eebf393257f800693ca7733a82cb17cc5ebf39b3be4e4c0b",
+			normalize: func(data []byte) ([]byte, error) {
+				current := []byte(nestedModulePath + "/internal/server")
+				baseline := []byte(rootModulePath + "/reference/control-plane-lite/internal/server")
+				if bytes.Count(data, current) != 1 {
+					return nil, errors.New("migrated aropd import path is not present exactly once")
+				}
+				return bytes.Replace(data, current, baseline, 1), nil
+			},
+		},
+	}
+	for _, file := range files {
+		data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(file.path)))
+		if err != nil {
+			return err
+		}
+		if file.normalize != nil {
+			data, err = file.normalize(data)
+			if err != nil {
+				return fmt.Errorf("normalize %s: %w", file.path, err)
+			}
+		}
+		if digest := report.Hash(data); digest != file.wantSHA256 {
+			return fmt.Errorf("%s digest = %s, want approved baseline %s", file.path, digest, file.wantSHA256)
+		}
+	}
+	return nil
+}
+
 func validateRootImportBoundary(root string) error {
 	problems := []string{}
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
@@ -464,26 +544,116 @@ func validateRootImportBoundary(root string) error {
 }
 
 func validateWorkflow(root string) error {
-	data, err := os.ReadFile(filepath.Join(root, ".github", "workflows", "go-workspace.yml"))
+	value, _, err := structuredfile.LoadAny(filepath.Join(root, ".github", "workflows", "go-workspace.yml"))
 	if err != nil {
 		return err
 	}
-	text := string(data)
-	for _, required := range []string{"permissions:\n  contents: read", "fetch-depth: 0", "run: make test-go-workspace", "node-version: 22"} {
-		if !strings.Contains(text, required) {
-			return fmt.Errorf("go-workspace workflow is missing %q", required)
-		}
+	workflow, err := exactObject(value, "workflow", "name", "on", "permissions", "jobs")
+	if err != nil {
+		return err
 	}
-	lower := strings.ToLower(text)
-	for _, forbidden := range []string{"secrets.", "id-token:", "packages:", "publish", "release", "go.work\n", "go work "} {
-		if strings.Contains(lower, forbidden) {
-			return fmt.Errorf("go-workspace workflow contains forbidden capability marker %q", forbidden)
-		}
+	if workflow["name"] != "go-workspace" {
+		return fmt.Errorf("workflow name = %v, want go-workspace", workflow["name"])
 	}
-	if strings.Count(text, "run: make test-go-workspace") != 1 {
-		return errors.New("go-workspace workflow must invoke the exact Make target once")
+	triggers, err := exactObject(workflow["on"], "workflow.on", "pull_request", "push")
+	if err != nil || triggers["pull_request"] != nil {
+		return errors.Join(err, errors.New("workflow pull_request trigger must be unconditional"))
+	}
+	push, err := exactObject(triggers["push"], "workflow.on.push", "branches")
+	if err != nil {
+		return err
+	}
+	if !equalAnyStrings(push["branches"], []string{"main"}) {
+		return fmt.Errorf("workflow push branches = %v, want [main]", push["branches"])
+	}
+	permissions, err := exactObject(workflow["permissions"], "workflow.permissions", "contents")
+	if err != nil || permissions["contents"] != "read" {
+		return errors.Join(err, errors.New("workflow permissions must be exactly contents: read"))
+	}
+	jobs, err := exactObject(workflow["jobs"], "workflow.jobs", "modules")
+	if err != nil {
+		return err
+	}
+	job, err := exactObject(jobs["modules"], "workflow.jobs.modules", "runs-on", "steps")
+	if err != nil || job["runs-on"] != "ubuntu-latest" {
+		return errors.Join(err, errors.New("modules job must run on ubuntu-latest without job-level conditions"))
+	}
+	steps, ok := job["steps"].([]any)
+	if !ok || len(steps) != 4 {
+		return fmt.Errorf("modules job steps = %T/%d, want exactly four", job["steps"], len(steps))
+	}
+	checkout, err := exactObject(steps[0], "checkout step", "uses", "with")
+	if err != nil || checkout["uses"] != "actions/checkout@v4" {
+		return errors.Join(err, errors.New("checkout step must use actions/checkout@v4 without conditions"))
+	}
+	checkoutWith, err := exactObject(checkout["with"], "checkout.with", "fetch-depth")
+	if err != nil || fmt.Sprint(checkoutWith["fetch-depth"]) != "0" {
+		return errors.Join(err, errors.New("checkout fetch-depth must be 0"))
+	}
+	setupGo, err := exactObject(steps[1], "setup-go step", "uses", "with")
+	if err != nil || setupGo["uses"] != "actions/setup-go@v5" {
+		return errors.Join(err, errors.New("setup-go step must use actions/setup-go@v5 without conditions"))
+	}
+	setupGoWith, err := exactObject(setupGo["with"], "setup-go.with", "go-version-file", "cache", "cache-dependency-path")
+	if err != nil || setupGoWith["go-version-file"] != "go.mod" || setupGoWith["cache"] != true || !equalLineSet(setupGoWith["cache-dependency-path"], []string{"go.sum", nestedDirectory + "/go.sum"}) {
+		return errors.Join(err, errors.New("setup-go inputs must bind go.mod and both go.sum files"))
+	}
+	setupNode, err := exactObject(steps[2], "setup-node step", "uses", "with")
+	if err != nil || setupNode["uses"] != "actions/setup-node@v4" {
+		return errors.Join(err, errors.New("setup-node step must use actions/setup-node@v4 without conditions"))
+	}
+	setupNodeWith, err := exactObject(setupNode["with"], "setup-node.with", "node-version", "cache")
+	if err != nil || fmt.Sprint(setupNodeWith["node-version"]) != "22" || setupNodeWith["cache"] != "npm" {
+		return errors.Join(err, errors.New("setup-node inputs must be Node 22 with npm cache"))
+	}
+	verify, err := exactObject(steps[3], "verification step", "name", "run")
+	if err != nil || verify["name"] != "Verify the two-module bootstrap" || verify["run"] != "make test-go-workspace" {
+		return errors.Join(err, errors.New("verification step must unconditionally run exactly make test-go-workspace"))
 	}
 	return nil
+}
+
+func exactObject(value any, label string, keys ...string) (map[string]any, error) {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%s must be an object", label)
+	}
+	want := append([]string(nil), keys...)
+	sort.Strings(want)
+	got := make([]string, 0, len(object))
+	for key := range object {
+		got = append(got, key)
+	}
+	sort.Strings(got)
+	if !equalStrings(got, want) {
+		return nil, fmt.Errorf("%s keys = %v, want %v", label, got, want)
+	}
+	return object, nil
+}
+
+func equalAnyStrings(value any, want []string) bool {
+	items, ok := value.([]any)
+	if !ok || len(items) != len(want) {
+		return false
+	}
+	for index := range want {
+		if items[index] != want[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func equalLineSet(value any, want []string) bool {
+	text, ok := value.(string)
+	if !ok {
+		return false
+	}
+	got := strings.Fields(text)
+	sort.Strings(got)
+	want = append([]string(nil), want...)
+	sort.Strings(want)
+	return equalStrings(got, want)
 }
 
 func validateHealthTestOutput(output []byte) error {
@@ -611,10 +781,7 @@ func writeModuleZip(root, destination string, bootstrap bootstrapCommit) error {
 	var totalBytes int64
 	caseFolded := map[string]string{}
 	for _, entry := range entries {
-		if entry.Path == nestedDirectory || strings.HasPrefix(entry.Path, nestedDirectory+"/") {
-			continue
-		}
-		if entry.Path == "vendor" || strings.HasPrefix(entry.Path, "vendor/") {
+		if excludedFromModuleZip(entry.Path) {
 			continue
 		}
 		if entry.Type != "blob" || (entry.Mode != "100644" && entry.Mode != "100755") {
@@ -667,6 +834,10 @@ func validateModuleArchivePath(path string) error {
 		if element == "" || element == "." || element == ".." || strings.HasSuffix(element, ".") || strings.HasSuffix(element, " ") {
 			return fmt.Errorf("invalid module archive path element %q in %q", element, path)
 		}
+		stem := strings.ToUpper(strings.SplitN(element, ".", 2)[0])
+		if stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL" || len(stem) == 4 && (strings.HasPrefix(stem, "COM") || strings.HasPrefix(stem, "LPT")) && stem[3] >= '1' && stem[3] <= '9' {
+			return fmt.Errorf("module archive path uses reserved Windows name %q", element)
+		}
 		for _, character := range element {
 			if character < 0x20 || strings.ContainsRune(`:*?"<>|`, character) {
 				return fmt.Errorf("invalid character in module archive path %q", path)
@@ -674,6 +845,18 @@ func validateModuleArchivePath(path string) error {
 		}
 	}
 	return nil
+}
+
+func excludedFromModuleZip(path string) bool {
+	if path == nestedDirectory || strings.HasPrefix(path, nestedDirectory+"/") {
+		return true
+	}
+	for _, element := range strings.Split(path, "/") {
+		if element == "vendor" {
+			return true
+		}
+	}
+	return false
 }
 
 func foldPath(path string) string {
@@ -872,6 +1055,55 @@ func inside(root, path string) bool {
 	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
+func trackedRepositoryInputs(root string) ([]string, error) {
+	output, err := gitBytes(root, "ls-files", "-z")
+	if err != nil {
+		return nil, fmt.Errorf("list tracked report inputs: %w", err)
+	}
+	paths := []string{}
+	for _, raw := range bytes.Split(output, []byte{0}) {
+		if len(raw) == 0 {
+			continue
+		}
+		relative := filepath.ToSlash(string(raw))
+		if relative == "" || filepath.IsAbs(relative) || filepath.ToSlash(filepath.Clean(relative)) != relative || relative == ".." || strings.HasPrefix(relative, "../") {
+			return nil, fmt.Errorf("unsafe tracked report input path %q", relative)
+		}
+		current := root
+		for _, component := range strings.Split(relative, "/") {
+			current = filepath.Join(current, component)
+			info, err := os.Lstat(current)
+			if err != nil {
+				return nil, fmt.Errorf("inspect tracked report input %s: %w", relative, err)
+			}
+			if info.Mode()&os.ModeSymlink != 0 {
+				return nil, fmt.Errorf("tracked report input path contains symlink: %s", relative)
+			}
+		}
+		info, err := os.Stat(current)
+		if err != nil || !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("tracked report input is not a regular file: %s", relative)
+		}
+		paths = append(paths, relative)
+	}
+	sort.Strings(paths)
+	if len(paths) == 0 {
+		return nil, errors.New("tracked report input closure is empty")
+	}
+	return paths, nil
+}
+
+func sourceTreeClean(root string) error {
+	output, err := gitBytes(root, "status", "--porcelain=v1", "--untracked-files=all")
+	if err != nil {
+		return fmt.Errorf("inspect source tree cleanliness: %w", err)
+	}
+	if dirty := strings.TrimSpace(string(output)); dirty != "" {
+		return fmt.Errorf("source tree is dirty: %s", strings.ReplaceAll(dirty, "\n", "; "))
+	}
+	return nil
+}
+
 func removeAllWritable(path string) error {
 	_ = filepath.WalkDir(path, func(current string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -939,6 +1171,27 @@ func negativeVersionProbe() error {
 	return nil
 }
 
+func negativeModuleArchiveProbe() error {
+	for _, path := range []string{"vendor/x.go", "foo/vendor/x.go", "foo/bar/vendor/data.json"} {
+		if !excludedFromModuleZip(path) {
+			return fmt.Errorf("module zip would include vendor path %q", path)
+		}
+	}
+	for _, path := range []string{"../escape", `foo\\bar`, "foo/./bar", "foo/CON"} {
+		if validateModuleArchivePath(path) == nil {
+			return fmt.Errorf("unsafe module archive path %q was accepted", path)
+		}
+	}
+	seen := map[string]string{}
+	if err := recordArchivePath("Readme.md", seen); err != nil {
+		return err
+	}
+	if err := recordArchivePath("README.md", seen); err == nil {
+		return errors.New("case-fold module archive collision was accepted")
+	}
+	return nil
+}
+
 func runGo(directory string, additions map[string]string, args ...string) ([]byte, error) {
 	return runGoWithProxy(directory, goEnvironment(additions, true), args...)
 }
@@ -956,7 +1209,7 @@ func rootPrefetchProxy() (string, error) {
 		return "", errors.New("AROP_GO_PROXY must name one explicit proxy without direct/off fallback")
 	}
 	parsed, err := url.Parse(value)
-	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "file") || parsed.User != nil || parsed.Host == "" && parsed.Scheme != "file" {
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "file") || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Host == "" && parsed.Scheme != "file" {
 		return "", fmt.Errorf("AROP_GO_PROXY is not an allowed credential-free https/file proxy: %q", value)
 	}
 	return value, nil
@@ -1034,7 +1287,7 @@ func cloneMap(source map[string]string) map[string]string {
 	return result
 }
 
-func writeReport(root string, checks []report.Check, rootLog, downloadLog, nestedLog []byte) {
+func writeReport(root string, checks []report.Check, rootLog, downloadLog, nestedLog []byte, rootProxy string, trackedInputs []string) {
 	temporaryProxyRemoved := false
 	for _, check := range checks {
 		if check.Name == "temporary-proxy-cleanup" {
@@ -1046,37 +1299,49 @@ func writeReport(root string, checks []report.Check, rootLog, downloadLog, neste
 		{Kind: "root-go-test-log", SHA256: report.Hash(rootLog), Bytes: int64(len(rootLog))},
 		{Kind: "root-module-download-log", SHA256: report.Hash(downloadLog), Bytes: int64(len(downloadLog))},
 	}
+	if parsed, err := url.Parse(rootProxy); err == nil && parsed.Scheme != "" {
+		evidence = append(evidence, report.RuntimeEvidence{
+			Kind:   "root-prefetch-proxy-config-" + parsed.Scheme,
+			SHA256: report.Hash([]byte(rootProxy)),
+			Bytes:  int64(len(rootProxy)),
+		})
+	}
 	command := os.Getenv("AROP_CHECK_COMMAND")
 	if command == "" {
 		command = "go run ./internal/tooling/cmd/arop-go-proxy-bootstrap"
 	}
-	inputs := []string{
-		".github/workflows/go-workspace.yml",
-		".gitignore",
-		"Makefile",
-		"go.mod",
-		"go.sum",
-		"go.work.example",
-		"internal/tooling/cmd/arop-go-proxy-bootstrap/main.go",
-		"internal/tooling/controlledinput/manifest.go",
-		"internal/tooling/report/verifier.go",
-		"internal/tooling/report/writer.go",
-		"internal/tooling/schema/validator.go",
-		"internal/tooling/structuredfile/files.go",
-		"reference/control-plane/README.md",
-		"reference/control-plane/cmd/aropd/main.go",
-		"reference/control-plane/go.mod",
-		"reference/control-plane/internal/server/server.go",
-		"reference/control-plane/internal/server/server_test.go",
-		"reference/control-plane-lite/README.md",
-		"docs/DEVELOPMENT_PLAN.md",
-		"docs/IMPLEMENTATION_BLUEPRINT.md",
-		"spec/artifact-manifest.yaml",
-		"spec/requirements.yaml",
-		"spec/schemas/check-report.schema.json",
+	inputs := trackedInputs
+	if len(inputs) == 0 {
+		inputs = []string{
+			".github/workflows/go-workspace.yml",
+			".gitignore",
+			"Makefile",
+			"go.mod",
+			"go.sum",
+			"go.work.example",
+			"internal/tooling/cmd/arop-go-proxy-bootstrap/main.go",
+			"internal/tooling/controlledinput/manifest.go",
+			"internal/tooling/report/verifier.go",
+			"internal/tooling/report/writer.go",
+			"internal/tooling/schema/validator.go",
+			"internal/tooling/structuredfile/files.go",
+			"reference/control-plane/README.md",
+			"reference/control-plane/cmd/aropd/main.go",
+			"reference/control-plane/go.mod",
+			"reference/control-plane/internal/server/server.go",
+			"reference/control-plane/internal/server/server_test.go",
+			"reference/control-plane-lite/README.md",
+			"docs/DEVELOPMENT_PLAN.md",
+			"docs/IMPLEMENTATION_BLUEPRINT.md",
+			"spec/artifact-manifest.yaml",
+			"spec/requirements.yaml",
+			"spec/schemas/check-report.schema.json",
+		}
 	}
-	if _, err := os.Stat(filepath.Join(root, nestedDirectory, "go.sum")); err == nil {
-		inputs = append(inputs, nestedDirectory+"/go.sum")
+	if len(trackedInputs) == 0 {
+		if _, err := os.Stat(filepath.Join(root, nestedDirectory, "go.sum")); err == nil {
+			inputs = append(inputs, nestedDirectory+"/go.sum")
+		}
 	}
 	result, err := report.Write(report.WriteOptions{
 		Root:            root,
