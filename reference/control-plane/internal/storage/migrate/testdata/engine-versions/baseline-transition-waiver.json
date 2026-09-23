@@ -13,17 +13,18 @@
     "reason": "P09 adds explicit durable storage composition to the P08 Control Plane server without transferring its accountable owner or changing its public exposure."
   },
   "affected_artifacts": [
-    "reference-control-plane-server",
+    "control-plane-platform-foundation",
+    "durable-audit-storage",
     "migration-engine",
     "migration-engine-fixture-versions",
-    "durable-audit-storage",
-    "sqlite-uow-storage-adapter",
-    "postgres-uow-storage-adapter",
-    "sqlite-migration-base",
-    "postgres-migration-base",
     "nested-control-plane-go-module",
     "phase-report-p08",
-    "phase-report-p09"
+    "phase-report-p09",
+    "postgres-migration-base",
+    "postgres-uow-storage-adapter",
+    "reference-control-plane-server",
+    "sqlite-migration-base",
+    "sqlite-uow-storage-adapter"
   ],
   "source_closure": [
     "reference/control-plane/cmd/aropd/main.go",
@@ -33,7 +34,12 @@
     "reference/control-plane/internal/adapters/observability/durable/store.go",
     "reference/control-plane/internal/adapters/storage/postgres/uow.go",
     "reference/control-plane/internal/adapters/storage/sqlite/uow.go",
+    "reference/control-plane/internal/app/platform/config.go",
+    "reference/control-plane/internal/app/platform/httpadapter/http.go",
+    "reference/control-plane/internal/app/platform/platform.go",
+    "reference/control-plane/internal/app/platform/testdata/harness/main.go",
     "reference/control-plane/internal/storage/migrate/runner.go",
+    "reference/control-plane/internal/storage/migrate/testdata/engine-versions/acceptance/acceptance_test.go",
     "reference/control-plane/migrations/postgres/0001_base.sql",
     "reference/control-plane/migrations/sqlite/0001_base.sql"
   ],

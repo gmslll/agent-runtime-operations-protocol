@@ -134,6 +134,42 @@ type baselineTransitionWaiver struct {
 	} `json:"acceptance"`
 	Constraints []string `json:"constraints"`
 }
+
+type artifactManifest struct {
+	SchemaVersion  int                `json:"schema_version"`
+	CatalogID      string             `json:"catalog_id"`
+	Updated        string             `json:"updated"`
+	Purpose        string             `json:"purpose"`
+	AuthorityChain []map[string]any   `json:"authority_chain"`
+	Statuses       map[string]string  `json:"statuses"`
+	Artifacts      []manifestArtifact `json:"artifacts"`
+}
+
+type manifestArtifact struct {
+	ID                    string   `json:"id"`
+	Path                  string   `json:"path"`
+	Status                string   `json:"status"`
+	Kind                  string   `json:"kind"`
+	Authority             string   `json:"authority"`
+	Language              string   `json:"language"`
+	Capabilities          []string `json:"capabilities"`
+	Owner                 string   `json:"owner"`
+	OwnerPhase            string   `json:"owner_phase"`
+	CompletionPhase       string   `json:"completion_phase"`
+	ProducerPhase         string   `json:"producer_phase"`
+	AcceptanceTest        string   `json:"acceptance_test"`
+	Exposure              string   `json:"exposure"`
+	PathRole              string   `json:"path_role"`
+	FutureAction          string   `json:"future_action"`
+	FutureOwner           string   `json:"future_owner"`
+	FutureOwnerPhase      string   `json:"future_owner_phase"`
+	FutureAcceptanceTest  string   `json:"future_acceptance_test"`
+	ImplementationRuntime string   `json:"implementation_runtime"`
+	ToolScope             string   `json:"tool_scope"`
+	DerivesFrom           []string `json:"derives_from"`
+	RuntimeInputs         []string `json:"runtime_inputs"`
+	FutureArtifacts       []string `json:"future_artifacts"`
+}
 type commandResult struct {
 	Argv   []string
 	Output []byte
@@ -191,7 +227,6 @@ func main() {
 
 	before, inputPaths, staticErr := staticManifest(root)
 	add("p09-static-input-closure", staticErr, fmt.Sprintf("%d regular inputs with exact path/mode/digest and no symlink ancestry", len(before)))
-	add("p09-baseline-transition-waiver", verifyBaselineTransitionWaiver(root, inputPaths), "P08 server to P09 storage composition transition binds owner semantics, affected artifacts, exact source closure, and both phase acceptances")
 	add("p09-baseline-transition-waiver-strict-json", verifyBaselineTransitionWaiverStrictJSON(), "duplicate JSON keys are rejected before typed waiver validation")
 	add("p09-migration-inventory", verifyMigrationInventory(root), "fixture and production base migration inventories are exact")
 
@@ -237,6 +272,9 @@ func main() {
 	add("p09-real-composition", compositionErr, "cmd/aropd compose runs real SQLite and PostgreSQL storage, reports ready durable health, persists observations, fails closed, and bounds advisory-lock startup")
 	listErr := verifyProductionList(root, standalone.Version, standalone.ModuleCache, standalone.List)
 	add("p09-production-go-list", listErr, "dependency closure is exact and resolves from isolated caches")
+	waiverErr := verifyBaselineTransitionWaiver(root, inputPaths, standalone.List.Output)
+	add("p09-baseline-transition-waiver", waiverErr, "manifest ownership, the P08 baseline diff, and the actual Go compilation closure independently match the waiver's exact affected artifact/source set")
+	add("p09-baseline-transition-waiver-omission-negatives", verifyBaselineTransitionWaiverOmissionNegatives(root, inputPaths, standalone.List.Output), "omitting any independently discovered P08 artifact, changed source, or acceptance checker is rejected")
 
 	p08 := runP08Regression(root, scratch)
 	add("p09-p08-regression", commandFailure(p08), "P08 platform acceptance and report verification remain green")
@@ -338,7 +376,7 @@ func verifyMinimalEnvironment() error {
 	return nil
 }
 
-func verifyBaselineTransitionWaiver(root string, inputPaths []string) error {
+func verifyBaselineTransitionWaiver(root string, inputPaths []string, goListOutput []byte) error {
 	data, err := readRegular(root, waiverPath)
 	if err != nil {
 		return fmt.Errorf("read baseline transition waiver: %w", err)
@@ -354,23 +392,14 @@ func verifyBaselineTransitionWaiver(root string, inputPaths []string) error {
 	if err != nil {
 		return err
 	}
-	wantArtifacts := []string{
-		"reference-control-plane-server",
-		"migration-engine",
-		"migration-engine-fixture-versions",
-		"durable-audit-storage",
-		"sqlite-uow-storage-adapter",
-		"postgres-uow-storage-adapter",
-		"sqlite-migration-base",
-		"postgres-migration-base",
-		"nested-control-plane-go-module",
-		"phase-report-p08",
-		"phase-report-p09",
+	wantArtifacts, wantSources, discoveryErr := discoverBaselineTransitionClosure(root, goListOutput)
+	if discoveryErr != nil {
+		return discoveryErr
 	}
-	wantSources, sourceErr := baselineTransitionSourceClosure(root)
-	if sourceErr != nil {
-		return sourceErr
-	}
+	return validateBaselineTransitionWaiver(root, inputPaths, waiver, wantArtifacts, wantSources)
+}
+
+func validateBaselineTransitionWaiver(root string, inputPaths []string, waiver baselineTransitionWaiver, wantArtifacts, wantSources []string) error {
 	wantConstraints := []string{
 		"no-memory-fallback-in-durable-modes",
 		"p08-regression-must-pass-under-p09",
@@ -429,6 +458,53 @@ func verifyBaselineTransitionWaiver(root string, inputPaths []string) error {
 	return nil
 }
 
+func verifyBaselineTransitionWaiverOmissionNegatives(root string, inputPaths []string, goListOutput []byte) error {
+	data, err := readRegular(root, waiverPath)
+	if err != nil {
+		return err
+	}
+	waiver, err := decodeBaselineTransitionWaiver(data)
+	if err != nil {
+		return err
+	}
+	wantArtifacts, wantSources, err := discoverBaselineTransitionClosure(root, goListOutput)
+	if err != nil {
+		return err
+	}
+	requiredArtifacts := []string{"reference-control-plane-server", "control-plane-platform-foundation", "phase-report-p08"}
+	requiredSources := []string{
+		"reference/control-plane/internal/app/platform/config.go",
+		"reference/control-plane/internal/app/platform/platform.go",
+		"reference/control-plane/internal/app/platform/httpadapter/http.go",
+		"reference/control-plane/internal/app/platform/testdata/harness/main.go",
+	}
+	for _, artifact := range requiredArtifacts {
+		if !containsString(wantArtifacts, artifact) {
+			return fmt.Errorf("independent artifact discovery omitted required P08 artifact %s", artifact)
+		}
+	}
+	for _, path := range requiredSources {
+		if !containsString(wantSources, path) {
+			return fmt.Errorf("independent source discovery omitted required P08 source/checker %s", path)
+		}
+	}
+	for _, artifact := range wantArtifacts {
+		candidate := waiver
+		candidate.AffectedArtifacts = withoutString(candidate.AffectedArtifacts, artifact)
+		if err := validateBaselineTransitionWaiver(root, inputPaths, candidate, wantArtifacts, wantSources); err == nil {
+			return fmt.Errorf("waiver omission negative accepted missing artifact %s", artifact)
+		}
+	}
+	for _, path := range wantSources {
+		candidate := waiver
+		candidate.SourceClosure = withoutString(candidate.SourceClosure, path)
+		if err := validateBaselineTransitionWaiver(root, inputPaths, candidate, wantArtifacts, wantSources); err == nil {
+			return fmt.Errorf("waiver omission negative accepted missing source/checker %s", path)
+		}
+	}
+	return nil
+}
+
 func decodeBaselineTransitionWaiver(data []byte) (baselineTransitionWaiver, error) {
 	if _, err := structuredfile.Parse(data, ".json"); err != nil {
 		return baselineTransitionWaiver{}, fmt.Errorf("strict parse baseline transition waiver: %w", err)
@@ -457,47 +533,249 @@ func verifyBaselineTransitionWaiverStrictJSON() error {
 	return nil
 }
 
-func baselineTransitionSourceClosure(root string) ([]string, error) {
-	directories := []string{
-		"reference/control-plane/cmd/aropd",
-		"reference/control-plane/internal/adapters/observability/durable",
-		"reference/control-plane/internal/adapters/storage/postgres",
-		"reference/control-plane/internal/adapters/storage/sqlite",
-		"reference/control-plane/internal/storage/migrate",
+func discoverBaselineTransitionClosure(root string, goListOutput []byte) ([]string, []string, error) {
+	manifest, err := loadArtifactManifest(root)
+	if err != nil {
+		return nil, nil, err
 	}
-	paths := []string{
-		"reference/control-plane/go.mod",
-		"reference/control-plane/go.sum",
-		"reference/control-plane/migrations/postgres/0001_base.sql",
-		"reference/control-plane/migrations/sqlite/0001_base.sql",
+	changed, err := changedPathsSinceP08(root)
+	if err != nil {
+		return nil, nil, err
 	}
-	for _, directory := range directories {
-		if err := rejectSymlinkAncestors(root, directory); err != nil {
-			return nil, err
+	compiled, err := compiledRepositoryPaths(goListOutput)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	affected := map[string]bool{}
+	for _, artifact := range manifest.Artifacts {
+		if artifact.PathRole != "concrete" || artifact.Path == "" {
+			continue
 		}
-		entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(directory)))
-		if err != nil {
-			return nil, err
+		if artifact.OwnerPhase != "P08" && artifact.OwnerPhase != "P09" && artifact.ID != "nested-control-plane-go-module" {
+			continue
 		}
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
-			}
-			if entry.Type()&os.ModeSymlink != 0 {
-				return nil, fmt.Errorf("baseline transition source is a symlink: %s/%s", directory, entry.Name())
-			}
-			info, err := entry.Info()
-			if err != nil {
-				return nil, err
-			}
-			if !info.Mode().IsRegular() || info.Mode().Perm() != 0o644 {
-				return nil, fmt.Errorf("baseline transition source %s/%s is not regular 0644", directory, entry.Name())
-			}
-			paths = append(paths, directory+"/"+entry.Name())
+		if anyPathWithin(changed, artifact.Path) {
+			affected[artifact.ID] = true
 		}
 	}
-	sort.Strings(paths)
+	for _, artifact := range manifest.Artifacts {
+		if artifact.PathRole != "concrete" || (artifact.ProducerPhase != "P08" && artifact.ProducerPhase != "P09") {
+			continue
+		}
+		for _, dependency := range artifact.DerivesFrom {
+			if affected[dependency] {
+				affected[artifact.ID] = true
+				break
+			}
+		}
+	}
+
+	sources := map[string]bool{}
+	for path := range changed {
+		if compiled[path] {
+			sources[path] = true
+		}
+	}
+	for _, artifact := range manifest.Artifacts {
+		if !affected[artifact.ID] {
+			continue
+		}
+		switch artifact.Kind {
+		case "database-migration", "go-module-definition":
+			if changed[artifact.Path] {
+				sources[artifact.Path] = true
+			}
+		}
+		if artifact.ID == "nested-control-plane-go-module" && changed["reference/control-plane/go.sum"] {
+			sources["reference/control-plane/go.sum"] = true
+		}
+	}
+	for path := range changed {
+		if isP08AcceptanceChecker(root, path, manifest.Artifacts) {
+			sources[path] = true
+		}
+	}
+
+	artifacts := sortedBoolKeys(affected)
+	paths := sortedBoolKeys(sources)
+	if len(artifacts) == 0 || len(paths) == 0 {
+		return nil, nil, errors.New("independent baseline transition discovery produced an empty closure")
+	}
+	for _, path := range paths {
+		if _, err := readRegular(root, path); err != nil {
+			return nil, nil, fmt.Errorf("independently discovered source %s: %w", path, err)
+		}
+	}
+	return artifacts, paths, nil
+}
+
+func loadArtifactManifest(root string) (artifactManifest, error) {
+	var manifest artifactManifest
+	if err := structuredfile.Load(filepath.Join(root, "spec", "artifact-manifest.yaml"), &manifest); err != nil {
+		return artifactManifest{}, fmt.Errorf("load artifact manifest for transition closure: %w", err)
+	}
+	if manifest.SchemaVersion != 1 || len(manifest.Artifacts) == 0 {
+		return artifactManifest{}, errors.New("artifact manifest has an unsupported version or no artifacts")
+	}
+	seen := map[string]bool{}
+	for _, artifact := range manifest.Artifacts {
+		if artifact.ID == "" || seen[artifact.ID] {
+			return artifactManifest{}, fmt.Errorf("artifact manifest contains an empty or duplicate id %q", artifact.ID)
+		}
+		seen[artifact.ID] = true
+	}
+	return manifest, nil
+}
+
+func changedPathsSinceP08(root string) (map[string]bool, error) {
+	output, err := runGit(root, "log", "--diff-filter=A", "--format=%H", "--", waiverPath)
+	if err != nil {
+		return nil, fmt.Errorf("locate transition introduction commit: %w", err)
+	}
+	commits := strings.Fields(string(output))
+	if len(commits) != 1 {
+		return nil, fmt.Errorf("transition waiver must have exactly one introduction commit, found %d", len(commits))
+	}
+	parentOutput, err := runGit(root, "rev-parse", commits[0]+"^")
+	if err != nil {
+		return nil, fmt.Errorf("resolve P08 baseline parent: %w", err)
+	}
+	baseline := strings.TrimSpace(string(parentOutput))
+	if len(baseline) != 40 {
+		return nil, errors.New("resolved P08 baseline is not a full commit id")
+	}
+	if _, err := runGit(root, "merge-base", "--is-ancestor", baseline, "HEAD"); err != nil {
+		return nil, errors.New("resolved P08 baseline is not an ancestor of HEAD")
+	}
+	diff, err := runGit(root, "diff", "--name-only", "--diff-filter=ACMRT", "-z", baseline, "--")
+	if err != nil {
+		return nil, fmt.Errorf("discover P09 paths changed from P08 baseline: %w", err)
+	}
+	paths := map[string]bool{}
+	for _, raw := range bytes.Split(diff, []byte{0}) {
+		if len(raw) == 0 {
+			continue
+		}
+		path := filepath.ToSlash(string(raw))
+		if path == "" || filepath.IsAbs(filepath.FromSlash(path)) || path == ".." || strings.HasPrefix(path, "../") {
+			return nil, fmt.Errorf("git returned unsafe changed path %q", path)
+		}
+		paths[path] = true
+	}
+	if len(paths) == 0 {
+		return nil, errors.New("P09 transition diff from the P08 baseline is empty")
+	}
 	return paths, nil
+}
+
+func compiledRepositoryPaths(output []byte) (map[string]bool, error) {
+	type listedPackage struct {
+		ImportPath     string
+		GoFiles        []string
+		CgoFiles       []string
+		TestGoFiles    []string
+		XTestGoFiles   []string
+		IgnoredGoFiles []string
+		Error          *struct{ Err string }
+	}
+	decoder := json.NewDecoder(bytes.NewReader(output))
+	paths := map[string]bool{}
+	for {
+		var item listedPackage
+		if err := decoder.Decode(&item); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return nil, fmt.Errorf("decode Go compilation closure: %w", err)
+		}
+		if item.Error != nil {
+			return nil, fmt.Errorf("Go compilation closure contains package error for %s", item.ImportPath)
+		}
+		if item.ImportPath != nestedModule && !strings.HasPrefix(item.ImportPath, nestedModule+"/") {
+			continue
+		}
+		relativePackage := strings.TrimPrefix(item.ImportPath, nestedModule)
+		relativePackage = strings.TrimPrefix(relativePackage, "/")
+		directory := "reference/control-plane"
+		if relativePackage != "" {
+			directory += "/" + relativePackage
+		}
+		files := append([]string{}, item.GoFiles...)
+		files = append(files, item.CgoFiles...)
+		files = append(files, item.TestGoFiles...)
+		files = append(files, item.XTestGoFiles...)
+		for _, name := range files {
+			if name == "" || filepath.Base(name) != name {
+				return nil, fmt.Errorf("Go compilation closure contains non-local filename %q", name)
+			}
+			paths[directory+"/"+name] = true
+		}
+	}
+	if len(paths) == 0 {
+		return nil, errors.New("Go compilation closure contains no nested-module source files")
+	}
+	return paths, nil
+}
+
+func isP08AcceptanceChecker(root, path string, artifacts []manifestArtifact) bool {
+	if !strings.HasSuffix(path, "/testdata/harness/main.go") {
+		return false
+	}
+	owned := false
+	for _, artifact := range artifacts {
+		if artifact.OwnerPhase == "P08" && artifact.AcceptanceTest == "make-test-control-plane-platform" && pathWithinArtifact(path, artifact.Path) {
+			owned = true
+			break
+		}
+	}
+	if !owned {
+		return false
+	}
+	data, err := readRegular(root, path)
+	return err == nil && bytes.Contains(data, []byte(`expectedCommand = "make test-control-plane-platform"`))
+}
+
+func anyPathWithin(paths map[string]bool, artifactPath string) bool {
+	for path := range paths {
+		if pathWithinArtifact(path, artifactPath) {
+			return true
+		}
+	}
+	return false
+}
+
+func pathWithinArtifact(path, artifactPath string) bool {
+	return path == artifactPath || strings.HasPrefix(path, strings.TrimSuffix(artifactPath, "/")+"/")
+}
+
+func sortedBoolKeys(values map[string]bool) []string {
+	keys := make([]string, 0, len(values))
+	for key, enabled := range values {
+		if enabled {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func withoutString(values []string, omitted string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != omitted {
+			result = append(result, value)
+		}
+	}
+	return result
 }
 
 func fatal(err error) {
