@@ -3,6 +3,8 @@ node_modules/
 coverage/
 dist/
 build/
+/go.work
+/go.work.sum
 *.log
 *.tmp
 .env

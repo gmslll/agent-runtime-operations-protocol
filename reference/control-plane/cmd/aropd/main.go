@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane-lite/internal/server"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/server"
 )
 
 var version = "0.1.0-dev"

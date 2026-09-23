@@ -1,13 +1,6 @@
-# Go Reference Control Plane
+# Retired Control Plane Lite baseline
 
-This directory contains the vendor-neutral Go reference backend for AROP. The current repository-baseline slice only exposes liveness and readiness endpoints; Registry, Run/Dispatch, Event Ledger, and SSE are added after their machine-readable contracts land.
-
-Run it locally:
-
-```bash
-go run ./reference/control-plane-lite/cmd/aropd --listen 127.0.0.1:8080
-curl http://127.0.0.1:8080/v1/health/live
-curl http://127.0.0.1:8080/v1/health/ready
-```
-
-This service must not import KingLucky Console packages or implement organization, Feishu, approval, billing, or product UI rules.
+The executable baseline moved to [`../control-plane`](../control-plane/README.md) in P05.
+This tombstone preserves the historical artifact-catalog path only; no Go
+module, command, package, or independently maintained implementation remains
+under `reference/control-plane-lite`.
