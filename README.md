@@ -115,6 +115,8 @@ P03/P04 外部证据的 subject commit 可以是当前 HEAD 或其祖先；只�
 make manifest-digest FILE=examples/manifests/valid/minimal.yaml
 ```
 
+Manifest 必须先通过包内 Schema 闭包和 Extension 载荷校验，才会输出 Digest。Publisher Schema 固定为 AROP 的 Draft 2020-12 可移植子集：`format` 仅支持严格 RFC 3339 `date-time`；`pattern` 仅支持锚定首尾、固定长度的安全 ASCII 子集；`patternProperties` 和 `multipleOf` 禁止使用；Manifest、Publisher Schema 和 Extension data 递归禁止 `__proto__`、`prototype`、`constructor` 对象键。Extension 信封的 `schema_digest` 对 `schema_ref` 指向的完整 Schema 文档按 JSON-compatible YAML/JSON profile 解析，再用 RFC 8785 JCS + SHA-256 生成；v1 Extension Schema 只允许文档内 fragment `$ref`，不允许跨文件依赖。完整示例见 `examples/manifests/valid/complete.yaml` 及其 `schemas/audit-extension.schema`。
+
 当前 Schema `$id` 使用保留域名 `arop.invalid`，仅供预发布阶段稳定本地引用；项目域名确定后会在首个稳定公开版本前一次性迁移。
 
 文档中的标记含义：

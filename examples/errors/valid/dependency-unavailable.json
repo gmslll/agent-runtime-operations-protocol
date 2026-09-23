@@ -1,0 +1,9 @@
+{
+  "code": "DEPENDENCY_UNAVAILABLE",
+  "category": "dependency",
+  "message": "The model service is temporarily unavailable",
+  "retryable": true,
+  "retry_after_seconds": 5,
+  "details": {},
+  "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"
+}

@@ -1,0 +1,12 @@
+protocol: arop/v1
+kind: AgentManifest
+identity: {id: invalid.extension-transitive, version: 1.0.0, name: Invalid transitive extension schema, summary: Extension schema digests bind one self-contained document without cross-file references., owner: {team: protocol-team}}
+skills:
+  - {id: default, name: Test, invoke_modes: [params], input_schema: {type: object}, output_schema: {type: object}}
+execution: {default_timeout_seconds: 30, max_timeout_seconds: 60, effects: {level: none, idempotency: supported, human_confirmation: false}, capabilities: {}}
+required_extensions: [com.example.arop.audit.v1]
+extensions:
+  com.example.arop.audit.v1:
+    schema_ref: ./schemas/extension-transitive.schema
+    schema_digest: sha256:c0dc87677c452fecdaac99b41a7bc4f85c9dbeb878ccaf9b56a87703890716ea
+    data: {}

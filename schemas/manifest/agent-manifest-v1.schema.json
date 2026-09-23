@@ -57,7 +57,7 @@
         "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/extensionId"
       },
       "additionalProperties": {
-        "type": "object"
+        "$ref": "#/$defs/extensionEnvelope"
       }
     }
   },
@@ -147,6 +147,24 @@
         }
       },
       "additionalProperties": true
+    },
+    "extensionEnvelope": {
+      "type": "object",
+      "required": ["schema_ref", "schema_digest", "data"],
+      "properties": {
+        "schema_ref": {
+          "type": "string",
+          "format": "uri-reference",
+          "not": {
+            "pattern": "^(?:file:|/|[A-Za-z]:[\\\\/])"
+          }
+        },
+        "schema_digest": {
+          "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/sha256Digest"
+        },
+        "data": true
+      },
+      "additionalProperties": false
     },
     "skill": {
       "type": "object",

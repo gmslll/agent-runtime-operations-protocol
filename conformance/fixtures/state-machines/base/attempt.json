@@ -1,0 +1,23 @@
+{
+  "machine": "attempt",
+  "states": ["created", "assigned", "accepted", "running", "succeeded", "failed", "cancelled", "expired", "fenced"],
+  "initial": "created",
+  "terminal": ["succeeded", "failed", "cancelled", "expired", "fenced"],
+  "accepted": [
+    ["created", "assigned"],
+    ["assigned", "accepted"],
+    ["accepted", "running"],
+    ["running", "succeeded"],
+    ["running", "failed"],
+    ["running", "cancelled"],
+    ["running", "expired"],
+    ["running", "fenced"]
+  ],
+  "rejected": [
+    ["created", "running"],
+    ["assigned", "succeeded"],
+    ["accepted", "failed"],
+    ["succeeded", "running"],
+    ["fenced", "succeeded"]
+  ]
+}

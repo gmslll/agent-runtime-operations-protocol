@@ -2,10 +2,12 @@ package schema
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile"
 )
@@ -46,11 +48,80 @@ func TestDraft2020AndFormatAssertions(t *testing.T) {
 			t.Fatalf("invalid document accepted: %s", invalid)
 		}
 	}
+
+	for _, unsupported := range []string{
+		`(?=a)a`, `(a)\1`, `\A`, `\z`, `\Qliteral\E`, `[[:alpha:]]`, `^.$`,
+		`\-`, `\!`, `\_`, `\,`, `\:`,
+	} {
+		if _, err := compileECMAScript(unsupported); err == nil {
+			t.Fatalf("non-portable/backtracking pattern %q was accepted", unsupported)
+		}
+	}
+
+	notSchema := `{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","not":{"pattern":"^(a+)+b$|^a+$"}}`
+	if err := os.WriteFile(filepath.Join(root, "schema.json"), []byte(notSchema), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now()
+	if err := ValidateFile(root, "schema.json", strings.Repeat("a", 20_000)); err == nil {
+		t.Fatal("linear regexp engine failed open under not")
+	}
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Fatalf("linear regexp engine exceeded not budget: %s", elapsed)
+	}
+
+	var many strings.Builder
+	many.WriteString(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{`)
+	manyValue := map[string]any{}
+	for index := 0; index < 40; index++ {
+		if index != 0 {
+			many.WriteByte(',')
+		}
+		fmt.Fprintf(&many, `"p%d":{"type":"string","pattern":"^(a+)+$"}`, index)
+		manyValue[fmt.Sprintf("p%d", index)] = strings.Repeat("a", 20_000) + "!"
+	}
+	many.WriteString(`},"additionalProperties":false}`)
+	if err := os.WriteFile(filepath.Join(root, "schema.json"), []byte(many.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	started = time.Now()
+	if err := ValidateFile(root, "schema.json", manyValue); err == nil {
+		t.Fatal("multi-pattern invalid value was accepted")
+	}
+	if elapsed := time.Since(started); elapsed > 2*time.Second {
+		t.Fatalf("schema validation multiplied regexp work: %s", elapsed)
+	}
 }
 
 func TestPlanningAndGateSummarySchemasAreStrict(t *testing.T) {
 	t.Parallel()
 	root := filepath.Clean(filepath.Join("..", "..", ".."))
+	manifestRaw, err := os.ReadFile(filepath.Join(root, "spec", "artifact-manifest.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest, err := structuredfile.Parse(manifestRaw, "yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifestMap, ok := manifest.(map[string]any)
+	if !ok {
+		t.Fatalf("artifact manifest parsed as %T, want map[string]any", manifest)
+	}
+	for _, candidatePath := range []string{".git/config", "..inside/file"} {
+		candidate := cloneMap(t, manifestMap)
+		candidate["artifacts"].([]any)[0].(map[string]any)["path"] = candidatePath
+		if err := ValidateFile(root, "spec/schemas/artifact-manifest.schema.json", candidate); err != nil {
+			t.Fatalf("valid portable artifact path %q rejected: %v", candidatePath, err)
+		}
+	}
+	for _, candidatePath := range []string{"../escape", "foo/../bar", "/abs", "foo//bar", "foo/.", "foo\rbar", "foo\nbar"} {
+		candidate := cloneMap(t, manifestMap)
+		candidate["artifacts"].([]any)[0].(map[string]any)["path"] = candidatePath
+		if err := ValidateFile(root, "spec/schemas/artifact-manifest.schema.json", candidate); err == nil {
+			t.Fatalf("unsafe artifact path %q accepted", candidatePath)
+		}
+	}
 	digest := strings.Repeat("a", 64)
 	results := make([]any, 14)
 	for i := range results {

@@ -17,9 +17,9 @@ skills:
     summary: Generate an image with optional reference assets.
     invoke_modes: [params, chat]
     input_schema:
-      $ref: ./schemas/image-generate-input.schema.json
+      $ref: ./schemas/image-generate-input.schema
     output_schema:
-      $ref: ./schemas/image-generate-output.schema.json
+      $ref: ./schemas/image-generate-output.schema
     required_scopes: [image.generate]
     risk_level: medium
 content:
@@ -74,4 +74,7 @@ presentation:
 required_extensions: [com.example.arop.audit.v1]
 extensions:
   com.example.arop.audit.v1:
-    policy: standard
+    schema_ref: ./schemas/audit-extension.schema
+    schema_digest: sha256:45bf92c2b4781d20cd180f1076ac3e42be7f04044a460668c378bdcce3927fde
+    data:
+      policy: standard

@@ -1,9 +1,6 @@
-import path from "node:path";
-
 import {
-  loadStructuredFile,
-  manifestDigest,
-  repositoryRoot,
+  manifestFileDigest,
+  resolveRepositoryFile,
 } from "./lib/repository.mjs";
 
 const requestedPath = process.argv[2];
@@ -12,6 +9,5 @@ if (!requestedPath) {
   process.exit(2);
 }
 
-const manifestPath = path.resolve(repositoryRoot, requestedPath);
-const manifest = await loadStructuredFile(manifestPath);
-console.log(manifestDigest(manifest));
+const manifestPath = await resolveRepositoryFile(requestedPath);
+console.log(await manifestFileDigest(manifestPath));

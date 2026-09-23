@@ -188,6 +188,12 @@ Skill 的 Input/Output Schema 必须使用且只使用以下一种形式：
 
 禁止绝对路径、`file:`、带 URI authority 的引用、HTTP(S) 远程引用和越界 `..`。Publisher 必须上传完整的不可变发布包；Control Plane 在不访问网络的情况下解析全部引用，限制文件数、总字节和引用深度，验证引用闭包后才允许发布。
 
+v1 的可移植 Schema Profile 固定为 JSON Schema Draft 2020-12。Schema 出现 `$schema` 时，其值必须精确为 `https://json-schema.org/draft/2020-12/schema`；不接受其他 dialect，也不接受属于旧 dialect 的 `$recursiveRef` 和 `$recursiveAnchor`，递归动态引用使用 `$dynamicRef` 和 `$dynamicAnchor`。
+
+Publisher 提交的 Skill Input/Output Schema 和 Extension Schema 使用同一可移植 profile：`format` 仅允许值为 `date-time`，并按大写 `T`/`Z`、有效公历日期与时区偏移的严格 RFC 3339 语义断言；`pattern` 必须为 `^...$` 首尾锚定、最多 512 字节的可见 ASCII 表达式，仅允许安全字面量、非取反 ASCII 字符类和 1–256 的固定 `{n}` 重复，禁止任意长度重复、分组、分支、回溯引用、环视和转义；`patternProperties` 和 `multipleOf` 不在 v1 可移植 profile 中。Manifest、Publisher Schema 和 Extension data 的任意对象层级都递归拒绝 `__proto__`、`prototype`、`constructor` 键。协议自有的内建 Schema 使用仓库固定实现和契约测试的校验器。
+
+包内 `$ref`、`$id` 和 Extension `schema_ref` 的路径使用可移植 ASCII 子集：每个路径段必须匹配 `[A-Za-z0-9._~-]+`，用 `/` 分隔，只允许可选的前导 `./`，并必须与磁盘上的实际大小写精确一致。禁止 `%` 编码、Unicode、空白/控制字符、反斜杠和 `{}`、`[]`、`|`、`^`、反引号等非 portable 标点。URI fragment 不按文件路径处理，但只允许 portable anchor 或 RFC 6901 JSON Pointer。
+
 # 6. 内容模型
 
 ## 6.1 ContentPart
@@ -506,6 +512,8 @@ Manifest、Capability、ContentPart 和 Event 可以通过命名空间扩展。�
 扩展不得改变核心字段语义。依赖某扩展才能安全执行的 Agent 必须在注册时声明 `required_extensions`，不支持的实例不得进入发现视图。
 
 `required_extensions` 必须是 `extensions` 键的子集。每个 Extension 载荷必须使用包含 `schema_ref`、`schema_digest` 和 `data` 的统一信封；`schema_ref` 只能指向 AgentVersion 发布包内容。扩展载荷必须先校验，其绑定和载荷一起进入 Manifest Digest。
+
+v1 中，Extension Schema 必须是单文档自包含闭包：可以使用同一文档内的 fragment `$ref`，不得继续引用其他包内 Schema 文件。这个限制使一个 `schema_digest` 能完整绑定校验语义，避免只修改间接依赖却不改变 Digest。`schema_digest` 的算法为：用 Manifest 相同的 JSON-compatible YAML/JSON profile 解析 `schema_ref` 指向的完整文件，对语义值执行 RFC 8785 JCS 规范化，再计算 SHA-256，格式为 `sha256:<lowercase-hex>`。`schema_ref` 即使携带 fragment，Digest 也始终覆盖整份 Schema 文档，不只覆盖 fragment。
 
 Core Manifest 可以省略 Governance。但当 Manifest 声明 Enterprise Governance Extension，或发布到受治理 Control Plane 时，必须提供完整 Governance 字段或由发布 API 绑定等价的签名治理元数据。
 

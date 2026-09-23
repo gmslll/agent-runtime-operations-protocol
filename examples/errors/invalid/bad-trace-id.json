@@ -1,0 +1,7 @@
+{
+  "code": "INTERNAL_ERROR",
+  "category": "internal",
+  "message": "bad trace identifier",
+  "retryable": false,
+  "trace_id": "0000"
+}

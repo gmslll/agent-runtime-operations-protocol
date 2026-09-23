@@ -1,0 +1,6 @@
+{
+  "code": "dependency_unavailable",
+  "category": "dependency",
+  "message": "invalid lowercase code",
+  "retryable": true
+}

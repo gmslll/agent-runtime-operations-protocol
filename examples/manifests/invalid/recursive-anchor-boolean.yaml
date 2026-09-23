@@ -1,0 +1,19 @@
+protocol: arop/v1
+kind: AgentManifest
+identity:
+  id: invalid.recursive-anchor-boolean
+  version: 1.0.0
+  name: Invalid recursive anchor boolean
+  summary: Draft 2020-12 rejects the legacy recursive anchor keyword in every shape.
+  owner: {team: protocol-team}
+skills:
+  - id: default
+    name: Test
+    invoke_modes: [params]
+    input_schema: {$ref: ./schemas/recursive-anchor-boolean.schema}
+    output_schema: {type: object}
+execution:
+  default_timeout_seconds: 30
+  max_timeout_seconds: 60
+  effects: {level: none, idempotency: supported, human_confirmation: false}
+  capabilities: {}

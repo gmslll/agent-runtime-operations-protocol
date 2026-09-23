@@ -1,0 +1,5 @@
+{
+  "code": "DEPENDENCY_UNAVAILABLE",
+  "category": "dependency",
+  "message": "required retryable is absent"
+}

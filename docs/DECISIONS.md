@@ -51,8 +51,8 @@ updated: 2026-09-23
 | D-041 | 后端语言 | Reference Control Plane、Registry、Dispatcher、Run/Event Ledger 和服务端 Conformance Harness 使用 Go 实现；Python 主要用于 Agent Provider SDK，TypeScript 主要用于 Web/BFF Consumer |
 | D-042 | 权威来源链 | Decision 约束语义；领域规范和状态机 Fixture 是行为权威；JSON Schema 是结构权威；OpenAPI/AsyncAPI 只绑定传输；生成物均非权威 |
 | D-043 | 未知字段兼容 | 发布和作者校验对其声明版本严格拒绝未知字段；同一主版本的兼容消费者必须保留或忽略未知可选字段，安全相关未知语义不得默认放行 |
-| D-044 | Schema 封装与引用 | AgentVersion 发布包的 Schema 只能内联或使用包内相对引用；服务端不得为校验 Publisher 提交的 Schema 访问网络；必须校验引用闭包和 Digest |
-| D-045 | Extension 绑定 | `required_extensions` 必须是 `extensions` 键的子集；每个扩展载荷必须绑定包内 Schema 及 Digest，Manifest Digest 覆盖该绑定与载荷 |
+| D-044 | Schema 封装与引用 | AgentVersion 发布包的 Schema 只能内联或使用包内相对引用；服务端不得为校验 Publisher 提交的 Schema 访问网络；必须校验引用闭包和 Digest。v1 Schema 固定 JSON Schema Draft 2020-12；出现 `$schema` 时必须精确等于 `https://json-schema.org/draft/2020-12/schema`，禁止 legacy `$recursiveRef`/`$recursiveAnchor`，使用 `$dynamicRef`/`$dynamicAnchor`。Publisher Schema 的 `format` 仅支持共同实现的严格 RFC 3339 `date-time`；`pattern` 仅支持 `^...$` 锚定、最多 512 字节、固定长度的安全 ASCII 子集；`patternProperties` 与 `multipleOf` 禁止使用。Manifest、Publisher Schema 与 Extension data 任意对象层级拒绝 `__proto__`/`prototype`/`constructor` 键。包内 `$ref`/`$id`/Extension `schema_ref` 的路径段只允许 `[A-Za-z0-9._~-]+`、以 `/` 分隔并按磁盘实际大小写精确匹配，仅允许可选前导 `./`；禁止百分号编码、Unicode/空白/控制字符和其他非 portable 标点，fragment 只能使用 portable anchor 或 JSON Pointer |
+| D-045 | Extension 绑定 | `required_extensions` 必须是 `extensions` 键的子集；每个扩展载荷必须绑定包内 Schema 及 Digest，Manifest Digest 覆盖该绑定与载荷。v1 扩展 Schema 必须是单文档自包含闭包，只能使用文档内 fragment `$ref`，不得再引用其他包内文件；`schema_digest` 对 `schema_ref` 指向文件的完整语义文档按 JSON-compatible YAML/JSON profile 解析、RFC 8785 JCS 规范化后计算 SHA-256，即使 `schema_ref` 带 fragment 也始终摘要整份 Schema |
 | D-046 | Governance 分层 | Core Manifest 允许省略 Governance；声明 Governance Extension 或发布到受治理 Control Plane 时必须提供完整治理元数据 |
 | D-047 | ContentPart 扩展 | Core ContentPart 保持闭合；非核心内容统一使用 `type=extension` 包装并携带 `extension_id`、Schema Digest 和 `data`，不直接新增未协商的 `type` |
 | D-048 | Trace Context 校验 | `traceparent` 除结构匹配外必须遵循 W3C 语义：禁止 `ff` 版本、全零 Trace/Parent ID，v00 禁止多余字段 |

@@ -156,7 +156,7 @@ func Run(root string) ([]report.Check, map[string]any, []string) {
 	checks := []report.Check{}
 	errors := []string{}
 	record := func(name string, ok bool, detail string) {
-		checks = append(checks, report.Check{name, ok, detail})
+		checks = append(checks, report.Check{Name: name, Passed: ok, Detail: detail})
 		if !ok {
 			errors = append(errors, name+": "+detail)
 		}
@@ -490,7 +490,7 @@ func makeCommands(v string) []string {
 func parityChecks(root, plan, layout, blueprint, architecture, decisions, makefile, readme, agents, sdk, publicAdoption string, phases []Phase, byPhase map[string]Phase, ownerPhase map[string]string, dependencies map[string][]string, artifacts []Artifact, byID map[string]Artifact, planOwner map[string]string, planBaseline map[string]Baseline, acceptance map[string][]string, reports map[string]Artifact, requirements Requirements) []report.Check {
 	checks := []report.Check{}
 	add := func(name string, passed bool, detail string) {
-		checks = append(checks, report.Check{name, passed, detail})
+		checks = append(checks, report.Check{Name: name, Passed: passed, Detail: detail})
 	}
 
 	add("review-candidate-status", strings.Contains(layout, "status: review-candidate") && strings.Contains(blueprint, "status: review-candidate") && strings.Contains(blueprint, "P04 用户 Gate 前") && strings.Contains(readme, "不表示规划已冻结"), "layout and blueprint remain review candidates before P04")
@@ -673,7 +673,7 @@ func parityChecks(root, plan, layout, blueprint, architecture, decisions, makefi
 func releaseParity(plan, blueprint, decisions, publicAdoption string, phases []Phase, byPhase map[string]Phase, ownerPhase map[string]string, dependencies map[string][]string, byID map[string]Artifact) []report.Check {
 	checks := []report.Check{}
 	add := func(name string, passed bool, detail string) {
-		checks = append(checks, report.Check{name, passed, detail})
+		checks = append(checks, report.Check{Name: name, Passed: passed, Detail: detail})
 	}
 	sequence := []struct{ owner, phase, kind string }{{"release-supply-chain", "P39", "implement"}, {"release-evidence-tooling", "P40", "implement"}, {"release-lineage-tooling", "P41", "implement"}, {"release-finalization-tooling", "P42", "implement"}, {"release-dry-run-verification", "P43", "verify · spec"}, {"release-readiness-review", "P44", "verify · review"}, {"public-governance", "P45", "gate"}, {"public-artifact-generation", "P46", "deliver"}, {"rc-source-freeze", "P47", "deliver"}, {"public-release-verification", "P48", "verify · review"}, {"v1-rc-delivery", "P49", "deliver"}, {"external-conformance-review", "P50", "gate"}, {"v1-freeze-overlay-review", "P51", "verify · review"}, {"v1-release-approval", "P52", "gate"}, {"v1-delivery", "P53", "deliver"}}
 	problems := []string{}

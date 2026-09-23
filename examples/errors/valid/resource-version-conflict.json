@@ -1,0 +1,6 @@
+{
+  "code": "RESOURCE_VERSION_CONFLICT",
+  "category": "conflict",
+  "message": "The resource version no longer matches",
+  "retryable": true
+}

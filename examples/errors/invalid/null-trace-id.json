@@ -1,0 +1,7 @@
+{
+  "code": "DEPENDENCY_UNAVAILABLE",
+  "category": "dependency",
+  "message": "trace id must not be null",
+  "retryable": true,
+  "trace_id": null
+}

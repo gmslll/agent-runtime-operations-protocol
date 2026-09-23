@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -178,7 +179,7 @@ func Current(root, scope string) (Manifest, error) {
 		if fileErr := validateWorktreeFile(root, path, meta[0]); fileErr != nil {
 			return Manifest{}, fileErr
 		}
-		data, readErr := rootedWorktree.ReadFile(filepath.FromSlash(path))
+		data, readErr := fs.ReadFile(rootedWorktree.FS(), filepath.FromSlash(path))
 		if readErr != nil {
 			return Manifest{}, fmt.Errorf("read controlled input %s: %w", path, readErr)
 		}

@@ -1,0 +1,6 @@
+protocol: arop/v1
+kind: AgentManifest
+identity: {id: invalid.schema-ref-brace, version: 1.0.0, name: Invalid brace reference, summary: Package schema path components use the portable path grammar., owner: {team: protocol-team}}
+skills:
+  - {id: default, name: Test, invoke_modes: [params], input_schema: {$ref: ./schemas/wrapper-brace.schema}, output_schema: {type: object}}
+execution: {default_timeout_seconds: 30, max_timeout_seconds: 60, effects: {level: none, idempotency: supported, human_confirmation: false}, capabilities: {}}

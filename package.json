@@ -8,8 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "validate": "node --permission --allow-fs-read=. --disable-proto=throw --no-addons scripts/validate.mjs",
-    "manifest:digest": "node --permission --allow-fs-read=. --disable-proto=throw --no-addons scripts/manifest-digest.mjs"
+    "validate": "node --permission --allow-fs-read=. --disable-proto=throw --no-addons scripts/validate.mjs"
   },
   "devDependencies": {
     "ajv": "8.20.0",

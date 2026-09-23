@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"regexp"
+	"strings"
 
-	"github.com/dlclark/regexp2"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile"
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -42,19 +43,67 @@ func ValidateFile(root, schemaPath string, value any) error {
 	return nil
 }
 
-type ecmaRegexp regexp2.Regexp
-
-func (r *ecmaRegexp) MatchString(value string) bool {
-	matched, err := (*regexp2.Regexp)(r).MatchString(value)
-	return err == nil && matched
-}
-func (r *ecmaRegexp) String() string { return (*regexp2.Regexp)(r).String() }
 func compileECMAScript(value string) (jsonschema.Regexp, error) {
-	compiled, err := regexp2.Compile(value, regexp2.ECMAScript)
+	translated, err := translateNonCapturingGroups(value)
 	if err != nil {
 		return nil, err
 	}
-	return (*ecmaRegexp)(compiled), nil
+	compiled, err := regexp.Compile(translated)
+	if err != nil {
+		return nil, fmt.Errorf("pattern is outside the AROP linear-time regexp profile: %w", err)
+	}
+	return compiled, nil
+}
+
+func translateNonCapturingGroups(value string) (string, error) {
+	var result strings.Builder
+	result.Grow(len(value))
+	inClass := false
+	escaped := false
+	for index := 0; index < len(value); index++ {
+		character := value[index]
+		if escaped {
+			if !strings.ContainsRune(`.\\+*nr`, rune(character)) {
+				return "", fmt.Errorf("pattern escape \\%c is outside the AROP linear-time regexp profile", character)
+			}
+			result.WriteByte(character)
+			escaped = false
+			continue
+		}
+		if character == '\\' {
+			result.WriteByte(character)
+			escaped = true
+			continue
+		}
+		if inClass {
+			if character == '[' && index+1 < len(value) && value[index+1] == ':' {
+				return "", fmt.Errorf("POSIX character classes are outside the AROP linear-time regexp profile")
+			}
+			result.WriteByte(character)
+			if character == ']' {
+				inClass = false
+			}
+			continue
+		}
+		if character == '[' {
+			inClass = true
+			result.WriteByte(character)
+			continue
+		}
+		if character == '.' {
+			return "", fmt.Errorf("unescaped dot is outside the AROP linear-time regexp profile")
+		}
+		if character == '(' && index+1 < len(value) && value[index+1] == '?' {
+			if index+2 < len(value) && value[index+2] == ':' {
+				result.WriteByte('(')
+				index += 2
+				continue
+			}
+			return "", fmt.Errorf("pattern construct beginning at byte %d is outside the AROP linear-time regexp profile", index)
+		}
+		result.WriteByte(character)
+	}
+	return result.String(), nil
 }
 
 // ValidatePath applies the strict document parser before schema validation.

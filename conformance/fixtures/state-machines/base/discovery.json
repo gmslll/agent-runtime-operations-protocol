@@ -1,0 +1,13 @@
+{
+  "cases": [
+    {"name": "all-eligible", "lease_alive": true, "healthy": true, "ready": true, "enabled": true, "draining": false, "capacity_available": true, "protocol_compatible": true, "binding_matches": true, "discoverable": true},
+    {"name": "lease-dead", "lease_alive": false, "healthy": true, "ready": true, "enabled": true, "draining": false, "capacity_available": true, "protocol_compatible": true, "binding_matches": true, "discoverable": false},
+    {"name": "unhealthy", "lease_alive": true, "healthy": false, "ready": true, "enabled": true, "draining": false, "capacity_available": true, "protocol_compatible": true, "binding_matches": true, "discoverable": false},
+    {"name": "not-ready", "lease_alive": true, "healthy": true, "ready": false, "enabled": true, "draining": false, "capacity_available": true, "protocol_compatible": true, "binding_matches": true, "discoverable": false},
+    {"name": "disabled", "lease_alive": true, "healthy": true, "ready": true, "enabled": false, "draining": false, "capacity_available": true, "protocol_compatible": true, "binding_matches": true, "discoverable": false},
+    {"name": "draining", "lease_alive": true, "healthy": true, "ready": true, "enabled": true, "draining": true, "capacity_available": true, "protocol_compatible": true, "binding_matches": true, "discoverable": false},
+    {"name": "no-capacity", "lease_alive": true, "healthy": true, "ready": true, "enabled": true, "draining": false, "capacity_available": false, "protocol_compatible": true, "binding_matches": true, "discoverable": false},
+    {"name": "protocol-incompatible", "lease_alive": true, "healthy": true, "ready": true, "enabled": true, "draining": false, "capacity_available": true, "protocol_compatible": false, "binding_matches": true, "discoverable": false},
+    {"name": "binding-mismatch", "lease_alive": true, "healthy": true, "ready": true, "enabled": true, "draining": false, "capacity_available": true, "protocol_compatible": true, "binding_matches": false, "discoverable": false}
+  ]
+}

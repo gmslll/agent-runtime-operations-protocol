@@ -1,0 +1,39 @@
+{
+  "validators": [
+    {
+      "kind": "slug",
+      "accepted": ["image.generate", "default", "runtime-service_1"],
+      "rejected": ["", "Image.Generate", "bad space", "a..b", "-leading"]
+    },
+    {
+      "kind": "uuid_v7",
+      "accepted": ["01956e7b-9abc-7def-8abc-0123456789ab"],
+      "rejected": ["01956e7b-9abc-6def-8abc-0123456789ab", "01956E7B-9ABC-7DEF-8ABC-0123456789AB", "not-a-uuid"]
+    },
+    {
+      "kind": "effect_id",
+      "accepted": ["eff_order:1234", "eff_A.b-c_123"],
+      "rejected": ["eff_x", "effect_order:1234", "eff_bad/value"]
+    },
+    {
+      "kind": "semantic_version",
+      "accepted": ["0.0.0", "1.0.0", "1.2.3-rc.1+build-5"],
+      "rejected": ["v1.0.0", "01.0.0", "1.0", "1.0.0+", "1.0.0-01"]
+    },
+    {
+      "kind": "sha256_digest",
+      "accepted": ["sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"],
+      "rejected": ["0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "sha256:ABCDEF", "sha512:0123"]
+    },
+    {
+      "kind": "capability_id",
+      "accepted": ["streaming.resume.v1", "delivery.worker-pull.v2"],
+      "rejected": ["streaming.v0", "Streaming.resume.v1", "streaming_resume.v1", "streaming.resume"]
+    },
+    {
+      "kind": "extension_id",
+      "accepted": ["com.example.governance.v1", "io.acme.agent-tools.v2"],
+      "rejected": ["example.governance.v1", "com.Example.governance.v1", "com.example.governance.v0", "com.example.v1"]
+    }
+  ]
+}

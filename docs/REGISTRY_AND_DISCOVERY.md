@@ -288,6 +288,7 @@ POST /v1/registry/instances/{instance_id}/drain
 - 新 Discovery View 不再返回该实例。
 - 已分配 Attempt 可以继续执行到 Deadline。
 - 到达 Deadline 后按策略取消或标记失联。
+- 实例重启或重新注册只能轮换 `session_id` 并递增 `generation`，不得隐式清除 Draining；必须经过明确的运维恢复或注销后重新注册才可回到可路由状态。
 
 ## 10.2 Deregister
 

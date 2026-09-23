@@ -1,0 +1,7 @@
+protocol: arop/v1
+kind: AgentManifest
+identity: {id: invalid.required-extension, version: 1.0.0, name: Missing extension payload, summary: Every required extension must have a digest-bound payload envelope., owner: {team: protocol-team}}
+skills:
+  - {id: default, name: Test, invoke_modes: [params], input_schema: {type: object}, output_schema: {type: object}}
+execution: {default_timeout_seconds: 30, max_timeout_seconds: 60, effects: {level: none, idempotency: supported, human_confirmation: false}, capabilities: {}}
+required_extensions: [com.example.arop.audit.v1]

@@ -1,0 +1,11 @@
+protocol: arop/v1
+kind: AgentManifest
+identity: {id: invalid.extension-multiple-of, version: 1.0.0, name: Unsupported multipleOf, summary: Publisher schemas exclude binary floating-point multipleOf semantics., owner: {team: protocol-team}}
+skills:
+  - {id: default, name: Test, invoke_modes: [params], input_schema: {type: object}, output_schema: {type: object}}
+execution: {default_timeout_seconds: 30, max_timeout_seconds: 60, effects: {level: none, idempotency: supported, human_confirmation: false}, capabilities: {}}
+extensions:
+  com.example.arop.audit.v1:
+    schema_ref: ./schemas/extension-multiple-of.schema
+    schema_digest: sha256:e42127690b92ea081af0f4b50ba92ea01ae366dfa20801a498b204747be7dae7
+    data: {value: 0.3}

@@ -1,0 +1,7 @@
+{
+  "code": "DEPENDENCY_UNAVAILABLE",
+  "category": "dependency",
+  "message": "retry after one second",
+  "retryable": true,
+  "retry_after_seconds": 1e0
+}

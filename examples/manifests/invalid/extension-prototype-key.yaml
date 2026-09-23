@@ -1,0 +1,11 @@
+protocol: arop/v1
+kind: AgentManifest
+identity: {id: invalid.extension-prototype, version: 1.0.0, name: Dangerous prototype key, summary: Manifest and extension objects reject prototype-affecting property names recursively., owner: {team: protocol-team}}
+skills:
+  - {id: default, name: Test, invoke_modes: [params], input_schema: {type: object}, output_schema: {type: object}}
+execution: {default_timeout_seconds: 30, max_timeout_seconds: 60, effects: {level: none, idempotency: supported, human_confirmation: false}, capabilities: {}}
+extensions:
+  com.example.arop.audit.v1:
+    schema_ref: ./schemas/extension-prototype.schema
+    schema_digest: sha256:c332659e3d577e35a94146e4f69c1d80e3875ed34375df92a170f929a5051bc9
+    data: {__proto__: owned, constructor: owned}

@@ -1,0 +1,42 @@
+{
+  "resource_ids": {
+    "accepted": [
+      ["session", "ses_01956e7b-9abc-7def-8abc-0123456789ab"],
+      ["deployment", "dep_01956e7b-9abc-7def-8abc-0123456789ab"],
+      ["lease", "lease_01956e7b-9abc-7def-8abc-0123456789ab"],
+      ["attempt", "att_01956e7b-9abc-7def-8abc-0123456789ab"],
+      ["run", "run_01956e7b-9abc-7def-8abc-0123456789ab"],
+      ["event", "evt_01956e7b-9abc-7def-8abc-0123456789ab"],
+      ["asset", "asset_01956e7b-9abc-7def-8abc-0123456789ab"],
+      ["conversation", "conv_01956e7b-9abc-7def-8abc-0123456789ab"]
+    ],
+    "rejected": [
+      ["session", "boot_01956e7b-9abc-7def-8abc-0123456789ab"],
+      ["deployment", "deployment_01956e7b-9abc-7def-8abc-0123456789ab"],
+      ["lease", "lease_01956e7b-9abc-6def-8abc-0123456789ab"],
+      ["attempt", "attempt_01956e7b-9abc-7def-8abc-0123456789ab"],
+      ["run", "run_01956e7b-9abc-6def-8abc-0123456789ab"],
+      ["event", "event_01956e7b-9abc-7def-8abc-0123456789ab"],
+      ["asset", "asset_01956e7b-9abc-7def-0abc-0123456789ab"],
+      ["conversation", "conversation_01956e7b-9abc-7def-8abc-0123456789ab"]
+    ]
+  },
+  "traceparent": {
+    "accepted": [
+      "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      "01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-00-ab",
+      "01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-a"
+    ],
+    "rejected": [
+      "ff-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      "00-00000000000000000000000000000000-00f067aa0ba902b7-01",
+      "00-4bf92f3577b34da6a3ce929d0e0e4736-0000000000000000-01",
+      "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-extra",
+      "01-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01-"
+    ]
+  },
+  "tracestate": {
+    "accepted": ["", "vendor=value", "vendor=value,other=opaque", "供应商=值", "vendor=value\nother=value"],
+    "rejected": ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+  }
+}

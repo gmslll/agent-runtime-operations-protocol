@@ -1,0 +1,12 @@
+{
+  "accepted": [
+    {"initial": "", "steps": [{"offset": 0, "delta": "hello"}], "result": "hello", "bytes": 5},
+    {"initial": "", "steps": [{"offset": 0, "delta": "商品"}, {"offset": 6, "delta": "😀"}, {"offset": 10, "delta": "é"}], "result": "商品😀é", "bytes": 13},
+    {"initial": "前缀", "steps": [{"offset": 6, "delta": "ok"}, {"offset": 6, "delta": "ok"}], "result": "前缀ok", "bytes": 8}
+  ],
+  "rejected": [
+    {"initial": "商品", "offset": 1, "delta": "x", "reason": "middle of UTF-8 code point"},
+    {"initial": "商品", "offset": 3, "delta": "x", "reason": "not append position"},
+    {"initial": "ok", "steps": [{"offset": 2, "delta": "a"}, {"offset": 2, "delta": "b"}], "reason": "conflicting retransmission"}
+  ]
+}

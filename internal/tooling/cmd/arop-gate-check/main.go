@@ -18,7 +18,9 @@ func main() {
 	root, err := structuredfile.FindRoot(".")
 	fatal(err)
 	checks := []report.Check{}
-	record := func(n string, ok bool, d string) { checks = append(checks, report.Check{n, ok, d}) }
+	record := func(n string, ok bool, d string) {
+		checks = append(checks, report.Check{Name: n, Passed: ok, Detail: d})
+	}
 	record("supported-gate", os.Getenv("GATE") == "P04", "only P04 is supported")
 	arg := os.Getenv("EVIDENCE")
 	if arg == "" && len(os.Args) > 1 {

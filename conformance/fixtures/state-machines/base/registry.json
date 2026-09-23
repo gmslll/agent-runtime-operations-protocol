@@ -1,0 +1,184 @@
+{
+  "machine": "registry",
+  "states": ["unregistered", "registered", "draining", "expired", "deregistered"],
+  "initial": "unregistered",
+  "terminal": [],
+  "accepted": [
+    ["unregistered", "registered"],
+    ["registered", "draining"],
+    ["registered", "expired"],
+    ["registered", "deregistered"],
+    ["draining", "expired"],
+    ["draining", "deregistered"],
+    ["expired", "registered"],
+    ["deregistered", "registered"]
+  ],
+  "rejected": [
+    ["unregistered", "draining"],
+    ["draining", "registered"],
+    ["expired", "draining"],
+    ["deregistered", "draining"]
+  ],
+  "cases": [
+    {
+      "name": "initial-register",
+      "before": {"state": "unregistered", "session_id": "", "generation": 0},
+      "action": "register",
+      "session_id": "ses_01956e7b-9abc-7def-8abc-0123456789ab",
+      "generation": 0,
+      "expect": {"state": "registered", "session_id": "ses_01956e7b-9abc-7def-8abc-0123456789ab", "generation": 1, "error": ""}
+    },
+    {
+      "name": "new-session-fences-old-generation",
+      "before": {"state": "registered", "session_id": "ses_01956e7b-9abc-7def-8abc-0123456789ab", "generation": 1},
+      "action": "register",
+      "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab",
+      "generation": 0,
+      "expect": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": ""}
+    },
+    {
+      "name": "current-keepalive",
+      "before": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "keepalive",
+      "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab",
+      "generation": 2,
+      "expect": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": ""}
+    },
+    {
+      "name": "current-drain",
+      "before": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "drain",
+      "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab",
+      "generation": 2,
+      "expect": {"state": "draining", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": ""}
+    },
+    {
+      "name": "current-expire",
+      "before": {"state": "draining", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "expire",
+      "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab",
+      "generation": 2,
+      "expect": {"state": "expired", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": ""}
+    },
+    {
+      "name": "draining-instance-reregisters-and-remains-draining",
+      "before": {"state": "draining", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "register",
+      "session_id": "ses_01956e7d-9abc-7def-8abc-0123456789ab",
+      "generation": 0,
+      "expect": {"state": "draining", "session_id": "ses_01956e7d-9abc-7def-8abc-0123456789ab", "generation": 3, "error": ""}
+    },
+    {
+      "name": "expired-lease-cannot-revive",
+      "before": {"state": "expired", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "keepalive",
+      "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab",
+      "generation": 2,
+      "expect": {"state": "expired", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": "LEASE_EXPIRED"}
+    },
+    {
+      "name": "expired-instance-reregisters-with-new-session",
+      "before": {"state": "expired", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "register",
+      "session_id": "ses_01956e7d-9abc-7def-8abc-0123456789ab",
+      "generation": 0,
+      "expect": {"state": "registered", "session_id": "ses_01956e7d-9abc-7def-8abc-0123456789ab", "generation": 3, "error": ""}
+    },
+    {
+      "name": "current-deregister",
+      "before": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "deregister",
+      "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab",
+      "generation": 2,
+      "expect": {"state": "deregistered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": ""}
+    },
+    {
+      "name": "old-session-keepalive-fenced",
+      "before": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "keepalive",
+      "session_id": "ses_01956e7b-9abc-7def-8abc-0123456789ab",
+      "generation": 2,
+      "expect": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": "INSTANCE_GENERATION_FENCED"}
+    },
+    {
+      "name": "old-session-drain-fenced",
+      "before": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "drain",
+      "session_id": "ses_01956e7b-9abc-7def-8abc-0123456789ab",
+      "generation": 2,
+      "expect": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": "INSTANCE_GENERATION_FENCED"}
+    },
+    {
+      "name": "old-session-deregister-fenced",
+      "before": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "deregister",
+      "session_id": "ses_01956e7b-9abc-7def-8abc-0123456789ab",
+      "generation": 2,
+      "expect": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": "INSTANCE_GENERATION_FENCED"}
+    },
+    {
+      "name": "old-generation-keepalive-fenced",
+      "before": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "keepalive",
+      "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab",
+      "generation": 1,
+      "expect": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": "INSTANCE_GENERATION_FENCED"}
+    },
+    {
+      "name": "old-generation-drain-fenced",
+      "before": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "drain",
+      "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab",
+      "generation": 1,
+      "expect": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": "INSTANCE_GENERATION_FENCED"}
+    },
+    {
+      "name": "old-generation-deregister-fenced",
+      "before": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "deregister",
+      "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab",
+      "generation": 1,
+      "expect": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": "INSTANCE_GENERATION_FENCED"}
+    },
+    {
+      "name": "old-session-expire-fenced",
+      "before": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "expire",
+      "session_id": "ses_01956e7b-9abc-7def-8abc-0123456789ab",
+      "generation": 2,
+      "expect": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": "INSTANCE_GENERATION_FENCED"}
+    },
+    {
+      "name": "old-generation-expire-fenced",
+      "before": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "expire",
+      "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab",
+      "generation": 1,
+      "expect": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": "INSTANCE_GENERATION_FENCED"}
+    },
+    {
+      "name": "same-session-register-rejected",
+      "before": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "register",
+      "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab",
+      "generation": 0,
+      "expect": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2, "error": "REGISTRY_SESSION_REUSED"}
+    },
+    {
+      "name": "generation-overflow-rejected",
+      "before": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 18446744073709551615},
+      "action": "register",
+      "session_id": "ses_01956e7d-9abc-7def-8abc-0123456789ab",
+      "generation": 0,
+      "expect": {"state": "registered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 18446744073709551615, "error": "REGISTRY_GENERATION_OVERFLOW"}
+    },
+    {
+      "name": "deregistered-instance-reregisters",
+      "before": {"state": "deregistered", "session_id": "ses_01956e7c-9abc-7def-8abc-0123456789ab", "generation": 2},
+      "action": "register",
+      "session_id": "ses_01956e7d-9abc-7def-8abc-0123456789ab",
+      "generation": 0,
+      "expect": {"state": "registered", "session_id": "ses_01956e7d-9abc-7def-8abc-0123456789ab", "generation": 3, "error": ""}
+    }
+  ]
+}

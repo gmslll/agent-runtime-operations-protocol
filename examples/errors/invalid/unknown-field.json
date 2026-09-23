@@ -1,0 +1,7 @@
+{
+  "code": "DEPENDENCY_UNAVAILABLE",
+  "category": "dependency",
+  "message": "unknown authoring field",
+  "retryable": true,
+  "internal_stack": "must not cross the wire"
+}

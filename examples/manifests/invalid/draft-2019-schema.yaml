@@ -1,0 +1,6 @@
+protocol: arop/v1
+kind: AgentManifest
+identity: {id: invalid.draft-2019, version: 1.0.0, name: Invalid draft, summary: Package schemas are fixed to the JSON Schema 2020-12 dialect., owner: {team: protocol-team}}
+skills:
+  - {id: default, name: Test, invoke_modes: [params], input_schema: {$ref: ./schemas/draft-2019.schema}, output_schema: {type: object}}
+execution: {default_timeout_seconds: 30, max_timeout_seconds: 60, effects: {level: none, idempotency: supported, human_confirmation: false}, capabilities: {}}

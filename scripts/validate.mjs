@@ -6,8 +6,7 @@ import addFormats from "ajv-formats";
 
 import {
   loadStructuredFile,
-  manifestDigest,
-  manifestSemanticErrors,
+  manifestFileDigest,
   repositoryRoot,
   walkFiles,
 } from "./lib/repository.mjs";
@@ -53,10 +52,8 @@ for (const schemaFile of schemaFiles) {
   }
 }
 
-let validateManifest;
 try {
-  validateManifest = ajv.getSchema(manifestSchemaId);
-  if (!validateManifest) {
+  if (!ajv.getSchema(manifestSchemaId)) {
     throw new Error(`schema not registered: ${manifestSchemaId}`);
   }
 } catch (error) {
@@ -65,23 +62,14 @@ try {
 
 async function validateManifestFixture(filePath, expectedValid) {
   try {
-    const manifest = await loadStructuredFile(filePath);
-    const schemaValid = validateManifest ? validateManifest(manifest) : false;
-    const semanticErrors = schemaValid ? manifestSemanticErrors(manifest) : [];
-    const actualValid = schemaValid && semanticErrors.length === 0;
-
-    if (expectedValid && !actualValid) {
-      const detail = schemaValid
-        ? semanticErrors.join("; ")
-        : formatAjvErrors(validateManifest?.errors);
-      errors.push(`${relative(filePath)} should be valid: ${detail}`);
-    }
-
-    if (!expectedValid && actualValid) {
+    await manifestFileDigest(filePath);
+    if (!expectedValid) {
       errors.push(`${relative(filePath)} should be rejected but passed all checks`);
     }
   } catch (error) {
-    errors.push(`${relative(filePath)} cannot be loaded: ${error.message}`);
+    if (expectedValid) {
+      errors.push(`${relative(filePath)} should be valid: ${error.message}`);
+    }
   }
 }
 
@@ -110,8 +98,9 @@ try {
   const digestFile = path.join(repositoryRoot, "examples/manifests/digests.json");
   const expectedDigests = JSON.parse(await readFile(digestFile, "utf8"));
   for (const [manifestPath, expectedDigest] of Object.entries(expectedDigests)) {
-    const manifest = await loadStructuredFile(path.join(repositoryRoot, manifestPath));
-    const actualDigest = manifestDigest(manifest);
+    const actualDigest = await manifestFileDigest(
+      path.join(repositoryRoot, manifestPath),
+    );
     if (actualDigest !== expectedDigest) {
       errors.push(
         `${manifestPath} digest mismatch: expected ${expectedDigest}, got ${actualDigest}`,

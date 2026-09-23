@@ -1,0 +1,25 @@
+{
+  "protocol": "arop/v1",
+  "kind": "AgentManifest",
+  "identity": {
+    "id": "invalid.unknown-field",
+    "version": "1.0.0",
+    "name": "Invalid unknown field",
+    "summary": "A strict JSON fixture with an unknown top-level member.",
+    "owner": {"team": "protocol-team"}
+  },
+  "skills": [{
+    "id": "default",
+    "name": "Test",
+    "invoke_modes": ["params"],
+    "input_schema": {"type": "object"},
+    "output_schema": {"type": "object"}
+  }],
+  "execution": {
+    "default_timeout_seconds": 30,
+    "max_timeout_seconds": 60,
+    "effects": {"level": "none", "idempotency": "supported", "human_confirmation": false},
+    "capabilities": {}
+  },
+  "unknown_field": true
+}
