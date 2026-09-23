@@ -1,0 +1,305 @@
+{
+  "attested_at": "2026-09-23T00:50:58Z",
+  "authentication": {
+    "confirmation_sha256": "sha256:395029517b26da22c73494b423cad707515b92b006facd3a4c988442e52c2a8b",
+    "limitation": "manual identity and independence verification is not cryptographically replayable",
+    "mode": "manual-trusted-channel"
+  },
+  "kind": "arop-planning-audit-summary",
+  "raw_evidence_sha256": "sha256:a57f81e407e8ba54135b1e8291bc96a76ef210eff89dbd6713c0d675a95bdff6",
+  "result": {
+    "must_fix": [],
+    "must_fix_count": 0,
+    "phases": [
+      {
+        "id": "P01",
+        "result": "PASS"
+      },
+      {
+        "id": "P02",
+        "result": "PASS"
+      },
+      {
+        "id": "P03",
+        "result": "PASS"
+      },
+      {
+        "id": "P04",
+        "result": "PASS"
+      },
+      {
+        "id": "P05",
+        "result": "PASS"
+      },
+      {
+        "id": "P06",
+        "result": "PASS"
+      },
+      {
+        "id": "P07",
+        "result": "PASS"
+      },
+      {
+        "id": "P08",
+        "result": "PASS"
+      },
+      {
+        "id": "P09",
+        "result": "PASS"
+      },
+      {
+        "id": "P10",
+        "result": "PASS"
+      },
+      {
+        "id": "P11",
+        "result": "PASS"
+      },
+      {
+        "id": "P12",
+        "result": "PASS"
+      },
+      {
+        "id": "P13",
+        "result": "PASS"
+      },
+      {
+        "id": "P14",
+        "result": "PASS"
+      },
+      {
+        "id": "P15",
+        "result": "PASS"
+      },
+      {
+        "id": "P16",
+        "result": "PASS"
+      },
+      {
+        "id": "P17",
+        "result": "PASS"
+      },
+      {
+        "id": "P18",
+        "result": "PASS"
+      },
+      {
+        "id": "P19",
+        "result": "PASS"
+      },
+      {
+        "id": "P20",
+        "result": "PASS"
+      },
+      {
+        "id": "P21",
+        "result": "PASS"
+      },
+      {
+        "id": "P22",
+        "result": "PASS"
+      },
+      {
+        "id": "P23",
+        "result": "PASS"
+      },
+      {
+        "id": "P24",
+        "result": "PASS"
+      },
+      {
+        "id": "P25",
+        "result": "PASS"
+      },
+      {
+        "id": "P26",
+        "result": "PASS"
+      },
+      {
+        "id": "P27",
+        "result": "PASS"
+      },
+      {
+        "id": "P28",
+        "result": "PASS"
+      },
+      {
+        "id": "P29",
+        "result": "PASS"
+      },
+      {
+        "id": "P30",
+        "result": "PASS"
+      },
+      {
+        "id": "P31",
+        "result": "PASS"
+      },
+      {
+        "id": "P32",
+        "result": "PASS"
+      },
+      {
+        "id": "P33",
+        "result": "PASS"
+      },
+      {
+        "id": "P34",
+        "result": "PASS"
+      },
+      {
+        "id": "P35",
+        "result": "PASS"
+      },
+      {
+        "id": "P36",
+        "result": "PASS"
+      },
+      {
+        "id": "P37",
+        "result": "PASS"
+      },
+      {
+        "id": "P38",
+        "result": "PASS"
+      },
+      {
+        "id": "P39",
+        "result": "PASS"
+      },
+      {
+        "id": "P40",
+        "result": "PASS"
+      },
+      {
+        "id": "P41",
+        "result": "PASS"
+      },
+      {
+        "id": "P42",
+        "result": "PASS"
+      },
+      {
+        "id": "P43",
+        "result": "PASS"
+      },
+      {
+        "id": "P44",
+        "result": "PASS"
+      },
+      {
+        "id": "P45",
+        "result": "PASS"
+      },
+      {
+        "id": "P46",
+        "result": "PASS"
+      },
+      {
+        "id": "P47",
+        "result": "PASS"
+      },
+      {
+        "id": "P48",
+        "result": "PASS"
+      },
+      {
+        "id": "P49",
+        "result": "PASS"
+      },
+      {
+        "id": "P50",
+        "result": "PASS"
+      },
+      {
+        "id": "P51",
+        "result": "PASS"
+      },
+      {
+        "id": "P52",
+        "result": "PASS"
+      },
+      {
+        "id": "P53",
+        "result": "PASS"
+      }
+    ],
+    "requirements": [
+      {
+        "id": "IR-01",
+        "result": "PASS"
+      },
+      {
+        "id": "IR-02",
+        "result": "PASS"
+      },
+      {
+        "id": "IR-03",
+        "result": "PASS"
+      },
+      {
+        "id": "IR-04",
+        "result": "PASS"
+      },
+      {
+        "id": "IR-05",
+        "result": "PASS"
+      },
+      {
+        "id": "IR-06",
+        "result": "PASS"
+      },
+      {
+        "id": "IR-07",
+        "result": "PASS"
+      },
+      {
+        "id": "IR-08",
+        "result": "PASS"
+      },
+      {
+        "id": "IR-09",
+        "result": "PASS"
+      },
+      {
+        "id": "IR-10",
+        "result": "PASS"
+      },
+      {
+        "id": "IR-11",
+        "result": "PASS"
+      },
+      {
+        "id": "IR-12",
+        "result": "PASS"
+      },
+      {
+        "id": "IR-13",
+        "result": "PASS"
+      },
+      {
+        "id": "IR-14",
+        "result": "PASS"
+      }
+    ],
+    "should_fix": [
+      {
+        "detail": "Before P40/P50, clarify whether the two independent Runtime implementations must cover at least two Provider languages; if required, add distinct_provider_languages \u003e= 2 to compatibility policy and the external evidence schema.",
+        "id": "ADV-001"
+      }
+    ],
+    "should_fix_count": 1,
+    "verdict": "PASS"
+  },
+  "reviewer_id": "p03-independent-review-agent",
+  "schema_version": 1,
+  "subject": {
+    "artifact_manifest_sha256": "2765cd7ce3e8c5ef1a5434a4e18d5aca1c0e0f724279ee5e0d13b9a6c55406d7",
+    "blueprint_sha256": "2c8470f94220c4959c98e91f3909bd3d698c265841c5be9e53afaab84ced0a94",
+    "commit": "dc27b6f121fc3ced2ba58348e530f3f5c0ca1f0c",
+    "plan_last_phase": "P53",
+    "plan_sha256": "ccabaae3dac4bc0eca4c27b08ef7b4aa932a1f3e74a35ebac46b66df0a7d38e6",
+    "requirements_sha256": "3154db5e7d9073967c67ec0669e442df9c225f39d79ea384a7c9da42bb8bb5e4"
+  },
+  "summary_sha256": "sha256:0982dd0b2f00a7994d095804b2302098f124244e49d11f41561786806a50b587"
+}
