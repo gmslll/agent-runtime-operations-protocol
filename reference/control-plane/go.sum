@@ -1,2 +1,8 @@
-github.com/gmslll/agent-runtime-operations-protocol v0.0.0-20260923023550-1bc642d6648a h1:Fd+w1T7K4+KQji8aWziLDhU5Pdm3Cxa5Ywy/2aizkDU=
-github.com/gmslll/agent-runtime-operations-protocol v0.0.0-20260923023550-1bc642d6648a/go.mod h1:ov6WTouj8Qdfs+WL7KgViSYyf6mbrYLBDM8N2EvrxxY=
+github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 h1:uX1JmpONuD549D73r6cgnxyUu18Zb7yHAy5AYU0Pm4Q=
+github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467/go.mod h1:uzvlm1mxhHkdfqitSA92i7Se+S9ksOn3a3qmv/kyOCw=
+github.com/gmslll/agent-runtime-operations-protocol v0.0.0-20260923092055-1195e393bc06 h1:3tJrUIY49T4KBh43mBrY/+wzMcZ5J7bxbF3odles/Ns=
+github.com/gmslll/agent-runtime-operations-protocol v0.0.0-20260923092055-1195e393bc06/go.mod h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk=
+github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 h1:KRzFb2m7YtdldCEkzs6KqmJw4nqEVZGK7IN2kJkjTuQ=
+github.com/santhosh-tekuri/jsonschema/v6 v6.0.2/go.mod h1:JXeL+ps8p7/KNMjDQk3TCwPpBy0wYklyWTfbkIzdIFU=
+golang.org/x/text v0.14.0 h1:ScX5w1eTa3QqT8oi6+ziP7dTV1S2+ALU0bI+0zXKWiQ=
+golang.org/x/text v0.14.0/go.mod h1:18ZOQIKpY8NJVqYksKHtTdi31H5itFRjB5/qKTNYzSU=
