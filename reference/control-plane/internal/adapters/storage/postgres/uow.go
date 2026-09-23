@@ -228,6 +228,9 @@ func NewBackupRestore(db *sql.DB, dsn, backupDirectory, pgDumpPath string) (*Bac
 	if err := validatePrivateDirectory(backupDirectory); err != nil {
 		return nil, err
 	}
+	if parsed.User == nil || parsed.User.Username() == "" {
+		return nil, errors.New("PostgreSQL backup DSN requires an explicit user")
+	}
 	dumpPath, err := validateExecutable(pgDumpPath, "pg_dump")
 	if err != nil {
 		return nil, err
@@ -240,7 +243,11 @@ func NewBackupRestore(db *sql.DB, dsn, backupDirectory, pgDumpPath string) (*Bac
 	if err != nil {
 		return nil, err
 	}
-	config, err := pgx.ParseConfig(dsn)
+	isolatedDSN := *parsed
+	isolatedQuery := isolatedDSN.Query()
+	isolatedQuery.Set("passfile", os.DevNull)
+	isolatedDSN.RawQuery = isolatedQuery.Encode()
+	config, err := pgx.ParseConfig(isolatedDSN.String())
 	if err != nil {
 		return nil, errors.New("parse PostgreSQL backup connection")
 	}
@@ -250,7 +257,8 @@ func NewBackupRestore(db *sql.DB, dsn, backupDirectory, pgDumpPath string) (*Bac
 			parameters[environment] = value
 		}
 	}
-	connection := connectionEnvironment{host: config.Host, port: strconv.Itoa(int(config.Port)), user: config.User, database: config.Database, password: config.Password, parameters: parameters}
+	password, _ := parsed.User.Password()
+	connection := connectionEnvironment{host: config.Host, port: strconv.Itoa(int(config.Port)), user: parsed.User.Username(), database: config.Database, password: password, parameters: parameters}
 	if strings.ContainsAny(connection.password, "\r\n\x00") {
 		return nil, errors.New("PostgreSQL password contains unsupported control character")
 	}
@@ -277,13 +285,13 @@ func (backup *BackupRestore) Create(ctx context.Context, fromVersion, toVersion 
 		return migrate.Snapshot{}, errors.New("secure PostgreSQL backup file")
 	}
 	err = backup.withConnectionEnvironment(func(environment []string, extraFiles []*os.File) error {
-		command := exec.CommandContext(ctx, backup.pgDumpPath, "--format=custom", "--no-owner", "--no-privileges", "--file", name)
+		command := exec.CommandContext(ctx, backup.pgDumpPath, "--no-password", "--format=custom", "--no-owner", "--no-privileges", "--file", name)
 		command.Env = environment
 		command.ExtraFiles = extraFiles
 		return command.Run()
 	})
 	if err != nil {
-		return migrate.Snapshot{}, errors.New("pg_dump failed")
+		return migrate.Snapshot{}, fmt.Errorf("pg_dump failed: %w", err)
 	}
 	if err := backup.validateArchive(ctx, name); err != nil {
 		return migrate.Snapshot{}, err
@@ -545,11 +553,12 @@ func (backup *BackupRestore) withConnectionEnvironment(callback func([]string, [
 	for key, value := range backup.connection.parameters {
 		environment = append(environment, key+"="+value)
 	}
-	if backup.connection.password == "" {
-		return callback(environment, nil)
+	contents := []byte{}
+	if backup.connection.password != "" {
+		escaped := strings.NewReplacer(`\`, `\\`, `:`, `\:`).Replace(backup.connection.password)
+		contents = []byte("*:*:*:*:" + escaped + "\n")
 	}
-	escaped := strings.NewReplacer(`\`, `\\`, `:`, `\:`).Replace(backup.connection.password)
-	file, err := anonymousReadFile(backup.directory, ".arop-pgpass-", []byte("*:*:*:*:"+escaped+"\n"))
+	file, err := anonymousReadFile(backup.directory, ".arop-pgpass-", contents)
 	if err != nil {
 		return errors.New("prepare PostgreSQL credential file")
 	}
@@ -604,8 +613,9 @@ func validateNoSymlinkComponents(target string) error {
 }
 
 func safeProcessEnvironment() []string {
-	allowed := []string{"HOME", "LANG", "LC_ALL", "PATH", "TMPDIR", "TZ"}
-	result := make([]string, 0, len(allowed))
+	allowed := []string{"LANG", "LC_ALL", "PATH", "TMPDIR", "TZ"}
+	result := make([]string, 0, len(allowed)+1)
+	result = append(result, "HOME=/nonexistent")
 	for _, key := range allowed {
 		if value, ok := os.LookupEnv(key); ok {
 			result = append(result, key+"="+value)

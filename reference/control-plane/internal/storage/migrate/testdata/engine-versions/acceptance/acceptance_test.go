@@ -385,14 +385,104 @@ func testGap(t *testing.T, dialect migrate.Dialect) {
 
 func testSparseEmpty(t *testing.T, dialect migrate.Dialect) {
 	b := newBackend(t, dialect)
-	runner := newRunner(t, b, sparseCatalog(t, dialect, 1, 5, 10, 20))
-	result, err := runner.Migrate(context.Background())
-	requireNoError(t, err)
-	if result.FromVersion != 0 || result.ToVersion != 20 || !equalInt64(result.Applied, []int64{1, 5, 10, 20}) {
-		t.Fatalf("unexpected sparse migration result: %+v", result)
+	versions := []int{1, 5, 10, 20}
+	for index, target := range versions {
+		catalog := sparseCatalog(t, dialect, versions[:index+1]...)
+		options := []migrate.Option{}
+		var backup *productionBackupHarness
+		from := int64(0)
+		if index > 0 {
+			from = int64(versions[index-1])
+			backup = newBackup(t, b)
+			options = append(options, migrate.WithBackupRestore(backup))
+		}
+		runner := newSparseRunner(t, b, catalog, options...)
+		requireSparseNotReady(t, runner, from, int64(target))
+		result, err := runner.Migrate(context.Background())
+		requireNoError(t, err)
+		if result.FromVersion != from || result.ToVersion != int64(target) || !equalInt64(result.Applied, []int64{int64(target)}) {
+			t.Fatalf("unexpected sparse %d to %d result: %+v", from, target, result)
+		}
+		if index == 0 {
+			if result.Snapshot != nil {
+				t.Fatalf("empty to v1 unexpectedly produced snapshot: %+v", result.Snapshot)
+			}
+		} else {
+			requireSnapshotEvidence(t, dialect, backup, result.Snapshot, from, int64(target))
+		}
+		requireSparseHistory(t, b.db, dialect, versions[:index+1])
+		requireReady(t, runner, int64(target))
 	}
-	requireReady(t, runner, 20)
-	requireHistoryCount(t, b.db, 4)
+	testSparseFiveToTenRecovery(t, dialect, "apply")
+	testSparseFiveToTenRecovery(t, dialect, "verifier")
+}
+
+func testSparseFiveToTenRecovery(t *testing.T, dialect migrate.Dialect, failure string) {
+	b := newBackend(t, dialect)
+	v5Catalog := sparseCatalog(t, dialect, 1, 5)
+	v5 := newSparseRunner(t, b, v5Catalog)
+	result, err := v5.Migrate(context.Background())
+	requireNoError(t, err)
+	if result.FromVersion != 0 || result.ToVersion != 5 || !equalInt64(result.Applied, []int64{1, 5}) || result.Snapshot != nil {
+		t.Fatalf("prepare sparse v5 result: %+v", result)
+	}
+	requireSparseHistory(t, b.db, dialect, []int{1, 5})
+	requireReady(t, v5, 5)
+
+	upgradeCatalog := sparseCatalog(t, dialect, 1, 5, 10)
+	verifier := sparseSchemaVerifier(dialect, 10)
+	if failure == "apply" {
+		v1 := sparseMigration(t, dialect, 1)
+		v5Migration := sparseMigration(t, dialect, 5)
+		v10 := sparseMigration(t, dialect, 10)
+		v10.SQL = append(append([]byte{}, v10.SQL...), []byte("\n-- arop:statement\nINSERT INTO arop_p09_missing_apply_target(id) VALUES(1);\n")...)
+		v10.Checksum = ""
+		upgradeCatalog, err = migrate.NewCatalog(dialect, []migrate.Migration{v1, v5Migration, v10})
+		requireNoError(t, err)
+	} else if failure == "verifier" {
+		verifier = func(ctx context.Context, queryer migrate.Queryer) error {
+			if err := sparseSchemaVerifier(dialect, 10)(ctx, queryer); err != nil {
+				return err
+			}
+			return errors.New("injected sparse v10 verifier failure")
+		}
+	} else {
+		t.Fatalf("unknown sparse recovery failure %q", failure)
+	}
+
+	production := newBackup(t, b)
+	observedNotReady := false
+	var upgrade *migrate.Runner
+	backup := &restoreObservingBackup{
+		productionBackupHarness: production,
+		beforeRestore: func() {
+			status, statusErr := upgrade.Status(context.Background())
+			requireNoError(t, statusErr)
+			if status.Ready {
+				t.Fatalf("sparse 5 to 10 %s failure reported ready before restore: %+v", failure, status)
+			}
+			if failure == "apply" && status.Reason != "migration_history_incompatible" {
+				t.Fatalf("sparse apply failure readiness: %+v", status)
+			}
+			if failure == "verifier" && status.Reason != "schema_verification_failed" {
+				t.Fatalf("sparse verifier failure readiness: %+v", status)
+			}
+			observedNotReady = true
+		},
+	}
+	upgrade = newSparseRunner(t, b, upgradeCatalog, migrate.WithBackupRestore(backup), migrate.WithVerifier(verifier))
+	requireSparseNotReady(t, upgrade, 5, 10)
+	if _, err = upgrade.Migrate(context.Background()); err == nil {
+		t.Fatalf("sparse 5 to 10 %s failure succeeded", failure)
+	}
+	if !observedNotReady || production.restoreCount() != 1 {
+		t.Fatalf("sparse 5 to 10 %s recovery evidence: not_ready=%t restores=%d", failure, observedNotReady, production.restoreCount())
+	}
+	requireRestoredSnapshotEvidence(t, dialect, production, 5, 10)
+	restored := newSparseRunner(t, b, v5Catalog)
+	requireSparseHistory(t, b.db, dialect, []int{1, 5})
+	requireNoError(t, sparseSchemaVerifier(dialect, 5)(context.Background(), b.db))
+	requireReady(t, restored, 5)
 }
 
 func testSparseOneToFive(t *testing.T, dialect migrate.Dialect) {
@@ -859,6 +949,69 @@ func testProductionBackupUpgrade(t *testing.T, dialect migrate.Dialect) {
 	}
 	requireReady(t, v2, 2)
 	requireFixtureSentinel(t, b.db)
+	if dialect == migrate.DialectPostgres {
+		testPostgresAdversarialHomeIsolation(t, b)
+	}
+}
+
+func testPostgresAdversarialHomeIsolation(t *testing.T, b *backend) {
+	hostileHome := filepath.Join(newControlledBackupDirectory(t), "hostile-home")
+	requireNoError(t, os.Mkdir(hostileHome, 0o700))
+	hostilePassfile := filepath.Join(hostileHome, ".pgpass")
+	requireNoError(t, os.WriteFile(hostilePassfile, []byte("*:*:*:*:ambient-secret-must-not-be-read\n"), 0o600))
+	t.Setenv("HOME", hostileHome)
+	t.Setenv("PGPASSFILE", hostilePassfile)
+	t.Setenv("PGPASSWORD", "ambient-password-must-not-be-used")
+
+	toolDirectory := filepath.Join(newControlledBackupDirectory(t), "postgres-tools")
+	requireNoError(t, os.Mkdir(toolDirectory, 0o700))
+	writeExecutable := func(name, contents string) {
+		t.Helper()
+		requireNoError(t, os.WriteFile(filepath.Join(toolDirectory, name), []byte(contents), 0o700))
+	}
+	writeExecutable("pg_dump", `#!/bin/sh
+set -eu
+[ "${HOME-}" = "/nonexistent" ] || exit 41
+[ "${PGPASSFILE-}" = "/dev/fd/3" ] || exit 42
+[ -r "$PGPASSFILE" ] || exit 43
+[ ! -s "$PGPASSFILE" ] || exit 44
+output=""
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--file" ]; then
+    shift
+    output="$1"
+  fi
+  shift
+done
+[ -n "$output" ] || exit 45
+printf 'controlled fake PostgreSQL archive\n' > "$output"
+`)
+	writeExecutable("pg_restore", `#!/bin/sh
+set -eu
+[ "${HOME-}" = "/nonexistent" ] || exit 51
+if [ "${1-}" = "--list" ]; then
+  printf 'controlled archive list\n'
+  exit 0
+fi
+exit 52
+`)
+	writeExecutable("psql", "#!/bin/sh\nexit 53\n")
+
+	parsed, err := url.Parse(b.dsn)
+	requireNoError(t, err)
+	username := ""
+	if parsed.User != nil {
+		username = parsed.User.Username()
+	}
+	parsed.User = url.User(username)
+	backupDirectory := newControlledBackupDirectory(t)
+	adapter, err := pgstore.NewBackupRestore(b.db, parsed.String(), backupDirectory, filepath.Join(toolDirectory, "pg_dump"))
+	requireNoError(t, err)
+	snapshot, err := adapter.Create(context.Background(), 2, 3)
+	requireNoError(t, err)
+	if snapshot.ID == "" || snapshot.Digest == "" {
+		t.Fatalf("credential isolation probe returned incomplete snapshot: %+v", snapshot)
+	}
 }
 
 func testSnapshotRefusal(t *testing.T, dialect migrate.Dialect, mode string) {
@@ -1435,6 +1588,114 @@ func newRunner(t *testing.T, b *backend, catalog *migrate.Catalog, options ...mi
 	requireNoError(t, err)
 	return runner
 }
+
+func newSparseRunner(t *testing.T, b *backend, catalog *migrate.Catalog, options ...migrate.Option) *migrate.Runner {
+	t.Helper()
+	options = append([]migrate.Option{migrate.WithVerifier(sparseSchemaVerifier(b.dialect, catalog.TargetVersion()))}, options...)
+	runner, err := migrate.NewRunner(b.db, catalog, b.locker, options...)
+	requireNoError(t, err)
+	return runner
+}
+
+func sparseSchemaVerifier(dialect migrate.Dialect, target int64) migrate.Verifier {
+	return func(ctx context.Context, queryer migrate.Queryer) error {
+		base, err := queryer.QueryContext(ctx, `SELECT fixture_id,fixture_value FROM arop_engine_fixture WHERE 1=0`)
+		if err != nil {
+			return err
+		}
+		if err := base.Close(); err != nil {
+			return err
+		}
+		if err := requireSparseColumn(ctx, queryer, "generation", target >= 5); err != nil {
+			return err
+		}
+		if err := requireSparseColumn(ctx, queryer, "updated_at_ns", target >= 10); err != nil {
+			return err
+		}
+		generationIndex, err := sparseIndexExists(ctx, queryer, dialect, "arop_engine_fixture_generation_idx")
+		if err != nil {
+			return fmt.Errorf("inspect sparse generation index: %w", err)
+		}
+		if generationIndex != (target >= 5) {
+			return fmt.Errorf("sparse generation index presence=%t target=%d", generationIndex, target)
+		}
+		updatedIndex, err := sparseIndexExists(ctx, queryer, dialect, "arop_engine_fixture_updated_at_idx")
+		if err != nil {
+			return fmt.Errorf("inspect sparse updated-at index: %w", err)
+		}
+		if updatedIndex != (target >= 20) {
+			return fmt.Errorf("sparse updated-at index presence=%t target=%d", updatedIndex, target)
+		}
+		return nil
+	}
+}
+
+func requireSparseColumn(ctx context.Context, queryer migrate.Queryer, column string, want bool) error {
+	rows, err := queryer.QueryContext(ctx, `SELECT `+column+` FROM arop_engine_fixture WHERE 1=0`)
+	if err == nil {
+		err = rows.Close()
+	}
+	if want && err != nil {
+		return fmt.Errorf("required sparse column %s is absent: %w", column, err)
+	}
+	if !want && err == nil {
+		return fmt.Errorf("future sparse column %s is already present", column)
+	}
+	return nil
+}
+
+func sparseIndexExists(ctx context.Context, queryer migrate.Queryer, dialect migrate.Dialect, name string) (bool, error) {
+	var exists bool
+	if dialect == migrate.DialectSQLite {
+		var count int
+		err := queryer.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name=?`, name).Scan(&count)
+		return count == 1, err
+	}
+	err := queryer.QueryRowContext(ctx, `SELECT to_regclass($1) IS NOT NULL`, "public."+name).Scan(&exists)
+	return exists, err
+}
+
+func requireSparseNotReady(t *testing.T, runner *migrate.Runner, current, target int64) {
+	t.Helper()
+	status, err := runner.Status(context.Background())
+	requireNoError(t, err)
+	if status.Ready || status.CurrentVersion != current || status.TargetVersion != target {
+		t.Fatalf("sparse pre-migration readiness current=%d target=%d: %+v", current, target, status)
+	}
+	wantReason := "migration_version_mismatch"
+	if current == 0 {
+		wantReason = "migration_history_missing"
+	}
+	if status.Reason != wantReason {
+		t.Fatalf("sparse pre-migration reason=%q want=%q", status.Reason, wantReason)
+	}
+}
+
+func requireSparseHistory(t *testing.T, db *sql.DB, dialect migrate.Dialect, versions []int) {
+	t.Helper()
+	rows, err := db.Query(`SELECT version,name,checksum,dirty FROM arop_schema_migrations ORDER BY version`)
+	requireNoError(t, err)
+	defer rows.Close()
+	index := 0
+	for rows.Next() {
+		if index >= len(versions) {
+			t.Fatalf("sparse history has extra row at index %d", index)
+		}
+		var version int64
+		var name, checksum string
+		var dirty bool
+		requireNoError(t, rows.Scan(&version, &name, &checksum, &dirty))
+		expected := sparseMigration(t, dialect, versions[index])
+		if version != expected.Version || name != expected.Name || checksum != expected.Checksum || dirty {
+			t.Fatalf("sparse history[%d]=%d/%s/%s/dirty=%t want=%d/%s/%s/false", index, version, name, checksum, dirty, expected.Version, expected.Name, expected.Checksum)
+		}
+		index++
+	}
+	requireNoError(t, rows.Err())
+	if index != len(versions) {
+		t.Fatalf("sparse history rows=%d want=%d", index, len(versions))
+	}
+}
 func newRunnerWithFreshLocker(t *testing.T, b *backend, catalog *migrate.Catalog) *migrate.Runner {
 	t.Helper()
 	runner, err := migrate.NewRunner(b.db, catalog, freshLocker(t, b), migrate.WithVerifier(fixtureSchemaVerifier(catalog.TargetVersion())))
@@ -1446,6 +1707,18 @@ type productionBackupHarness struct {
 	adapter   migrate.BackupRestore
 	directory string
 	restored  int
+}
+
+type restoreObservingBackup struct {
+	*productionBackupHarness
+	beforeRestore func()
+}
+
+func (backup *restoreObservingBackup) Restore(ctx context.Context, snapshot migrate.Snapshot) error {
+	if backup.beforeRestore != nil {
+		backup.beforeRestore()
+	}
+	return backup.productionBackupHarness.Restore(ctx, snapshot)
 }
 
 func newBackup(t *testing.T, b *backend) *productionBackupHarness {
@@ -1467,6 +1740,63 @@ func newBackupInDirectory(t *testing.T, b *backend, directory string) *productio
 	}
 	requireNoError(t, err)
 	return &productionBackupHarness{adapter: adapter, directory: directory}
+}
+
+func requireSnapshotEvidence(t *testing.T, dialect migrate.Dialect, backup *productionBackupHarness, snapshot *migrate.Snapshot, from, to int64) {
+	t.Helper()
+	if snapshot == nil || snapshot.ID == "" || snapshot.Digest == "" {
+		t.Fatalf("migration %d to %d returned incomplete snapshot: %+v", from, to, snapshot)
+	}
+	check := func(id, digest string, recordedFrom, recordedTo int64, state string) {
+		if id != snapshot.ID || digest != snapshot.Digest || recordedFrom != from || recordedTo != to || state != "available" {
+			t.Fatalf("snapshot metadata=%s/%s/%d/%d/%s want=%s/%s/%d/%d/available", id, digest, recordedFrom, recordedTo, state, snapshot.ID, snapshot.Digest, from, to)
+		}
+	}
+	switch adapter := backup.adapter.(type) {
+	case *sqlitestore.BackupRestore:
+		records, err := adapter.ListSnapshots()
+		requireNoError(t, err)
+		if len(records) != 1 {
+			t.Fatalf("SQLite snapshot records=%d want=1", len(records))
+		}
+		check(records[0].ID, records[0].Digest, records[0].FromVersion, records[0].ToVersion, records[0].State)
+	case *pgstore.BackupRestore:
+		records, err := adapter.ListSnapshots()
+		requireNoError(t, err)
+		if len(records) != 1 {
+			t.Fatalf("PostgreSQL snapshot records=%d want=1", len(records))
+		}
+		check(records[0].ID, records[0].Digest, records[0].FromVersion, records[0].ToVersion, records[0].State)
+	default:
+		t.Fatalf("unsupported %s snapshot adapter %T", dialect, backup.adapter)
+	}
+}
+
+func requireRestoredSnapshotEvidence(t *testing.T, dialect migrate.Dialect, backup *productionBackupHarness, from, to int64) {
+	t.Helper()
+	check := func(id, digest string, recordedFrom, recordedTo int64, state string) {
+		if id == "" || digest == "" || recordedFrom != from || recordedTo != to || state != "restored_verified" {
+			t.Fatalf("restored snapshot metadata=%s/%s/%d/%d/%s want non-empty/non-empty/%d/%d/restored_verified", id, digest, recordedFrom, recordedTo, state, from, to)
+		}
+	}
+	switch adapter := backup.adapter.(type) {
+	case *sqlitestore.BackupRestore:
+		records, err := adapter.ListSnapshots()
+		requireNoError(t, err)
+		if len(records) != 1 {
+			t.Fatalf("SQLite restored snapshot records=%d want=1", len(records))
+		}
+		check(records[0].ID, records[0].Digest, records[0].FromVersion, records[0].ToVersion, records[0].State)
+	case *pgstore.BackupRestore:
+		records, err := adapter.ListSnapshots()
+		requireNoError(t, err)
+		if len(records) != 1 {
+			t.Fatalf("PostgreSQL restored snapshot records=%d want=1", len(records))
+		}
+		check(records[0].ID, records[0].Digest, records[0].FromVersion, records[0].ToVersion, records[0].State)
+	default:
+		t.Fatalf("unsupported %s restored snapshot adapter %T", dialect, backup.adapter)
+	}
 }
 func (backup *productionBackupHarness) Create(ctx context.Context, from, to int64) (migrate.Snapshot, error) {
 	return backup.adapter.Create(ctx, from, to)
