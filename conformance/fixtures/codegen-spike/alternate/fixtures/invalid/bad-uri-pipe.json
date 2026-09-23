@@ -1,0 +1,6 @@
+{
+  "revision": 23,
+  "name": "alternate-bad-uri-pipe",
+  "metadata": {},
+  "links": [{"href": "a|b", "label": "invalid"}]
+}

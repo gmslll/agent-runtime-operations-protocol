@@ -1,0 +1,7 @@
+{
+  "revision": 3,
+  "name": "alternate-value",
+  "note": "present",
+  "metadata": {"nested": {"items": [1, "二", null]}},
+  "links": [{"href": "https://example.invalid/path", "label": "external"}]
+}

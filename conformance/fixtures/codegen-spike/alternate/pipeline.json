@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "resources": [
+    {
+      "path": "conformance/fixtures/codegen-spike/alternate/schema.json",
+      "uri": "https://arop.invalid/conformance/alternate-envelope.schema.json"
+    }
+  ],
+  "roots": [
+    {
+      "ref": "https://arop.invalid/conformance/alternate-envelope.schema.json",
+      "name": "AlternateEnvelope"
+    }
+  ],
+  "fixtures": {
+    "valid": [
+      {"id": "alternate-minimal", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/valid/minimal.json"},
+      {"id": "alternate-null", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/valid/null.json"},
+      {"id": "alternate-value", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/valid/value.json"},
+      {"id": "alternate-inline-object", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/valid/inline-object.json"},
+      {"id": "alternate-typed-additional", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/valid/typed-additional.json"},
+      {"id": "alternate-mathematical-integer", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/valid/mathematical-integer.json"},
+      {"id": "alternate-ipv6-uri", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/valid/ipv6-uri.json"}
+    ],
+    "forward": [
+      {"id": "alternate-future", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/forward/future.json"},
+      {"id": "alternate-forward-union", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/forward/forward-union.json"}
+    ],
+    "invalid": [
+      {"id": "alternate-unknown", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/unknown.json"},
+      {"id": "alternate-bad-uri", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/bad-uri.json"},
+      {"id": "alternate-bad-uri-bracket", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/bad-uri-bracket.json"},
+      {"id": "alternate-bad-uri-ipv6", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/bad-uri-ipv6.json"},
+      {"id": "alternate-bad-uri-pipe", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/bad-uri-pipe.json"},
+      {"id": "alternate-bad-uri-backslash", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/bad-uri-backslash.json"},
+      {"id": "alternate-unsafe-json", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/unsafe-json.json"},
+      {"id": "alternate-missing-required", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/missing-required.json"},
+      {"id": "alternate-duplicate-key", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/duplicate-key.json.invalid"},
+      {"id": "alternate-nonnullable-null", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/nonnullable-null.json"},
+      {"id": "alternate-json-large-integer", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/json-large-integer.json"},
+      {"id": "alternate-year-zero", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/year-zero.json"},
+      {"id": "alternate-typed-additional-invalid", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/typed-additional-invalid.json"},
+      {"id": "alternate-unpaired-surrogate", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/unpaired-surrogate.json.invalid"},
+      {"id": "alternate-closed-empty", "path": "conformance/fixtures/codegen-spike/alternate/fixtures/invalid/closed-empty.json"}
+    ]
+  },
+  "outputs": {
+    "go": {"model": "go/models.gen.go", "probe": "go/models_gen_test.go"},
+    "python": {"model": "python/models_gen.py", "probe": "python/probe.py"},
+    "typescript": {"model": "typescript/models.gen.ts", "probe": "typescript/probe.ts"}
+  }
+}

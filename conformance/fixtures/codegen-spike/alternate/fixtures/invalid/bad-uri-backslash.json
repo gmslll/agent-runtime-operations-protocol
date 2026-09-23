@@ -1,0 +1,6 @@
+{
+  "revision": 24,
+  "name": "alternate-bad-uri-backslash",
+  "metadata": {},
+  "links": [{"href": "a\\b", "label": "invalid"}]
+}

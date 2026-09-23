@@ -1,0 +1,7 @@
+{
+  "revision": 10,
+  "name": "alternate-typed-additional",
+  "metadata": {},
+  "links": [{"href": "urn:arop:alternate:10", "label": "valid"}],
+  "annotations": {"primary": "one", "secondary": "two"}
+}

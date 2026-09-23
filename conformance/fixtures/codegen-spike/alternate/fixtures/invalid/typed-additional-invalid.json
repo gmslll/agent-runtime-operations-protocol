@@ -1,0 +1,7 @@
+{
+  "revision": 17,
+  "name": "alternate-typed-additional-invalid",
+  "metadata": {},
+  "links": [{"href": "urn:arop:alternate:17", "label": "valid"}],
+  "annotations": {"primary": "valid", "extra": 42}
+}

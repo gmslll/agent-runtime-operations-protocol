@@ -1,0 +1,6 @@
+{
+  "revision": 20,
+  "name": "alternate-ipv6-uri",
+  "metadata": {},
+  "links": [{"href": "http://[::1]/a?b#c", "label": "ipv6"}]
+}

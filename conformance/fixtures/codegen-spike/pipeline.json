@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "resources": [
+    {
+      "path": "conformance/fixtures/codegen-spike/schemas/codegen-spike.schema.json",
+      "uri": "https://arop.invalid/conformance/codegen-spike.schema.json"
+    },
+    {
+      "path": "conformance/fixtures/codegen-spike/schemas/extension-envelope.schema.json",
+      "uri": "https://arop.invalid/conformance/extension-envelope.schema.json"
+    }
+  ],
+  "roots": [
+    {
+      "ref": "https://arop.invalid/conformance/codegen-spike.schema.json",
+      "name": "CodegenSpikeEnvelope"
+    }
+  ],
+  "fixtures": {
+    "valid": [
+      {"id": "minimal", "path": "conformance/fixtures/codegen-spike/fixtures/valid/minimal.json"},
+      {"id": "nullable-null", "path": "conformance/fixtures/codegen-spike/fixtures/valid/nullable-null.json"},
+      {"id": "full", "path": "conformance/fixtures/codegen-spike/fixtures/valid/full.json"}
+    ],
+    "forward": [
+      {"id": "future-fields", "path": "conformance/fixtures/codegen-spike/fixtures/forward/future-fields.json"}
+    ],
+    "invalid": [
+      {"id": "unknown-field", "path": "conformance/fixtures/codegen-spike/fixtures/invalid/unknown-field.json"},
+      {"id": "wrong-discriminator", "path": "conformance/fixtures/codegen-spike/fixtures/invalid/wrong-discriminator.json"},
+      {"id": "invalid-date-time", "path": "conformance/fixtures/codegen-spike/fixtures/invalid/invalid-date-time.json"},
+      {"id": "invalid-uri-reference", "path": "conformance/fixtures/codegen-spike/fixtures/invalid/invalid-uri-reference.json"},
+      {"id": "nested-unknown-field", "path": "conformance/fixtures/codegen-spike/fixtures/invalid/nested-unknown-field.json"},
+      {"id": "nested-unsafe-attributes", "path": "conformance/fixtures/codegen-spike/fixtures/invalid/nested-unsafe-attributes.json"},
+      {"id": "nested-unsafe-extension", "path": "conformance/fixtures/codegen-spike/fixtures/invalid/nested-unsafe-extension.json"},
+      {"id": "unsafe-integer", "path": "conformance/fixtures/codegen-spike/fixtures/invalid/unsafe-integer.json"}
+    ]
+  },
+  "outputs": {
+    "go": {"model": "go/models.gen.go", "probe": "go/models_gen_test.go"},
+    "python": {"model": "python/models_gen.py", "probe": "python/probe.py"},
+    "typescript": {"model": "typescript/models.gen.ts", "probe": "typescript/probe.ts"}
+  }
+}

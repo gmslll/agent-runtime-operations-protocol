@@ -1,0 +1,6 @@
+{
+  "revision": 15,
+  "name": "alternate-json-large-integer",
+  "metadata": {"safe": 1e20},
+  "links": [{"href": "urn:arop:alternate:15", "label": "valid"}]
+}

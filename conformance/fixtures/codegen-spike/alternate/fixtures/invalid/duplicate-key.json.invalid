@@ -1,0 +1,7 @@
+{
+  "revision": 13,
+  "name": "alternate-duplicate-key",
+  "name": "duplicate",
+  "metadata": {},
+  "links": [{"href": "urn:arop:alternate:13", "label": "valid"}]
+}

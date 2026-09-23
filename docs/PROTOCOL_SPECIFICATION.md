@@ -194,6 +194,16 @@ Publisher 提交的 Skill Input/Output Schema 和 Extension Schema 使用同一�
 
 包内 `$ref`、`$id` 和 Extension `schema_ref` 的路径使用可移植 ASCII 子集：每个路径段必须匹配 `[A-Za-z0-9._~-]+`，用 `/` 分隔，只允许可选的前导 `./`，并必须与磁盘上的实际大小写精确一致。禁止 `%` 编码、Unicode、空白/控制字符、反斜杠和 `{}`、`[]`、`|`、`^`、反引号等非 portable 标点。URI fragment 不按文件路径处理，但只允许 portable anchor 或 RFC 6901 JSON Pointer。
 
+## 5.6 生成模型映射 Profile
+
+Go、Python 和 TypeScript 模型必须由同一份 Schema 资源闭包和同一个固定版本的 mapping profile 生成。生成器只能读取命令中显式列举且已绑定 Digest 的本地资源，不得在解析 `$ref` 或生成期间访问网络。未知 Schema 关键字、不在闭包内的引用、生成标识符冲突、歧义 union 和不受支持的循环必须终止生成，不得降级成宽松类型。
+
+跨语言 wire `integer` 必须声明有限 `minimum`/`maximum`，且整个区间落在 `[-9007199254740991, 9007199254740991]` 内。该规则递归适用于所有通用 `JsonValue`，包括 Extension `data`、`attributes` 以及任意嵌套数组或对象中的整数；任意一层无界或越界都必须拒绝生成，v1 不引入 BigInt 或 string integer profile。`date-time` 映射为先按本规范严格验证的 wire string，不默认转成 `time.Time`、`datetime` 或 `Date`，因为这些转换可能改写原始时区偏移和小数秒精度。
+
+`oneOf` 只有在每个分支都含一个必需、唯一且互不相同的 `const` discriminator 时才映射为 tagged union。字段未出现与字段显式为 `null` 是不同的 wire 状态；生成类型和 codec 必须保留缺失、null 和具体值三态，不得用单一零值或空指针合并。
+
+P07 只生成代表性 spike 并冻结 pipeline、mapping profile、固定工具版本、输入/输出 Digest 与 exact file inventory。后续 Schema/OpenAPI/AsyncAPI 生成物由首次引入它们的 Contract 阶段调用同一 pipeline 交付，禁止在 P07 预生成未来尚不存在的合同。
+
 # 6. 内容模型
 
 ## 6.1 ContentPart

@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "resources": [{"path": "conformance/fixtures/codegen-spike/schemas/negative/remote-ref.schema.json", "uri": "https://arop.invalid/conformance/negative/remote-ref.schema.json"}],
+  "roots": [{"ref": "https://arop.invalid/conformance/negative/remote-ref.schema.json", "name": "CodegenSpikeEnvelope"}],
+  "fixtures": {"valid": [{"id": "minimal", "path": "conformance/fixtures/codegen-spike/fixtures/valid/minimal.json"}], "forward": [{"id": "future-fields", "path": "conformance/fixtures/codegen-spike/fixtures/forward/future-fields.json"}], "invalid": [{"id": "unknown-field", "path": "conformance/fixtures/codegen-spike/fixtures/invalid/unknown-field.json"}]},
+  "outputs": {"go": {"model": "go/models.gen.go", "probe": "go/models_gen_test.go"}, "python": {"model": "python/models_gen.py", "probe": "python/probe.py"}, "typescript": {"model": "typescript/models.gen.ts", "probe": "typescript/probe.ts"}}
+}

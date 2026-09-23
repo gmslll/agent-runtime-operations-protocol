@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "valid": [
+    {"id": "alternate-minimal", "path": "fixtures/valid/minimal.json"},
+    {"id": "alternate-null", "path": "fixtures/valid/null.json"},
+    {"id": "alternate-value", "path": "fixtures/valid/value.json"},
+    {"id": "alternate-inline-object", "path": "fixtures/valid/inline-object.json"},
+    {"id": "alternate-typed-additional", "path": "fixtures/valid/typed-additional.json"},
+    {"id": "alternate-mathematical-integer", "path": "fixtures/valid/mathematical-integer.json"},
+    {"id": "alternate-ipv6-uri", "path": "fixtures/valid/ipv6-uri.json"}
+  ],
+  "forward": [
+    {"id": "alternate-future", "path": "fixtures/forward/future.json"},
+    {"id": "alternate-forward-union", "path": "fixtures/forward/forward-union.json"}
+  ],
+  "invalid": [
+    {"id": "alternate-unknown", "path": "fixtures/invalid/unknown.json"},
+    {"id": "alternate-bad-uri", "path": "fixtures/invalid/bad-uri.json"},
+    {"id": "alternate-bad-uri-bracket", "path": "fixtures/invalid/bad-uri-bracket.json"},
+    {"id": "alternate-bad-uri-ipv6", "path": "fixtures/invalid/bad-uri-ipv6.json"},
+    {"id": "alternate-bad-uri-pipe", "path": "fixtures/invalid/bad-uri-pipe.json"},
+    {"id": "alternate-bad-uri-backslash", "path": "fixtures/invalid/bad-uri-backslash.json"},
+    {"id": "alternate-unsafe-json", "path": "fixtures/invalid/unsafe-json.json"},
+    {"id": "alternate-missing-required", "path": "fixtures/invalid/missing-required.json"},
+    {"id": "alternate-duplicate-key", "path": "fixtures/invalid/duplicate-key.json.invalid"},
+    {"id": "alternate-nonnullable-null", "path": "fixtures/invalid/nonnullable-null.json"},
+    {"id": "alternate-json-large-integer", "path": "fixtures/invalid/json-large-integer.json"},
+    {"id": "alternate-year-zero", "path": "fixtures/invalid/year-zero.json"},
+    {"id": "alternate-typed-additional-invalid", "path": "fixtures/invalid/typed-additional-invalid.json"},
+    {"id": "alternate-unpaired-surrogate", "path": "fixtures/invalid/unpaired-surrogate.json.invalid"},
+    {"id": "alternate-closed-empty", "path": "fixtures/invalid/closed-empty.json"}
+  ]
+}

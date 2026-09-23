@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "payload": {"type": "text", "text": "forward"},
+  "optional_nullable": "future",
+  "occurred_at": "2026-09-23T08:00:00Z",
+  "labels": {"mode": "forward"},
+  "attributes": {"future": {"nested": true}},
+  "extension": {"schema_ref": "future.schema.json", "schema_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "data": {"future": true}},
+  "tree": {"name": "root", "children": [{"name": "leaf", "children": [], "future_node": 2}], "future_node": 1},
+  "safe_integer": 42,
+  "future_top": {"preserve": [true, null, "yes"]}
+}

@@ -1,0 +1,6 @@
+{
+  "revision": 1,
+  "name": "alternate-minimal",
+  "metadata": {"locale": "zh-CN"},
+  "links": [{"href": "urn:arop:alternate:1", "label": "primary"}]
+}

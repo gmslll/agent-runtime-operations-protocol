@@ -1,0 +1,6 @@
+{
+  "revision": 21,
+  "name": "alternate-bad-uri-bracket",
+  "metadata": {},
+  "links": [{"href": "[", "label": "invalid"}]
+}

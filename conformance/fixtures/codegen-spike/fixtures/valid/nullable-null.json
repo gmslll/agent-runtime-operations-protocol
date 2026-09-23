@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "payload": {"type": "text", "text": "explicit null"},
+  "optional_nullable": null,
+  "occurred_at": "2026-09-23T08:00:00Z",
+  "labels": {"state": "null"},
+  "attributes": {"kind": "nullable"},
+  "extension": {
+    "schema_ref": "schemas/extensions/example.schema.json",
+    "schema_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "data": ["array", {"object": true}, null]
+  },
+  "tree": {"name": "root", "children": [{"name": "leaf", "children": []}]},
+  "safe_integer": -9007199254740991
+}

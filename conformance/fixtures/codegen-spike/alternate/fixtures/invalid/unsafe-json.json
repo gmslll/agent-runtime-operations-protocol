@@ -1,0 +1,6 @@
+{
+  "revision": 7,
+  "name": "alternate-unsafe-json",
+  "metadata": {"nested": {"unsafe": 9007199254740992}},
+  "links": [{"href": "urn:arop:alternate:7", "label": "valid"}]
+}

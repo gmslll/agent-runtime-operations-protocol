@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/conformance/alternate-envelope.schema.json",
+  "title": "Alternate reusable code generation fixture",
+  "type": "object",
+  "required": ["revision", "name", "metadata", "links"],
+  "properties": {
+    "revision": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+    "name": {"type": "string"},
+    "note": {"anyOf": [{"type": "string"}, {"type": "null"}]},
+    "metadata": {"type": "object", "additionalProperties": true},
+    "links": {"type": "array", "items": {"$ref": "#/$defs/link"}},
+    "details": {
+      "type": "object",
+      "required": ["active"],
+      "properties": {"active": {"type": "boolean"}},
+      "additionalProperties": false
+    },
+    "annotations": {
+      "type": "object",
+      "properties": {"primary": {"type": "string"}},
+      "additionalProperties": {"type": "string"}
+    },
+    "message": {
+      "oneOf": [
+        {"$ref": "#/$defs/alphaMessage"},
+        {"$ref": "#/$defs/betaMessage"}
+      ]
+    },
+    "observed_at": {"type": "string", "format": "date-time"},
+    "closed": {"type": "object", "properties": {}, "additionalProperties": false}
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "link": {
+      "type": "object",
+      "required": ["href", "label"],
+      "properties": {
+        "href": {"type": "string", "format": "uri-reference"},
+        "label": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "alphaMessage": {
+      "type": "object",
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": {"const": "alpha"},
+        "value": {"type": "string"}
+      },
+      "additionalProperties": false
+    },
+    "betaMessage": {
+      "type": "object",
+      "required": ["kind", "count"],
+      "properties": {
+        "kind": {"const": "beta"},
+        "count": {"type": "integer", "minimum": 0, "maximum": 100}
+      },
+      "additionalProperties": false
+    }
+  }
+}

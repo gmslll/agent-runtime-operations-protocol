@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "payload": {"type": "text", "text": "三语言一致"},
+  "optional_nullable": "present-value",
+  "occurred_at": "2026-09-23T16:30:45.123+08:00",
+  "labels": {"region": "cn-east", "tier": "gold"},
+  "attributes": {"enabled": true, "nested": {"count": 2}, "items": [1, "two", null]},
+  "extension": {
+    "schema_ref": "schemas/extensions/com.example.demo.v1.schema.json#/$defs/payload",
+    "schema_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "data": {"chart": "bar", "series": [1, 2, 3]}
+  },
+  "tree": {
+    "name": "root",
+    "children": [
+      {"name": "branch", "children": [{"name": "leaf", "children": []}]}
+    ]
+  },
+  "safe_integer": 9007199254740991
+}

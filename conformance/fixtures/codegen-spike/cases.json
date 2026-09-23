@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "valid": [
+    {"id": "minimal", "path": "fixtures/valid/minimal.json"},
+    {"id": "nullable-null", "path": "fixtures/valid/nullable-null.json"},
+    {"id": "full", "path": "fixtures/valid/full.json"}
+  ],
+  "forward": [
+    {"id": "future-fields", "path": "fixtures/forward/future-fields.json"}
+  ],
+  "invalid": [
+    {"id": "unknown-field", "path": "fixtures/invalid/unknown-field.json"},
+    {"id": "wrong-discriminator", "path": "fixtures/invalid/wrong-discriminator.json"},
+    {"id": "invalid-date-time", "path": "fixtures/invalid/invalid-date-time.json"},
+    {"id": "invalid-uri-reference", "path": "fixtures/invalid/invalid-uri-reference.json"},
+    {"id": "nested-unknown-field", "path": "fixtures/invalid/nested-unknown-field.json"},
+    {"id": "nested-unsafe-attributes", "path": "fixtures/invalid/nested-unsafe-attributes.json"},
+    {"id": "nested-unsafe-extension", "path": "fixtures/invalid/nested-unsafe-extension.json"},
+    {"id": "unsafe-integer", "path": "fixtures/invalid/unsafe-integer.json"}
+  ]
+}

@@ -1,4 +1,4 @@
-.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier test-evidence-lineage planning-audit gate-check test-go test-go-workspace test-protocol-foundation manifest-digest
+.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier test-evidence-lineage planning-audit gate-check test-go test-go-workspace test-protocol-foundation test-codegen-pipeline manifest-digest
 
 install:
 	npm ci
@@ -36,6 +36,9 @@ test-go-workspace:
 
 test-protocol-foundation:
 	AROP_CHECK_COMMAND="make test-protocol-foundation" env -u GOFLAGS -u GOENV -u GOWORK -u GOCACHE -u GOCACHEPROG -u GOMODCACHE -u GOTMPDIR -u GOROOT -u GOTOOLCHAIN -u GOEXPERIMENT GOENV=off GOFLAGS=-mod=readonly GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go run ./conformance/harness/base
+
+test-codegen-pipeline:
+	AROP_CHECK_COMMAND="make test-codegen-pipeline" env -u GOFLAGS -u GOENV -u GOWORK -u GOCACHE -u GOCACHEPROG -u GOMODCACHE -u GOTMPDIR -u GOROOT -u GOTOOLCHAIN -u GOEXPERIMENT -u NODE_OPTIONS -u NODE_PATH -u NPM_CONFIG_NODE_OPTIONS -u PYTHONHOME -u PYTHONPATH -u PYTHONSTARTUP -u PYTHONINSPECT -u PYTHONWARNINGS -u PYTHONUSERBASE GOENV=off GOFLAGS=-mod=readonly GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go run ./conformance/fixtures/codegen-spike/testdata/harness
 
 manifest-digest: export AROP_MANIFEST_FILE := $(value FILE)
 manifest-digest:

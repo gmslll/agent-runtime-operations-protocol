@@ -1,0 +1,7 @@
+{
+  "revision": 19,
+  "name": "alternate-closed-empty",
+  "metadata": {},
+  "links": [{"href": "urn:arop:alternate:19", "label": "valid"}],
+  "closed": {"forbidden": true}
+}

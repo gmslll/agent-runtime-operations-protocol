@@ -1,0 +1,7 @@
+{
+  "revision": 2,
+  "name": "alternate-null",
+  "note": null,
+  "metadata": {"enabled": true},
+  "links": [{"href": "./relative", "label": "relative"}]
+}

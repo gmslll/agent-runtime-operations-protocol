@@ -1,0 +1,7 @@
+{
+  "revision": 11,
+  "name": "alternate-forward-union",
+  "metadata": {},
+  "links": [{"href": "urn:arop:alternate:11", "label": "valid"}],
+  "message": {"kind": "alpha", "value": "known", "future_message": true}
+}

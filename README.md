@@ -92,11 +92,21 @@ AROP 的权威顺序为：`DECISIONS` 约束 → 领域规范与状态机 Fixtur
 ## 当前验证
 
 ```bash
-npm ci
+npm ci --ignore-scripts --omit=optional --no-audit --no-fund
 make spec-index-check
 make blueprint-check
 make validate
 ```
+
+P07 将以仓库内自有、确定性的 Schema-driven pipeline 生成 Go/Python/TypeScript 代表模型。TypeScript 编译器固定为 `5.9.3`，Python 严格类型检查器固定为 Pyright `1.1.414`，npm 版本声明为 `10.9.2`；版本与完整性信息由 `package-lock.json` 绑定，不调用全局 `tsc`、`npx` 或浮动版本。依赖安装完成后，生成、编译、类型检查与 drift 验证必须全程离线；若要求空机从零开始也能 air-gap 运行，还需另外提供与 lock Digest 绑定的受控 npm 缓存或工具链制品。
+
+P07 的计划验收入口为：
+
+```bash
+make test-codegen-pipeline
+```
+
+只有该命令产生的 `build/reports/P07/report.json` 和 `junit.xml` 通过独立报告复验后，才能声明 P07 完成；本节的工具版本和命令不构成提前验收。
 
 `make spec-index-check` 校验权威链、机器目录/DAG、14 条不可变需求、冲突、Decision ID 和本地引用闭包。`make blueprint-check` 动态校验双 Go Module、最终布局、连续阶段 DAG、baseline future ownership、关键制品 owner/phase/test/exposure、implement report closure、聚合报告精确 fan-in、跨生态版本、detached evidence 与 commit A→metadata-only B 发布链。`make test-evidence-lineage` 以真实临时 Git 历史验证 planning blob 的 ancestor/current/changed→reverted/deleted 负例。全部由 `make validate` 强制执行。
 

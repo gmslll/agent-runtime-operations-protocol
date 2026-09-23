@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/conformance/extension-envelope.schema.json",
+  "title": "Representative extension envelope",
+  "type": "object",
+  "required": ["schema_ref", "schema_digest", "data"],
+  "properties": {
+    "schema_ref": {"type": "string", "format": "uri-reference"},
+    "schema_digest": {"type": "string"},
+    "data": true
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,7 @@
+{
+  "revision": 4,
+  "name": "alternate-future",
+  "metadata": {"source": "future"},
+  "links": [{"href": "urn:arop:alternate:future", "label": "future", "future_link": true}],
+  "future_top": {"preserve": true}
+}
