@@ -75,9 +75,29 @@ func p09TestComposeReadyDurable(t *testing.T, mode platform.Mode) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cleanupRestart()
 	if restarted.Durability() != "durable" || !restarted.Readiness(context.Background()).Ready {
 		t.Fatal("restart did not preserve ready durable composition")
+	}
+	if err := cleanupRestart(); err != nil {
+		t.Fatal(err)
+	}
+
+	// The real composition must not discover a migration that is absent from
+	// the P09 report-bound production catalog, even when it appears in the
+	// configured directory later.
+	future := filepath.Join(p09MigrationRootArg(args), string(mode), "0002_future.sql")
+	if err := os.WriteFile(future, []byte("SELECT 2;\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	application, server, unexpectedCleanup, err := compose(args, nil)
+	if err == nil {
+		if unexpectedCleanup != nil {
+			_ = unexpectedCleanup()
+		}
+		t.Fatalf("real composition consumed undeclared future migration: application=%v server=%v", application != nil, server != nil)
+	}
+	if application != nil || server != nil || unexpectedCleanup != nil {
+		t.Fatal("undeclared future migration failure returned live components")
 	}
 }
 
@@ -150,15 +170,44 @@ func p09CompositionArgs(t *testing.T, mode platform.Mode, dsn, startupTimeout, m
 	if err := os.Mkdir(backupDirectory, 0o700); err != nil {
 		t.Fatal(err)
 	}
+	migrationRoot := filepath.Join(backupDirectory, "p09-catalog")
+	p09CopyIsolatedCatalog(t, migrationRoot)
 	return []string{
 		"--listen=127.0.0.1:0",
 		"--mode=" + string(mode),
 		"--database-dsn=" + dsn,
-		"--migration-root=" + p09RequiredAbsoluteEnv("AROP_P09_MIGRATION_ROOT"),
+		"--migration-root=" + migrationRoot,
 		"--backup-directory=" + backupDirectory,
 		"--storage-startup-timeout=" + startupTimeout,
 		"--migration-timeout=" + migrationTimeout,
 	}
+}
+
+func p09CopyIsolatedCatalog(t *testing.T, destination string) {
+	t.Helper()
+	source := p09RequiredAbsoluteEnv("AROP_P09_MIGRATION_ROOT")
+	for _, relative := range []string{"sqlite/0001_base.sql", "postgres/0001_base.sql"} {
+		contents, err := os.ReadFile(filepath.Join(source, filepath.FromSlash(relative)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		directory := filepath.Dir(filepath.Join(destination, filepath.FromSlash(relative)))
+		if err := os.MkdirAll(directory, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(destination, filepath.FromSlash(relative)), contents, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func p09MigrationRootArg(args []string) string {
+	for _, argument := range args {
+		if value, found := strings.CutPrefix(argument, "--migration-root="); found {
+			return value
+		}
+	}
+	panic("missing controlled P09 migration root argument")
 }
 
 func p09CompositionDatabase(t *testing.T, mode platform.Mode) (string, func()) {

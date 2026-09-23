@@ -1,0 +1,110 @@
+package migrate
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"testing"
+	"testing/fstest"
+)
+
+func TestCatalogClosure(t *testing.T) {
+	sqliteSQL := []byte("CREATE TABLE closure_probe(id INTEGER PRIMARY KEY);\n")
+	postgresSQL := []byte("CREATE TABLE closure_probe(id BIGINT PRIMARY KEY);\n")
+	validFS := fstest.MapFS{
+		"sqlite/0001_base.sql":   &fstest.MapFile{Data: sqliteSQL, Mode: 0o644},
+		"postgres/0001_base.sql": &fstest.MapFile{Data: postgresSQL, Mode: 0o644},
+	}
+	valid := CatalogClosure{
+		ID: "production-migrations", ReportPhase: "P09", ReportPath: "build/reports/P09/report.json", OwnerPhases: []string{"P09"},
+		Migrations: []DeclaredMigration{
+			{Dialect: DialectSQLite, Path: "sqlite/0001_base.sql", OwnerPhase: "P09", SHA256: testDigest(sqliteSQL)},
+			{Dialect: DialectPostgres, Path: "postgres/0001_base.sql", OwnerPhase: "P09", SHA256: testDigest(postgresSQL)},
+		},
+	}
+
+	t.Run("declared-complete-static-input-closure", func(t *testing.T) {
+		for _, dialect := range []Dialect{DialectSQLite, DialectPostgres} {
+			catalog, err := LoadCatalogClosure(validFS, valid, dialect)
+			if err != nil {
+				t.Fatalf("%s closure rejected: %v", dialect, err)
+			}
+			if catalog.TargetVersion() != 1 {
+				t.Fatalf("%s target=%d want=1", dialect, catalog.TargetVersion())
+			}
+		}
+	})
+
+	t.Run("missing-declared-migration", func(t *testing.T) {
+		filesystem := cloneMapFS(validFS)
+		delete(filesystem, "postgres/0001_base.sql")
+		if _, err := LoadCatalogClosure(filesystem, valid, DialectSQLite); err == nil {
+			t.Fatal("missing paired-dialect migration was accepted")
+		}
+	})
+
+	t.Run("undeclared-migration", func(t *testing.T) {
+		filesystem := cloneMapFS(validFS)
+		filesystem["sqlite/0002_future.sql"] = &fstest.MapFile{Data: []byte("SELECT 2;\n"), Mode: 0o644}
+		if _, err := LoadCatalogClosure(filesystem, valid, DialectSQLite); err == nil {
+			t.Fatal("undeclared migration was accepted")
+		}
+	})
+
+	t.Run("report-input-digest-drift", func(t *testing.T) {
+		filesystem := cloneMapFS(validFS)
+		filesystem["sqlite/0001_base.sql"] = &fstest.MapFile{Data: []byte("SELECT 9;\n"), Mode: 0o644}
+		if _, err := LoadCatalogClosure(filesystem, valid, DialectSQLite); err == nil {
+			t.Fatal("migration outside the reported digest was accepted")
+		}
+	})
+
+	t.Run("future-owner-phase", func(t *testing.T) {
+		closure := valid
+		closure.Migrations = append([]DeclaredMigration(nil), valid.Migrations...)
+		closure.Migrations[0].OwnerPhase = "P10"
+		if _, err := LoadCatalogClosure(validFS, closure, DialectSQLite); err == nil {
+			t.Fatal("future-phase migration was accepted")
+		}
+	})
+
+	t.Run("owner-phase-outside-scope", func(t *testing.T) {
+		closure := valid
+		closure.Migrations = append([]DeclaredMigration(nil), valid.Migrations...)
+		closure.Migrations[0].OwnerPhase = "P08"
+		if _, err := LoadCatalogClosure(validFS, closure, DialectSQLite); err == nil {
+			t.Fatal("migration from an undeclared owner phase was accepted")
+		}
+	})
+
+	t.Run("report-provenance-mismatch", func(t *testing.T) {
+		closure := valid
+		closure.ReportPath = "build/reports/P10/report.json"
+		if _, err := LoadCatalogClosure(validFS, closure, DialectSQLite); err == nil {
+			t.Fatal("mismatched report provenance was accepted")
+		}
+	})
+
+	t.Run("cross-dialect-version-closure", func(t *testing.T) {
+		closure := valid
+		closure.Migrations = append([]DeclaredMigration(nil), valid.Migrations...)
+		closure.Migrations[1].Path = "postgres/0002_other.sql"
+		if _, err := LoadCatalogClosure(validFS, closure, DialectPostgres); err == nil {
+			t.Fatal("asymmetric dual-database closure was accepted")
+		}
+	})
+}
+
+func testDigest(contents []byte) string {
+	digest := sha256.Sum256(contents)
+	return hex.EncodeToString(digest[:])
+}
+
+func cloneMapFS(source fstest.MapFS) fstest.MapFS {
+	clone := fstest.MapFS{}
+	for name, file := range source {
+		copy := *file
+		copy.Data = append([]byte(nil), file.Data...)
+		clone[name] = &copy
+	}
+	return clone
+}

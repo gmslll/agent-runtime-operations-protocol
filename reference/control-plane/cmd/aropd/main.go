@@ -93,16 +93,12 @@ func composeStorageContext(ctx context.Context, config platform.Config) (platfor
 		if err != nil {
 			return nil, nil, nil, nil, errors.New("validate migration root")
 		}
-		dialectRoot, err := canonicalDirectory(filepath.Join(root, "sqlite"))
-		if err != nil {
-			return nil, nil, nil, nil, errors.New("validate SQLite migration catalog")
-		}
 		db, err := sqliteadapter.OpenContext(startupContext, config.DatabaseDSN)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
 		cleanup := db.Close
-		catalog, err := migrate.LoadCatalog(os.DirFS(dialectRoot), ".", migrate.DialectSQLite)
+		catalog, err := migrate.LoadCatalogClosure(os.DirFS(root), migrate.CurrentProductionCatalog(), migrate.DialectSQLite)
 		if err != nil {
 			_ = cleanup()
 			return nil, nil, nil, nil, errors.New("load SQLite migration catalog")
@@ -148,16 +144,12 @@ func composeStorageContext(ctx context.Context, config platform.Config) (platfor
 		if err != nil {
 			return nil, nil, nil, nil, errors.New("validate migration root")
 		}
-		dialectRoot, err := canonicalDirectory(filepath.Join(root, "postgres"))
-		if err != nil {
-			return nil, nil, nil, nil, errors.New("validate PostgreSQL migration catalog")
-		}
 		db, err := postgresadapter.Open(startupContext, config.DatabaseDSN)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
 		cleanup := db.Close
-		catalog, err := migrate.LoadCatalog(os.DirFS(dialectRoot), ".", migrate.DialectPostgres)
+		catalog, err := migrate.LoadCatalogClosure(os.DirFS(root), migrate.CurrentProductionCatalog(), migrate.DialectPostgres)
 		if err != nil {
 			_ = cleanup()
 			return nil, nil, nil, nil, errors.New("load PostgreSQL migration catalog")
