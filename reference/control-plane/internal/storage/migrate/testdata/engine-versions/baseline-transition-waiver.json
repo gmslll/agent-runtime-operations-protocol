@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "waiver_id": "P09-P08-SERVER-BASELINE-TRANSITION-001",
+  "status": "accepted",
+  "policy": {
+    "owner_phase_semantics": "first-introduction-and-accountability",
+    "exclusive_mutation_ownership": false
+  },
+  "transition": {
+    "from_phase": "P08",
+    "to_phase": "P09",
+    "artifact": "reference-control-plane-server",
+    "reason": "P09 adds explicit durable storage composition to the P08 Control Plane server without transferring its accountable owner or changing its public exposure."
+  },
+  "affected_artifacts": [
+    "reference-control-plane-server",
+    "migration-engine",
+    "migration-engine-fixture-versions",
+    "durable-audit-storage",
+    "sqlite-uow-storage-adapter",
+    "postgres-uow-storage-adapter",
+    "sqlite-migration-base",
+    "postgres-migration-base",
+    "nested-control-plane-go-module",
+    "phase-report-p08",
+    "phase-report-p09"
+  ],
+  "source_closure": [
+    "reference/control-plane/cmd/aropd/main.go",
+    "reference/control-plane/cmd/aropd/main_test.go",
+    "reference/control-plane/go.mod",
+    "reference/control-plane/go.sum",
+    "reference/control-plane/internal/adapters/observability/durable/store.go",
+    "reference/control-plane/internal/adapters/storage/postgres/uow.go",
+    "reference/control-plane/internal/adapters/storage/sqlite/uow.go",
+    "reference/control-plane/internal/storage/migrate/runner.go",
+    "reference/control-plane/migrations/postgres/0001_base.sql",
+    "reference/control-plane/migrations/sqlite/0001_base.sql"
+  ],
+  "acceptance": [
+    {
+      "phase": "P08",
+      "command": "make test-control-plane-platform",
+      "report": "build/reports/P08/report.json"
+    },
+    {
+      "phase": "P09",
+      "command": "make test-storage-migrations",
+      "report": "build/reports/P09/report.json"
+    }
+  ],
+  "constraints": [
+    "no-memory-fallback-in-durable-modes",
+    "p08-regression-must-pass-under-p09",
+    "p08-static-closure-binds-p09-composition-sources",
+    "frozen-planning-inputs-remain-unchanged"
+  ]
+}

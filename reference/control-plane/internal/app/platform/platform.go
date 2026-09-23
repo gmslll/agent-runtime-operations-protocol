@@ -15,8 +15,12 @@ import (
 )
 
 const (
-	ReadinessScope = "platform-bootstrap"
-	DurabilityMode = "ephemeral"
+	ReadinessScope      = "platform-bootstrap"
+	DurabilityEphemeral = "ephemeral"
+	DurabilityDurable   = "durable"
+	// DurabilityMode is retained for the P08 development-memory compatibility
+	// surface. Runtime responses use Platform.Durability instead.
+	DurabilityMode = DurabilityEphemeral
 )
 
 var checkNamePattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$`)
@@ -119,6 +123,12 @@ func New(config Config, dependencies Dependencies, service, version string) (*Pl
 func (platform *Platform) Config() Config  { return platform.config }
 func (platform *Platform) Service() string { return platform.service }
 func (platform *Platform) Version() string { return platform.version }
+func (platform *Platform) Durability() string {
+	if platform != nil && platform.config.Mode != ModeDevelopmentMemory {
+		return DurabilityDurable
+	}
+	return DurabilityEphemeral
+}
 
 func (platform *Platform) Now() time.Time { return platform.deps.Clock.Now().UTC() }
 
@@ -180,7 +190,7 @@ func (platform *Platform) Readiness(ctx context.Context) ReadinessSnapshot {
 	for _, result := range results {
 		ready = ready && result.Ready
 	}
-	return ReadinessSnapshot{Ready: ready, Scope: ReadinessScope, Durability: DurabilityMode, Checks: results}
+	return ReadinessSnapshot{Ready: ready, Scope: ReadinessScope, Durability: platform.Durability(), Checks: results}
 }
 
 func readinessResult(ctx context.Context, name string, check func(context.Context) error) ReadinessResult {

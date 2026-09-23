@@ -42,13 +42,38 @@ const (
 
 var rootRequirementPattern = regexp.MustCompile(`(?m)^\s*(?:require\s+)?github\.com/gmslll/agent-runtime-operations-protocol\s+(v0\.0\.0-([0-9]{14})-([0-9a-f]{12}))\s*$`)
 
-var externalModules = []struct {
+type modulePin struct {
 	Path    string
 	Version string
-}{
+}
+
+var rootExternalModules = []modulePin{
 	{Path: "github.com/cyberphone/json-canonicalization", Version: "v0.0.0-20241213102144-19d51d7fe467"},
 	{Path: "github.com/santhosh-tekuri/jsonschema/v6", Version: "v6.0.2"},
 	{Path: "golang.org/x/text", Version: "v0.14.0"},
+}
+
+var nestedExternalModules = []modulePin{
+	{Path: "github.com/cyberphone/json-canonicalization", Version: "v0.0.0-20241213102144-19d51d7fe467"},
+	{Path: "github.com/dustin/go-humanize", Version: "v1.0.1"},
+	{Path: "github.com/gofrs/flock", Version: "v0.13.0"},
+	{Path: "github.com/google/uuid", Version: "v1.6.0"},
+	{Path: "github.com/jackc/pgpassfile", Version: "v1.0.0"},
+	{Path: "github.com/jackc/pgservicefile", Version: "v0.0.0-20240606120523-5a60cdf6a761"},
+	{Path: "github.com/jackc/pgx/v5", Version: "v5.8.0"},
+	{Path: "github.com/jackc/puddle/v2", Version: "v2.2.2"},
+	{Path: "github.com/mattn/go-isatty", Version: "v0.0.20"},
+	{Path: "github.com/ncruces/go-strftime", Version: "v1.0.0"},
+	{Path: "github.com/remyoudompheng/bigfft", Version: "v0.0.0-20230129092748-24d4a6f8daec"},
+	{Path: "github.com/santhosh-tekuri/jsonschema/v6", Version: "v6.0.2"},
+	{Path: "golang.org/x/exp", Version: "v0.0.0-20251023183803-a4bb9ffd2546"},
+	{Path: "golang.org/x/sync", Version: "v0.17.0"},
+	{Path: "golang.org/x/sys", Version: "v0.37.0"},
+	{Path: "golang.org/x/text", Version: "v0.29.0"},
+	{Path: "modernc.org/libc", Version: "v1.67.6"},
+	{Path: "modernc.org/mathutil", Version: "v1.7.1"},
+	{Path: "modernc.org/memory", Version: "v1.11.0"},
+	{Path: "modernc.org/sqlite", Version: "v1.46.1"},
 }
 
 var ownerDirectories = []string{
@@ -58,6 +83,19 @@ var ownerDirectories = []string{
 	"reference/control-plane/internal/app/platform/httpadapter",
 	"reference/control-plane/internal/app/platform/ports",
 	"reference/control-plane/internal/ports/observability",
+}
+
+var p09CompositionInputs = []string{
+	"reference/control-plane/internal/storage/migrate/testdata/engine-versions/baseline-transition-waiver.json",
+	"reference/control-plane/migrations/postgres/0001_base.sql",
+	"reference/control-plane/migrations/sqlite/0001_base.sql",
+}
+
+var p09CompositionDirectories = []string{
+	"reference/control-plane/internal/adapters/observability/durable",
+	"reference/control-plane/internal/adapters/storage/postgres",
+	"reference/control-plane/internal/adapters/storage/sqlite",
+	"reference/control-plane/internal/storage/migrate",
 }
 
 var expectedTests = map[string][]string{
@@ -192,7 +230,7 @@ func main() {
 
 	add("p08-owner-boundary", requireOwnerDirectories(root), "the four P08 owner roots and their required platform subpackages exist as real directories")
 	add("p05-baseline-unchanged", verifyFrozenInputs(root), "nested module/workspace and internal/server P05 baselines are byte-identical")
-	add("production-import-boundary", verifyProductionImports(root), "P08 production imports stay within stdlib and exact P08 owner packages")
+	add("production-import-boundary", verifyProductionImports(root), "P08 production imports stay within stdlib and exact P08 packages, with cmd/aropd alone allowed the approved P09 storage assembly imports")
 	add("trace-validator-reuse", verifyTraceValidatorReuse(root), "request metadata uses the root core TraceContext validator without a copied trace regex or validator")
 	add("redaction-fixture-coverage", verifySentinelFixtures(root), "tests exercise secret, authorization and cookie redaction sentinels")
 
@@ -211,7 +249,7 @@ func main() {
 	add("nested-go-test-command", errors.Join(testErr, commandFailure(result)), strings.Join(result.Argv, " "))
 	add("runtime-log-redaction", rejectSentinels(result.Output), "runtime evidence contains no raw redaction sentinel")
 	listResult := standalone.List
-	add("production-go-list", verifyProductionList(root, standalone.Version, standalone.ModuleCache, listResult), "go list dependency closure contains only stdlib, exact P08 packages, root core and its three locked transitive modules")
+	add("production-go-list", verifyProductionList(root, standalone.Version, standalone.ModuleCache, listResult), "go list dependency closure contains only stdlib, exact approved P08/P09 composition packages, root core and checksum-locked modules")
 
 	afterPaths, after, afterErr := staticInputs(root)
 	if afterErr == nil && !reflect.DeepEqual(inputPaths, afterPaths) {
@@ -232,15 +270,18 @@ func main() {
 		Command: command, CheckerPath: checkerPath, InputPaths: inputPaths, RuntimeInputPaths: []string{}, RuntimeEvidence: runtimeEvidence,
 		Checks: checks,
 		Summary: map[string]any{
-			"external_proxy_category": "credential-free-https",
-			"locked_external_modules": len(externalModules),
-			"owner_artifacts":         4,
-			"required_packages":       len(expectedTests),
-			"required_subtests":       requiredSubtestCount(),
-			"required_top_tests":      requiredTestCount(),
-			"runtime_input_count":     0,
+			"external_proxy_category":        "credential-free-https",
+			"root_locked_external_modules":   len(rootExternalModules),
+			"nested_locked_external_modules": len(nestedExternalModules),
+			"owner_artifacts":                4,
+			"p09_composition_inputs":         len(p09CompositionInputs),
+			"p09_composition_package_roots":  len(p09CompositionDirectories),
+			"required_packages":              len(expectedTests),
+			"required_subtests":              requiredSubtestCount(),
+			"required_top_tests":             requiredTestCount(),
+			"runtime_input_count":            0,
 		},
-		AuditNote: "P08 has no runtime_inputs. Its static closure binds all P08 owner sources plus frozen P05 module/server baselines and report tooling; the nested root pseudo-version is reconstructed from its exact Git commit into an isolated file proxy. Three exact root-locked dependencies are prefetched through one credential-free HTTPS proxy, then tests and dependency discovery run with GOWORK=off and GOPROXY=off. Proxy category is non-secret; download outputs, absolute cache paths, verification, test, and list outputs are represented only by digest and byte-count runtime_evidence.",
+		AuditNote: "P08 has no runtime_inputs. Its static closure binds all P08 owner sources plus frozen P05 module/server baselines, report tooling, the strict P08-to-P09 transition waiver, and every production source or migration loaded by the approved P09 durable cmd composition; the nested root pseudo-version is reconstructed from its exact Git commit into an isolated file proxy. Exact checksum-locked dependencies are prefetched through one credential-free HTTPS proxy, then tests and dependency discovery run with GOWORK=off and GOPROXY=off. Proxy category is non-secret; download outputs, absolute cache paths, verification, test, and list outputs are represented only by digest and byte-count runtime_evidence.",
 	})
 	fatal(err)
 	verified, mode, err := report.Verify(report.VerifyOptions{Root: root, ReportPath: reportPath})
@@ -297,6 +338,10 @@ func verifyProductionImports(root string) error {
 	observability := nestedModule + "/internal/ports/observability"
 	memory := nestedModule + "/internal/adapters/observability/memory"
 	rootCore := rootModule + "/sdk/go/protocol/core"
+	durable := nestedModule + "/internal/adapters/observability/durable"
+	postgres := nestedModule + "/internal/adapters/storage/postgres"
+	sqlite := nestedModule + "/internal/adapters/storage/sqlite"
+	migrations := nestedModule + "/internal/storage/migrate"
 	allowedByDirectory := map[string]map[string]bool{
 		"reference/control-plane/internal/app/platform": {
 			platformPorts: true,
@@ -312,11 +357,9 @@ func verifyProductionImports(root string) error {
 			observability: true,
 		},
 		"reference/control-plane/cmd/aropd": {
-			httpAdapter:   true,
-			platform:      true,
-			platformPorts: true,
-			observability: true,
-			memory:        true,
+			httpAdapter: true, platform: true, platformPorts: true,
+			observability: true, memory: true, durable: true,
+			postgres: true, sqlite: true, migrations: true,
 		},
 	}
 	problems := []string{}
@@ -606,7 +649,7 @@ func runStandaloneAcceptance(root string) (result standaloneResult) {
 	if err == nil {
 		externalEnvironment := cloneStrings(baseEnvironment)
 		externalEnvironment["GOPROXY"] = "https://proxy.golang.org"
-		for _, dependency := range externalModules {
+		for _, dependency := range rootExternalModules {
 			external := runCommand(moduleCopy, externalEnvironment, []string{"go", "mod", "download", "-json", dependency.Path + "@" + dependency.Version})
 			externalDownloads = append(externalDownloads, external)
 			if err = commandFailure(external); err != nil {
@@ -614,6 +657,13 @@ func runStandaloneAcceptance(root string) (result standaloneResult) {
 			}
 			if err = validateExternalDownload(root, scratch, dependency.Path, dependency.Version, rootGoSum, external.Output); err != nil {
 				break
+			}
+		}
+		if err == nil {
+			nestedDownload := runCommand(moduleCopy, externalEnvironment, []string{"go", "mod", "download", "-json", "all"})
+			externalDownloads = append(externalDownloads, nestedDownload)
+			if err = commandFailure(nestedDownload); err == nil {
+				err = validateNestedDownloads(root, scratch, nestedDownload.Output)
 			}
 		}
 	}
@@ -717,7 +767,7 @@ func validateExternalModuleLocks(rootGoMod, rootGoSum []byte) error {
 		}
 	}
 	problems := []string{}
-	for _, dependency := range externalModules {
+	for _, dependency := range rootExternalModules {
 		versions := requirements[dependency.Path]
 		if len(versions) != 1 || versions[0] != dependency.Version {
 			problems = append(problems, fmt.Sprintf("root go.mod lock for %s is %v, want exactly %s", dependency.Path, versions, dependency.Version))
@@ -996,6 +1046,53 @@ func validateExternalDownload(root, scratch, module, version string, rootGoSum, 
 	return nil
 }
 
+func validateNestedDownloads(root, scratch string, output []byte) error {
+	nestedGoSum, err := readRegular(root, "reference/control-plane/go.sum")
+	if err != nil {
+		return err
+	}
+	sums := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(string(nestedGoSum)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 3 {
+			return errors.New("nested go.sum contains a malformed entry")
+		}
+		sums[fields[0]+" "+fields[1]] = fields[2]
+	}
+	seen := map[string]bool{}
+	decoder := json.NewDecoder(bytes.NewReader(output))
+	for {
+		var document moduleDownloadDocument
+		if err := decoder.Decode(&document); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return fmt.Errorf("decode nested module download evidence: %w", err)
+		}
+		if document.Error != "" || document.Path == "" || document.Version == "" || document.Sum == "" || document.GoModSum == "" {
+			return fmt.Errorf("nested module download is incomplete for %s", document.Path)
+		}
+		key := document.Path + " " + document.Version
+		if seen[key] {
+			return fmt.Errorf("duplicate nested module download %s", key)
+		}
+		seen[key] = true
+		if sums[key] != document.Sum || sums[key+"/go.mod"] != document.GoModSum {
+			return fmt.Errorf("nested module checksum mismatch for %s", key)
+		}
+		for label, downloadedPath := range map[string]string{"info": document.Info, "go.mod": document.GoMod, "zip": document.Zip, "directory": document.Dir} {
+			if downloadedPath == "" || !pathWithin(scratch, downloadedPath) || pathWithin(root, downloadedPath) {
+				return fmt.Errorf("nested module %s %s escaped isolated cache", key, label)
+			}
+		}
+	}
+	for _, dependency := range nestedExternalModules {
+		if !seen[dependency.Path+" "+dependency.Version] {
+			return fmt.Errorf("nested download omitted locked module %s@%s", dependency.Path, dependency.Version)
+		}
+	}
+	return nil
+}
+
 func runGit(root string, arguments ...string) ([]byte, error) {
 	command := exec.Command("git", append([]string{"-c", "core.autocrlf=false", "-c", "core.safecrlf=true"}, arguments...)...)
 	command.Dir = root
@@ -1095,18 +1192,22 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 		} `json:"Module"`
 	}
 	allowed := map[string]string{
-		nestedModule + "/cmd/aropd":                              "reference/control-plane/cmd/aropd",
-		nestedModule + "/internal/adapters/observability/memory": "reference/control-plane/internal/adapters/observability/memory",
-		nestedModule + "/internal/app/platform":                  "reference/control-plane/internal/app/platform",
-		nestedModule + "/internal/app/platform/httpadapter":      "reference/control-plane/internal/app/platform/httpadapter",
-		nestedModule + "/internal/app/platform/ports":            "reference/control-plane/internal/app/platform/ports",
-		nestedModule + "/internal/ports/observability":           "reference/control-plane/internal/ports/observability",
+		nestedModule + "/cmd/aropd":                               "reference/control-plane/cmd/aropd",
+		nestedModule + "/internal/adapters/observability/durable": "reference/control-plane/internal/adapters/observability/durable",
+		nestedModule + "/internal/adapters/observability/memory":  "reference/control-plane/internal/adapters/observability/memory",
+		nestedModule + "/internal/adapters/storage/postgres":      "reference/control-plane/internal/adapters/storage/postgres",
+		nestedModule + "/internal/adapters/storage/sqlite":        "reference/control-plane/internal/adapters/storage/sqlite",
+		nestedModule + "/internal/app/platform":                   "reference/control-plane/internal/app/platform",
+		nestedModule + "/internal/app/platform/httpadapter":       "reference/control-plane/internal/app/platform/httpadapter",
+		nestedModule + "/internal/app/platform/ports":             "reference/control-plane/internal/app/platform/ports",
+		nestedModule + "/internal/ports/observability":            "reference/control-plane/internal/ports/observability",
+		nestedModule + "/internal/storage/migrate":                "reference/control-plane/internal/storage/migrate",
 	}
 	seen := map[string]bool{}
 	seenExternalModules := map[string]bool{}
 	rootCore := rootModule + "/sdk/go/protocol/core"
 	externalVersions := map[string]string{}
-	for _, dependency := range externalModules {
+	for _, dependency := range nestedExternalModules {
 		externalVersions[dependency.Path] = dependency.Version
 	}
 	problems := []string{}
@@ -1150,7 +1251,7 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 	if !seen[rootCore] {
 		problems = append(problems, "missing production dependency "+rootCore)
 	}
-	for _, dependency := range externalModules {
+	for _, dependency := range nestedExternalModules {
 		if !seenExternalModules[dependency.Path] {
 			problems = append(problems, "missing locked transitive module "+dependency.Path+"@"+dependency.Version)
 		}
@@ -1282,6 +1383,14 @@ func staticInputs(root string) ([]string, []fileEntry, error) {
 		"docs/DECISIONS.md", "docs/DEVELOPMENT_PLAN.md", "docs/DIRECTORY_STRUCTURE.md", "docs/IMPLEMENTATION_BLUEPRINT.md",
 		"spec/artifact-manifest.yaml", "spec/requirements.yaml", "spec/schemas/check-report.schema.json",
 	}
+	paths = append(paths, p09CompositionInputs...)
+	for _, directory := range p09CompositionDirectories {
+		files, err := immediateRegularFiles(root, directory)
+		if err != nil {
+			return nil, nil, err
+		}
+		paths = append(paths, files...)
+	}
 	for _, directory := range append(append([]string{}, ownerDirectories...),
 		"internal/tooling/controlledinput", "internal/tooling/report", "internal/tooling/schema", "internal/tooling/structuredfile") {
 		files, err := regularFiles(root, directory)
@@ -1312,6 +1421,35 @@ func staticInputs(root string) ([]string, []fileEntry, error) {
 		entries = append(entries, fileEntry{Path: path, Mode: info.Mode(), SHA256: digest(data), Bytes: int64(len(data))})
 	}
 	return paths, entries, nil
+}
+
+func immediateRegularFiles(root, relativeDirectory string) ([]string, error) {
+	if err := requireRealDirectory(root, relativeDirectory); err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(relativeDirectory)))
+	if err != nil {
+		return nil, err
+	}
+	paths := []string{}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("static closure contains symlink %s/%s", relativeDirectory, entry.Name())
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return nil, err
+		}
+		if !info.Mode().IsRegular() || info.Mode().Perm() != 0o644 {
+			return nil, fmt.Errorf("static closure file %s/%s is not regular 0644", relativeDirectory, entry.Name())
+		}
+		paths = append(paths, relativeDirectory+"/"+entry.Name())
+	}
+	sort.Strings(paths)
+	return paths, nil
 }
 
 func regularFiles(root, relativeDirectory string) ([]string, error) {

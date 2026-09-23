@@ -38,7 +38,7 @@ func NewHandler(application *platform.Platform) (http.Handler, error) {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/health/live", func(writer http.ResponseWriter, _ *http.Request) {
-		writeJSON(writer, http.StatusOK, healthResponse{Status: "ok", Service: application.Service(), Version: application.Version(), Scope: platform.ReadinessScope, Durability: platform.DurabilityMode})
+		writeJSON(writer, http.StatusOK, healthResponse{Status: "ok", Service: application.Service(), Version: application.Version(), Scope: platform.ReadinessScope, Durability: application.Durability()})
 	})
 	mux.HandleFunc("GET /v1/health/ready", func(writer http.ResponseWriter, request *http.Request) {
 		snapshot := application.Readiness(request.Context())
@@ -141,6 +141,11 @@ func invoke(application *platform.Platform, writer http.ResponseWriter, request 
 			writeJSON(writer, http.StatusInternalServerError, errorResponse{Status: "error"})
 		}
 	}()
+	operation := classifyOperation(request.URL.Path)
+	if operation == "health.live" || operation == "health.ready" {
+		next.ServeHTTP(writer, request)
+		return
+	}
 	if err := application.Execute(request.Context(), func(ctx context.Context) error {
 		next.ServeHTTP(writer, request.WithContext(ctx))
 		return nil

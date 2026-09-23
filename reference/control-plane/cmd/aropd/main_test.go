@@ -12,9 +12,11 @@ import (
 
 func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 	t.Parallel()
-	if _, _, err := compose([]string{"--listen=127.0.0.1:0"}, nil); err != nil {
+	_, _, cleanup, err := compose([]string{"--listen=127.0.0.1:0"}, nil)
+	if err != nil {
 		t.Fatalf("valid composition rejected: %v", err)
 	}
+	defer cleanup()
 	for _, test := range []struct {
 		name              string
 		args, environment []string
@@ -24,7 +26,7 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 		{"invalid-mode", []string{"--mode=production"}, nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			_, _, err := compose(test.args, test.environment)
+			_, _, _, err := compose(test.args, test.environment)
 			if err == nil {
 				t.Fatal("invalid composition was accepted")
 			}

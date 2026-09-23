@@ -7,13 +7,21 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/observability/durable"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/observability/memory"
+	postgresadapter "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/storage/postgres"
+	sqliteadapter "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/storage/sqlite"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/httpadapter"
+	platformports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/ports"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/ports/observability"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/storage/migrate"
 )
 
 var version = "0.1.0-dev"
@@ -25,39 +33,203 @@ func main() {
 	}
 }
 
-func compose(args, environment []string) (*platform.Platform, *http.Server, error) {
+func compose(args, environment []string) (*platform.Platform, *http.Server, func() error, error) {
 	config, err := platform.ParseConfig(args, environment)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	store, err := memory.New(config.AuditCapacity, config.TraceCapacity)
+	uow, store, checks, cleanup, err := composeStorageContext(context.Background(), config)
 	if err != nil {
-		return nil, nil, errors.New("initialize ephemeral observability store")
+		return nil, nil, nil, err
 	}
 	clock := platform.RealClock{}
 	application, err := platform.New(config, platform.Dependencies{
 		Clock: clock, IDs: platform.SystemIDSource{Clock: clock}, Faults: platform.NoopFaultHook{},
-		UoW: &platform.SerialUnitOfWork{}, Observability: store,
+		UoW: uow, Observability: store, Checks: checks,
 	}, "arop-reference-control-plane", version)
 	if err != nil {
-		return nil, nil, errors.New("initialize Control Plane platform")
+		_ = cleanup()
+		return nil, nil, nil, errors.New("initialize Control Plane platform")
 	}
 	handler, err := httpadapter.NewHandler(application)
 	if err != nil {
-		return nil, nil, errors.New("assemble Control Plane HTTP handler")
+		_ = cleanup()
+		return nil, nil, nil, errors.New("assemble Control Plane HTTP handler")
 	}
-	return application, httpadapter.NewServer(application, handler), nil
+	return application, httpadapter.NewServer(application, handler), cleanup, nil
 }
 
 func run(args, environment []string) error {
-	application, httpServer, err := compose(args, environment)
+	application, httpServer, cleanup, err := compose(args, environment)
 	if err != nil {
 		return err
 	}
+	defer cleanup()
 	shutdownContext, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	slog.Info("reference control plane listening", "address", httpServer.Addr, "durability", platform.DurabilityMode)
+	slog.Info("reference control plane listening", "address", httpServer.Addr, "durability", application.Durability())
 	return serve(shutdownContext, application, httpServer, application.Config().ShutdownTimeout)
+}
+
+func composeStorage(config platform.Config) (platformports.UnitOfWork, observability.Store, []platformports.ReadinessCheck, func() error, error) {
+	return composeStorageContext(context.Background(), config)
+}
+
+func composeStorageContext(ctx context.Context, config platform.Config) (platformports.UnitOfWork, observability.Store, []platformports.ReadinessCheck, func() error, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, nil, nil, err
+	}
+	startupContext, cancelStartup := context.WithTimeout(ctx, config.StorageStartupTimeout)
+	defer cancelStartup()
+	switch config.Mode {
+	case platform.ModeDevelopmentMemory:
+		store, err := memory.New(config.AuditCapacity, config.TraceCapacity)
+		if err != nil {
+			return nil, nil, nil, nil, errors.New("initialize ephemeral observability store")
+		}
+		return &platform.SerialUnitOfWork{}, store, nil, func() error { return nil }, nil
+	case platform.ModeSQLite:
+		root, err := canonicalDirectory(config.MigrationRoot)
+		if err != nil {
+			return nil, nil, nil, nil, errors.New("validate migration root")
+		}
+		dialectRoot, err := canonicalDirectory(filepath.Join(root, "sqlite"))
+		if err != nil {
+			return nil, nil, nil, nil, errors.New("validate SQLite migration catalog")
+		}
+		db, err := sqliteadapter.OpenContext(startupContext, config.DatabaseDSN)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		cleanup := db.Close
+		catalog, err := migrate.LoadCatalog(os.DirFS(dialectRoot), ".", migrate.DialectSQLite)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, errors.New("load SQLite migration catalog")
+		}
+		locker, err := sqliteadapter.NewMigrationLocker(config.DatabaseDSN + ".migrate.lock")
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, errors.New("initialize SQLite migration lock")
+		}
+		backup, err := sqliteadapter.NewBackupRestore(db, config.DatabaseDSN, config.BackupDirectory)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, errors.New("initialize SQLite backup/restore")
+		}
+		runner, err := migrate.NewRunner(db, catalog, locker,
+			migrate.WithVerifier(durable.VerifySchema(migrate.DialectSQLite)),
+			migrate.WithBackupRestore(backup), migrate.WithRecoveryTimeout(config.MigrationTimeout))
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, errors.New("initialize SQLite migration runner")
+		}
+		cancelStartup()
+		migrationContext, cancelMigration := context.WithTimeout(ctx, config.MigrationTimeout)
+		_, err = runner.Migrate(migrationContext)
+		cancelMigration()
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, errors.New("migrate SQLite database")
+		}
+		uow, err := sqliteadapter.NewUnitOfWorkWithMigrationLock(db, config.DatabaseDSN+".migrate.lock")
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, err
+		}
+		store, err := durable.New(db, migrate.DialectSQLite, uow.Transaction, runner.Check)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, err
+		}
+		return uow, store, []platformports.ReadinessCheck{runner}, cleanup, nil
+	case platform.ModePostgres:
+		root, err := canonicalDirectory(config.MigrationRoot)
+		if err != nil {
+			return nil, nil, nil, nil, errors.New("validate migration root")
+		}
+		dialectRoot, err := canonicalDirectory(filepath.Join(root, "postgres"))
+		if err != nil {
+			return nil, nil, nil, nil, errors.New("validate PostgreSQL migration catalog")
+		}
+		db, err := postgresadapter.Open(startupContext, config.DatabaseDSN)
+		if err != nil {
+			return nil, nil, nil, nil, err
+		}
+		cleanup := db.Close
+		catalog, err := migrate.LoadCatalog(os.DirFS(dialectRoot), ".", migrate.DialectPostgres)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, errors.New("load PostgreSQL migration catalog")
+		}
+		unlockTimeout := 5 * time.Second
+		if config.MigrationTimeout < unlockTimeout {
+			unlockTimeout = config.MigrationTimeout
+		}
+		locker, err := postgresadapter.NewMigrationLockerWithTimeout(db, postgresadapter.MaintenanceLockKey, unlockTimeout)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, errors.New("initialize PostgreSQL migration lock")
+		}
+		pgDumpPath, err := exec.LookPath("pg_dump")
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, errors.New("locate pg_dump")
+		}
+		pgDumpPath, err = filepath.EvalSymlinks(pgDumpPath)
+		if err != nil || !filepath.IsAbs(pgDumpPath) {
+			_ = cleanup()
+			return nil, nil, nil, nil, errors.New("resolve pg_dump")
+		}
+		backup, err := postgresadapter.NewBackupRestore(db, config.DatabaseDSN, config.BackupDirectory, pgDumpPath)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, errors.New("initialize PostgreSQL backup/restore")
+		}
+		runner, err := migrate.NewRunner(db, catalog, locker,
+			migrate.WithVerifier(durable.VerifySchema(migrate.DialectPostgres)),
+			migrate.WithBackupRestore(backup), migrate.WithRecoveryTimeout(config.MigrationTimeout))
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, errors.New("initialize PostgreSQL migration runner")
+		}
+		cancelStartup()
+		migrationContext, cancelMigration := context.WithTimeout(ctx, config.MigrationTimeout)
+		_, err = runner.Migrate(migrationContext)
+		cancelMigration()
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, errors.New("migrate PostgreSQL database")
+		}
+		uow, err := postgresadapter.NewUnitOfWorkWithMaintenanceLock(db, postgresadapter.MaintenanceLockKey)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, err
+		}
+		store, err := durable.New(db, migrate.DialectPostgres, uow.Transaction, runner.Check)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, nil, err
+		}
+		return uow, store, []platformports.ReadinessCheck{runner}, cleanup, nil
+	default:
+		return nil, nil, nil, nil, errors.New("unsupported storage mode")
+	}
+}
+
+func canonicalDirectory(directory string) (string, error) {
+	if directory == "" || !filepath.IsAbs(directory) || filepath.Clean(directory) != directory {
+		return "", errors.New("directory must be absolute and clean")
+	}
+	resolved, err := filepath.EvalSymlinks(directory)
+	if err != nil || resolved != directory {
+		return "", errors.New("directory must exist and contain no symlink")
+	}
+	info, err := os.Stat(directory)
+	if err != nil || !info.IsDir() {
+		return "", errors.New("directory must exist")
+	}
+	return directory, nil
 }
 
 type drainingController interface {

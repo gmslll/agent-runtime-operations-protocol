@@ -1,4 +1,4 @@
-.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier test-evidence-lineage planning-audit gate-check test-go test-go-workspace test-protocol-foundation test-codegen-pipeline test-control-plane-platform manifest-digest
+.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier test-evidence-lineage planning-audit gate-check test-go test-go-workspace test-protocol-foundation test-codegen-pipeline test-control-plane-platform test-storage-migrations manifest-digest
 
 install:
 	npm ci
@@ -42,6 +42,9 @@ test-codegen-pipeline:
 
 test-control-plane-platform:
 	AROP_CHECK_COMMAND="make test-control-plane-platform" env -u GOFLAGS -u GOENV -u GOWORK -u GOCACHE -u GOCACHEPROG -u GOMODCACHE -u GOTMPDIR -u GOROOT -u GOTOOLCHAIN -u GOEXPERIMENT -u NODE_OPTIONS -u NODE_PATH -u NPM_CONFIG_NODE_OPTIONS GOENV=off GOFLAGS=-mod=readonly GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go run -modfile="$(CURDIR)/go.mod" "$(CURDIR)/reference/control-plane/internal/app/platform/testdata/harness/main.go"
+
+test-storage-migrations:
+	AROP_CHECK_COMMAND="make test-storage-migrations" env -u GOFLAGS -u GOENV -u GOWORK -u GOCACHE -u GOCACHEPROG -u GOMODCACHE -u GOTMPDIR -u GOROOT -u GOTOOLCHAIN -u GOEXPERIMENT -u NODE_OPTIONS -u NODE_PATH -u NPM_CONFIG_NODE_OPTIONS -u PGHOST -u PGHOSTADDR -u PGPORT -u PGDATABASE -u PGUSER -u PGPASSWORD -u PGSERVICE -u PGSERVICEFILE -u PGPASSFILE -u PGOPTIONS -u PGCONNECT_TIMEOUT -u PGAPPNAME -u PGTARGETSESSIONATTRS -u PGREQUIRESSL -u PGSSLMODE -u PGSSLCERT -u PGSSLKEY -u PGSSLROOTCERT -u PGSSLCRL -u PGSSLCRLDIR -u PGGSSENCMODE -u PGCHANNELBINDING -u PGKRBSRVNAME -u PGSYSCONFDIR -u PGLOCALEDIR -u PGCLIENTENCODING GOENV=off GOFLAGS=-mod=readonly GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go run -modfile="$(CURDIR)/go.mod" "$(CURDIR)/reference/control-plane/internal/storage/migrate/testdata/engine-versions/harness/main.go"
 
 manifest-digest: export AROP_MANIFEST_FILE := $(value FILE)
 manifest-digest:
