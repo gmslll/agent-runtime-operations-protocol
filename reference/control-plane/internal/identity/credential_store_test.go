@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"strings"
 	"sync"
@@ -294,6 +295,34 @@ func TestVerifySchemaSQLite(t *testing.T) {
 		"missing-unique": func(schema string) string {
 			return strings.Replace(schema, "  CONSTRAINT arop_credentials_verifier_unique UNIQUE(secret_verifier),\n", "", 1)
 		},
+		"extra-check": func(schema string) string {
+			return strings.Replace(schema, "  CONSTRAINT arop_credentials_revision_check", "  CONSTRAINT arop_credentials_extra_check CHECK(revision < 999999),\n  CONSTRAINT arop_credentials_revision_check", 1)
+		},
+		"extra-unique": func(schema string) string {
+			return strings.Replace(schema, "  CONSTRAINT arop_credentials_revision_check", "  CONSTRAINT arop_credentials_extra_unique UNIQUE(audience),\n  CONSTRAINT arop_credentials_revision_check", 1)
+		},
+		"extra-foreign-key": func(schema string) string {
+			return strings.Replace(schema, "  CONSTRAINT arop_credentials_pkey", "  CONSTRAINT arop_credentials_extra_fkey FOREIGN KEY(principal_id) REFERENCES arop_dev_principals(principal_id),\n  CONSTRAINT arop_credentials_pkey", 1)
+		},
+		"different-index": func(schema string) string {
+			return strings.Replace(schema, "(audience, status, expires_at_ns);", "(audience, expires_at_ns, status);", 1)
+		},
+		"partial-index": func(schema string) string {
+			return strings.Replace(schema, "(audience, status, expires_at_ns);", "(audience, status, expires_at_ns) WHERE status = 'active';", 1)
+		},
+		"expression-index": func(schema string) string {
+			return schema + "\nCREATE INDEX arop_credentials_extra_idx ON arop_credentials(lower(audience));"
+		},
+		"column-default": func(schema string) string {
+			return strings.Replace(schema, "audience TEXT NOT NULL", "audience TEXT NOT NULL DEFAULT 'reference-control-plane'", 1)
+		},
+		"comment-false-positive": func(schema string) string {
+			return strings.Replace(schema, "  CONSTRAINT arop_credentials_scope_check CHECK(length(scope_canonical) BETWEEN 1 AND 4096),", "  -- CONSTRAINT arop_credentials_scope_check CHECK(length(scope_canonical) BETWEEN 1 AND 4096),", 1)
+		},
+		"wrong-table": func(schema string) string {
+			schema = strings.Replace(schema, "  CONSTRAINT arop_dev_principals_created_check CHECK(created_at_ns > 0),\n", "", 1)
+			return strings.Replace(schema, "  CONSTRAINT arop_credentials_revision_check", "  CONSTRAINT arop_dev_principals_created_check CHECK(issued_at_ns > 0),\n  CONSTRAINT arop_credentials_revision_check", 1)
+		},
 	}
 	for name, mutate := range mutations {
 		t.Run(name, func(t *testing.T) {
@@ -303,4 +332,42 @@ func TestVerifySchemaSQLite(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestVerifySchemaRejectsRowsIterationFailure(t *testing.T) {
+	const driverName = "identity-schema-iteration-error"
+	iterationDriverOnce.Do(func() { sql.Register(driverName, iterationErrorDriver{}) })
+	db, err := sql.Open(driverName, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := VerifySchema(migrate.DialectSQLite)(context.Background(), db); err == nil {
+		t.Fatal("row iteration failure was accepted")
+	}
+}
+
+type iterationErrorDriver struct{}
+
+var iterationDriverOnce sync.Once
+
+func (iterationErrorDriver) Open(string) (driver.Conn, error) { return iterationErrorConn{}, nil }
+
+type iterationErrorConn struct{}
+
+func (iterationErrorConn) Prepare(string) (driver.Stmt, error) { return nil, driver.ErrSkip }
+func (iterationErrorConn) Close() error                        { return nil }
+func (iterationErrorConn) Begin() (driver.Tx, error)           { return nil, driver.ErrSkip }
+func (iterationErrorConn) QueryContext(context.Context, string, []driver.NamedValue) (driver.Rows, error) {
+	return iterationErrorRows{}, nil
+}
+
+type iterationErrorRows struct{}
+
+func (iterationErrorRows) Columns() []string {
+	return []string{"cid", "name", "type", "notnull", "dflt_value", "pk"}
+}
+func (iterationErrorRows) Close() error { return nil }
+func (iterationErrorRows) Next([]driver.Value) error {
+	return errors.New("injected row iteration failure")
 }
