@@ -28,7 +28,7 @@ func main() {
 		fatal(err)
 	}
 	if len(os.Args) != 2 {
-		fatal(errors.New("usage: transitioncheck <validate|negative|allowed-packages>"))
+		fatal(errors.New("usage: transitioncheck <validate|negative|allowed-packages|finalize>"))
 	}
 	switch os.Args[1] {
 	case "validate":
@@ -43,6 +43,8 @@ func main() {
 				fmt.Println(pkg)
 			}
 		}
+	case "finalize":
+		err = Finalize(root)
 	default:
 		err = errors.New("unknown transitioncheck mode")
 	}
@@ -64,6 +66,15 @@ type Source struct {
 	OwnerPhases    []string `json:"owner_phases"`
 }
 
+type StaticSource struct {
+	Path           string   `json:"path"`
+	Scope          string   `json:"scope"`
+	ChangeType     string   `json:"change_type"`
+	BaselineSHA256 *string  `json:"baseline_sha256"`
+	CurrentSHA256  *string  `json:"current_sha256"`
+	TouchCommits   []string `json:"touch_commits"`
+}
+
 type Acceptance struct {
 	Phase   string `json:"phase"`
 	Command string `json:"command"`
@@ -83,10 +94,11 @@ type Waiver struct {
 		ToPhase    string   `json:"to_phase"`
 		Reason     string   `json:"reason"`
 	} `json:"transition"`
-	AffectedArtifacts []string     `json:"affected_artifacts"`
-	SourceClosure     []Source     `json:"source_closure"`
-	Acceptance        []Acceptance `json:"acceptance"`
-	Constraints       []string     `json:"constraints"`
+	AffectedArtifacts []string       `json:"affected_artifacts"`
+	SourceClosure     []Source       `json:"source_closure"`
+	StaticClosure     []StaticSource `json:"static_source_closure"`
+	Acceptance        []Acceptance   `json:"acceptance"`
+	Constraints       []string       `json:"constraints"`
 }
 
 type manifest struct {
@@ -194,7 +206,7 @@ func validate(root string, staticInputs []string, w Waiver) error {
 	if w.Policy.OwnerPhaseSemantics != "first-introduction-and-accountability" || w.Policy.OwnershipTransferred || !reflect.DeepEqual(w.Transition.FromPhases, []string{"P08", "P09"}) || w.Transition.ToPhase != "P10" || w.Transition.Reason == "" {
 		problems = append(problems, "transition/ownership mismatch")
 	}
-	if !canonical(w.AffectedArtifacts) || !canonical(w.Constraints) || !canonicalSources(w.SourceClosure) {
+	if !canonical(w.AffectedArtifacts) || !canonical(w.Constraints) || !canonicalSources(w.SourceClosure) || !canonicalStaticSourcesOrEmpty(w.StaticClosure) {
 		problems = append(problems, "arrays are not unique canonical order")
 	}
 	wantAcceptance := expectedDeclared().Acceptance
@@ -231,6 +243,14 @@ func validate(root string, staticInputs []string, w Waiver) error {
 			problems = append(problems, "declared source contains final evidence")
 		}
 	}
+	for _, source := range w.StaticClosure {
+		if source.Scope != "static-only" || source.ChangeType != "add" && source.ChangeType != "modify" && source.ChangeType != "delete" {
+			problems = append(problems, "invalid static source "+source.Path)
+		}
+		if w.Status == "declared" && (source.BaselineSHA256 != nil || source.CurrentSHA256 != nil || len(source.TouchCommits) != 0) {
+			problems = append(problems, "declared static source contains final evidence")
+		}
+	}
 	if !reflect.DeepEqual(w.AffectedArtifacts, unionArtifacts(w.SourceClosure)) {
 		problems = append(problems, "affected_artifacts do not equal independently mapped source DAG closure")
 	}
@@ -247,7 +267,11 @@ func validate(root string, staticInputs []string, w Waiver) error {
 }
 
 func Negative(root string, staticInputs []string) error {
-	w, err := Load(root)
+	validated, err := synthesizedValidated(root)
+	if err != nil {
+		return err
+	}
+	m, err := loadManifest(root)
 	if err != nil {
 		return err
 	}
@@ -257,32 +281,6 @@ func Negative(root string, staticInputs []string) error {
 		}
 		return nil
 	}
-	m, err := loadManifest(root)
-	if err != nil {
-		return err
-	}
-	intro, err := uniqueIntroduction(root, Path)
-	if err != nil {
-		return err
-	}
-	baseBytes, err := git(root, "rev-parse", intro+"^")
-	if err != nil {
-		return err
-	}
-	discovered, staticOnly, err := discoverSources(root, strings.TrimSpace(string(baseBytes)), m)
-	if err != nil {
-		return err
-	}
-	if !canonicalOrEmpty(staticOnly) {
-		return errors.New("static-only touch paths are not canonical")
-	}
-	validated := clone(w)
-	validated.Status = "validated"
-	validated.SourceClosure = nil
-	for _, path := range sortedSourcePaths(discovered) {
-		validated.SourceClosure = append(validated.SourceClosure, discovered[path])
-	}
-	validated.AffectedArtifacts = unionArtifacts(validated.SourceClosure)
 	if err := validate(root, staticInputs, validated); err != nil {
 		return fmt.Errorf("production validator rejected synthesized valid closure: %w", err)
 	}
@@ -291,6 +289,13 @@ func Negative(root string, staticInputs []string) error {
 		c.SourceClosure = append(c.SourceClosure[:i], c.SourceClosure[i+1:]...)
 		c.AffectedArtifacts = unionArtifacts(c.SourceClosure)
 		if err := check("validated omitted source "+s.Path, c); err != nil {
+			return err
+		}
+	}
+	for i, s := range validated.StaticClosure {
+		c := clone(validated)
+		c.StaticClosure = append(c.StaticClosure[:i], c.StaticClosure[i+1:]...)
+		if err := check("validated omitted static source "+s.Path, c); err != nil {
 			return err
 		}
 	}
@@ -357,6 +362,53 @@ func Negative(root string, staticInputs []string) error {
 		return errors.New("trailing value accepted")
 	}
 	return nil
+}
+
+func synthesizedValidated(root string) (Waiver, error) {
+	w, err := Load(root)
+	if err != nil {
+		return Waiver{}, err
+	}
+	m, err := loadManifest(root)
+	if err != nil {
+		return Waiver{}, err
+	}
+	intro, err := uniqueIntroduction(root, Path)
+	if err != nil {
+		return Waiver{}, err
+	}
+	baseBytes, err := git(root, "rev-parse", intro+"^")
+	if err != nil {
+		return Waiver{}, err
+	}
+	discovered, staticOnly, err := discoverSources(root, strings.TrimSpace(string(baseBytes)), m)
+	if err != nil {
+		return Waiver{}, err
+	}
+	w.Status = "validated"
+	w.SourceClosure = nil
+	for _, path := range sortedSourcePaths(discovered) {
+		w.SourceClosure = append(w.SourceClosure, discovered[path])
+	}
+	w.StaticClosure = nil
+	for _, path := range sortedStaticSourcePaths(staticOnly) {
+		w.StaticClosure = append(w.StaticClosure, staticOnly[path])
+	}
+	w.AffectedArtifacts = unionArtifacts(w.SourceClosure)
+	return w, nil
+}
+
+func Finalize(root string) error {
+	w, err := synthesizedValidated(root)
+	if err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(w, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return os.WriteFile(filepath.Join(root, filepath.FromSlash(Path)), data, 0o644)
 }
 
 func AllowsP10ProductionPackage(root, importPath, nestedModule string) bool {
@@ -438,9 +490,6 @@ func validateGit(root string, w Waiver, m manifest) error {
 	if err != nil {
 		return err
 	}
-	if !canonicalOrEmpty(staticOnly) {
-		return errors.New("static-only touch paths are not canonical")
-	}
 	declared := map[string]Source{}
 	for _, s := range w.SourceClosure {
 		declared[s.Path] = s
@@ -451,6 +500,9 @@ func validateGit(root string, w Waiver, m manifest) error {
 			if !ok || want.ChangeType != got.ChangeType || want.Scope != got.Scope {
 				return fmt.Errorf("declared waiver does not cover governed touch %s", path)
 			}
+		}
+		if len(w.StaticClosure) != 0 {
+			return errors.New("declared waiver must not contain final static-only evidence")
 		}
 		return nil
 	}
@@ -463,17 +515,30 @@ func validateGit(root string, w Waiver, m manifest) error {
 			return fmt.Errorf("validated source mismatch for %s", path)
 		}
 	}
+	if len(staticOnly) != len(w.StaticClosure) {
+		return fmt.Errorf("validated static closure=%d discovered=%d", len(w.StaticClosure), len(staticOnly))
+	}
+	declaredStatic := map[string]StaticSource{}
+	for _, source := range w.StaticClosure {
+		declaredStatic[source.Path] = source
+	}
+	for path, got := range staticOnly {
+		want, ok := declaredStatic[path]
+		if !ok || !reflect.DeepEqual(want, got) {
+			return fmt.Errorf("validated static source mismatch for %s", path)
+		}
+	}
 	return nil
 }
 
-func discoverSources(root, baseline string, m manifest) (map[string]Source, []string, error) {
+func discoverSources(root, baseline string, m manifest) (map[string]Source, map[string]StaticSource, error) {
 	commitsBytes, err := git(root, "rev-list", "--reverse", baseline+"..HEAD")
 	if err != nil {
 		return nil, nil, err
 	}
 	commits := strings.Fields(string(commitsBytes))
 	touches := map[string][]string{}
-	staticSet := map[string]bool{}
+	staticTouches := map[string][]string{}
 	for _, commit := range commits {
 		parentBytes, err := git(root, "rev-parse", commit+"^")
 		if err != nil {
@@ -495,7 +560,7 @@ func discoverSources(root, baseline string, m manifest) (map[string]Source, []st
 				return nil, nil, fmt.Errorf("classify tracked touch %s at %s: %w", path, commit, err)
 			}
 			if classification == "static-only" {
-				staticSet[path] = true
+				staticTouches[path] = append(staticTouches[path], commit)
 				continue
 			}
 			touches[path] = append(touches[path], commit)
@@ -531,9 +596,48 @@ func discoverSources(root, baseline string, m manifest) (map[string]Source, []st
 			v := report.Hash(current)
 			currentHash = &v
 		}
+		// The carrier cannot contain its own exact file digest without a
+		// cryptographic fixed point. Its content is instead bound by the report
+		// static input manifest and strict typed/Git closure validation.
+		if path == Path {
+			currentHash = nil
+			// Record the independently discoverable introduction anchor only.
+			// A commit cannot embed its own future object ID while finalizing this
+			// carrier; current content is bound by strict validation and the P10
+			// report's static input digest.
+			commits = commits[:1]
+		}
 		result[path] = Source{path, scope, change, baseHash, currentHash, commits, ids, phases}
 	}
-	return result, keys(staticSet), nil
+	staticResult := map[string]StaticSource{}
+	for path, commits := range staticTouches {
+		base, baseOK, err := gitBlob(root, baseline, path)
+		if err != nil {
+			return nil, nil, err
+		}
+		current, currentOK, err := worktreeBlob(root, path)
+		if err != nil {
+			return nil, nil, err
+		}
+		change := "modify"
+		if !baseOK {
+			change = "add"
+		}
+		if !currentOK {
+			change = "delete"
+		}
+		var baseHash, currentHash *string
+		if baseOK {
+			value := report.Hash(base)
+			baseHash = &value
+		}
+		if currentOK {
+			value := report.Hash(current)
+			currentHash = &value
+		}
+		staticResult[path] = StaticSource{path, "static-only", change, baseHash, currentHash, commits}
+	}
+	return result, staticResult, nil
 }
 
 func mapSource(m manifest, path string) ([]string, []string, string, error) {
@@ -747,6 +851,22 @@ func canonicalSources(v []Source) bool {
 	}
 	return true
 }
+
+func canonicalStaticSourcesOrEmpty(v []StaticSource) bool {
+	for i, source := range v {
+		if source.Path == "" || (i > 0 && v[i-1].Path >= source.Path) {
+			return false
+		}
+		seen := map[string]bool{}
+		for _, commit := range source.TouchCommits {
+			if len(commit) != 40 || seen[commit] {
+				return false
+			}
+			seen[commit] = true
+		}
+	}
+	return true
+}
 func unionArtifacts(v []Source) []string {
 	m := map[string]bool{}
 	for _, s := range v {
@@ -768,6 +888,14 @@ func sortedSourcePaths(m map[string]Source) []string {
 	v := make([]string, 0, len(m))
 	for k := range m {
 		v = append(v, k)
+	}
+	sort.Strings(v)
+	return v
+}
+func sortedStaticSourcePaths(m map[string]StaticSource) []string {
+	v := make([]string, 0, len(m))
+	for path := range m {
+		v = append(v, path)
 	}
 	sort.Strings(v)
 	return v

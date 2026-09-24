@@ -91,7 +91,9 @@ var p09CompositionInputs = []string{
 	"reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go",
 	p10WaiverPath,
 	"reference/control-plane/migrations/postgres/0001_base.sql",
+	"reference/control-plane/migrations/postgres/0005_identity.sql",
 	"reference/control-plane/migrations/sqlite/0001_base.sql",
+	"reference/control-plane/migrations/sqlite/0005_identity.sql",
 }
 
 var p09CompositionDirectories = []string{
@@ -99,6 +101,9 @@ var p09CompositionDirectories = []string{
 	"reference/control-plane/internal/adapters/storage/postgres",
 	"reference/control-plane/internal/adapters/storage/sqlite",
 	"reference/control-plane/internal/storage/migrate",
+	"reference/control-plane/internal/adapters/secrets",
+	"reference/control-plane/internal/identity",
+	"reference/control-plane/internal/ports/secrets",
 }
 
 var expectedTests = map[string][]string{
