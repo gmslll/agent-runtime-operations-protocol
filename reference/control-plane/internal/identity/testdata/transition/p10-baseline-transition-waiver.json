@@ -1,56 +1,146 @@
 {
   "schema_version": 1,
   "waiver_id": "P10-P08-P09-BASELINE-TRANSITION-001",
-  "status": "declared",
+  "status": "validated",
   "policy": {
     "owner_phase_semantics": "first-introduction-and-accountability",
     "ownership_transferred": false
   },
   "transition": {
-    "from_phases": ["P08", "P09"],
+    "from_phases": [
+      "P08",
+      "P09"
+    ],
     "to_phase": "P10",
     "reason": "P10 composes identity, credential, SecretRef, and identity migrations through the accepted P08/P09 reference implementation without transferring accountable ownership or weakening historical phase evidence."
   },
   "affected_artifacts": [
     "control-plane-platform-foundation",
+    "credential-store",
+    "identity-service",
     "migration-engine",
     "migration-engine-fixture-versions",
     "p10-baseline-transition-waiver",
     "phase-report-p08",
     "phase-report-p09",
     "phase-report-p10",
-    "reference-control-plane-server"
+    "postgres-migration-identity",
+    "reference-control-plane-server",
+    "reference-secret-exchange",
+    "secret-resolver-port",
+    "sqlite-migration-identity"
   ],
   "source_closure": [
     {
       "path": "reference/control-plane/cmd/aropd/main.go",
       "scope": "early-owned",
       "change_type": "modify",
-      "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
-      "artifact_ids": ["phase-report-p08", "reference-control-plane-server"],
-      "owner_phases": ["P08"]
+      "baseline_sha256": "7a9f51544407d1a8e3ce7cf5569b2422d7dbdefd51366552a56d3aaf4175191c",
+      "current_sha256": "11bc5a3ca959e85894537d4a23a66984bb1dc84bf65af9f444df9a827de49e10",
+      "touch_commits": [
+        "c36f4419b565e7bccdb466ae53f8ec7b13f045af"
+      ],
+      "artifact_ids": [
+        "phase-report-p08",
+        "reference-control-plane-server"
+      ],
+      "owner_phases": [
+        "P08"
+      ]
     },
     {
       "path": "reference/control-plane/cmd/aropd/main_test.go",
       "scope": "early-owned",
       "change_type": "modify",
+      "baseline_sha256": "343954366fdcd8ce97f232f2032ef2064afe1fdef402490269381e4f9607a49d",
+      "current_sha256": "a69a8b34230ae0b89406c91e24ad199d8c036e3991fa9c901c7b8cc0e94b2a98",
+      "touch_commits": [
+        "c36f4419b565e7bccdb466ae53f8ec7b13f045af"
+      ],
+      "artifact_ids": [
+        "phase-report-p08",
+        "reference-control-plane-server"
+      ],
+      "owner_phases": [
+        "P08"
+      ]
+    },
+    {
+      "path": "reference/control-plane/internal/adapters/secrets/resolver.go",
+      "scope": "p10-production",
+      "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
-      "artifact_ids": ["phase-report-p08", "reference-control-plane-server"],
-      "owner_phases": ["P08"]
+      "current_sha256": "b280064ec01f84d8fdc6c57ca36ccbb90beb6738a5d6136b4032edea990271d6",
+      "touch_commits": [
+        "3a46df76ddcc8ffb6c45296c00582410f3bdcc8c",
+        "ea0dd41c57776a5611aa796d3c918dfba16b1cef"
+      ],
+      "artifact_ids": [
+        "phase-report-p10",
+        "reference-secret-exchange"
+      ],
+      "owner_phases": [
+        "P10"
+      ]
     },
     {
       "path": "reference/control-plane/internal/app/platform/testdata/harness/main.go",
       "scope": "early-owned",
       "change_type": "modify",
+      "baseline_sha256": "ecfab20e1290b246a4e09549c004c0e3490640d7ee288ce25ae2d252da17a4bd",
+      "current_sha256": "426c790fb13dbf91934f0bf1f544cf6e59397e003a62c4711372269df3da08f2",
+      "touch_commits": [
+        "4f97c42f2b46c17bf0ab5daac4780f43c10234b5",
+        "ace230f6e083e23d09c0f807127496defe9ed14c",
+        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126"
+      ],
+      "artifact_ids": [
+        "control-plane-platform-foundation",
+        "phase-report-p08"
+      ],
+      "owner_phases": [
+        "P08"
+      ]
+    },
+    {
+      "path": "reference/control-plane/internal/identity/credential_store.go",
+      "scope": "p10-production",
+      "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
-      "artifact_ids": ["control-plane-platform-foundation", "phase-report-p08"],
-      "owner_phases": ["P08"]
+      "current_sha256": "3ba4943415e4286447996b0a74caaf42101b9c7bdaf3d2e7e4aa5b1fc404c370",
+      "touch_commits": [
+        "e36aca311db1d6e43c552c1157d5bcfefa5e2b9e",
+        "7fcc6501cb116e2026a22e55d5a5e2876522d2dd",
+        "8e1f0f945a81dd84026a60369444538c656bc32c",
+        "b4a1d29fdf4209cdc495e10d19f70b19291ccc1b",
+        "9458050282af725b02c990248e92f77943f2fcf3"
+      ],
+      "artifact_ids": [
+        "credential-store",
+        "phase-report-p10"
+      ],
+      "owner_phases": [
+        "P10"
+      ]
+    },
+    {
+      "path": "reference/control-plane/internal/identity/service.go",
+      "scope": "p10-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": "ef85b4584dc397ae08b0589a3ab989dcb364844b65e155c1c487506ce2663ad0",
+      "touch_commits": [
+        "e36aca311db1d6e43c552c1157d5bcfefa5e2b9e",
+        "7fcc6501cb116e2026a22e55d5a5e2876522d2dd",
+        "5566927dedec156b863e601c4c122ce01cb58506"
+      ],
+      "artifact_ids": [
+        "identity-service",
+        "phase-report-p10"
+      ],
+      "owner_phases": [
+        "P10"
+      ]
     },
     {
       "path": "reference/control-plane/internal/identity/testdata/transition/p10-baseline-transition-waiver.json",
@@ -58,75 +148,269 @@
       "change_type": "add",
       "baseline_sha256": null,
       "current_sha256": null,
-      "touch_commits": [],
-      "artifact_ids": ["p10-baseline-transition-waiver", "phase-report-p10"],
-      "owner_phases": ["P10"]
+      "touch_commits": [
+        "4f97c42f2b46c17bf0ab5daac4780f43c10234b5"
+      ],
+      "artifact_ids": [
+        "p10-baseline-transition-waiver",
+        "phase-report-p10"
+      ],
+      "owner_phases": [
+        "P10"
+      ]
     },
     {
-      "path": "reference/control-plane/internal/storage/migrate/catalog_closure.go",
-      "scope": "early-owned",
-      "change_type": "modify",
+      "path": "reference/control-plane/internal/ports/secrets/resolver.go",
+      "scope": "p10-production",
+      "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
-      "artifact_ids": ["migration-engine", "phase-report-p09"],
-      "owner_phases": ["P09"]
+      "current_sha256": "157cb5fe12856c9f5907f4edd08db141cb9a7ebad49da59af49a1a9debcaa49f",
+      "touch_commits": [
+        "3a46df76ddcc8ffb6c45296c00582410f3bdcc8c"
+      ],
+      "artifact_ids": [
+        "phase-report-p10",
+        "secret-resolver-port"
+      ],
+      "owner_phases": [
+        "P10"
+      ]
     },
     {
       "path": "reference/control-plane/internal/storage/migrate/catalog_closure_test.go",
       "scope": "early-owned",
       "change_type": "modify",
-      "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
-      "artifact_ids": ["migration-engine", "phase-report-p09"],
-      "owner_phases": ["P09"]
+      "baseline_sha256": "90d885e2d04061176f44c230e409b337897ca3deb8612d5d68e4143d71c47946",
+      "current_sha256": "ca737c37c2589526beeb13a72a51c801f42ed25f1bc2b6f1543588347c4db542",
+      "touch_commits": [
+        "c36f4419b565e7bccdb466ae53f8ec7b13f045af"
+      ],
+      "artifact_ids": [
+        "migration-engine",
+        "phase-report-p09"
+      ],
+      "owner_phases": [
+        "P09"
+      ]
     },
     {
       "path": "reference/control-plane/internal/storage/migrate/production_catalog.go",
       "scope": "early-owned",
       "change_type": "modify",
-      "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
-      "artifact_ids": ["migration-engine", "phase-report-p09"],
-      "owner_phases": ["P09"]
+      "baseline_sha256": "ac1333c68dafc71c48cc38fd51e02011d536e1af22fb68af32d3165614ad8216",
+      "current_sha256": "3bc7b71fb50aaddbd18d51dc8b80ba5bf9e77141c89a6f1059adc472e17dc5bf",
+      "touch_commits": [
+        "c36f4419b565e7bccdb466ae53f8ec7b13f045af"
+      ],
+      "artifact_ids": [
+        "migration-engine",
+        "phase-report-p09"
+      ],
+      "owner_phases": [
+        "P09"
+      ]
     },
     {
       "path": "reference/control-plane/internal/storage/migrate/testdata/engine-versions/composition/p09_storage_acceptance_test.go",
       "scope": "early-owned",
       "change_type": "modify",
-      "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
-      "artifact_ids": ["migration-engine-fixture-versions", "phase-report-p09"],
-      "owner_phases": ["P09"]
+      "baseline_sha256": "a685a58b1e440b6aa69e9d1045ccd9ad0c7af8d3f310704d5d24a8fb2313a85a",
+      "current_sha256": "da2c893b37943b593eed1a09e3e6b32e39df8aa76841e3202aa4b2fc5cb48440",
+      "touch_commits": [
+        "c36f4419b565e7bccdb466ae53f8ec7b13f045af"
+      ],
+      "artifact_ids": [
+        "migration-engine-fixture-versions",
+        "phase-report-p09"
+      ],
+      "owner_phases": [
+        "P09"
+      ]
     },
     {
       "path": "reference/control-plane/internal/storage/migrate/testdata/engine-versions/harness/main.go",
       "scope": "early-owned",
       "change_type": "modify",
-      "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
-      "artifact_ids": ["migration-engine-fixture-versions", "phase-report-p09"],
-      "owner_phases": ["P09"]
+      "baseline_sha256": "f2bb5a1bf4a13bec55d0fdf65cc45ea90950ca0d1ea58d4132e63c6b14613898",
+      "current_sha256": "d3cd7d150dc2c6506ab7bf5a6c2bb18fc0a442b3d1119dfb5eea43fa96a0d9ef",
+      "touch_commits": [
+        "4f97c42f2b46c17bf0ab5daac4780f43c10234b5",
+        "ace230f6e083e23d09c0f807127496defe9ed14c",
+        "b24c9ed8bfc7ae02a08d1d143434c6c93db614b8",
+        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126"
+      ],
+      "artifact_ids": [
+        "migration-engine-fixture-versions",
+        "phase-report-p09"
+      ],
+      "owner_phases": [
+        "P09"
+      ]
     },
     {
       "path": "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go",
       "scope": "early-owned",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
-      "artifact_ids": ["migration-engine-fixture-versions", "phase-report-p09"],
-      "owner_phases": ["P09"]
+      "current_sha256": "d7997f5f463fab63cd7528dd634feba685465c3f3eaa5623debb7809c2b5f32f",
+      "touch_commits": [
+        "ace230f6e083e23d09c0f807127496defe9ed14c",
+        "54079d80326f6f5776b1c35acb68df4d4af18039",
+        "b24c9ed8bfc7ae02a08d1d143434c6c93db614b8",
+        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126"
+      ],
+      "artifact_ids": [
+        "migration-engine-fixture-versions",
+        "phase-report-p09"
+      ],
+      "owner_phases": [
+        "P09"
+      ]
+    },
+    {
+      "path": "reference/control-plane/migrations/postgres/0005_identity.sql",
+      "scope": "p10-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": "7fc1890df04c694bf16db3947651f52a01cfe4e912fc3a50a98b3a5cfac1a281",
+      "touch_commits": [
+        "b8121c6691868ca7219b3df1593fca61966e5248",
+        "e81efec8419627da0d8952e7fec1a28d4836f5c3"
+      ],
+      "artifact_ids": [
+        "phase-report-p10",
+        "postgres-migration-identity"
+      ],
+      "owner_phases": [
+        "P10"
+      ]
+    },
+    {
+      "path": "reference/control-plane/migrations/sqlite/0005_identity.sql",
+      "scope": "p10-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": "a90c0ad3cbec2bd538e995acd6e9feb1d2d1d3745d6167dce21cfb3e28cbce3f",
+      "touch_commits": [
+        "b8121c6691868ca7219b3df1593fca61966e5248",
+        "e81efec8419627da0d8952e7fec1a28d4836f5c3"
+      ],
+      "artifact_ids": [
+        "phase-report-p10",
+        "sqlite-migration-identity"
+      ],
+      "owner_phases": [
+        "P10"
+      ]
+    }
+  ],
+  "static_source_closure": [
+    {
+      "path": "Makefile",
+      "scope": "static-only",
+      "change_type": "modify",
+      "baseline_sha256": "bed4f0d0b4e5a1edd9654d67de9288e3e8c6b629a893e692f39ec8881bcc8ff4",
+      "current_sha256": "170676003f9c167710724ae81dc65055665bd1f606accc260cdef00fedacf82e",
+      "touch_commits": [
+        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126"
+      ]
+    },
+    {
+      "path": "reference/control-plane/internal/adapters/secrets/resolver_test.go",
+      "scope": "static-only",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": "ae48f922afd978a931e09bb4b922b636fea5402c970f08f86db7f0b2c711c0db",
+      "touch_commits": [
+        "3a46df76ddcc8ffb6c45296c00582410f3bdcc8c",
+        "ea0dd41c57776a5611aa796d3c918dfba16b1cef"
+      ]
+    },
+    {
+      "path": "reference/control-plane/internal/identity/credential_store_test.go",
+      "scope": "static-only",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": "2ed6d2cf05c6500cccf325b1be7e39419dfe8cb802200b1e497e7389a9dea5a6",
+      "touch_commits": [
+        "e36aca311db1d6e43c552c1157d5bcfefa5e2b9e",
+        "7fcc6501cb116e2026a22e55d5a5e2876522d2dd",
+        "5566927dedec156b863e601c4c122ce01cb58506",
+        "8e1f0f945a81dd84026a60369444538c656bc32c",
+        "b4a1d29fdf4209cdc495e10d19f70b19291ccc1b",
+        "9458050282af725b02c990248e92f77943f2fcf3"
+      ]
+    },
+    {
+      "path": "reference/control-plane/internal/identity/migration_test.go",
+      "scope": "static-only",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": "e6e87ac65e2cae88b7f4bddf80b6bfba122d60bc2fa6e63f5e1c704a0f084f5e",
+      "touch_commits": [
+        "b8121c6691868ca7219b3df1593fca61966e5248",
+        "e81efec8419627da0d8952e7fec1a28d4836f5c3"
+      ]
+    },
+    {
+      "path": "reference/control-plane/internal/identity/service_test.go",
+      "scope": "static-only",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": "c8166f079d90a466fbcceada257226f946471f6beb2cb4758e58f0914e07e609",
+      "touch_commits": [
+        "e36aca311db1d6e43c552c1157d5bcfefa5e2b9e",
+        "7fcc6501cb116e2026a22e55d5a5e2876522d2dd",
+        "5566927dedec156b863e601c4c122ce01cb58506"
+      ]
+    },
+    {
+      "path": "reference/control-plane/internal/identity/testdata/acceptance/p10_acceptance_test.go",
+      "scope": "static-only",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": "d8229838a6cfe852fb9fe687782a4a32655177b638e83813558df0864662418d",
+      "touch_commits": [
+        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126"
+      ]
+    },
+    {
+      "path": "reference/control-plane/internal/identity/testdata/harness/main.go",
+      "scope": "static-only",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": "2d99acfd32e440a2945fde677bbc769584ae4f22c6b013f3025d925ef1befd14",
+      "touch_commits": [
+        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126"
+      ]
+    },
+    {
+      "path": "reference/control-plane/internal/ports/secrets/resolver_test.go",
+      "scope": "static-only",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": "6644bf6e6cd9a51906dd91fe2dd51eac8a77a4150e32f6c12eff53a8b0f20347",
+      "touch_commits": [
+        "3a46df76ddcc8ffb6c45296c00582410f3bdcc8c"
+      ]
     }
   ],
   "acceptance": [
-    {"phase": "P08", "command": "make test-control-plane-platform", "report": "build/reports/P08/report.json"},
-    {"phase": "P09", "command": "make test-storage-migrations", "report": "build/reports/P09/report.json"},
-    {"phase": "P10", "command": "make test-identity-secrets", "report": "build/reports/P10/report.json"}
+    {
+      "phase": "P08",
+      "command": "make test-control-plane-platform",
+      "report": "build/reports/P08/report.json"
+    },
+    {
+      "phase": "P09",
+      "command": "make test-storage-migrations",
+      "report": "build/reports/P09/report.json"
+    },
+    {
+      "phase": "P10",
+      "command": "make test-identity-secrets",
+      "report": "build/reports/P10/report.json"
+    }
   ],
   "constraints": [
     "frozen-planning-inputs-remain-unchanged",
