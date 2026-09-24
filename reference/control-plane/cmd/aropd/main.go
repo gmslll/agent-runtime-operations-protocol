@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,11 +16,13 @@ import (
 
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/observability/durable"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/observability/memory"
+	secretadapter "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/secrets"
 	postgresadapter "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/storage/postgres"
 	sqliteadapter "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/storage/sqlite"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/httpadapter"
 	platformports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/ports"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/identity"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/ports/observability"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/storage/migrate"
 )
@@ -34,17 +37,23 @@ func main() {
 }
 
 func compose(args, environment []string) (*platform.Platform, *http.Server, func() error, error) {
+	return composeWithCatalog(args, environment, migrate.CurrentProductionCatalog())
+}
+
+func composeWithCatalog(args, environment []string, catalogClosure migrate.CatalogClosure) (*platform.Platform, *http.Server, func() error, error) {
 	config, err := platform.ParseConfig(args, environment)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	uow, store, checks, cleanup, err := composeStorageContext(context.Background(), config)
+	clock := platform.RealClock{}
+	ids := platform.SystemIDSource{Clock: clock}
+	faults := platform.NoopFaultHook{}
+	uow, store, checks, cleanup, err := composeStorageContext(context.Background(), config, catalogClosure, clock, ids, faults)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	clock := platform.RealClock{}
 	application, err := platform.New(config, platform.Dependencies{
-		Clock: clock, IDs: platform.SystemIDSource{Clock: clock}, Faults: platform.NoopFaultHook{},
+		Clock: clock, IDs: ids, Faults: faults,
 		UoW: uow, Observability: store, Checks: checks,
 	}, "arop-reference-control-plane", version)
 	if err != nil {
@@ -72,10 +81,11 @@ func run(args, environment []string) error {
 }
 
 func composeStorage(config platform.Config) (platformports.UnitOfWork, observability.Store, []platformports.ReadinessCheck, func() error, error) {
-	return composeStorageContext(context.Background(), config)
+	clock := platform.RealClock{}
+	return composeStorageContext(context.Background(), config, migrate.CurrentProductionCatalog(), clock, platform.SystemIDSource{Clock: clock}, platform.NoopFaultHook{})
 }
 
-func composeStorageContext(ctx context.Context, config platform.Config) (platformports.UnitOfWork, observability.Store, []platformports.ReadinessCheck, func() error, error) {
+func composeStorageContext(ctx context.Context, config platform.Config, catalogClosure migrate.CatalogClosure, clock platformports.Clock, ids platformports.IDSource, faults platformports.FaultHook) (platformports.UnitOfWork, observability.Store, []platformports.ReadinessCheck, func() error, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -98,7 +108,7 @@ func composeStorageContext(ctx context.Context, config platform.Config) (platfor
 			return nil, nil, nil, nil, err
 		}
 		cleanup := db.Close
-		catalog, err := migrate.LoadCatalogClosure(os.DirFS(root), migrate.CurrentProductionCatalog(), migrate.DialectSQLite)
+		catalog, err := migrate.LoadCatalogClosure(os.DirFS(root), catalogClosure, migrate.DialectSQLite)
 		if err != nil {
 			_ = cleanup()
 			return nil, nil, nil, nil, errors.New("load SQLite migration catalog")
@@ -114,7 +124,7 @@ func composeStorageContext(ctx context.Context, config platform.Config) (platfor
 			return nil, nil, nil, nil, errors.New("initialize SQLite backup/restore")
 		}
 		runner, err := migrate.NewRunner(db, catalog, locker,
-			migrate.WithVerifier(durable.VerifySchema(migrate.DialectSQLite)),
+			migrate.WithVerifier(schemaVerifier(catalogClosure, migrate.DialectSQLite)),
 			migrate.WithBackupRestore(backup), migrate.WithRecoveryTimeout(config.MigrationTimeout))
 		if err != nil {
 			_ = cleanup()
@@ -138,7 +148,16 @@ func composeStorageContext(ctx context.Context, config platform.Config) (platfor
 			_ = cleanup()
 			return nil, nil, nil, nil, err
 		}
-		return uow, store, []platformports.ReadinessCheck{runner}, cleanup, nil
+		checks := []platformports.ReadinessCheck{runner}
+		if catalogClosure.ReportPhase == "P10" {
+			identityService, err := composeIdentity(db, migrate.DialectSQLite, uow.Transaction, uow, store, clock, ids, faults)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, identityService)
+		}
+		return uow, store, checks, cleanup, nil
 	case platform.ModePostgres:
 		root, err := canonicalDirectory(config.MigrationRoot)
 		if err != nil {
@@ -149,7 +168,7 @@ func composeStorageContext(ctx context.Context, config platform.Config) (platfor
 			return nil, nil, nil, nil, err
 		}
 		cleanup := db.Close
-		catalog, err := migrate.LoadCatalogClosure(os.DirFS(root), migrate.CurrentProductionCatalog(), migrate.DialectPostgres)
+		catalog, err := migrate.LoadCatalogClosure(os.DirFS(root), catalogClosure, migrate.DialectPostgres)
 		if err != nil {
 			_ = cleanup()
 			return nil, nil, nil, nil, errors.New("load PostgreSQL migration catalog")
@@ -179,7 +198,7 @@ func composeStorageContext(ctx context.Context, config platform.Config) (platfor
 			return nil, nil, nil, nil, errors.New("initialize PostgreSQL backup/restore")
 		}
 		runner, err := migrate.NewRunner(db, catalog, locker,
-			migrate.WithVerifier(durable.VerifySchema(migrate.DialectPostgres)),
+			migrate.WithVerifier(schemaVerifier(catalogClosure, migrate.DialectPostgres)),
 			migrate.WithBackupRestore(backup), migrate.WithRecoveryTimeout(config.MigrationTimeout))
 		if err != nil {
 			_ = cleanup()
@@ -203,10 +222,53 @@ func composeStorageContext(ctx context.Context, config platform.Config) (platfor
 			_ = cleanup()
 			return nil, nil, nil, nil, err
 		}
-		return uow, store, []platformports.ReadinessCheck{runner}, cleanup, nil
+		checks := []platformports.ReadinessCheck{runner}
+		if catalogClosure.ReportPhase == "P10" {
+			identityService, err := composeIdentity(db, migrate.DialectPostgres, uow.Transaction, uow, store, clock, ids, faults)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, identityService)
+		}
+		return uow, store, checks, cleanup, nil
 	default:
 		return nil, nil, nil, nil, errors.New("unsupported storage mode")
 	}
+}
+
+func schemaVerifier(catalog migrate.CatalogClosure, dialect migrate.Dialect) migrate.Verifier {
+	durableVerifier := durable.VerifySchema(dialect)
+	if catalog.ReportPhase == "P09" {
+		return durableVerifier
+	}
+	identityVerifier := identity.VerifySchema(dialect)
+	return func(ctx context.Context, query migrate.Queryer) error {
+		if err := durableVerifier(ctx, query); err != nil {
+			return err
+		}
+		return identityVerifier(ctx, query)
+	}
+}
+
+func composeIdentity(db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, observations observability.Store, clock platformports.Clock, ids platformports.IDSource, faults platformports.FaultHook) (*identity.Service, error) {
+	repository, err := identity.NewCredentialStore(db, dialect, lookup)
+	if err != nil {
+		return nil, errors.New("initialize credential store")
+	}
+	service, err := identity.New(identity.Dependencies{
+		Clock: clock, IDs: ids, Faults: faults, UoW: uow, Observability: observations, Repository: repository,
+		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"secret.read"},
+	})
+	if err != nil {
+		return nil, errors.New("initialize identity service")
+	}
+	// An empty resolver is deliberately composed: without an explicit deployment
+	// binding every SecretRef remains denied, and no public handler is registered.
+	if _, err := secretadapter.New(secretadapter.Config{Clock: clock, IDs: ids, Observability: observations}); err != nil {
+		return nil, errors.New("initialize deny-by-default secret resolver")
+	}
+	return service, nil
 }
 
 func canonicalDirectory(directory string) (string, error) {

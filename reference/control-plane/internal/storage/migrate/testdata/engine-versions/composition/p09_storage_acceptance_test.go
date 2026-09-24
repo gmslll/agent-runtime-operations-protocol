@@ -18,6 +18,7 @@ import (
 	pgstore "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/storage/postgres"
 	sqlitestore "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/storage/sqlite"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/storage/migrate"
 )
 
 const p09CompositionLockKey int64 = 0x41524f505f4350
@@ -41,7 +42,7 @@ func p09TestComposeReadyDurable(t *testing.T, mode platform.Mode) {
 	dsn, cleanupDatabase := p09CompositionDatabase(t, mode)
 	defer cleanupDatabase()
 	args := p09CompositionArgs(t, mode, dsn, "5s", "5s")
-	application, server, cleanup, err := compose(args, nil)
+	application, server, cleanup, err := composeWithCatalog(args, nil, migrate.P09ProductionCatalog())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +72,7 @@ func p09TestComposeReadyDurable(t *testing.T, mode platform.Mode) {
 
 	// A second real composition over the same database must observe the durable
 	// state and remain ready; an in-memory fallback would lose it.
-	restarted, _, cleanupRestart, err := compose(args, nil)
+	restarted, _, cleanupRestart, err := composeWithCatalog(args, nil, migrate.P09ProductionCatalog())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +90,7 @@ func p09TestComposeReadyDurable(t *testing.T, mode platform.Mode) {
 	if err := os.WriteFile(future, []byte("SELECT 2;\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	application, server, unexpectedCleanup, err := compose(args, nil)
+	application, server, unexpectedCleanup, err := composeWithCatalog(args, nil, migrate.P09ProductionCatalog())
 	if err == nil {
 		if unexpectedCleanup != nil {
 			_ = unexpectedCleanup()
@@ -115,7 +116,7 @@ func p09TestComposeFailureNoFallback(t *testing.T, mode platform.Mode) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	application, server, cleanup, err := compose(p09CompositionArgs(t, mode, dsn, "2s", "1s"), nil)
+	application, server, cleanup, err := composeWithCatalog(p09CompositionArgs(t, mode, dsn, "2s", "1s"), nil, migrate.P09ProductionCatalog())
 	if err == nil {
 		if cleanup != nil {
 			_ = cleanup()
@@ -148,7 +149,7 @@ func p09TestPostgresLockTimeout(t *testing.T) {
 	}
 	defer connection.ExecContext(context.Background(), `SELECT pg_advisory_unlock($1)`, p09CompositionLockKey)
 	started := time.Now()
-	application, server, cleanup, err := compose(p09CompositionArgs(t, platform.ModePostgres, dsn, "750ms", "200ms"), nil)
+	application, server, cleanup, err := composeWithCatalog(p09CompositionArgs(t, platform.ModePostgres, dsn, "750ms", "200ms"), nil, migrate.P09ProductionCatalog())
 	elapsed := time.Since(started)
 	if err == nil {
 		if cleanup != nil {
@@ -186,7 +187,8 @@ func p09CompositionArgs(t *testing.T, mode platform.Mode, dsn, startupTimeout, m
 func p09CopyIsolatedCatalog(t *testing.T, destination string) {
 	t.Helper()
 	source := p09RequiredAbsoluteEnv("AROP_P09_MIGRATION_ROOT")
-	for _, relative := range []string{"sqlite/0001_base.sql", "postgres/0001_base.sql"} {
+	for _, declared := range migrate.P09ProductionCatalog().Migrations {
+		relative := declared.Path
 		contents, err := os.ReadFile(filepath.Join(source, filepath.FromSlash(relative)))
 		if err != nil {
 			t.Fatal(err)

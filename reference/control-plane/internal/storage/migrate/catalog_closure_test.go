@@ -94,6 +94,25 @@ func TestCatalogClosure(t *testing.T) {
 	})
 }
 
+func TestProductionCatalogSnapshots(t *testing.T) {
+	p09 := P09ProductionCatalog()
+	if p09.ReportPhase != "P09" || p09.ReportPath != "build/reports/P09/report.json" || len(p09.Migrations) != 2 {
+		t.Fatalf("P09 snapshot drifted: %+v", p09)
+	}
+	current := CurrentProductionCatalog()
+	if current.ReportPhase != "P10" || current.ReportPath != "build/reports/P10/report.json" || len(current.Migrations) != 4 {
+		t.Fatalf("current catalog is not P10 complete: %+v", current)
+	}
+	for _, item := range current.Migrations {
+		if item.Path == "" || item.OwnerPhase == "" || item.SHA256 == "" {
+			t.Fatalf("incomplete current declaration: %+v", item)
+		}
+		if item.Path == "sqlite/0010_publication.sql" || item.Path == "postgres/0010_publication.sql" {
+			t.Fatalf("future production migration admitted: %s", item.Path)
+		}
+	}
+}
+
 func testDigest(contents []byte) string {
 	digest := sha256.Sum256(contents)
 	return hex.EncodeToString(digest[:])

@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -35,6 +38,54 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("durable-sqlite-composes-identity-without-secret-route", func(t *testing.T) {
+		root := t.TempDir()
+		migrationRoot := filepath.Join(root, "migrations")
+		for _, relative := range []string{"sqlite/0001_base.sql", "sqlite/0005_identity.sql", "postgres/0001_base.sql", "postgres/0005_identity.sql"} {
+			source := filepath.Join("..", "..", "migrations", filepath.FromSlash(relative))
+			contents, err := os.ReadFile(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			target := filepath.Join(migrationRoot, filepath.FromSlash(relative))
+			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target, contents, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		backup := filepath.Join(root, "backup")
+		if err := os.Mkdir(backup, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		application, server, cleanup, err := compose([]string{
+			"--listen=127.0.0.1:0", "--mode=sqlite", "--database-dsn=" + filepath.Join(root, "identity.db"),
+			"--migration-root=" + migrationRoot, "--backup-directory=" + backup,
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer cleanup()
+		snapshot := application.Readiness(context.Background())
+		foundIdentity := false
+		for _, check := range snapshot.Checks {
+			if check.Name == "identity-cache" && check.Ready {
+				foundIdentity = true
+			}
+		}
+		if !snapshot.Ready || !foundIdentity {
+			t.Fatalf("identity readiness missing: %+v", snapshot)
+		}
+		for _, path := range []string{"/v1/secrets", "/v1/secret-values", "/v1/credentials/cred_test/value"} {
+			response := httptest.NewRecorder()
+			server.Handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+			if response.Code != http.StatusNotFound && response.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("unexpected public secret route %s status=%d", path, response.Code)
+			}
+		}
+	})
 
 	t.Run("normal-shutdown", func(t *testing.T) {
 		events := &eventLog{}
