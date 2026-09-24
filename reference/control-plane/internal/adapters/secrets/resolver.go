@@ -92,27 +92,45 @@ func (resolver *Resolver) Use(ctx context.Context, request secretports.ResolveRe
 		return resolver.reject(ctx, request, startedAt)
 	}
 
-	resolveCtx, cancel := context.WithDeadline(ctx, request.Deadline)
+	effectiveDeadline := request.Deadline
+	if binding.ExpiresAt.Before(effectiveDeadline) {
+		effectiveDeadline = binding.ExpiresAt
+	}
+	resolveCtx, cancel := context.WithDeadline(ctx, effectiveDeadline)
 	defer cancel()
 	providerValue, err := resolveProvider(binding.Provider, resolveCtx)
-	if err != nil || resolveCtx.Err() != nil || len(providerValue) == 0 {
+	if err != nil || len(providerValue) == 0 {
 		zero(providerValue)
 		if ctx.Err() != nil {
 			return secretports.ErrDenied
 		}
-		if resolveCtx.Err() != nil {
+		if !resolver.active(resolveCtx, effectiveDeadline) {
 			return resolver.reject(ctx, request, startedAt)
 		}
 		return resolver.fail(ctx, request, startedAt)
+	}
+	if !resolver.active(resolveCtx, effectiveDeadline) {
+		zero(providerValue)
+		return resolver.reject(ctx, request, startedAt)
 	}
 	value := append([]byte(nil), providerValue...)
 	zero(providerValue)
 	defer zero(value)
 
-	if err := resolver.observe(ctx, request, startedAt, observability.OutcomeSucceeded, 200); err != nil {
+	if err := resolver.observe(resolveCtx, request, startedAt, observability.OutcomeSucceeded, 200); err != nil {
+		if !resolver.active(resolveCtx, effectiveDeadline) {
+			return secretports.ErrDenied
+		}
 		return secretports.ErrUnavailable
 	}
+	if !resolver.active(resolveCtx, effectiveDeadline) {
+		return secretports.ErrDenied
+	}
 	return invoke(callback, secretports.NewView(value))
+}
+
+func (resolver *Resolver) active(ctx context.Context, deadline time.Time) bool {
+	return ctx.Err() == nil && deadline.After(resolver.clock.Now())
 }
 
 func resolveProvider(provider Provider, ctx context.Context) (value []byte, err error) {
@@ -194,7 +212,7 @@ func spanStatus(outcome observability.Outcome) observability.SpanStatus {
 func invoke(callback secretports.UseFunc, view secretports.SecretView) (err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
-			panic(secretports.ErrUnavailable)
+			err = secretports.ErrUnavailable
 		}
 	}()
 	if err := callback(view); err != nil {

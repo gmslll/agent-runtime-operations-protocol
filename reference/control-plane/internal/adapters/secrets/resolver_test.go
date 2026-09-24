@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -159,16 +158,12 @@ func TestResolverProviderAndCallbackErrorsDoNotLeak(t *testing.T) {
 func TestResolverPanicIsSanitizedAndStorageIsZeroed(t *testing.T) {
 	resolver := newResolver(t, []Binding{validBinding(valueProvider())}, &captureWriter{}, nil)
 	var storage []byte
-	var recovered any
-	func() {
-		defer func() { recovered = recover() }()
-		_ = resolver.Use(context.Background(), validRequest(), func(view secretports.SecretView) error {
-			storage = view.Bytes()
-			panic(sentinel)
-		})
-	}()
-	if !errors.Is(asError(recovered), secretports.ErrUnavailable) || containsText(fmt.Sprint(recovered), sentinel) {
-		t.Fatalf("panic was not sanitized: %v", recovered)
+	err := resolver.Use(context.Background(), validRequest(), func(view secretports.SecretView) error {
+		storage = view.Bytes()
+		panic(sentinel)
+	})
+	if !errors.Is(err, secretports.ErrUnavailable) || containsText(err.Error(), sentinel) {
+		t.Fatalf("panic was not converted to a safe error: %v", err)
 	}
 	assertZeroed(t, storage)
 }
@@ -212,6 +207,97 @@ func TestResolverDeadlineCancellationAndExpiry(t *testing.T) {
 	if err := resolver.Use(context.Background(), timed, func(secretports.SecretView) error { return nil }); !errors.Is(err, secretports.ErrDenied) {
 		t.Fatalf("deadline expiration returned %v", err)
 	}
+}
+
+func TestResolverRechecksAuthorizationWindowBeforeExposure(t *testing.T) {
+	t.Run("caller cancels while provider runs", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		providerStorage := []byte(sentinel)
+		binding := validBinding(ProviderFunc(func(context.Context) ([]byte, error) {
+			cancel()
+			return providerStorage, nil
+		}))
+		resolver := newResolver(t, []Binding{binding}, &captureWriter{}, nil)
+		called := false
+		err := resolver.Use(ctx, validRequest(), func(secretports.SecretView) error {
+			called = true
+			return nil
+		})
+		if !errors.Is(err, secretports.ErrDenied) || called {
+			t.Fatalf("cancellation was not fail-closed: err=%v called=%v", err, called)
+		}
+		assertZeroed(t, providerStorage)
+	})
+
+	t.Run("binding expires while provider runs", func(t *testing.T) {
+		clock := &mutableClock{now: testNow}
+		providerStorage := []byte(sentinel)
+		binding := validBinding(ProviderFunc(func(context.Context) ([]byte, error) {
+			clock.set(testNow.Add(2 * time.Hour))
+			return providerStorage, nil
+		}))
+		binding.ExpiresAt = testNow.Add(time.Hour)
+		resolver := newResolverWithClock(t, []Binding{binding}, &captureWriter{}, clock)
+		request := validRequest()
+		request.Deadline = testNow.Add(3 * time.Hour)
+		called := false
+		err := resolver.Use(context.Background(), request, func(secretports.SecretView) error {
+			called = true
+			return nil
+		})
+		if !errors.Is(err, secretports.ErrDenied) || called {
+			t.Fatalf("expired binding was not fail-closed: err=%v called=%v", err, called)
+		}
+		assertZeroed(t, providerStorage)
+	})
+
+	t.Run("audit blocks across request deadline", func(t *testing.T) {
+		providerStorage := []byte(sentinel)
+		writer := &captureWriter{hook: func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		}}
+		resolver := newResolver(t, []Binding{validBinding(ProviderFunc(func(context.Context) ([]byte, error) {
+			return providerStorage, nil
+		}))}, writer, nil)
+		request := validRequest()
+		request.Deadline = time.Now().UTC().Add(20 * time.Millisecond)
+		called := false
+		err := resolver.Use(context.Background(), request, func(secretports.SecretView) error {
+			called = true
+			return nil
+		})
+		if !errors.Is(err, secretports.ErrDenied) || called {
+			t.Fatalf("audit deadline was not fail-closed: err=%v called=%v", err, called)
+		}
+		assertZeroed(t, providerStorage)
+	})
+
+	t.Run("binding expires while audit runs", func(t *testing.T) {
+		clock := &mutableClock{now: testNow}
+		providerStorage := []byte(sentinel)
+		bindingExpiry := testNow.Add(time.Hour)
+		writer := &captureWriter{hook: func(context.Context) error {
+			clock.set(bindingExpiry)
+			return nil
+		}}
+		binding := validBinding(ProviderFunc(func(context.Context) ([]byte, error) {
+			return providerStorage, nil
+		}))
+		binding.ExpiresAt = bindingExpiry
+		resolver := newResolverWithClock(t, []Binding{binding}, writer, clock)
+		request := validRequest()
+		request.Deadline = testNow.Add(2 * time.Hour)
+		called := false
+		err := resolver.Use(context.Background(), request, func(secretports.SecretView) error {
+			called = true
+			return nil
+		})
+		if !errors.Is(err, secretports.ErrDenied) || called {
+			t.Fatalf("post-audit expiry was not fail-closed: err=%v called=%v", err, called)
+		}
+		assertZeroed(t, providerStorage)
+	})
 }
 
 func TestResolverConcurrentCallsUseIsolatedCopies(t *testing.T) {
@@ -288,6 +374,23 @@ type fixedClock struct{}
 
 func (fixedClock) Now() time.Time { return testNow }
 
+type mutableClock struct {
+	mutex sync.Mutex
+	now   time.Time
+}
+
+func (clock *mutableClock) Now() time.Time {
+	clock.mutex.Lock()
+	defer clock.mutex.Unlock()
+	return clock.now
+}
+
+func (clock *mutableClock) set(now time.Time) {
+	clock.mutex.Lock()
+	defer clock.mutex.Unlock()
+	clock.now = now
+}
+
 type fixedIDs struct{}
 
 func (fixedIDs) NewID(_ context.Context, kind platformports.IDKind) (string, error) {
@@ -306,11 +409,17 @@ type captureWriter struct {
 	entries []observability.AuditEntry
 	spans   []observability.SpanRecord
 	err     error
+	hook    func(context.Context) error
 }
 
-func (writer *captureWriter) AppendObservation(_ context.Context, entry observability.AuditEntry, span observability.SpanRecord) error {
+func (writer *captureWriter) AppendObservation(ctx context.Context, entry observability.AuditEntry, span observability.SpanRecord) error {
 	if err := observability.ValidateObservationPair(entry, span); err != nil {
 		return err
+	}
+	if writer.hook != nil {
+		if err := writer.hook(ctx); err != nil {
+			return err
+		}
 	}
 	if writer.err != nil {
 		return writer.err
@@ -371,6 +480,15 @@ func newResolver(t *testing.T, bindings []Binding, writer *captureWriter, fallba
 	return resolver
 }
 
+func newResolverWithClock(t *testing.T, bindings []Binding, writer *captureWriter, clock platformports.Clock) *Resolver {
+	t.Helper()
+	resolver, err := New(Config{Bindings: bindings, Clock: clock, IDs: fixedIDs{}, Observability: writer})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resolver
+}
+
 func withBinding(base Binding, change func(*Binding)) Binding {
 	copy := cloneBinding(base)
 	change(&copy)
@@ -393,11 +511,4 @@ func containsText(value, target string) bool {
 		}
 	}
 	return false
-}
-
-func asError(value any) error {
-	if err, ok := value.(error); ok {
-		return err
-	}
-	return nil
 }
