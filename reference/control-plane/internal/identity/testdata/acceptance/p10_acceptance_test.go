@@ -213,7 +213,9 @@ func acceptanceDatabase(t *testing.T, dialect migrate.Dialect) (*sql.DB, platfor
 	requireNoError(t, err)
 	pgDump, err = filepath.EvalSymlinks(pgDump)
 	requireNoError(t, err)
-	backup, err := postgresadapter.NewBackupRestore(db, parsed.String(), t.TempDir(), pgDump)
+	backupDirectory := t.TempDir()
+	requireNoError(t, os.Chmod(backupDirectory, 0o700))
+	backup, err := postgresadapter.NewBackupRestore(db, parsed.String(), backupDirectory, pgDump)
 	requireNoError(t, err)
 	return db, uow, backup, func() {
 		_ = db.Close()

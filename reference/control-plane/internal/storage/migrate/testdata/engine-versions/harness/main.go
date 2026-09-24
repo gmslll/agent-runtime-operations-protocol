@@ -399,6 +399,19 @@ func runP10TransitionChecker(root, mode string) ([]byte, error) {
 	return output, nil
 }
 
+func p10AllowsPackage(root, importPath string) bool {
+	output, err := runP10TransitionChecker(root, "allowed-packages")
+	if err != nil {
+		return false
+	}
+	for _, pkg := range strings.Fields(string(output)) {
+		if pkg == importPath {
+			return true
+		}
+	}
+	return false
+}
+
 func verifyBaselineTransitionWaiver(root string, inputPaths []string, goListOutput []byte) error {
 	data, err := readRegular(root, waiverPath)
 	if err != nil {
@@ -1972,6 +1985,10 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 			if item.Module == nil || item.Module.Path != nestedModule || item.Module.Version != "" || !pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) {
 				problems = append(problems, "nested package resolved outside main module: "+item.ImportPath)
 			}
+			seenNested[item.ImportPath] = true
+			continue
+		}
+		if p10AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) {
 			seenNested[item.ImportPath] = true
 			continue
 		}

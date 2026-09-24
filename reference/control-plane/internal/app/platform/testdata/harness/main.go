@@ -720,7 +720,14 @@ func runStandaloneAcceptance(root string) (result standaloneResult) {
 	result.Test.Argv = testArgv
 	result.List.Argv = listArgv
 
-	scratch, err := os.MkdirTemp("", "arop-p08-standalone-")
+	temporaryRoot, err := filepath.EvalSymlinks(os.TempDir())
+	if err == nil && (!filepath.IsAbs(temporaryRoot) || filepath.Clean(temporaryRoot) != temporaryRoot) {
+		err = errors.New("resolved P08 temporary root is not absolute and clean")
+	}
+	var scratch string
+	if err == nil {
+		scratch, err = os.MkdirTemp(temporaryRoot, "arop-p08-standalone-")
+	}
 	if err != nil {
 		result.BootstrapErr = err
 		result.Test.Err = err
