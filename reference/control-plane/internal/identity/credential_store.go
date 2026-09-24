@@ -414,6 +414,10 @@ func verifySQLiteIdentityForeignKeys(ctx context.Context, queryer migrate.Querye
 }
 
 func verifySQLiteIdentityIndexes(ctx context.Context, queryer migrate.Queryer) error {
+	type indexMetadata struct {
+		name, origin    string
+		unique, partial int
+	}
 	expected := map[string]map[string]int{
 		"arop_dev_principals": {
 			"pk|1|0|principal_id": 1,
@@ -433,29 +437,35 @@ func verifySQLiteIdentityIndexes(ctx context.Context, queryer migrate.Queryer) e
 		if err != nil {
 			return errors.New("inspect SQLite identity indexes")
 		}
-		found := map[string]int{}
+		var indexes []indexMetadata
 		for rows.Next() {
 			var sequence, unique, partial int
 			var name, origin string
 			if err := rows.Scan(&sequence, &name, &unique, &origin, &partial); err != nil {
-				rows.Close()
+				_ = rows.Close()
 				return errors.New("scan SQLite identity indexes")
 			}
-			columns := sqliteIndexColumns(ctx, queryer, name)
+			indexes = append(indexes, indexMetadata{name: name, origin: origin, unique: unique, partial: partial})
+		}
+		iterationErr := rows.Err()
+		closeErr := rows.Close()
+		if iterationErr != nil || closeErr != nil {
+			return errors.New("SQLite identity indexes are not exact")
+		}
+		found := map[string]int{}
+		for _, metadata := range indexes {
+			columns := sqliteIndexColumns(ctx, queryer, metadata.name)
 			if len(columns) == 0 {
-				rows.Close()
 				return errors.New("SQLite identity indexes are not exact")
 			}
-			signature := fmt.Sprintf("%s|%d|%d|", origin, unique, partial)
-			if origin == "c" {
-				signature += name + "|"
+			signature := fmt.Sprintf("%s|%d|%d|", metadata.origin, metadata.unique, metadata.partial)
+			if metadata.origin == "c" {
+				signature += metadata.name + "|"
 			}
 			signature += strings.Join(columns, ",")
 			found[signature]++
 		}
-		iterationErr := rows.Err()
-		closeErr := rows.Close()
-		if iterationErr != nil || closeErr != nil || !equalStringCounts(found, wanted) {
+		if !equalStringCounts(found, wanted) {
 			return errors.New("SQLite identity indexes are not exact")
 		}
 	}

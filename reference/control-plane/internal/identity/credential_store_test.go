@@ -347,6 +347,38 @@ func TestVerifySchemaRejectsRowsIterationFailure(t *testing.T) {
 	}
 }
 
+func TestVerifySchemaSQLiteSingleConnectionTransaction(t *testing.T) {
+	db := openIdentityDatabase(t)
+	db.SetMaxOpenConns(1)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifySchema(migrate.DialectSQLite)(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("single-connection verifier failed: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	tampered := openIdentityDatabaseWithSchema(t, strings.Replace(exactSQLiteIdentitySchema, "expires_at_ns > not_before_at_ns", "expires_at_ns >= not_before_at_ns", 1))
+	tampered.SetMaxOpenConns(1)
+	tamperedTx, err := tampered.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifySchema(migrate.DialectSQLite)(ctx, tamperedTx); err == nil {
+		_ = tamperedTx.Rollback()
+		t.Fatal("single-connection verifier accepted tampered schema")
+	}
+	if err := tamperedTx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 type iterationErrorDriver struct{}
 
 var iterationDriverOnce sync.Once
