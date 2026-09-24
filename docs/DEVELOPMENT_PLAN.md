@@ -167,7 +167,7 @@ updated: 2026-09-23
 - **Status:** pending
 - **Capability owner:** identity-secret-foundation
 - **Components:** identity
-- **Artifacts owned:** identity-service, credential-store, secret-resolver-port, reference-secret-exchange, sqlite-migration-identity, postgres-migration-identity
+- **Artifacts owned:** identity-service, credential-store, secret-resolver-port, reference-secret-exchange, sqlite-migration-identity, postgres-migration-identity, p10-baseline-transition-waiver
 - **Goal:** 只实现 dev identity、Credential 发行/轮换/撤销和 reference-only SecretRef resolver adapter。
 - **Scope:** AuthN middleware、Credential store/cache invalidation、SecretRef port/deployment adapter、SQLite/PostgreSQL credential migration；不实现 URL、Asset 或通用 Secret value HTTP API。
 - **Dependencies:** P09

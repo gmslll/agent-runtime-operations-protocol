@@ -1439,6 +1439,7 @@ artifacts:
     path_role: concrete
     derives_from:
       - identity-service
+      - secret-resolver-port
       - schema-secret-ref
       - security-governance-specification
     capabilities:
@@ -3287,7 +3288,6 @@ artifacts:
     authority: implementation
     path_role: concrete
     derives_from:
-      - secret-resolver-port
       - identity-service
       - durable-audit-storage
       - sqlite-migration-identity
@@ -3312,6 +3312,21 @@ artifacts:
     owner_phase: P10
     acceptance_test: make-test-identity-secrets
     exposure: reference-only
+  - id: p10-baseline-transition-waiver
+    path: reference/control-plane/internal/identity/testdata/transition/p10-baseline-transition-waiver.json
+    status: planned
+    kind: baseline-transition-waiver
+    authority: evidence
+    path_role: concrete
+    derives_from:
+      - decisions
+      - development-plan
+      - artifact-catalog
+    language: language-neutral
+    owner: identity-secret-foundation
+    owner_phase: P10
+    acceptance_test: make-test-identity-secrets
+    exposure: repository-internal
   - id: registry-api-service
     path: reference/control-plane/internal/app/registryapi
     status: planned
@@ -4913,6 +4928,7 @@ artifacts:
       - reference-secret-exchange
       - sqlite-migration-identity
       - postgres-migration-identity
+      - p10-baseline-transition-waiver
   - id: phase-report-p11
     path: build/reports/P11
     status: planned
