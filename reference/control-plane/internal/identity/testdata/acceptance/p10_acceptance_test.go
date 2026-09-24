@@ -3,6 +3,8 @@ package acceptance
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -58,27 +60,31 @@ func TestP10DurableIdentityConformance(t *testing.T) {
 			service, err := identity.New(identity.Dependencies{
 				Clock: clock, IDs: ids, Faults: platform.NoopFaultHook{}, UoW: uow,
 				Observability: observations, Repository: repository,
-				AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"secret.read"},
+				AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"secret.read"}, AllowedTenants: []string{"reference-dev"},
 			})
 			requireNoError(t, err)
 
 			issueMetadata := requestMetadata(t, ids)
 			issued, err := service.Issue(context.Background(), identity.IssueRequest{
-				SubjectID: "p10-acceptance", Kind: "service", Audience: "reference-control-plane",
+				TenantID: "reference-dev", SubjectID: "p10-acceptance", Kind: "service", Audience: "reference-control-plane",
 				Scopes: []string{"secret.read"}, TTL: 5 * time.Minute, IdempotencyKey: "p10-issue-1", Metadata: issueMetadata,
 			})
 			requireNoError(t, err)
 			if issued.Credential == "" || strings.Contains(issued.Credential, "plaintext") {
 				t.Fatal("issued credential is missing or unsafe")
 			}
-			principal, err := service.Authenticate(context.Background(), identity.AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"secret.read"}, Metadata: requestMetadata(t, ids)})
+			principal, err := service.Authenticate(context.Background(), identity.AuthenticateRequest{Credential: issued.Credential, TenantID: "reference-dev", Audience: "reference-control-plane", Scopes: []string{"secret.read"}, Metadata: requestMetadata(t, ids)})
 			requireNoError(t, err)
 			if principal.CredentialID != issued.CredentialID {
 				t.Fatal("authenticated principal does not match issued credential")
 			}
 			requireNoError(t, service.Revoke(context.Background(), identity.RevokeRequest{CredentialID: issued.CredentialID, Metadata: requestMetadata(t, ids)}))
-			if _, err := service.Authenticate(context.Background(), identity.AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"secret.read"}, Metadata: requestMetadata(t, ids)}); err == nil {
+			_, authenticationErr := service.Authenticate(context.Background(), identity.AuthenticateRequest{Credential: issued.Credential, TenantID: "reference-dev", Audience: "reference-control-plane", Scopes: []string{"secret.read"}, Metadata: requestMetadata(t, ids)})
+			if authenticationErr == nil {
 				t.Fatal("revoked credential authenticated")
+			}
+			if strings.Contains(authenticationErr.Error(), issued.Credential) {
+				t.Fatal("authentication error leaked presented credential")
 			}
 			audits, err := observations.QueryAudit(context.Background(), observability.AuditQuery{Limit: 100})
 			requireNoError(t, err)
@@ -90,8 +96,14 @@ func TestP10DurableIdentityConformance(t *testing.T) {
 			if persistedVerifier == issued.Credential || len(persistedVerifier) != 64 || len(requestDigest) != 64 {
 				t.Fatal("credential plaintext or malformed request fingerprint persisted")
 			}
+			testRejectedMutationAuditAndReadiness(t, db, uow, observations, repository, clock, ids)
+			assertNoCredentialEgress(t, db, observations, issued.Credential)
 
 			t.Run("one-to-five", func(t *testing.T) { testOneToFive(t, dialect) })
+			for _, failure := range []string{"apply", "verifier", "restore"} {
+				failure := failure
+				t.Run("one-to-five-recovery-"+failure, func(t *testing.T) { testOneToFiveRecovery(t, dialect, failure) })
+			}
 		})
 	}
 }
@@ -125,6 +137,214 @@ func testOneToFive(t *testing.T, dialect migrate.Dialect) {
 		t.Fatalf("unexpected P10 staged result: %#v", result)
 	}
 	requireNoError(t, p10.Check(context.Background()))
+}
+
+func testOneToFiveRecovery(t *testing.T, dialect migrate.Dialect, failure string) {
+	db, uow, backup, cleanup := acceptanceDatabase(t, dialect)
+	defer cleanup()
+	rootPath := requiredEnv(t, "AROP_P10_MIGRATION_ROOT")
+	p09Catalog := loadP09Catalog(t, rootPath, dialect)
+	p09, err := migrate.NewRunner(db, p09Catalog, testLocker{}, migrate.WithVerifier(durable.VerifySchema(dialect)))
+	requireNoError(t, err)
+	_, err = p09.Migrate(context.Background())
+	requireNoError(t, err)
+	seedDurableObservation(t, db, uow, dialect, p09)
+
+	p10Catalog, err := migrate.LoadCatalogClosure(os.DirFS(rootPath), migrate.CurrentProductionCatalog(), dialect)
+	requireNoError(t, err)
+	verifier := combinedVerifier(dialect)
+	usedBackup := backup
+	switch failure {
+	case "apply":
+		p10Catalog = failingApplyCatalog(t, rootPath, dialect)
+	case "verifier":
+		base := verifier
+		verifier = func(ctx context.Context, query migrate.Queryer) error {
+			if err := base(ctx, query); err != nil {
+				return err
+			}
+			return errors.New("injected identity verifier failure")
+		}
+	case "restore":
+		p10Catalog = failingApplyCatalog(t, rootPath, dialect)
+		usedBackup = &restoreFailureBackup{delegate: backup}
+	default:
+		t.Fatalf("unknown recovery case %q", failure)
+	}
+	runner, err := migrate.NewRunner(db, p10Catalog, testLocker{}, migrate.WithVerifier(verifier), migrate.WithBackupRestore(usedBackup))
+	requireNoError(t, err)
+	_, err = runner.Migrate(context.Background())
+	if err == nil {
+		t.Fatal("injected migration failure succeeded")
+	}
+	if failure == "restore" {
+		if !strings.Contains(err.Error(), "arop_p10_missing_apply_target") || !strings.Contains(err.Error(), "restore pre-migration backup") || !strings.Contains(err.Error(), "injected restore failure") || runner.Check(context.Background()) == nil {
+			t.Fatalf("restore failure did not retain original+restore error and not-ready state: %v", err)
+		}
+		return
+	}
+	assertRestoredV1(t, db, dialect, p09)
+}
+
+func loadP09Catalog(t *testing.T, rootPath string, dialect migrate.Dialect) *migrate.Catalog {
+	t.Helper()
+	files := fstest.MapFS{}
+	for _, declared := range migrate.P09ProductionCatalog().Migrations {
+		contents, err := os.ReadFile(filepath.Join(rootPath, filepath.FromSlash(declared.Path)))
+		requireNoError(t, err)
+		files[declared.Path] = &fstest.MapFile{Data: contents, Mode: 0o600}
+	}
+	catalog, err := migrate.LoadCatalogClosure(files, migrate.P09ProductionCatalog(), dialect)
+	requireNoError(t, err)
+	return catalog
+}
+
+func failingApplyCatalog(t *testing.T, rootPath string, dialect migrate.Dialect) *migrate.Catalog {
+	t.Helper()
+	directory := string(dialect)
+	base, err := os.ReadFile(filepath.Join(rootPath, directory, "0001_base.sql"))
+	requireNoError(t, err)
+	identitySQL, err := os.ReadFile(filepath.Join(rootPath, directory, "0005_identity.sql"))
+	requireNoError(t, err)
+	identitySQL = append(identitySQL, []byte("\n-- arop:statement\nINSERT INTO arop_p10_missing_apply_target(id) VALUES(1);\n")...)
+	v1, err := migrate.NewMigration(1, "base", base)
+	requireNoError(t, err)
+	v5, err := migrate.NewMigration(5, "identity", identitySQL)
+	requireNoError(t, err)
+	catalog, err := migrate.NewCatalog(dialect, []migrate.Migration{v1, v5})
+	requireNoError(t, err)
+	return catalog
+}
+
+func seedDurableObservation(t *testing.T, db *sql.DB, uow platformports.UnitOfWork, dialect migrate.Dialect, runner *migrate.Runner) {
+	t.Helper()
+	store, err := durable.New(db, dialect, transactionLookup(uow), runner.Check)
+	requireNoError(t, err)
+	now := time.Unix(100, 0).UTC()
+	audit := observability.AuditEntry{ID: "aud_01956e7b-9abc-7def-8abc-0123456789ab", OccurredAt: now, RequestID: "req_01956e7b-9abc-7def-8abc-0123456789ab", TraceID: "4bf92f3577b34da6a3ce929d0e0e4736", Operation: "p10.migration.seed", Outcome: observability.OutcomeSucceeded, HTTPStatus: 200}
+	span := observability.SpanRecord{TraceID: audit.TraceID, SpanID: "00f067aa0ba902b7", RequestID: audit.RequestID, Operation: audit.Operation, StartedAt: now, EndedAt: now, Status: observability.SpanStatusOK}
+	requireNoError(t, store.AppendObservation(context.Background(), audit, span))
+}
+
+func assertRestoredV1(t *testing.T, db *sql.DB, dialect migrate.Dialect, p09 *migrate.Runner) {
+	t.Helper()
+	var versions, observations int
+	requireNoError(t, db.QueryRow(`SELECT COUNT(*) FROM arop_schema_migrations WHERE version=1 AND dirty=`+placeholder(dialect, 1), false).Scan(&versions))
+	requireNoError(t, db.QueryRow(`SELECT COUNT(*) FROM arop_observations WHERE operation='p10.migration.seed'`).Scan(&observations))
+	if versions != 1 || observations != 1 || identityTableExists(t, db, dialect) {
+		t.Fatalf("restore did not return exact v1: history=%d observations=%d identity_table=%t", versions, observations, identityTableExists(t, db, dialect))
+	}
+	requireNoError(t, p09.Check(context.Background()))
+}
+
+func identityTableExists(t *testing.T, db *sql.DB, dialect migrate.Dialect) bool {
+	t.Helper()
+	var exists bool
+	if dialect == migrate.DialectPostgres {
+		requireNoError(t, db.QueryRow(`SELECT to_regclass('public.arop_credentials') IS NOT NULL`).Scan(&exists))
+		return exists
+	}
+	var count int
+	requireNoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='arop_credentials'`).Scan(&count))
+	return count != 0
+}
+
+type restoreFailureBackup struct{ delegate migrate.BackupRestore }
+
+func (backup *restoreFailureBackup) Create(ctx context.Context, from, to int64) (migrate.Snapshot, error) {
+	return backup.delegate.Create(ctx, from, to)
+}
+func (*restoreFailureBackup) Restore(context.Context, migrate.Snapshot) error {
+	return errors.New("injected restore failure")
+}
+
+type failingObservationWriter struct {
+	delegate observability.ObservationWriter
+	fail     atomic.Bool
+}
+
+func (writer *failingObservationWriter) AppendObservation(ctx context.Context, audit observability.AuditEntry, span observability.SpanRecord) error {
+	if writer.fail.Load() {
+		return errors.New("injected durable observation failure")
+	}
+	return writer.delegate.AppendObservation(ctx, audit, span)
+}
+
+func testRejectedMutationAuditAndReadiness(t *testing.T, db *sql.DB, uow platformports.UnitOfWork, observations observability.Store, repository identity.CredentialRepository, clock platformports.Clock, ids platformports.IDSource) {
+	t.Helper()
+	rejected := identity.IssueRequest{TenantID: "reference-dev", SubjectID: "rejected-subject", Kind: "service", Audience: "reference-control-plane", Scopes: []string{"secret.read"}, IdempotencyKey: "rejected-request", Metadata: requestMetadata(t, ids)}
+	if _, err := identityService(t, uow, observations, repository, clock, ids).Issue(context.Background(), rejected); err == nil {
+		t.Fatal("invalid mutation was accepted")
+	}
+	audits, err := observations.QueryAudit(context.Background(), observability.AuditQuery{Operation: "credential.issue", Outcome: observability.OutcomeRejected, Limit: 100})
+	requireNoError(t, err)
+	if len(audits) == 0 {
+		t.Fatal("rejected mutation did not persist a durable security observation")
+	}
+
+	writer := &failingObservationWriter{delegate: observations}
+	writer.fail.Store(true)
+	service := identityService(t, uow, writer, repository, clock, ids)
+	var before, after int
+	requireNoError(t, db.QueryRow(`SELECT COUNT(*) FROM arop_credentials`).Scan(&before))
+	failed := identity.IssueRequest{TenantID: "reference-dev", SubjectID: "audit-failure-subject", Kind: "service", Audience: "reference-control-plane", Scopes: []string{"secret.read"}, TTL: time.Minute, IdempotencyKey: "audit-failure-request", Metadata: requestMetadata(t, ids)}
+	if _, err := service.Issue(context.Background(), failed); !errors.Is(err, identity.ErrUnavailable) {
+		t.Fatalf("audit failure did not fail closed: %v", err)
+	}
+	requireNoError(t, db.QueryRow(`SELECT COUNT(*) FROM arop_credentials`).Scan(&after))
+	if after != before {
+		t.Fatalf("audit failure committed credential mutation: before=%d after=%d", before, after)
+	}
+	if service.Check(context.Background()) == nil {
+		t.Fatal("audit failure left identity readiness green")
+	}
+	writer.fail.Store(false)
+	failed.Metadata = requestMetadata(t, ids)
+	failed.TTL = 0
+	if _, err := service.Issue(context.Background(), failed); err == nil {
+		t.Fatal("recovery rejection unexpectedly succeeded")
+	}
+	requireNoError(t, service.Check(context.Background()))
+}
+
+func identityService(t *testing.T, uow platformports.UnitOfWork, observations observability.ObservationWriter, repository identity.CredentialRepository, clock platformports.Clock, ids platformports.IDSource) *identity.Service {
+	t.Helper()
+	service, err := identity.New(identity.Dependencies{
+		Clock: clock, IDs: ids, Faults: platform.NoopFaultHook{}, UoW: uow,
+		Observability: observations, Repository: repository,
+		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"secret.read"}, AllowedTenants: []string{"reference-dev"},
+	})
+	requireNoError(t, err)
+	return service
+}
+
+func assertNoCredentialEgress(t *testing.T, db *sql.DB, observations observability.Store, credential string) {
+	t.Helper()
+	audits, err := observations.QueryAudit(context.Background(), observability.AuditQuery{Limit: 1000})
+	requireNoError(t, err)
+	spans, err := observations.QueryTrace(context.Background(), observability.TraceQuery{Limit: 1000})
+	requireNoError(t, err)
+	encoded, err := json.Marshal(struct {
+		Audits []observability.AuditEntry
+		Spans  []observability.SpanRecord
+	}{audits, spans})
+	requireNoError(t, err)
+	if strings.Contains(string(encoded), credential) {
+		t.Fatal("credential leaked into durable Audit/Trace storage")
+	}
+	rows, err := db.Query(`SELECT p.tenant_id,p.subject_id,c.credential_kind,c.audience,c.scope_canonical,c.secret_verifier,c.idempotency_key_digest,c.idempotency_request_digest FROM arop_credentials c JOIN arop_dev_principals p ON p.principal_id=c.principal_id`)
+	requireNoError(t, err)
+	defer rows.Close()
+	for rows.Next() {
+		var values [8]string
+		requireNoError(t, rows.Scan(&values[0], &values[1], &values[2], &values[3], &values[4], &values[5], &values[6], &values[7]))
+		for _, value := range values {
+			if strings.Contains(value, credential) {
+				t.Fatal("credential leaked into durable identity database")
+			}
+		}
+	}
+	requireNoError(t, rows.Err())
 }
 
 func assertMigrationFailuresClosed(t *testing.T, db *sql.DB, dialect migrate.Dialect, runner *migrate.Runner) {

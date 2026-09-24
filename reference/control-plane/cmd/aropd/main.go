@@ -61,6 +61,9 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 		return nil, nil, nil, errors.New("initialize Control Plane platform")
 	}
 	handler, err := httpadapter.NewHandler(application)
+	if identityService := identityServiceFromChecks(checks); identityService != nil {
+		handler, err = httpadapter.NewAuthenticatedHandler(application, referenceAuthenticate(identityService, ids))
+	}
 	if err != nil {
 		_ = cleanup()
 		return nil, nil, nil, errors.New("assemble Control Plane HTTP handler")
@@ -258,7 +261,7 @@ func composeIdentity(db *sql.DB, dialect migrate.Dialect, lookup durable.Transac
 	}
 	service, err := identity.New(identity.Dependencies{
 		Clock: clock, IDs: ids, Faults: faults, UoW: uow, Observability: observations, Repository: repository,
-		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"secret.read"},
+		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"secret.read"}, AllowedTenants: []string{"reference-dev"},
 	})
 	if err != nil {
 		return nil, errors.New("initialize identity service")
@@ -269,6 +272,42 @@ func composeIdentity(db *sql.DB, dialect migrate.Dialect, lookup durable.Transac
 		return nil, errors.New("initialize deny-by-default secret resolver")
 	}
 	return service, nil
+}
+
+func identityServiceFromChecks(checks []platformports.ReadinessCheck) *identity.Service {
+	for _, check := range checks {
+		if service, ok := check.(*identity.Service); ok {
+			return service
+		}
+	}
+	return nil
+}
+
+func referenceAuthenticate(service *identity.Service, ids platformports.IDSource) httpadapter.AuthenticateFunc {
+	return func(ctx context.Context, credential string, metadata platform.RequestMetadata) (httpadapter.AuthenticatedPrincipal, error) {
+		spanID, err := ids.NewID(ctx, platformports.IDSpan)
+		if err != nil {
+			return httpadapter.AuthenticatedPrincipal{}, httpadapter.ErrAuthenticationUnavailable
+		}
+		metadata.ParentSpanID, metadata.SpanID = metadata.SpanID, spanID
+		principal, err := service.Authenticate(ctx, identity.AuthenticateRequest{
+			Credential: credential,
+			TenantID:   "reference-dev",
+			Audience:   "reference-control-plane",
+			Scopes:     []string{"secret.read"},
+			Metadata:   metadata,
+		})
+		if err != nil {
+			if errors.Is(err, identity.ErrUnavailable) {
+				return httpadapter.AuthenticatedPrincipal{}, httpadapter.ErrAuthenticationUnavailable
+			}
+			return httpadapter.AuthenticatedPrincipal{}, errors.New("credential authentication failed")
+		}
+		return httpadapter.AuthenticatedPrincipal{
+			TenantID: principal.TenantID, PrincipalID: principal.PrincipalID,
+			SubjectID: principal.SubjectID, CredentialID: principal.CredentialID,
+		}, nil
+	}
 }
 
 func canonicalDirectory(directory string) (string, error) {

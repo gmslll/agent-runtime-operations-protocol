@@ -195,6 +195,11 @@ func main() {
 		AuditNote: "P10 is reference-only. Its static closure binds all seven P10-owned artifacts, P08/P09 composition sources, paired 0001/0005 migrations, catalog declarations, transition waiver, report tooling and exact discovered test inventory. P08 and P09 are rerun on the same head. Runtime logs, PostgreSQL toolchain evidence and temporary database results appear only as digest and byte count. No public Secret value API, production 0010 migration, durable-to-memory fallback, raw credential, DSN or absolute scratch path enters the report.",
 	})
 	fatal(writeErr)
+	for _, artifact := range []string{reportPath, "build/reports/P10/junit.xml"} {
+		contents, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(artifact)))
+		fatal(err)
+		fatal(rejectSensitive(contents))
+	}
 	verified, mode, verifyErr := report.Verify(report.VerifyOptions{Root: root, ReportPath: reportPath})
 	fatal(verifyErr)
 	if mode != "current-worktree" || verified.Success != written.Success {

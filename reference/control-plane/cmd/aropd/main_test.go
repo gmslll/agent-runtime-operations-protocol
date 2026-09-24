@@ -39,7 +39,7 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 		})
 	}
 
-	t.Run("durable-sqlite-composes-identity-without-secret-route", func(t *testing.T) {
+	t.Run("durable-sqlite-composes-reference-auth-without-secret-route", func(t *testing.T) {
 		root := t.TempDir()
 		migrationRoot := filepath.Join(root, "migrations")
 		for _, relative := range []string{"sqlite/0001_base.sql", "sqlite/0005_identity.sql", "postgres/0001_base.sql", "postgres/0005_identity.sql"} {
@@ -80,10 +80,20 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 		}
 		for _, path := range []string{"/v1/secrets", "/v1/secret-values", "/v1/credentials/cred_test/value"} {
 			response := httptest.NewRecorder()
-			server.Handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
-			if response.Code != http.StatusNotFound && response.Code != http.StatusMethodNotAllowed {
-				t.Fatalf("unexpected public secret route %s status=%d", path, response.Code)
+			request := httptest.NewRequest(http.MethodGet, path, nil)
+			request.Header.Set("Authorization", "Bearer p10-production-auth-sentinel")
+			server.Handler.ServeHTTP(response, request)
+			if response.Code != http.StatusUnauthorized || response.Body.String() != "{\"status\":\"unauthorized\"}\n" {
+				t.Fatalf("reference authentication did not fail closed for %s: status=%d body=%s", path, response.Code, response.Body.String())
 			}
+			if strings.Contains(response.Body.String(), "p10-production-auth-sentinel") {
+				t.Fatal("authentication response leaked presented credential")
+			}
+		}
+		health := httptest.NewRecorder()
+		server.Handler.ServeHTTP(health, httptest.NewRequest(http.MethodGet, "/v1/health/live", nil))
+		if health.Code != http.StatusOK {
+			t.Fatalf("health did not bypass authentication: %d %s", health.Code, health.Body.String())
 		}
 	})
 
