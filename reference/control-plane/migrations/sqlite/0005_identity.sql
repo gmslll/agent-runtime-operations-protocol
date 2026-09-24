@@ -31,6 +31,7 @@ CREATE TABLE arop_credentials (
   replacement_credential_id TEXT,
   revision INTEGER NOT NULL,
   idempotency_key_digest TEXT NOT NULL,
+  idempotency_request_digest TEXT NOT NULL,
   CONSTRAINT arop_credentials_pkey PRIMARY KEY(credential_id),
   CONSTRAINT arop_credentials_principal_fkey FOREIGN KEY(principal_id) REFERENCES arop_dev_principals(principal_id) ON UPDATE RESTRICT ON DELETE RESTRICT,
   CONSTRAINT arop_credentials_replacement_fkey FOREIGN KEY(replacement_credential_id) REFERENCES arop_credentials(credential_id) ON UPDATE RESTRICT ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
@@ -43,6 +44,7 @@ CREATE TABLE arop_credentials (
   CONSTRAINT arop_credentials_scope_check CHECK(length(scope_canonical) BETWEEN 1 AND 4096),
   CONSTRAINT arop_credentials_verifier_check CHECK(length(secret_verifier) = 64 AND secret_verifier NOT GLOB '*[^0-9a-f]*'),
   CONSTRAINT arop_credentials_idempotency_check CHECK(length(idempotency_key_digest) = 64 AND idempotency_key_digest NOT GLOB '*[^0-9a-f]*'),
+  CONSTRAINT arop_credentials_idempotency_request_check CHECK(length(idempotency_request_digest) = 64 AND idempotency_request_digest NOT GLOB '*[^0-9a-f]*'),
   CONSTRAINT arop_credentials_time_check CHECK(issued_at_ns > 0 AND not_before_at_ns >= issued_at_ns AND expires_at_ns > not_before_at_ns),
   CONSTRAINT arop_credentials_status_check CHECK(status IN ('active','revoked','replaced')),
   CONSTRAINT arop_credentials_lifecycle_check CHECK(

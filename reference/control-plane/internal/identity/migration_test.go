@@ -129,19 +129,20 @@ func assertIdentityConstraints(t *testing.T, db *sql.DB) {
 	t.Helper()
 	_, err := db.Exec(`INSERT INTO arop_dev_principals(principal_id,subject_id,status,created_at_ns,updated_at_ns,revision) VALUES(?,?,?,?,?,?)`, "principal-1", "subject-1", "active", 1, 1, 1)
 	requireMigrationNoError(t, err)
-	insertCredential := `INSERT INTO arop_credentials(credential_id,principal_id,credential_kind,audience,scope_canonical,secret_verifier,issued_at_ns,not_before_at_ns,expires_at_ns,status,revoked_at_ns,replaced_at_ns,replacement_credential_id,revision,idempotency_key_digest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-	_, err = db.Exec(insertCredential, "credential-1", "principal-1", "service", "control-plane", "agent:invoke", strings.Repeat("a", 64), 1, 1, 2, "active", nil, nil, nil, 1, strings.Repeat("b", 64))
+	insertCredential := `INSERT INTO arop_credentials(credential_id,principal_id,credential_kind,audience,scope_canonical,secret_verifier,issued_at_ns,not_before_at_ns,expires_at_ns,status,revoked_at_ns,replaced_at_ns,replacement_credential_id,revision,idempotency_key_digest,idempotency_request_digest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+	_, err = db.Exec(insertCredential, "credential-1", "principal-1", "service", "control-plane", "agent:invoke", strings.Repeat("a", 64), 1, 1, 2, "active", nil, nil, nil, 1, strings.Repeat("b", 64), strings.Repeat("c", 64))
 	requireMigrationNoError(t, err)
 
 	invalid := []struct {
 		name string
 		args []any
 	}{
-		{"raw-verifier-shape", []any{"credential-2", "principal-1", "service", "control-plane", "agent:invoke", "plaintext", 1, 1, 2, "active", nil, nil, nil, 1, strings.Repeat("c", 64)}},
-		{"invalid-lifecycle", []any{"credential-3", "principal-1", "service", "control-plane", "agent:invoke", strings.Repeat("d", 64), 1, 1, 2, "revoked", nil, nil, nil, 1, strings.Repeat("e", 64)}},
-		{"unknown-principal", []any{"credential-4", "missing", "service", "control-plane", "agent:invoke", strings.Repeat("f", 64), 1, 1, 2, "active", nil, nil, nil, 1, strings.Repeat("1", 64)}},
-		{"duplicate-verifier", []any{"credential-5", "principal-1", "service", "control-plane", "agent:invoke", strings.Repeat("a", 64), 1, 1, 2, "active", nil, nil, nil, 1, strings.Repeat("2", 64)}},
-		{"duplicate-idempotency", []any{"credential-6", "principal-1", "service", "control-plane", "agent:invoke", strings.Repeat("3", 64), 1, 1, 2, "active", nil, nil, nil, 1, strings.Repeat("b", 64)}},
+		{"raw-verifier-shape", []any{"credential-2", "principal-1", "service", "control-plane", "agent:invoke", "plaintext", 1, 1, 2, "active", nil, nil, nil, 1, strings.Repeat("d", 64), strings.Repeat("e", 64)}},
+		{"invalid-lifecycle", []any{"credential-3", "principal-1", "service", "control-plane", "agent:invoke", strings.Repeat("f", 64), 1, 1, 2, "revoked", nil, nil, nil, 1, strings.Repeat("1", 64), strings.Repeat("2", 64)}},
+		{"unknown-principal", []any{"credential-4", "missing", "service", "control-plane", "agent:invoke", strings.Repeat("3", 64), 1, 1, 2, "active", nil, nil, nil, 1, strings.Repeat("4", 64), strings.Repeat("5", 64)}},
+		{"duplicate-verifier", []any{"credential-5", "principal-1", "service", "control-plane", "agent:invoke", strings.Repeat("a", 64), 1, 1, 2, "active", nil, nil, nil, 1, strings.Repeat("6", 64), strings.Repeat("7", 64)}},
+		{"duplicate-idempotency", []any{"credential-6", "principal-1", "service", "control-plane", "agent:invoke", strings.Repeat("8", 64), 1, 1, 2, "active", nil, nil, nil, 1, strings.Repeat("b", 64), strings.Repeat("9", 64)}},
+		{"invalid-idempotency-request", []any{"credential-7", "principal-1", "service", "control-plane", "agent:invoke", strings.Repeat("0", 64), 1, 1, 2, "active", nil, nil, nil, 1, strings.Repeat("1", 64), "not-a-digest"}},
 	}
 	for _, test := range invalid {
 		t.Run(test.name, func(t *testing.T) {
