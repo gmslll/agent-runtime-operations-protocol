@@ -39,20 +39,20 @@ func (store *CredentialStore) Create(ctx context.Context, record *CredentialReco
 	if !ok {
 		return errors.New("credential mutation requires unit-of-work transaction")
 	}
-	insertPrincipal := `INSERT INTO arop_dev_principals(principal_id,subject_id,status,created_at_ns,updated_at_ns,revision)
-VALUES(?,?,?,?,?,1) ON CONFLICT(subject_id) DO NOTHING`
+	insertPrincipal := `INSERT INTO arop_dev_principals(principal_id,tenant_id,subject_id,status,created_at_ns,updated_at_ns,revision)
+VALUES(?,?,?,?,?,?,1) ON CONFLICT(tenant_id,subject_id) DO NOTHING`
 	if store.dialect == migrate.DialectPostgres {
-		insertPrincipal = `INSERT INTO arop_dev_principals(principal_id,subject_id,status,created_at_ns,updated_at_ns,revision)
-VALUES($1,$2,$3,$4,$5,1) ON CONFLICT(subject_id) DO NOTHING`
+		insertPrincipal = `INSERT INTO arop_dev_principals(principal_id,tenant_id,subject_id,status,created_at_ns,updated_at_ns,revision)
+VALUES($1,$2,$3,$4,$5,$6,1) ON CONFLICT(tenant_id,subject_id) DO NOTHING`
 	}
-	if _, err := tx.ExecContext(ctx, insertPrincipal, record.PrincipalID, record.SubjectID, "active", record.IssuedAt.UnixNano(), record.IssuedAt.UnixNano()); err != nil {
+	if _, err := tx.ExecContext(ctx, insertPrincipal, record.PrincipalID, record.TenantID, record.SubjectID, "active", record.IssuedAt.UnixNano(), record.IssuedAt.UnixNano()); err != nil {
 		return fmt.Errorf("ensure development principal: %w", err)
 	}
-	principalQuery := `SELECT principal_id FROM arop_dev_principals WHERE subject_id=? AND status='active'`
+	principalQuery := `SELECT principal_id FROM arop_dev_principals WHERE tenant_id=? AND subject_id=? AND status='active'`
 	if store.dialect == migrate.DialectPostgres {
-		principalQuery = `SELECT principal_id FROM arop_dev_principals WHERE subject_id=$1 AND status='active'`
+		principalQuery = `SELECT principal_id FROM arop_dev_principals WHERE tenant_id=$1 AND subject_id=$2 AND status='active'`
 	}
-	if err := tx.QueryRowContext(ctx, principalQuery, record.SubjectID).Scan(&record.PrincipalID); err != nil {
+	if err := tx.QueryRowContext(ctx, principalQuery, record.TenantID, record.SubjectID).Scan(&record.PrincipalID); err != nil {
 		return fmt.Errorf("load development principal: %w", err)
 	}
 	statement := `INSERT INTO arop_credentials(
@@ -91,7 +91,7 @@ func (store *CredentialStore) Replace(ctx context.Context, current CredentialRec
 	if err := validateRecord(replacement); err != nil {
 		return err
 	}
-	if current.Status != CredentialActive || current.PrincipalID != replacement.PrincipalID || current.SubjectID != replacement.SubjectID || at.IsZero() || at.Location() != time.UTC {
+	if current.Status != CredentialActive || current.PrincipalID != replacement.PrincipalID || current.TenantID != replacement.TenantID || current.SubjectID != replacement.SubjectID || at.IsZero() || at.Location() != time.UTC {
 		return ErrCredentialConflict
 	}
 	tx, ok := store.lookup(ctx)
@@ -158,7 +158,7 @@ replacement_credential_id,revision,idempotency_key_digest,idempotency_request_di
 }
 
 func (store *CredentialStore) queryOne(ctx context.Context, predicate string, argument any) (CredentialRecord, error) {
-	statement := `SELECT c.credential_id,c.principal_id,p.subject_id,c.credential_kind,c.audience,c.scope_canonical,
+	statement := `SELECT c.credential_id,c.principal_id,p.tenant_id,p.subject_id,c.credential_kind,c.audience,c.scope_canonical,
 c.secret_verifier,c.issued_at_ns,c.not_before_at_ns,c.expires_at_ns,c.status,c.revoked_at_ns,
 c.replaced_at_ns,c.replacement_credential_id,c.revision,c.idempotency_key_digest,c.idempotency_request_digest
 FROM arop_credentials c JOIN arop_dev_principals p ON p.principal_id=c.principal_id WHERE ` + predicate
@@ -171,7 +171,7 @@ FROM arop_credentials c JOIN arop_dev_principals p ON p.principal_id=c.principal
 	var revoked, replaced sql.NullInt64
 	var replacement sql.NullString
 	var scope string
-	err := queryer.QueryRowContext(ctx, statement, argument).Scan(&record.CredentialID, &record.PrincipalID, &record.SubjectID, &record.Kind, &record.Audience, &scope, &record.SecretVerifier, &issued, &notBefore, &expires, &record.Status, &revoked, &replaced, &replacement, &record.Revision, &record.IdempotencyDigest, &record.IdempotencyRequestDigest)
+	err := queryer.QueryRowContext(ctx, statement, argument).Scan(&record.CredentialID, &record.PrincipalID, &record.TenantID, &record.SubjectID, &record.Kind, &record.Audience, &scope, &record.SecretVerifier, &issued, &notBefore, &expires, &record.Status, &revoked, &replaced, &replacement, &record.Revision, &record.IdempotencyDigest, &record.IdempotencyRequestDigest)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CredentialRecord{}, ErrCredentialNotFound
 	}
@@ -203,7 +203,7 @@ func (store *CredentialStore) placeholder(position int) string {
 }
 
 func validateRecord(record *CredentialRecord) error {
-	if record == nil || !validCredentialID(record.CredentialID) || !strings.HasPrefix(record.PrincipalID, "prn_") || !domainIDPattern.MatchString(record.PrincipalID) || !identifierPattern.MatchString(record.SubjectID) || !identifierPattern.MatchString(record.Kind) || !identifierPattern.MatchString(record.Audience) {
+	if record == nil || !validCredentialID(record.CredentialID) || !strings.HasPrefix(record.PrincipalID, "prn_") || !domainIDPattern.MatchString(record.PrincipalID) || !tenantPattern.MatchString(record.TenantID) || !identifierPattern.MatchString(record.SubjectID) || !identifierPattern.MatchString(record.Kind) || !identifierPattern.MatchString(record.Audience) {
 		return errors.New("credential record identity fields are invalid")
 	}
 	if record.Status != CredentialActive || record.Revision != 1 || !digestPattern.MatchString(record.SecretVerifier) || !digestPattern.MatchString(record.IdempotencyDigest) || !digestPattern.MatchString(record.IdempotencyRequestDigest) || len(record.Scopes) == 0 {
@@ -216,7 +216,7 @@ func validateRecord(record *CredentialRecord) error {
 }
 
 func validateStoredRecord(record *CredentialRecord) error {
-	if record == nil || !validCredentialID(record.CredentialID) || !strings.HasPrefix(record.PrincipalID, "prn_") || !domainIDPattern.MatchString(record.PrincipalID) || !digestPattern.MatchString(record.SecretVerifier) || !digestPattern.MatchString(record.IdempotencyDigest) || !digestPattern.MatchString(record.IdempotencyRequestDigest) || record.Revision < 1 || len(record.Scopes) == 0 {
+	if record == nil || !validCredentialID(record.CredentialID) || !strings.HasPrefix(record.PrincipalID, "prn_") || !domainIDPattern.MatchString(record.PrincipalID) || !tenantPattern.MatchString(record.TenantID) || !digestPattern.MatchString(record.SecretVerifier) || !digestPattern.MatchString(record.IdempotencyDigest) || !digestPattern.MatchString(record.IdempotencyRequestDigest) || record.Revision < 1 || len(record.Scopes) == 0 {
 		return errors.New("credential record is invalid")
 	}
 	if record.NotBefore.Before(record.IssuedAt) || !record.NotBefore.Before(record.ExpiresAt) {
@@ -285,7 +285,8 @@ type identityColumn struct {
 
 var identityTables = map[string][]identityColumn{
 	"arop_dev_principals": {
-		{"principal_id", "TEXT", true, 1}, {"subject_id", "TEXT", true, 0},
+		{"principal_id", "TEXT", true, 1}, {"tenant_id", "TEXT", true, 0},
+		{"subject_id", "TEXT", true, 0},
 		{"status", "TEXT", true, 0}, {"created_at_ns", "INTEGER", true, 0},
 		{"updated_at_ns", "INTEGER", true, 0}, {"revision", "INTEGER", true, 0},
 	},
@@ -304,8 +305,9 @@ var identityTables = map[string][]identityColumn{
 var identityConstraintFragments = map[string][]string{
 	"arop_dev_principals": {
 		"constraintarop_dev_principals_pkeyprimarykey(principal_id)",
-		"constraintarop_dev_principals_subject_uniqueunique(subject_id)",
+		"constraintarop_dev_principals_tenant_subject_uniqueunique(tenant_id,subject_id)",
 		"constraintarop_dev_principals_principal_id_checkcheck(length(principal_id)between1and200)",
+		"constraintarop_dev_principals_tenant_id_checkcheck(length(tenant_id)between1and128andtenant_idnotglob'*[^a-z0-9._-]*'andsubstr(tenant_id,1,1)glob'[a-z]'andsubstr(tenant_id,-1,1)glob'[a-z0-9]'andtenant_idnotglob'*[._-][._-]*')",
 		"constraintarop_dev_principals_subject_id_checkcheck(length(subject_id)between1and200)",
 		"constraintarop_dev_principals_status_checkcheck(statusin('active','disabled'))",
 		"constraintarop_dev_principals_created_checkcheck(created_at_ns>0)",
@@ -349,7 +351,7 @@ func verifySQLiteIdentitySchema(ctx context.Context, queryer migrate.Queryer) er
 			}
 		}
 		expectedCounts := map[string]map[string]int{
-			"arop_dev_principals": {"constraint": 8, "primarykey(": 1, "unique(": 1, "foreignkey(": 0, "check(": 6},
+			"arop_dev_principals": {"constraint": 9, "primarykey(": 1, "unique(": 1, "foreignkey(": 0, "check(": 7},
 			"arop_credentials":    {"constraint": 17, "primarykey(": 1, "unique(": 3, "foreignkey(": 2, "check(": 11},
 		}
 		for token, count := range expectedCounts[table] {
@@ -420,8 +422,9 @@ func verifySQLiteIdentityIndexes(ctx context.Context, queryer migrate.Queryer) e
 	}
 	expected := map[string]map[string]int{
 		"arop_dev_principals": {
-			"pk|1|0|principal_id": 1,
-			"u|1|0|subject_id":    1,
+			"pk|1|0|principal_id":        1,
+			"u|1|0|tenant_id,subject_id": 1,
+			"c|0|0|arop_dev_principals_tenant_status_idx|tenant_id,status,principal_id": 1,
 		},
 		"arop_credentials": {
 			"pk|1|0|credential_id":            1,
@@ -534,8 +537,8 @@ func verifyPostgresIdentityConstraints(ctx context.Context, queryer migrate.Quer
 		deferrable, deferred bool
 	}
 	expected := map[string]constraintExpectation{
-		"arop_dev_principals_pkey": {"arop_dev_principals", 'p', false, false}, "arop_dev_principals_subject_unique": {"arop_dev_principals", 'u', false, false},
-		"arop_dev_principals_principal_id_check": {"arop_dev_principals", 'c', false, false}, "arop_dev_principals_subject_id_check": {"arop_dev_principals", 'c', false, false},
+		"arop_dev_principals_pkey": {"arop_dev_principals", 'p', false, false}, "arop_dev_principals_tenant_subject_unique": {"arop_dev_principals", 'u', false, false},
+		"arop_dev_principals_principal_id_check": {"arop_dev_principals", 'c', false, false}, "arop_dev_principals_tenant_id_check": {"arop_dev_principals", 'c', false, false}, "arop_dev_principals_subject_id_check": {"arop_dev_principals", 'c', false, false},
 		"arop_dev_principals_status_check": {"arop_dev_principals", 'c', false, false}, "arop_dev_principals_created_check": {"arop_dev_principals", 'c', false, false},
 		"arop_dev_principals_updated_check": {"arop_dev_principals", 'c', false, false}, "arop_dev_principals_revision_check": {"arop_dev_principals", 'c', false, false},
 		"arop_credentials_pkey": {"arop_credentials", 'p', false, false}, "arop_credentials_principal_fkey": {"arop_credentials", 'f', false, false},
@@ -579,8 +582,9 @@ func verifyPostgresIdentityConstraints(ctx context.Context, queryer migrate.Quer
 	}
 	definitions := map[string]string{
 		"arop_dev_principals_pkey":                   "primarykey(principal_id)",
-		"arop_dev_principals_subject_unique":         "unique(subject_id)",
+		"arop_dev_principals_tenant_subject_unique":  "unique(tenant_id,subject_id)",
 		"arop_dev_principals_principal_id_check":     "check(((length(principal_id)>=1)and(length(principal_id)<=200)))",
+		"arop_dev_principals_tenant_id_check":        "check(((tenant_id~'^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$')and(length(tenant_id)<=128)))",
 		"arop_dev_principals_subject_id_check":       "check(((length(subject_id)>=1)and(length(subject_id)<=200)))",
 		"arop_dev_principals_status_check":           "check((status=any(array['active','disabled'])))",
 		"arop_dev_principals_created_check":          "check((created_at_ns>0))",
@@ -620,7 +624,8 @@ func verifyPostgresIdentityIndexes(ctx context.Context, queryer migrate.Queryer)
 	}
 	expected := map[string]indexExpectation{
 		"arop_dev_principals_pkey":                     {"arop_dev_principals", true, true, "principal_id"},
-		"arop_dev_principals_subject_unique":           {"arop_dev_principals", true, false, "subject_id"},
+		"arop_dev_principals_tenant_subject_unique":    {"arop_dev_principals", true, false, "tenant_id,subject_id"},
+		"arop_dev_principals_tenant_status_idx":        {"arop_dev_principals", false, false, "tenant_id,status,principal_id"},
 		"arop_credentials_pkey":                        {"arop_credentials", true, true, "credential_id"},
 		"arop_credentials_verifier_unique":             {"arop_credentials", true, false, "secret_verifier"},
 		"arop_credentials_idempotency_unique":          {"arop_credentials", true, false, "idempotency_key_digest"},

@@ -107,7 +107,7 @@ func (repo *fakeRepository) Create(_ context.Context, record *CredentialRecord) 
 		if current.IdempotencyDigest == record.IdempotencyDigest {
 			return ErrCredentialConflict
 		}
-		if current.SubjectID == record.SubjectID {
+		if current.TenantID == record.TenantID && current.SubjectID == record.SubjectID {
 			record.PrincipalID = current.PrincipalID
 		}
 	}
@@ -235,7 +235,7 @@ func newIdentityService(t *testing.T) (*Service, *identityClock, *identityFault,
 		}
 		entropy++
 		return len(value), nil
-	}, MaximumTTL: 10 * time.Minute, CacheTTL: time.Minute, AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent.invoke", "agent.read"}})
+	}, MaximumTTL: 10 * time.Minute, CacheTTL: time.Minute, AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent.invoke", "agent.read"}, AllowedTenants: []string{"tenant-a", "tenant-b"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func metadata() platform.RequestMetadata {
 	return platform.RequestMetadata{RequestID: "req_01956e7b-9abc-7def-8abc-000000000001", TraceID: "4bf92f3577b34da6a3ce929d00000001", SpanID: "00f067aa00000001", TraceFlags: "01"}
 }
 func issueRequest(key string) IssueRequest {
-	return IssueRequest{SubjectID: "developer-1", Kind: "service", Audience: "reference-control-plane", Scopes: []string{"agent.read", "agent.invoke", "agent.read"}, TTL: 5 * time.Minute, IdempotencyKey: key, Metadata: metadata()}
+	return IssueRequest{TenantID: "tenant-a", SubjectID: "developer-1", Kind: "service", Audience: "reference-control-plane", Scopes: []string{"agent.read", "agent.invoke", "agent.read"}, TTL: 5 * time.Minute, IdempotencyKey: key, Metadata: metadata()}
 }
 
 func TestIssueAuthenticateAndSecretNonPersistence(t *testing.T) {
@@ -265,7 +265,7 @@ func TestIssueAuthenticateAndSecretNonPersistence(t *testing.T) {
 	if strings.Contains(fmt.Sprintf("%+v", record), issued.Credential) || record.SecretVerifier == issued.Credential || len(record.SecretVerifier) != 64 {
 		t.Fatal("raw credential crossed persistence boundary")
 	}
-	principal, err := service.Authenticate(context.Background(), AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.invoke"}, Metadata: metadata()})
+	principal, err := service.Authenticate(context.Background(), AuthenticateRequest{TenantID: "tenant-a", Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.invoke"}, Metadata: metadata()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -283,6 +283,38 @@ func TestIssueAuthenticateAndSecretNonPersistence(t *testing.T) {
 	if _, err := service.Issue(context.Background(), mismatched); !errors.Is(err, ErrCredentialConflict) {
 		t.Fatalf("mismatched idempotency replay accepted: %v", err)
 	}
+	mismatched = issueRequest("issue-1")
+	mismatched.TenantID = "tenant-b"
+	if _, err := service.Issue(context.Background(), mismatched); !errors.Is(err, ErrCredentialConflict) {
+		t.Fatalf("cross-tenant idempotency replay accepted: %v", err)
+	}
+	if _, err := service.Authenticate(context.Background(), AuthenticateRequest{TenantID: "tenant-b", Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnauthenticated) {
+		t.Fatalf("cross-tenant authentication was not generic: %v", err)
+	}
+}
+
+func TestAuthenticateThenCallsNextOnlyAfterAuthentication(t *testing.T) {
+	service, _, _, _, _ := newIdentityService(t)
+	issued, err := service.Issue(context.Background(), issueRequest("middleware"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	called := false
+	request := AuthenticateRequest{TenantID: "tenant-a", Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}
+	if err := service.AuthenticateThen(context.Background(), request, func(_ context.Context, principal Principal) error {
+		called = true
+		if principal.TenantID != "tenant-a" || principal.CredentialID != issued.CredentialID {
+			t.Fatalf("unexpected principal: %+v", principal)
+		}
+		return nil
+	}); err != nil || !called {
+		t.Fatalf("authenticated operation failed: called=%v err=%v", called, err)
+	}
+	called = false
+	request.TenantID = "tenant-b"
+	if err := service.AuthenticateThen(context.Background(), request, func(context.Context, Principal) error { called = true; return nil }); !errors.Is(err, ErrUnauthenticated) || called {
+		t.Fatalf("unauthenticated callback ran: called=%v err=%v", called, err)
+	}
 }
 
 func TestAuthenticationExpiryScopeAndGenericFailure(t *testing.T) {
@@ -295,9 +327,9 @@ func TestAuthenticationExpiryScopeAndGenericFailure(t *testing.T) {
 		request AuthenticateRequest
 		target  error
 	}{
-		"wrong-scope":    {request: AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.admin"}, Metadata: metadata()}, target: ErrUnauthorized},
-		"wrong-audience": {request: AuthenticateRequest{Credential: issued.Credential, Audience: "other-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}, target: ErrUnauthorized},
-		"malformed":      {request: AuthenticateRequest{Credential: "not-a-credential", Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}, target: ErrUnauthenticated},
+		"wrong-scope":    {request: AuthenticateRequest{TenantID: "tenant-a", Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.admin"}, Metadata: metadata()}, target: ErrUnauthorized},
+		"wrong-audience": {request: AuthenticateRequest{TenantID: "tenant-a", Credential: issued.Credential, Audience: "other-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}, target: ErrUnauthorized},
+		"malformed":      {request: AuthenticateRequest{TenantID: "tenant-a", Credential: "not-a-credential", Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}, target: ErrUnauthenticated},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := service.Authenticate(context.Background(), test.request); !errors.Is(err, test.target) {
@@ -306,11 +338,11 @@ func TestAuthenticationExpiryScopeAndGenericFailure(t *testing.T) {
 		})
 	}
 	clock.advance(5 * time.Minute)
-	if _, err := service.Authenticate(context.Background(), AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnauthenticated) {
+	if _, err := service.Authenticate(context.Background(), AuthenticateRequest{TenantID: "tenant-a", Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnauthenticated) {
 		t.Fatalf("expired credential accepted: %v", err)
 	}
 	clock.set(time.Date(2026, 9, 24, 1, 1, 0, 0, time.UTC))
-	if _, err := service.Authenticate(context.Background(), AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnauthenticated) {
+	if _, err := service.Authenticate(context.Background(), AuthenticateRequest{TenantID: "tenant-a", Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnauthenticated) {
 		t.Fatalf("clock rollback revived expired credential: %v", err)
 	}
 }
@@ -321,7 +353,7 @@ func TestRotateAndRevokeInvalidateWarmCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	auth := AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}
+	auth := AuthenticateRequest{TenantID: "tenant-a", Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}
 	if _, err := service.Authenticate(context.Background(), auth); err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +364,7 @@ func TestRotateAndRevokeInvalidateWarmCache(t *testing.T) {
 	if _, err := service.Authenticate(context.Background(), auth); !errors.Is(err, ErrUnauthenticated) {
 		t.Fatalf("replaced cache entry accepted: %v", err)
 	}
-	newAuth := AuthenticateRequest{Credential: replacement.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}
+	newAuth := AuthenticateRequest{TenantID: "tenant-a", Credential: replacement.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}
 	if _, err := service.Authenticate(context.Background(), newAuth); err != nil {
 		t.Fatal(err)
 	}
@@ -454,7 +486,7 @@ func TestDependencyErrorsAreUnavailableAndRejectedRequestsAreAudited(t *testing.
 		t.Fatalf("invalid issue outcome=%s", outcome)
 	}
 	repo.getError = errors.New("database offline")
-	_, err := service.Authenticate(context.Background(), AuthenticateRequest{Credential: credentialPrefix + "cred_01956e7b-9abc-7def-8abc-000000000001.AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE", Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()})
+	_, err := service.Authenticate(context.Background(), AuthenticateRequest{TenantID: "tenant-a", Credential: credentialPrefix + "cred_01956e7b-9abc-7def-8abc-000000000001.AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE", Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()})
 	if !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("dependency error classification: %v", err)
 	}
@@ -507,7 +539,7 @@ func TestCacheInvalidationFailureFailsClosedAndRollsBack(t *testing.T) {
 		t.Fatal("readiness stayed green")
 	}
 	before, _ := observations.snapshot()
-	if principal, err := service.Authenticate(context.Background(), AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnavailable) || principal.CredentialID != "" {
+	if principal, err := service.Authenticate(context.Background(), AuthenticateRequest{TenantID: "tenant-a", Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnavailable) || principal.CredentialID != "" {
 		t.Fatal("unhealthy cache failed open")
 	}
 	after, _ := observations.snapshot()
@@ -521,13 +553,122 @@ func TestCacheInvalidationFailureFailsClosedAndRollsBack(t *testing.T) {
 		t.Fatalf("cache dependency outcome=%s", outcome)
 	}
 	observations.fail = true
-	if principal, err := service.Authenticate(context.Background(), AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnavailable) || principal.CredentialID != "" {
+	if principal, err := service.Authenticate(context.Background(), AuthenticateRequest{TenantID: "tenant-a", Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnavailable) || principal.CredentialID != "" {
 		t.Fatalf("audit failure restored authentication: %+v %v", principal, err)
 	}
 	service.RebuildCache()
+	observations.fail = false
+	if _, err := service.Issue(context.Background(), IssueRequest{Metadata: metadata()}); err == nil {
+		t.Fatal("invalid recovery request accepted")
+	}
 	if err := service.Check(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestAuditFailureLatchesReadinessUntilSuccessfulAudit(t *testing.T) {
+	service, _, _, _, observations := newIdentityService(t)
+	observations.fail = true
+	if _, err := service.Issue(context.Background(), issueRequest("audit-health")); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("audit failure classification: %v", err)
+	}
+	if err := service.Check(context.Background()); err == nil {
+		t.Fatal("audit failure left readiness green")
+	}
+	observations.fail = false
+	if _, err := service.Issue(context.Background(), IssueRequest{Metadata: metadata()}); err == nil {
+		t.Fatal("invalid recovery request accepted")
+	}
+	if err := service.Check(context.Background()); err != nil {
+		t.Fatalf("successful safe audit did not recover readiness: %v", err)
+	}
+}
+
+func TestValidationCacheCapacityAndExpiryEviction(t *testing.T) {
+	now := time.Date(2026, 9, 24, 4, 0, 0, 0, time.UTC)
+	cache := newValidationCache(time.Minute, 2)
+	principal := Principal{TenantID: "tenant-a", CredentialID: "cred_one"}
+	cache.put("oldest", principal, now.Add(time.Minute), now)
+	cache.put("newer", principal, now.Add(time.Minute), now)
+	cache.put("newest", principal, now.Add(time.Minute), now)
+	if _, ok := cache.get("oldest", now); ok {
+		t.Fatal("oldest cache entry was not evicted")
+	}
+	if _, ok := cache.get("newer", now); !ok {
+		t.Fatal("newer cache entry was evicted")
+	}
+
+	cache = newValidationCache(time.Minute, 2)
+	cache.put("expired", principal, now.Add(time.Second), now)
+	cache.put("live", principal, now.Add(time.Minute), now)
+	cache.put("replacement", principal, now.Add(time.Minute), now.Add(2*time.Second))
+	if _, ok := cache.get("live", now.Add(2*time.Second)); !ok {
+		t.Fatal("live cache entry was evicted before expired entry")
+	}
+	if _, ok := cache.get("expired", now.Add(2*time.Second)); ok {
+		t.Fatal("expired cache entry survived")
+	}
+}
+
+func TestIdentityConfigurationRejectsUnsafeCacheCapacityAndTenant(t *testing.T) {
+	service, _, _, _, _ := newIdentityService(t)
+	dependencies := service.deps
+	dependencies.CacheCapacity = maximumCacheCapacity + 1
+	if _, err := New(dependencies); err == nil {
+		t.Fatal("unsafe cache capacity accepted")
+	}
+	request := issueRequest("tenant-validation")
+	request.TenantID = "Tenant:Unsafe"
+	if _, err := service.Issue(context.Background(), request); err == nil {
+		t.Fatal("invalid tenant accepted")
+	}
+}
+
+func TestValidationCacheConcurrentBoundedAccess(t *testing.T) {
+	cache := newValidationCache(time.Minute, 8)
+	now := time.Date(2026, 9, 24, 4, 0, 0, 0, time.UTC)
+	var wait sync.WaitGroup
+	for worker := 0; worker < 16; worker++ {
+		wait.Add(1)
+		go func(worker int) {
+			defer wait.Done()
+			for iteration := 0; iteration < 100; iteration++ {
+				key := fmt.Sprintf("%02d-%03d", worker, iteration)
+				cache.put(key, Principal{TenantID: "tenant-a", CredentialID: key}, now.Add(time.Minute), now)
+				_, _ = cache.get(key, now)
+			}
+		}(worker)
+	}
+	wait.Wait()
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	if len(cache.entries) > cache.capacity {
+		t.Fatalf("cache exceeded capacity: %d > %d", len(cache.entries), cache.capacity)
+	}
+}
+
+func TestCacheEvictionDoesNotChangeAuthorization(t *testing.T) {
+	service, _, _, _, _ := newIdentityService(t)
+	service.cache.capacity = 1
+	first, err := service.Issue(context.Background(), issueRequest("capacity-first"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondRequest := issueRequest("capacity-second")
+	secondRequest.SubjectID = "developer-2"
+	second, err := service.Issue(context.Background(), secondRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authenticate := func(credential string) {
+		t.Helper()
+		if _, err := service.Authenticate(context.Background(), AuthenticateRequest{TenantID: "tenant-a", Credential: credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	authenticate(first.Credential)
+	authenticate(second.Credential)
+	authenticate(first.Credential)
 }
 
 func TestAuthenticationAuditFailureDoesNotReleasePrincipal(t *testing.T) {
@@ -537,7 +678,7 @@ func TestAuthenticationAuditFailureDoesNotReleasePrincipal(t *testing.T) {
 		t.Fatal(err)
 	}
 	observations.fail = true
-	principal, err := service.Authenticate(context.Background(), AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()})
+	principal, err := service.Authenticate(context.Background(), AuthenticateRequest{TenantID: "tenant-a", Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()})
 	if err == nil {
 		t.Fatal("audit failure was ignored")
 	}
@@ -555,7 +696,7 @@ func TestConcurrentAuthenticateCannotRefillAfterRevoke(t *testing.T) {
 	repo.getStarted, repo.releaseGet = make(chan struct{}, 1), make(chan struct{})
 	authDone := make(chan error, 1)
 	go func() {
-		_, err := service.Authenticate(context.Background(), AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()})
+		_, err := service.Authenticate(context.Background(), AuthenticateRequest{TenantID: "tenant-a", Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()})
 		authDone <- err
 	}()
 	<-repo.getStarted
@@ -570,7 +711,7 @@ func TestConcurrentAuthenticateCannotRefillAfterRevoke(t *testing.T) {
 	if err := <-revokeDone; err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.Authenticate(context.Background(), AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnauthenticated) {
+	if _, err := service.Authenticate(context.Background(), AuthenticateRequest{TenantID: "tenant-a", Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnauthenticated) {
 		t.Fatalf("stale allow revived: %v", err)
 	}
 }

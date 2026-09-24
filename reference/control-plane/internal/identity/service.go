@@ -24,9 +24,11 @@ import (
 )
 
 const (
-	defaultMaximumTTL = 15 * time.Minute
-	defaultCacheTTL   = time.Minute
-	credentialPrefix  = "arop_dev_"
+	defaultMaximumTTL    = 15 * time.Minute
+	defaultCacheTTL      = time.Minute
+	defaultCacheCapacity = 1024
+	maximumCacheCapacity = 1 << 20
+	credentialPrefix     = "arop_dev_"
 )
 
 var (
@@ -38,6 +40,7 @@ var (
 	ErrUnavailable        = errors.New("identity dependency unavailable")
 
 	identifierPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+	tenantPattern     = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$`)
 	scopePattern      = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[.:_-][a-z0-9]+)*$`)
 	domainIDPattern   = regexp.MustCompile(`^(?:cred|prn)_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 	digestPattern     = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -57,6 +60,7 @@ const (
 type CredentialRecord struct {
 	CredentialID             string
 	PrincipalID              string
+	TenantID                 string
 	SubjectID                string
 	Kind                     string
 	Audience                 string
@@ -92,9 +96,11 @@ type Dependencies struct {
 	Random           func([]byte) (int, error)
 	MaximumTTL       time.Duration
 	CacheTTL         time.Duration
+	CacheCapacity    int
 	AllowedKinds     []string
 	AllowedAudiences []string
 	AllowedScopes    []string
+	AllowedTenants   []string
 }
 
 type Service struct {
@@ -103,12 +109,16 @@ type Service struct {
 	allowedKinds     map[string]struct{}
 	allowedAudiences map[string]struct{}
 	allowedScopes    map[string]struct{}
+	allowedTenants   map[string]struct{}
 	mu               sync.RWMutex
+	auditMu          sync.Mutex
+	auditUnhealthy   error
 	timeMu           sync.Mutex
 	lastNow          time.Time
 }
 
 type IssueRequest struct {
+	TenantID       string
 	SubjectID      string
 	Kind           string
 	Audience       string
@@ -121,6 +131,7 @@ type IssueRequest struct {
 
 type AuthenticateRequest struct {
 	Credential string
+	TenantID   string
 	Audience   string
 	Scopes     []string
 	Metadata   platform.RequestMetadata
@@ -148,6 +159,7 @@ type IssuedCredential struct {
 
 type Principal struct {
 	PrincipalID  string
+	TenantID     string
 	SubjectID    string
 	CredentialID string
 	Kind         string
@@ -169,8 +181,11 @@ func New(dependencies Dependencies) (*Service, error) {
 	if dependencies.CacheTTL == 0 {
 		dependencies.CacheTTL = defaultCacheTTL
 	}
-	if dependencies.MaximumTTL <= 0 || dependencies.MaximumTTL > 24*time.Hour || dependencies.CacheTTL <= 0 || dependencies.CacheTTL > dependencies.MaximumTTL {
-		return nil, errors.New("identity TTL configuration is invalid")
+	if dependencies.CacheCapacity == 0 {
+		dependencies.CacheCapacity = defaultCacheCapacity
+	}
+	if dependencies.MaximumTTL <= 0 || dependencies.MaximumTTL > 24*time.Hour || dependencies.CacheTTL <= 0 || dependencies.CacheTTL > dependencies.MaximumTTL || dependencies.CacheCapacity < 1 || dependencies.CacheCapacity > maximumCacheCapacity {
+		return nil, errors.New("identity TTL or cache configuration is invalid")
 	}
 	allowedKinds, err := validatedAllowlist("credential kind", dependencies.AllowedKinds, identifierPattern)
 	if err != nil {
@@ -184,11 +199,15 @@ func New(dependencies Dependencies) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	allowedTenants, err := validatedAllowlist("credential tenant", dependencies.AllowedTenants, tenantPattern)
+	if err != nil {
+		return nil, err
+	}
 	now := dependencies.Clock.Now()
 	if now.IsZero() || now.Location() != time.UTC {
 		return nil, errors.New("identity clock must return non-zero UTC time")
 	}
-	return &Service{deps: dependencies, cache: newValidationCache(dependencies.CacheTTL), allowedKinds: allowedKinds, allowedAudiences: allowedAudiences, allowedScopes: allowedScopes, lastNow: now}, nil
+	return &Service{deps: dependencies, cache: newValidationCache(dependencies.CacheTTL, dependencies.CacheCapacity), allowedKinds: allowedKinds, allowedAudiences: allowedAudiences, allowedScopes: allowedScopes, allowedTenants: allowedTenants, lastNow: now}, nil
 }
 
 func (service *Service) Issue(ctx context.Context, request IssueRequest) (IssuedCredential, error) {
@@ -222,7 +241,7 @@ func (service *Service) Issue(ctx context.Context, request IssueRequest) (Issued
 	if !notBefore.Before(now.Add(request.TTL)) {
 		return IssuedCredential{}, service.reject(ctx, request.Metadata, "credential.issue", 400, errors.New("credential not-before exceeds expiry"))
 	}
-	record, raw, err := service.newRecord(ctx, request.SubjectID, request.Kind, request.Audience, request.Scopes, now, notBefore, now.Add(request.TTL), idempotencyDigest, requestDigest)
+	record, raw, err := service.newRecord(ctx, request.TenantID, request.SubjectID, request.Kind, request.Audience, request.Scopes, now, notBefore, now.Add(request.TTL), idempotencyDigest, requestDigest)
 	if err != nil {
 		return IssuedCredential{}, service.fail(ctx, request.Metadata, "credential.issue", err)
 	}
@@ -245,12 +264,16 @@ func (service *Service) Issue(ctx context.Context, request IssueRequest) (Issued
 		}
 		return IssuedCredential{}, service.classifyMutationFailure(ctx, request.Metadata, "credential.issue", err)
 	}
+	service.markAuditHealthy()
 	return IssuedCredential{CredentialID: record.CredentialID, PrincipalID: record.PrincipalID, Credential: raw, ExpiresAt: record.ExpiresAt, Scopes: cloneScopes(record.Scopes)}, nil
 }
 
 func (service *Service) Authenticate(ctx context.Context, request AuthenticateRequest) (Principal, error) {
 	request.Scopes = canonicalScopes(request.Scopes)
-	if request.Credential == "" || !identifierPattern.MatchString(request.Audience) || len(request.Scopes) == 0 {
+	if request.Credential == "" || !tenantPattern.MatchString(request.TenantID) || !identifierPattern.MatchString(request.Audience) || len(request.Scopes) == 0 {
+		return Principal{}, service.rejectedAuthentication(ctx, request.Metadata, ErrUnauthenticated)
+	}
+	if _, allowed := service.allowedTenants[request.TenantID]; !allowed {
 		return Principal{}, service.rejectedAuthentication(ctx, request.Metadata, ErrUnauthenticated)
 	}
 	credentialID, verifier, ok := parseCredential(request.Credential)
@@ -262,7 +285,7 @@ func (service *Service) Authenticate(ctx context.Context, request AuthenticateRe
 	if err := service.cache.Check(ctx); err != nil {
 		return Principal{}, service.fail(ctx, request.Metadata, "credential.authenticate", err)
 	}
-	cacheKey := credentialID + "\x00" + verifier + "\x00" + request.Audience + "\x00" + strings.Join(request.Scopes, " ")
+	cacheKey := credentialID + "\x00" + verifier + "\x00" + request.TenantID + "\x00" + request.Audience + "\x00" + strings.Join(request.Scopes, " ")
 	now := service.now()
 	if principal, found := service.cache.get(cacheKey, now); found {
 		if err := service.auditAuthentication(ctx, request.Metadata, now, 200); err != nil {
@@ -274,7 +297,7 @@ func (service *Service) Authenticate(ctx context.Context, request AuthenticateRe
 	if err != nil && !errors.Is(err, ErrCredentialNotFound) {
 		return Principal{}, service.fail(ctx, request.Metadata, "credential.authenticate", err)
 	}
-	if err != nil || subtle.ConstantTimeCompare([]byte(record.SecretVerifier), []byte(verifier)) != 1 || record.Status != CredentialActive || now.Before(record.NotBefore) || !now.Before(record.ExpiresAt) {
+	if err != nil || subtle.ConstantTimeCompare([]byte(record.SecretVerifier), []byte(verifier)) != 1 || record.TenantID != request.TenantID || record.Status != CredentialActive || now.Before(record.NotBefore) || !now.Before(record.ExpiresAt) {
 		if auditErr := service.auditAuthentication(ctx, request.Metadata, now, 401); auditErr != nil {
 			return Principal{}, auditErr
 		}
@@ -286,7 +309,7 @@ func (service *Service) Authenticate(ctx context.Context, request AuthenticateRe
 		}
 		return Principal{}, ErrUnauthorized
 	}
-	principal := Principal{PrincipalID: record.PrincipalID, SubjectID: record.SubjectID, CredentialID: record.CredentialID, Kind: record.Kind, Audience: record.Audience, Scopes: cloneScopes(record.Scopes), ExpiresAt: record.ExpiresAt}
+	principal := Principal{PrincipalID: record.PrincipalID, TenantID: record.TenantID, SubjectID: record.SubjectID, CredentialID: record.CredentialID, Kind: record.Kind, Audience: record.Audience, Scopes: cloneScopes(record.Scopes), ExpiresAt: record.ExpiresAt}
 	if err := service.auditAuthentication(ctx, request.Metadata, now, 200); err != nil {
 		return Principal{}, err
 	}
@@ -324,7 +347,7 @@ func (service *Service) Rotate(ctx context.Context, request RotateRequest) (Issu
 	if old.Status != CredentialActive || !now.Before(old.ExpiresAt) {
 		return IssuedCredential{}, service.reject(ctx, request.Metadata, "credential.rotate", 409, ErrCredentialConflict)
 	}
-	replacement, raw, err := service.newRecord(ctx, old.SubjectID, old.Kind, old.Audience, old.Scopes, now, now, now.Add(request.TTL), idempotencyDigest, requestDigest)
+	replacement, raw, err := service.newRecord(ctx, old.TenantID, old.SubjectID, old.Kind, old.Audience, old.Scopes, now, now, now.Add(request.TTL), idempotencyDigest, requestDigest)
 	if err != nil {
 		return IssuedCredential{}, service.fail(ctx, request.Metadata, "credential.rotate", err)
 	}
@@ -350,6 +373,7 @@ func (service *Service) Rotate(ctx context.Context, request RotateRequest) (Issu
 		}
 		return IssuedCredential{}, service.classifyMutationFailure(ctx, request.Metadata, "credential.rotate", err)
 	}
+	service.markAuditHealthy()
 	return IssuedCredential{CredentialID: replacement.CredentialID, PrincipalID: replacement.PrincipalID, Credential: raw, ExpiresAt: replacement.ExpiresAt, Scopes: cloneScopes(replacement.Scopes)}, nil
 }
 
@@ -400,11 +424,19 @@ func (service *Service) Revoke(ctx context.Context, request RevokeRequest) error
 	if err != nil {
 		return service.classifyMutationFailure(ctx, request.Metadata, "credential.revoke", err)
 	}
+	service.markAuditHealthy()
 	return nil
 }
 
-func (service *Service) Name() string                    { return "identity-cache" }
-func (service *Service) Check(ctx context.Context) error { return service.cache.Check(ctx) }
+func (service *Service) Name() string { return "identity-cache" }
+func (service *Service) Check(ctx context.Context) error {
+	if err := service.cache.Check(ctx); err != nil {
+		return err
+	}
+	service.auditMu.Lock()
+	defer service.auditMu.Unlock()
+	return service.auditUnhealthy
+}
 func (service *Service) RebuildCache() {
 	service.mu.Lock()
 	defer service.mu.Unlock()
@@ -412,14 +444,17 @@ func (service *Service) RebuildCache() {
 }
 
 func (service *Service) validateIssue(request IssueRequest) error {
-	if !identifierPattern.MatchString(request.SubjectID) || !identifierPattern.MatchString(request.Kind) || !identifierPattern.MatchString(request.Audience) {
-		return errors.New("credential subject, kind, and audience are required")
+	if !tenantPattern.MatchString(request.TenantID) || !identifierPattern.MatchString(request.SubjectID) || !identifierPattern.MatchString(request.Kind) || !identifierPattern.MatchString(request.Audience) {
+		return errors.New("credential tenant, subject, kind, and audience are required")
 	}
 	if len(request.Scopes) == 0 || request.TTL <= 0 || request.TTL > service.deps.MaximumTTL || request.IdempotencyKey == "" || len(request.IdempotencyKey) > 256 {
 		return errors.New("credential scope, TTL, or idempotency key is invalid")
 	}
 	if _, ok := service.allowedKinds[request.Kind]; !ok {
 		return errors.New("credential kind is not allowed")
+	}
+	if _, ok := service.allowedTenants[request.TenantID]; !ok {
+		return errors.New("credential tenant is not allowed")
 	}
 	if _, ok := service.allowedAudiences[request.Audience]; !ok {
 		return errors.New("credential audience is not allowed")
@@ -433,7 +468,7 @@ func (service *Service) validateIssue(request IssueRequest) error {
 	return nil
 }
 
-func (service *Service) newRecord(ctx context.Context, subject, kind, audience string, scopes []string, issued, notBefore, expires time.Time, idempotencyDigest, requestDigest string) (CredentialRecord, string, error) {
+func (service *Service) newRecord(ctx context.Context, tenant, subject, kind, audience string, scopes []string, issued, notBefore, expires time.Time, idempotencyDigest, requestDigest string) (CredentialRecord, string, error) {
 	credentialID, err := service.newDomainID(ctx, "cred_")
 	if err != nil {
 		return CredentialRecord{}, "", err
@@ -455,7 +490,7 @@ func (service *Service) newRecord(ctx context.Context, subject, kind, audience s
 		return CredentialRecord{}, "", errors.New("credential entropy is all zero")
 	}
 	raw := credentialPrefix + credentialID + "." + base64.RawURLEncoding.EncodeToString(secret)
-	return CredentialRecord{CredentialID: credentialID, PrincipalID: principalID, SubjectID: subject, Kind: kind, Audience: audience, Scopes: cloneScopes(scopes), SecretVerifier: digestString(raw), IssuedAt: issued.UTC(), NotBefore: notBefore.UTC(), ExpiresAt: expires.UTC(), Status: CredentialActive, Revision: 1, IdempotencyDigest: idempotencyDigest, IdempotencyRequestDigest: requestDigest}, raw, nil
+	return CredentialRecord{CredentialID: credentialID, PrincipalID: principalID, TenantID: tenant, SubjectID: subject, Kind: kind, Audience: audience, Scopes: cloneScopes(scopes), SecretVerifier: digestString(raw), IssuedAt: issued.UTC(), NotBefore: notBefore.UTC(), ExpiresAt: expires.UTC(), Status: CredentialActive, Revision: 1, IdempotencyDigest: idempotencyDigest, IdempotencyRequestDigest: requestDigest}, raw, nil
 }
 
 func (service *Service) newDomainID(ctx context.Context, prefix string) (string, error) {
@@ -472,6 +507,7 @@ func (service *Service) newDomainID(ctx context.Context, prefix string) (string,
 func (service *Service) appendObservation(ctx context.Context, metadata platform.RequestMetadata, operation string, started time.Time, status int) error {
 	auditID, err := service.deps.IDs.NewID(ctx, platformports.IDAudit)
 	if err != nil {
+		service.markAuditUnhealthy(err)
 		return err
 	}
 	ended := service.now()
@@ -481,9 +517,13 @@ func (service *Service) appendObservation(ctx context.Context, metadata platform
 	} else if status >= 400 {
 		outcome, spanStatus = observability.OutcomeRejected, observability.SpanStatusError
 	}
-	return service.deps.Observability.AppendObservation(ctx,
+	err = service.deps.Observability.AppendObservation(ctx,
 		observability.AuditEntry{ID: auditID, OccurredAt: ended, RequestID: metadata.RequestID, TraceID: metadata.TraceID, Operation: operation, Outcome: outcome, HTTPStatus: status},
 		observability.SpanRecord{TraceID: metadata.TraceID, SpanID: metadata.SpanID, ParentSpanID: metadata.ParentSpanID, RequestID: metadata.RequestID, Operation: operation, StartedAt: started, EndedAt: ended, Status: spanStatus})
+	if err != nil {
+		service.markAuditUnhealthy(err)
+	}
+	return err
 }
 
 func (service *Service) auditAuthentication(ctx context.Context, metadata platform.RequestMetadata, started time.Time, status int) error {
@@ -494,9 +534,40 @@ func (service *Service) auditAuthentication(ctx context.Context, metadata platfo
 }
 
 func (service *Service) auditOperation(ctx context.Context, metadata platform.RequestMetadata, operation string, started time.Time, status int) error {
-	return service.deps.UoW.Within(ctx, func(transactionContext context.Context) error {
+	err := service.deps.UoW.Within(ctx, func(transactionContext context.Context) error {
 		return service.appendObservation(transactionContext, metadata, operation, started, status)
 	})
+	if err == nil {
+		service.markAuditHealthy()
+	} else {
+		service.markAuditUnhealthy(err)
+	}
+	return err
+}
+
+func (service *Service) markAuditUnhealthy(cause error) {
+	service.auditMu.Lock()
+	defer service.auditMu.Unlock()
+	service.auditUnhealthy = fmt.Errorf("identity audit unavailable: %w", cause)
+}
+
+func (service *Service) markAuditHealthy() {
+	service.auditMu.Lock()
+	defer service.auditMu.Unlock()
+	service.auditUnhealthy = nil
+}
+
+type AuthenticatedOperation func(context.Context, Principal) error
+
+func (service *Service) AuthenticateThen(ctx context.Context, request AuthenticateRequest, next AuthenticatedOperation) error {
+	if next == nil {
+		return ErrUnavailable
+	}
+	principal, err := service.Authenticate(ctx, request)
+	if err != nil {
+		return err
+	}
+	return next(ctx, principal)
 }
 
 func (service *Service) rejectedAuthentication(ctx context.Context, metadata platform.RequestMetadata, result error) error {
@@ -563,11 +634,11 @@ func issueRequestDigest(request IssueRequest) string {
 	if !request.NotBefore.IsZero() {
 		notBefore = request.NotBefore.UTC().Format(time.RFC3339Nano)
 	}
-	return digestString(strings.Join([]string{"credential.issue", request.SubjectID, request.Kind, request.Audience, strings.Join(request.Scopes, " "), strconv.FormatInt(int64(request.TTL), 10), notBefore}, "\n"))
+	return digestString(strings.Join([]string{"credential.issue", request.TenantID, request.SubjectID, request.Kind, request.Audience, strings.Join(request.Scopes, " "), strconv.FormatInt(int64(request.TTL), 10), notBefore}, "\n"))
 }
 
 func rotateRequestDigest(request RotateRequest, current CredentialRecord) string {
-	return digestString(strings.Join([]string{"credential.rotate", request.CredentialID, current.SubjectID, current.Kind, current.Audience, strings.Join(current.Scopes, " "), strconv.FormatInt(int64(request.TTL), 10), "immediate"}, "\n"))
+	return digestString(strings.Join([]string{"credential.rotate", request.CredentialID, current.TenantID, current.SubjectID, current.Kind, current.Audience, strings.Join(current.Scopes, " "), strconv.FormatInt(int64(request.TTL), 10), "immediate"}, "\n"))
 }
 
 func parseCredential(value string) (string, string, bool) {
@@ -634,17 +705,20 @@ func validatedAllowlist(name string, values []string, pattern *regexp.Regexp) (m
 type cacheEntry struct {
 	principal Principal
 	expiresAt time.Time
+	sequence  uint64
 }
 type validationCache struct {
 	mu             sync.Mutex
 	ttl            time.Duration
 	entries        map[string]cacheEntry
+	capacity       int
+	nextSequence   uint64
 	unhealthy      error
 	invalidateHook func(string) error
 }
 
-func newValidationCache(ttl time.Duration) *validationCache {
-	return &validationCache{ttl: ttl, entries: map[string]cacheEntry{}}
+func newValidationCache(ttl time.Duration, capacity int) *validationCache {
+	return &validationCache{ttl: ttl, capacity: capacity, entries: map[string]cacheEntry{}}
 }
 func (cache *validationCache) get(key string, now time.Time) (Principal, bool) {
 	cache.mu.Lock()
@@ -660,12 +734,28 @@ func (cache *validationCache) get(key string, now time.Time) (Principal, bool) {
 func (cache *validationCache) put(key string, principal Principal, credentialExpiry, now time.Time) {
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
+	for currentKey, entry := range cache.entries {
+		if !now.Before(entry.expiresAt) {
+			delete(cache.entries, currentKey)
+		}
+	}
+	if _, exists := cache.entries[key]; !exists && len(cache.entries) >= cache.capacity {
+		oldestKey := ""
+		var oldestSequence uint64
+		for currentKey, entry := range cache.entries {
+			if oldestKey == "" || entry.sequence < oldestSequence || (entry.sequence == oldestSequence && currentKey < oldestKey) {
+				oldestKey, oldestSequence = currentKey, entry.sequence
+			}
+		}
+		delete(cache.entries, oldestKey)
+	}
 	expires := now.Add(cache.ttl)
 	if credentialExpiry.Before(expires) {
 		expires = credentialExpiry
 	}
 	principal.Scopes = cloneScopes(principal.Scopes)
-	cache.entries[key] = cacheEntry{principal: principal, expiresAt: expires}
+	cache.nextSequence++
+	cache.entries[key] = cacheEntry{principal: principal, expiresAt: expires, sequence: cache.nextSequence}
 }
 func (cache *validationCache) invalidate(credentialID string) error {
 	cache.mu.Lock()
@@ -696,6 +786,7 @@ func (cache *validationCache) rebuild() {
 	defer cache.mu.Unlock()
 	cache.entries = map[string]cacheEntry{}
 	cache.unhealthy = nil
+	cache.nextSequence = 0
 }
 
 var _ platformports.ReadinessCheck = (*Service)(nil)

@@ -27,7 +27,7 @@ func TestCredentialStoreRequiresTransactionAndPersistsOnlyVerifier(t *testing.T)
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 9, 24, 2, 0, 0, 0, time.UTC)
-	record := CredentialRecord{CredentialID: "cred_01956e7b-9abc-7def-8abc-000000000001", PrincipalID: "prn_01956e7b-9abc-7def-8abc-000000000001", SubjectID: "developer-1", Kind: "service", Audience: "reference-control-plane", Scopes: []string{"agent.invoke", "agent.read"}, SecretVerifier: strings.Repeat("a", 64), IssuedAt: now, NotBefore: now, ExpiresAt: now.Add(time.Minute), Status: CredentialActive, Revision: 1, IdempotencyDigest: strings.Repeat("b", 64), IdempotencyRequestDigest: strings.Repeat("c", 64)}
+	record := CredentialRecord{CredentialID: "cred_01956e7b-9abc-7def-8abc-000000000001", PrincipalID: "prn_01956e7b-9abc-7def-8abc-000000000001", TenantID: "tenant-a", SubjectID: "developer-1", Kind: "service", Audience: "reference-control-plane", Scopes: []string{"agent.invoke", "agent.read"}, SecretVerifier: strings.Repeat("a", 64), IssuedAt: now, NotBefore: now, ExpiresAt: now.Add(time.Minute), Status: CredentialActive, Revision: 1, IdempotencyDigest: strings.Repeat("b", 64), IdempotencyRequestDigest: strings.Repeat("c", 64)}
 	if err := store.Create(context.Background(), &record); err == nil || !strings.Contains(err.Error(), "unit-of-work") {
 		t.Fatalf("out-of-transaction write accepted: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestCredentialStoreRequiresTransactionAndPersistsOnlyVerifier(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.SubjectID != record.SubjectID || loaded.SecretVerifier != record.SecretVerifier || loaded.IdempotencyRequestDigest != record.IdempotencyRequestDigest || strings.Contains(loaded.SecretVerifier, credentialPrefix) {
+	if loaded.TenantID != record.TenantID || loaded.SubjectID != record.SubjectID || loaded.SecretVerifier != record.SecretVerifier || loaded.IdempotencyRequestDigest != record.IdempotencyRequestDigest || strings.Contains(loaded.SecretVerifier, credentialPrefix) {
 		t.Fatalf("unexpected stored record: %+v", loaded)
 	}
 	var columns string
@@ -58,6 +58,35 @@ func TestCredentialStoreRequiresTransactionAndPersistsOnlyVerifier(t *testing.T)
 		if strings.Contains(columns, forbidden) {
 			t.Fatalf("secret-bearing column found: %s", columns)
 		}
+	}
+}
+
+func TestCredentialStoreIsolatesSameSubjectAcrossTenants(t *testing.T) {
+	db := openIdentityDatabase(t)
+	unit, _ := sqlite.NewUnitOfWork(db)
+	store, _ := NewCredentialStore(db, migrate.DialectSQLite, unit.Transaction)
+	now := time.Date(2026, 9, 24, 2, 0, 0, 0, time.UTC)
+	first := storeRecord(1, now, "a", "b")
+	second := storeRecord(2, now, "c", "d")
+	second.TenantID = "tenant-b"
+	second.PrincipalID = "prn_01956e7b-9abc-7def-8abc-000000000002"
+	second.IdempotencyRequestDigest = strings.Repeat("f", 64)
+	if err := unit.Within(context.Background(), func(ctx context.Context) error { return store.Create(ctx, &first) }); err != nil {
+		t.Fatal(err)
+	}
+	if err := unit.Within(context.Background(), func(ctx context.Context) error { return store.Create(ctx, &second) }); err != nil {
+		t.Fatal(err)
+	}
+	loadedFirst, err := store.Get(context.Background(), first.CredentialID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loadedSecond, err := store.Get(context.Background(), second.CredentialID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loadedFirst.TenantID != "tenant-a" || loadedSecond.TenantID != "tenant-b" || loadedFirst.SubjectID != loadedSecond.SubjectID || loadedFirst.PrincipalID == loadedSecond.PrincipalID {
+		t.Fatalf("tenant isolation failed: %+v %+v", loadedFirst, loadedSecond)
 	}
 }
 
@@ -153,7 +182,7 @@ func TestCrossServiceConcurrentIdempotencyUsesCommittedWinner(t *testing.T) {
 						value[index] = byte(index + 1)
 					}
 					return len(value), nil
-				}, MaximumTTL: 10 * time.Minute, CacheTTL: time.Minute, AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent.read", "agent.invoke"}})
+				}, MaximumTTL: 10 * time.Minute, CacheTTL: time.Minute, AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent.read", "agent.invoke"}, AllowedTenants: []string{"tenant-a", "tenant-b"}})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -201,7 +230,7 @@ func TestCrossServiceConcurrentIdempotencyUsesCommittedWinner(t *testing.T) {
 }
 
 func storeRecord(index int, now time.Time, verifier, idempotency string) CredentialRecord {
-	return CredentialRecord{CredentialID: "cred_01956e7b-9abc-7def-8abc-" + leftPad(index), PrincipalID: "prn_01956e7b-9abc-7def-8abc-000000000001", SubjectID: "developer-1", Kind: "service", Audience: "reference-control-plane", Scopes: []string{"agent.read"}, SecretVerifier: strings.Repeat(verifier, 64), IssuedAt: now, NotBefore: now, ExpiresAt: now.Add(time.Minute), Status: CredentialActive, Revision: 1, IdempotencyDigest: strings.Repeat(idempotency, 64), IdempotencyRequestDigest: strings.Repeat("e", 64)}
+	return CredentialRecord{CredentialID: "cred_01956e7b-9abc-7def-8abc-" + leftPad(index), PrincipalID: "prn_01956e7b-9abc-7def-8abc-000000000001", TenantID: "tenant-a", SubjectID: "developer-1", Kind: "service", Audience: "reference-control-plane", Scopes: []string{"agent.read"}, SecretVerifier: strings.Repeat(verifier, 64), IssuedAt: now, NotBefore: now, ExpiresAt: now.Add(time.Minute), Status: CredentialActive, Revision: 1, IdempotencyDigest: strings.Repeat(idempotency, 64), IdempotencyRequestDigest: strings.Repeat("e", 64)}
 }
 func leftPad(value int) string {
 	if value == 1 {
@@ -229,17 +258,19 @@ func openIdentityDatabaseWithSchema(t *testing.T, schema string) *sql.DB {
 
 const exactSQLiteIdentitySchema = `
 CREATE TABLE arop_dev_principals (
-  principal_id TEXT NOT NULL, subject_id TEXT NOT NULL, status TEXT NOT NULL,
+  principal_id TEXT NOT NULL, tenant_id TEXT NOT NULL, subject_id TEXT NOT NULL, status TEXT NOT NULL,
   created_at_ns INTEGER NOT NULL, updated_at_ns INTEGER NOT NULL, revision INTEGER NOT NULL,
   CONSTRAINT arop_dev_principals_pkey PRIMARY KEY(principal_id),
-  CONSTRAINT arop_dev_principals_subject_unique UNIQUE(subject_id),
+  CONSTRAINT arop_dev_principals_tenant_subject_unique UNIQUE(tenant_id,subject_id),
   CONSTRAINT arop_dev_principals_principal_id_check CHECK(length(principal_id) BETWEEN 1 AND 200),
+  CONSTRAINT arop_dev_principals_tenant_id_check CHECK(length(tenant_id) BETWEEN 1 AND 128 AND tenant_id NOT GLOB '*[^a-z0-9._-]*' AND substr(tenant_id,1,1) GLOB '[a-z]' AND substr(tenant_id,-1,1) GLOB '[a-z0-9]' AND tenant_id NOT GLOB '*[._-][._-]*'),
   CONSTRAINT arop_dev_principals_subject_id_check CHECK(length(subject_id) BETWEEN 1 AND 200),
   CONSTRAINT arop_dev_principals_status_check CHECK(status IN ('active','disabled')),
   CONSTRAINT arop_dev_principals_created_check CHECK(created_at_ns > 0),
   CONSTRAINT arop_dev_principals_updated_check CHECK(updated_at_ns >= created_at_ns),
   CONSTRAINT arop_dev_principals_revision_check CHECK(revision > 0)
 );
+CREATE INDEX arop_dev_principals_tenant_status_idx ON arop_dev_principals(tenant_id, status, principal_id);
 CREATE TABLE arop_credentials (
   credential_id TEXT NOT NULL, principal_id TEXT NOT NULL, credential_kind TEXT NOT NULL,
   audience TEXT NOT NULL, scope_canonical TEXT NOT NULL, secret_verifier TEXT NOT NULL,
