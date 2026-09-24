@@ -43,6 +43,29 @@ var testPackages = []string{
 	"./internal/storage/migrate",
 }
 
+var requiredSubtests = []string{
+	nestedModule + "/internal/adapters/secrets/TestResolverRechecksAuthorizationWindowBeforeExposure/audit_blocks_across_request_deadline",
+	nestedModule + "/internal/adapters/secrets/TestResolverRechecksAuthorizationWindowBeforeExposure/binding_expires_while_audit_runs",
+	nestedModule + "/internal/adapters/secrets/TestResolverRechecksAuthorizationWindowBeforeExposure/binding_expires_while_provider_runs",
+	nestedModule + "/internal/adapters/secrets/TestResolverRechecksAuthorizationWindowBeforeExposure/caller_cancels_while_provider_runs",
+	nestedModule + "/internal/app/platform/httpadapter/TestHandlerChainPropagatesCorrelatesAndRedacts/authenticated-chain-fails-closed-before-usecase",
+	nestedModule + "/internal/app/platform/httpadapter/TestHandlerChainPropagatesCorrelatesAndRedacts/authenticated-chain-fails-closed-before-usecase/unavailable",
+	nestedModule + "/internal/app/platform/httpadapter/TestHandlerChainPropagatesCorrelatesAndRedacts/authenticated-chain-fails-closed-before-usecase/valid",
+	nestedModule + "/internal/identity/TestMutationCommitAndLifecycleAuditFailuresRollback/commit",
+	nestedModule + "/internal/identity/TestMutationCommitAndLifecycleAuditFailuresRollback/revoke-audit",
+	nestedModule + "/internal/identity/TestMutationCommitAndLifecycleAuditFailuresRollback/rotate-audit",
+	nestedModule + "/internal/identity/testdata/acceptance/TestP10DurableIdentityConformance/postgres",
+	nestedModule + "/internal/identity/testdata/acceptance/TestP10DurableIdentityConformance/postgres/one-to-five",
+	nestedModule + "/internal/identity/testdata/acceptance/TestP10DurableIdentityConformance/postgres/one-to-five-recovery-apply",
+	nestedModule + "/internal/identity/testdata/acceptance/TestP10DurableIdentityConformance/postgres/one-to-five-recovery-restore",
+	nestedModule + "/internal/identity/testdata/acceptance/TestP10DurableIdentityConformance/postgres/one-to-five-recovery-verifier",
+	nestedModule + "/internal/identity/testdata/acceptance/TestP10DurableIdentityConformance/sqlite",
+	nestedModule + "/internal/identity/testdata/acceptance/TestP10DurableIdentityConformance/sqlite/one-to-five",
+	nestedModule + "/internal/identity/testdata/acceptance/TestP10DurableIdentityConformance/sqlite/one-to-five-recovery-apply",
+	nestedModule + "/internal/identity/testdata/acceptance/TestP10DurableIdentityConformance/sqlite/one-to-five-recovery-restore",
+	nestedModule + "/internal/identity/testdata/acceptance/TestP10DurableIdentityConformance/sqlite/one-to-five-recovery-verifier",
+}
+
 var inputRoots = []string{
 	"reference/control-plane/cmd/aropd",
 	"reference/control-plane/internal/adapters/observability/durable",
@@ -130,13 +153,15 @@ func main() {
 	var tests commandResult
 	var inventoryEvidence []byte
 	if inputErr == nil && cluster != nil {
-		tests, inventoryEvidence = runP10Tests(root, scratch, cluster)
+		tests = runP10Tests(root, scratch, cluster)
 	} else {
 		tests.Err = errors.New("P10 test prerequisites failed")
 	}
-	inventoryChecks, inventoryErr := evaluateTests(root, tests)
+	inventoryChecks, discoveredInventory, inventoryErr := evaluateTests(root, tests)
+	inventoryEvidence = discoveredInventory
 	checks = append(checks, inventoryChecks...)
 	add("p10-exact-test-inventory", inventoryErr, "all statically discovered packages and top-level tests ran once with no fail, skip, cache, or no-tests terminal")
+	add("p10-exact-test-inventory-negatives", verifyInventoryNegatives(), "nested skip and duplicate top-level/package terminals fail closed")
 	add("p10-secret-egress-scan", rejectSensitive(tests.Output), "test output contains no credential or SecretRef canary")
 
 	transition := run(root, nil, "go", "run", "-modfile="+filepath.Join(root, "go.mod"), filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go"), "validate")
@@ -211,11 +236,11 @@ func main() {
 	fmt.Printf("AROP identity and secrets passed: %d checks.\n", len(written.Checks))
 }
 
-func runP10Tests(root, scratch string, cluster *postgresCluster) (commandResult, []byte) {
+func runP10Tests(root, scratch string, cluster *postgresCluster) commandResult {
 	work := filepath.Join(scratch, "go.work")
 	contents := []byte("go 1.24.0\n\nuse " + filepath.Join(root, "reference/control-plane") + "\n\nreplace " + nestedRootModule() + " => " + root + "\n")
 	if err := os.WriteFile(work, contents, 0o600); err != nil {
-		return commandResult{Err: err}, nil
+		return commandResult{Err: err}
 	}
 	env := map[string]string{
 		"GOWORK": work, "GOENV": "off", "GOFLAGS": "-mod=readonly", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0",
@@ -223,19 +248,37 @@ func runP10Tests(root, scratch string, cluster *postgresCluster) (commandResult,
 		"AROP_P10_POSTGRES_URL": cluster.url(), "AROP_P10_MIGRATION_ROOT": filepath.Join(root, "reference/control-plane/migrations"),
 	}
 	args := append([]string{"test", "-count=1", "-json"}, testPackages...)
-	result := run(filepath.Join(root, "reference/control-plane"), env, "go", args...)
-	return result, contents
+	return run(filepath.Join(root, "reference/control-plane"), env, "go", args...)
 }
 
 func nestedRootModule() string { return "github.com/gmslll/agent-runtime-operations-protocol" }
 
-func evaluateTests(root string, result commandResult) ([]report.Check, error) {
+func evaluateTests(root string, result commandResult) ([]report.Check, []byte, error) {
 	expected, err := discoverTests(root)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	seen := map[string]bool{}
-	passedPackages := map[string]bool{}
+	evidence := inventoryEvidence(expected, requiredSubtests)
+	checks, err := evaluateTestEvents(expected, requiredSubtests, result)
+	return checks, evidence, err
+}
+
+func evaluateTestEvents(expected, required []string, result commandResult) ([]report.Check, error) {
+	expectedSet := map[string]bool{}
+	for _, key := range expected {
+		expectedSet[key] = true
+	}
+	expectedPackageList := expectedPackages(expected)
+	expectedPackageSet := map[string]bool{}
+	for _, pkg := range expectedPackageList {
+		expectedPackageSet[pkg] = true
+	}
+	topLevelPasses := map[string]int{}
+	subtestPasses := map[string]int{}
+	packagePasses := map[string]int{}
+	packageTerminals := map[string]int{}
+	unknownTests := map[string]bool{}
+	unknownPackages := map[string]bool{}
 	checks := []report.Check{}
 	problems := []string{}
 	scanner := bufio.NewScanner(bytes.NewReader(result.Output))
@@ -246,17 +289,34 @@ func evaluateTests(root string, result commandResult) ([]report.Check, error) {
 		if json.Unmarshal(scanner.Bytes(), &event) != nil {
 			continue
 		}
-		if event.Test != "" && !strings.Contains(event.Test, "/") {
-			key := event.Package + "/" + event.Test
-			switch event.Action {
-			case "pass":
-				seen[key] = true
-			case "skip", "fail":
-				problems = append(problems, key+" terminal="+event.Action)
+		if event.Test != "" {
+			topLevel := strings.SplitN(event.Test, "/", 2)[0]
+			key := event.Package + "/" + topLevel
+			if !expectedSet[key] && !unknownTests[key] {
+				unknownTests[key] = true
+				problems = append(problems, "unknown top-level test "+key)
+			}
+			if event.Action == "skip" || event.Action == "fail" {
+				problems = append(problems, event.Package+"/"+event.Test+" terminal="+event.Action)
+			}
+			if !strings.Contains(event.Test, "/") && event.Action == "pass" {
+				topLevelPasses[key]++
+			}
+			if strings.Contains(event.Test, "/") && event.Action == "pass" {
+				subtestPasses[event.Package+"/"+event.Test]++
 			}
 		}
-		if event.Test == "" && event.Action == "pass" {
-			passedPackages[event.Package] = true
+		if event.Test == "" && (event.Action == "pass" || event.Action == "skip" || event.Action == "fail") {
+			packageTerminals[event.Package]++
+			if event.Action == "pass" {
+				packagePasses[event.Package]++
+			} else {
+				problems = append(problems, "package "+event.Package+" terminal="+event.Action)
+			}
+			if !expectedPackageSet[event.Package] && !unknownPackages[event.Package] {
+				unknownPackages[event.Package] = true
+				problems = append(problems, "unknown package terminal "+event.Package)
+			}
 		}
 		if strings.Contains(event.Output, "[no test files]") || strings.Contains(event.Output, "(cached)") {
 			problems = append(problems, "no-tests or cached output")
@@ -266,18 +326,25 @@ func evaluateTests(root string, result commandResult) ([]report.Check, error) {
 		problems = append(problems, err.Error())
 	}
 	for _, key := range expected {
-		ok := seen[key]
-		checks = append(checks, report.Check{Name: "p10-test/" + strings.TrimPrefix(key, nestedModule+"/"), Passed: ok, Detail: map[bool]string{true: "passed exactly once", false: "missing passing terminal"}[ok]})
+		count := topLevelPasses[key]
+		ok := count == 1
+		detail := fmt.Sprintf("passing terminals=%d want=1", count)
+		if ok {
+			detail = "passed exactly once"
+		}
+		checks = append(checks, report.Check{Name: "p10-test/" + strings.TrimPrefix(key, nestedModule+"/"), Passed: ok, Detail: detail})
 		if !ok {
-			problems = append(problems, "missing "+key)
+			problems = append(problems, fmt.Sprintf("top-level passing terminals %s=%d want=1", key, count))
 		}
 	}
-	if len(seen) != len(expected) {
-		problems = append(problems, fmt.Sprintf("runtime tests=%d expected=%d", len(seen), len(expected)))
+	for _, pkg := range expectedPackageList {
+		if packageTerminals[pkg] != 1 || packagePasses[pkg] != 1 {
+			problems = append(problems, fmt.Sprintf("package terminals %s=%d pass=%d want=1/1", pkg, packageTerminals[pkg], packagePasses[pkg]))
+		}
 	}
-	for _, pkg := range expectedPackages(expected) {
-		if !passedPackages[pkg] {
-			problems = append(problems, "package did not pass: "+pkg)
+	for _, key := range required {
+		if subtestPasses[key] != 1 {
+			problems = append(problems, fmt.Sprintf("required subtest passing terminals %s=%d want=1", key, subtestPasses[key]))
 		}
 	}
 	if result.Err != nil {
@@ -288,6 +355,53 @@ func evaluateTests(root string, result commandResult) ([]report.Check, error) {
 		return checks, errors.New(strings.Join(problems, "; "))
 	}
 	return checks, nil
+}
+
+func inventoryEvidence(expected, required []string) []byte {
+	lines := make([]string, 0, len(expectedPackages(expected))+len(expected)+len(required))
+	for _, pkg := range expectedPackages(expected) {
+		lines = append(lines, "package\t"+pkg)
+	}
+	for _, test := range expected {
+		lines = append(lines, "top-level\t"+test)
+	}
+	for _, subtest := range required {
+		lines = append(lines, "required-subtest\t"+subtest)
+	}
+	sort.Strings(lines)
+	return []byte(strings.Join(lines, "\n") + "\n")
+}
+
+func verifyInventoryNegatives() error {
+	pkg := nestedModule + "/internal/identity"
+	test := pkg + "/TestInventoryProbe"
+	event := func(action, testName string) []byte {
+		encoded, err := json.Marshal(goEvent{Action: action, Package: pkg, Test: testName})
+		if err != nil {
+			panic(err)
+		}
+		return append(encoded, '\n')
+	}
+	packagePass := event("pass", "")
+	valid := bytes.Join([][]byte{event("pass", "TestInventoryProbe/nested"), event("pass", "TestInventoryProbe"), packagePass}, nil)
+	if _, err := evaluateTestEvents([]string{test}, []string{test + "/nested"}, commandResult{Output: valid}); err != nil {
+		return fmt.Errorf("valid inventory probe failed: %w", err)
+	}
+	cases := []struct {
+		name     string
+		output   []byte
+		required []string
+	}{
+		{"nested-skip", bytes.Join([][]byte{event("pass", "TestInventoryProbe"), event("skip", "TestInventoryProbe/nested"), packagePass}, nil), []string{test + "/nested"}},
+		{"duplicate-pass-terminal", bytes.Join([][]byte{event("pass", "TestInventoryProbe"), event("pass", "TestInventoryProbe"), packagePass}, nil), nil},
+		{"duplicate-package-terminal", bytes.Join([][]byte{event("pass", "TestInventoryProbe"), packagePass, packagePass}, nil), nil},
+	}
+	for _, testCase := range cases {
+		if _, err := evaluateTestEvents([]string{test}, testCase.required, commandResult{Output: testCase.output}); err == nil {
+			return errors.New(testCase.name + " inventory negative was accepted")
+		}
+	}
+	return nil
 }
 
 func discoverTests(root string) ([]string, error) {
