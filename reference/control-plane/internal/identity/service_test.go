@@ -624,6 +624,39 @@ func TestIdentityConfigurationRejectsUnsafeCacheCapacityAndTenant(t *testing.T) 
 	}
 }
 
+func TestTenantLengthBoundaryAcrossConfigurationIssueAndAuthentication(t *testing.T) {
+	base, _, _, _, _ := newIdentityService(t)
+	valid := "t" + strings.Repeat("a", 127)
+	invalid := valid + "a"
+	dependencies := base.deps
+	dependencies.AllowedTenants = []string{invalid}
+	if _, err := New(dependencies); err == nil {
+		t.Fatal("129-byte tenant allowlist entry accepted")
+	}
+	dependencies.AllowedTenants = []string{valid}
+	service, err := New(dependencies)
+	if err != nil {
+		t.Fatalf("128-byte tenant rejected: %v", err)
+	}
+	request := issueRequest("tenant-length-valid")
+	request.TenantID = valid
+	issued, err := service.Issue(context.Background(), request)
+	if err != nil {
+		t.Fatalf("128-byte tenant issue failed: %v", err)
+	}
+	if principal, err := service.Authenticate(context.Background(), AuthenticateRequest{TenantID: valid, Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); err != nil || principal.TenantID != valid {
+		t.Fatalf("128-byte tenant authentication failed: %+v %v", principal, err)
+	}
+	request.IdempotencyKey = "tenant-length-invalid"
+	request.TenantID = invalid
+	if _, err := service.Issue(context.Background(), request); err == nil {
+		t.Fatal("129-byte tenant issue accepted")
+	}
+	if _, err := service.Authenticate(context.Background(), AuthenticateRequest{TenantID: invalid, Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnauthenticated) {
+		t.Fatalf("129-byte tenant authentication was not rejected generically: %v", err)
+	}
+}
+
 func TestValidationCacheConcurrentBoundedAccess(t *testing.T) {
 	cache := newValidationCache(time.Minute, 8)
 	now := time.Date(2026, 9, 24, 4, 0, 0, 0, time.UTC)

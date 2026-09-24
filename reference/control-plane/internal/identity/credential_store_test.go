@@ -90,6 +90,25 @@ func TestCredentialStoreIsolatesSameSubjectAcrossTenants(t *testing.T) {
 	}
 }
 
+func TestCredentialStoreTenantLengthBoundary(t *testing.T) {
+	db := openIdentityDatabase(t)
+	unit, _ := sqlite.NewUnitOfWork(db)
+	store, _ := NewCredentialStore(db, migrate.DialectSQLite, unit.Transaction)
+	now := time.Date(2026, 9, 24, 2, 0, 0, 0, time.UTC)
+	valid := storeRecord(1, now, "a", "b")
+	valid.TenantID = "t" + strings.Repeat("a", 127)
+	if err := unit.Within(context.Background(), func(ctx context.Context) error { return store.Create(ctx, &valid) }); err != nil {
+		t.Fatalf("128-byte tenant store failed: %v", err)
+	}
+	invalid := storeRecord(2, now, "c", "d")
+	invalid.TenantID = valid.TenantID + "a"
+	invalid.PrincipalID = "prn_01956e7b-9abc-7def-8abc-000000000002"
+	invalid.IdempotencyRequestDigest = strings.Repeat("f", 64)
+	if err := unit.Within(context.Background(), func(ctx context.Context) error { return store.Create(ctx, &invalid) }); err == nil {
+		t.Fatal("129-byte tenant store accepted")
+	}
+}
+
 func TestCredentialStoreRotateRevokeAndRollback(t *testing.T) {
 	db := openIdentityDatabase(t)
 	unit, _ := sqlite.NewUnitOfWork(db)

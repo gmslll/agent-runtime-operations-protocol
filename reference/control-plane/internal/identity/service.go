@@ -199,7 +199,7 @@ func New(dependencies Dependencies) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	allowedTenants, err := validatedAllowlist("credential tenant", dependencies.AllowedTenants, tenantPattern)
+	allowedTenants, err := validatedTenantAllowlist(dependencies.AllowedTenants)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +270,7 @@ func (service *Service) Issue(ctx context.Context, request IssueRequest) (Issued
 
 func (service *Service) Authenticate(ctx context.Context, request AuthenticateRequest) (Principal, error) {
 	request.Scopes = canonicalScopes(request.Scopes)
-	if request.Credential == "" || !tenantPattern.MatchString(request.TenantID) || !identifierPattern.MatchString(request.Audience) || len(request.Scopes) == 0 {
+	if request.Credential == "" || !validTenant(request.TenantID) || !identifierPattern.MatchString(request.Audience) || len(request.Scopes) == 0 {
 		return Principal{}, service.rejectedAuthentication(ctx, request.Metadata, ErrUnauthenticated)
 	}
 	if _, allowed := service.allowedTenants[request.TenantID]; !allowed {
@@ -444,7 +444,7 @@ func (service *Service) RebuildCache() {
 }
 
 func (service *Service) validateIssue(request IssueRequest) error {
-	if !tenantPattern.MatchString(request.TenantID) || !identifierPattern.MatchString(request.SubjectID) || !identifierPattern.MatchString(request.Kind) || !identifierPattern.MatchString(request.Audience) {
+	if !validTenant(request.TenantID) || !identifierPattern.MatchString(request.SubjectID) || !identifierPattern.MatchString(request.Kind) || !identifierPattern.MatchString(request.Audience) {
 		return errors.New("credential tenant, subject, kind, and audience are required")
 	}
 	if len(request.Scopes) == 0 || request.TTL <= 0 || request.TTL > service.deps.MaximumTTL || request.IdempotencyKey == "" || len(request.IdempotencyKey) > 256 {
@@ -660,6 +660,10 @@ func validCredentialID(value string) bool {
 	return strings.HasPrefix(value, "cred_") && domainIDPattern.MatchString(value)
 }
 
+func validTenant(value string) bool {
+	return len(value) <= 128 && tenantPattern.MatchString(value)
+}
+
 func canonicalScopes(values []string) []string {
 	seen := map[string]struct{}{}
 	for _, value := range values {
@@ -698,6 +702,20 @@ func validatedAllowlist(name string, values []string, pattern *regexp.Regexp) (m
 	}
 	if len(result) == 0 {
 		return nil, fmt.Errorf("%s allowlist is required", name)
+	}
+	return result, nil
+}
+
+func validatedTenantAllowlist(values []string) (map[string]struct{}, error) {
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if !validTenant(value) {
+			return nil, errors.New("credential tenant allowlist contains invalid value")
+		}
+		result[value] = struct{}{}
+	}
+	if len(result) == 0 {
+		return nil, errors.New("credential tenant allowlist is required")
 	}
 	return result, nil
 }

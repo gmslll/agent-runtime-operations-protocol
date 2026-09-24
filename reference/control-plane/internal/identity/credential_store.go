@@ -203,7 +203,7 @@ func (store *CredentialStore) placeholder(position int) string {
 }
 
 func validateRecord(record *CredentialRecord) error {
-	if record == nil || !validCredentialID(record.CredentialID) || !strings.HasPrefix(record.PrincipalID, "prn_") || !domainIDPattern.MatchString(record.PrincipalID) || !tenantPattern.MatchString(record.TenantID) || !identifierPattern.MatchString(record.SubjectID) || !identifierPattern.MatchString(record.Kind) || !identifierPattern.MatchString(record.Audience) {
+	if record == nil || !validCredentialID(record.CredentialID) || !strings.HasPrefix(record.PrincipalID, "prn_") || !domainIDPattern.MatchString(record.PrincipalID) || !validTenant(record.TenantID) || !identifierPattern.MatchString(record.SubjectID) || !identifierPattern.MatchString(record.Kind) || !identifierPattern.MatchString(record.Audience) {
 		return errors.New("credential record identity fields are invalid")
 	}
 	if record.Status != CredentialActive || record.Revision != 1 || !digestPattern.MatchString(record.SecretVerifier) || !digestPattern.MatchString(record.IdempotencyDigest) || !digestPattern.MatchString(record.IdempotencyRequestDigest) || len(record.Scopes) == 0 {
@@ -216,7 +216,7 @@ func validateRecord(record *CredentialRecord) error {
 }
 
 func validateStoredRecord(record *CredentialRecord) error {
-	if record == nil || !validCredentialID(record.CredentialID) || !strings.HasPrefix(record.PrincipalID, "prn_") || !domainIDPattern.MatchString(record.PrincipalID) || !tenantPattern.MatchString(record.TenantID) || !digestPattern.MatchString(record.SecretVerifier) || !digestPattern.MatchString(record.IdempotencyDigest) || !digestPattern.MatchString(record.IdempotencyRequestDigest) || record.Revision < 1 || len(record.Scopes) == 0 {
+	if record == nil || !validCredentialID(record.CredentialID) || !strings.HasPrefix(record.PrincipalID, "prn_") || !domainIDPattern.MatchString(record.PrincipalID) || !validTenant(record.TenantID) || !digestPattern.MatchString(record.SecretVerifier) || !digestPattern.MatchString(record.IdempotencyDigest) || !digestPattern.MatchString(record.IdempotencyRequestDigest) || record.Revision < 1 || len(record.Scopes) == 0 {
 		return errors.New("credential record is invalid")
 	}
 	if record.NotBefore.Before(record.IssuedAt) || !record.NotBefore.Before(record.ExpiresAt) {
