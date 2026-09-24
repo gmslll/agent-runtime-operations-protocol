@@ -1,12 +1,12 @@
 {
-  "attested_at": "2026-09-23T00:50:58Z",
+  "attested_at": "2026-09-24T01:29:49Z",
   "authentication": {
-    "confirmation_sha256": "sha256:395029517b26da22c73494b423cad707515b92b006facd3a4c988442e52c2a8b",
+    "confirmation_sha256": "sha256:0d473c02985c6e6fa5efcee3a676a06c6251092e5abb4872f3e5a533b8acc509",
     "limitation": "manual identity and independence verification is not cryptographically replayable",
     "mode": "manual-trusted-channel"
   },
   "kind": "arop-planning-audit-summary",
-  "raw_evidence_sha256": "sha256:a57f81e407e8ba54135b1e8291bc96a76ef210eff89dbd6713c0d675a95bdff6",
+  "raw_evidence_sha256": "sha256:46d420bb42e3aaaa359f14315139a1247bcb3a251b064db65e55356d18cd20ad",
   "result": {
     "must_fix": [],
     "must_fix_count": 0,
@@ -282,24 +282,19 @@
         "result": "PASS"
       }
     ],
-    "should_fix": [
-      {
-        "detail": "Before P40/P50, clarify whether the two independent Runtime implementations must cover at least two Provider languages; if required, add distinct_provider_languages \u003e= 2 to compatibility policy and the external evidence schema.",
-        "id": "ADV-001"
-      }
-    ],
-    "should_fix_count": 1,
+    "should_fix": [],
+    "should_fix_count": 0,
     "verdict": "PASS"
   },
-  "reviewer_id": "p03-independent-review-agent",
+  "reviewer_id": "gms@backend:ts1093/codex",
   "schema_version": 1,
   "subject": {
-    "artifact_manifest_sha256": "2765cd7ce3e8c5ef1a5434a4e18d5aca1c0e0f724279ee5e0d13b9a6c55406d7",
+    "artifact_manifest_sha256": "689fe010cb8903570dc7f76c116b1ad2d496b42eb150b99232d2adfe7ac91f87",
     "blueprint_sha256": "2c8470f94220c4959c98e91f3909bd3d698c265841c5be9e53afaab84ced0a94",
-    "commit": "dc27b6f121fc3ced2ba58348e530f3f5c0ca1f0c",
+    "commit": "7498f8f9654d251cb2d8d8062d8d7c7f5d0373fc",
     "plan_last_phase": "P53",
-    "plan_sha256": "ccabaae3dac4bc0eca4c27b08ef7b4aa932a1f3e74a35ebac46b66df0a7d38e6",
+    "plan_sha256": "127e29a4ea740db9a91e2720f9c3f08d1a04e0346d445b522b5957bb4dbbf4e5",
     "requirements_sha256": "3154db5e7d9073967c67ec0669e442df9c225f39d79ea384a7c9da42bb8bb5e4"
   },
-  "summary_sha256": "sha256:0982dd0b2f00a7994d095804b2302098f124244e49d11f41561786806a50b587"
+  "summary_sha256": "sha256:b6decf940bb25a8eeac9c26077d042b9d8c120a567b0c6ad2da8d704605e0f4a"
 }
