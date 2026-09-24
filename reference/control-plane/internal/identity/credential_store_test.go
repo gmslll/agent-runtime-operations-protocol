@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -99,6 +101,101 @@ func TestCredentialStoreRotateRevokeAndRollback(t *testing.T) {
 	revoked, _ := store.Get(context.Background(), replacement.CredentialID)
 	if revoked.Status != CredentialRevoked || revoked.RevokedAt.IsZero() {
 		t.Fatalf("revocation mismatch: %+v", revoked)
+	}
+}
+
+type idempotencyBarrierRepository struct {
+	CredentialRepository
+	calls atomic.Int32
+	ready sync.WaitGroup
+}
+
+func newIdempotencyBarrierRepository(repository CredentialRepository) *idempotencyBarrierRepository {
+	barrier := &idempotencyBarrierRepository{CredentialRepository: repository}
+	barrier.ready.Add(2)
+	return barrier
+}
+
+func (repository *idempotencyBarrierRepository) GetByIdempotencyDigest(ctx context.Context, digest string) (CredentialRecord, error) {
+	result, err := repository.CredentialRepository.GetByIdempotencyDigest(ctx, digest)
+	if repository.calls.Add(1) <= 2 {
+		repository.ready.Done()
+		repository.ready.Wait()
+	}
+	return result, err
+}
+
+func TestCrossServiceConcurrentIdempotencyUsesCommittedWinner(t *testing.T) {
+	for _, different := range []bool{false, true} {
+		name := "same-fingerprint"
+		if different {
+			name = "different-fingerprint"
+		}
+		t.Run(name, func(t *testing.T) {
+			db := openIdentityDatabase(t)
+			db.SetMaxOpenConns(1)
+			unitOne, _ := sqlite.NewUnitOfWork(db)
+			unitTwo, _ := sqlite.NewUnitOfWork(db)
+			store, _ := NewCredentialStore(db, migrate.DialectSQLite, func(ctx context.Context) (*sql.Tx, bool) {
+				if tx, ok := unitOne.Transaction(ctx); ok {
+					return tx, true
+				}
+				return unitTwo.Transaction(ctx)
+			})
+			barrier := newIdempotencyBarrierRepository(store)
+			clock := &identityClock{now: time.Date(2026, 9, 24, 3, 0, 0, 0, time.UTC)}
+			ids := &identityIDs{}
+			observations := &fakeObservability{}
+			newService := func(unit *sqlite.UnitOfWork) *Service {
+				service, err := New(Dependencies{Clock: clock, IDs: ids, Faults: &identityFault{}, UoW: unit, Observability: observations, Repository: barrier, Random: func(value []byte) (int, error) {
+					for index := range value {
+						value[index] = byte(index + 1)
+					}
+					return len(value), nil
+				}, MaximumTTL: 10 * time.Minute, CacheTTL: time.Minute, AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent.read", "agent.invoke"}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				return service
+			}
+			services := []*Service{newService(unitOne), newService(unitTwo)}
+			type result struct {
+				issued IssuedCredential
+				err    error
+			}
+			results := make(chan result, 2)
+			for index, service := range services {
+				request := issueRequest("shared-cross-service-key")
+				if different && index == 1 {
+					request.SubjectID = "developer-2"
+				}
+				go func(service *Service, request IssueRequest) {
+					issued, err := service.Issue(context.Background(), request)
+					results <- result{issued, err}
+				}(service, request)
+			}
+			var successes, replays, conflicts int
+			for range 2 {
+				current := <-results
+				switch {
+				case current.err == nil && current.issued.Credential != "":
+					successes++
+				case errors.Is(current.err, ErrSecretUnavailable) && current.issued.Credential == "":
+					replays++
+				case errors.Is(current.err, ErrCredentialConflict) && current.issued.Credential == "":
+					conflicts++
+				default:
+					t.Fatalf("unexpected outcome: %+v %v", current.issued, current.err)
+				}
+			}
+			if successes != 1 || (!different && replays != 1) || (different && conflicts != 1) {
+				t.Fatalf("success=%d replay=%d conflict=%d", successes, replays, conflicts)
+			}
+			var count int
+			if err := db.QueryRow(`SELECT COUNT(*) FROM arop_credentials`).Scan(&count); err != nil || count != 1 {
+				t.Fatalf("credential rows=%d err=%v", count, err)
+			}
+		})
 	}
 }
 

@@ -490,7 +490,7 @@ func TestConcurrentDuplicateIdempotencyDoesNotReissueSecret(t *testing.T) {
 }
 
 func TestCacheInvalidationFailureFailsClosedAndRollsBack(t *testing.T) {
-	service, _, _, repo, _ := newIdentityService(t)
+	service, _, _, repo, observations := newIdentityService(t)
 	issued, err := service.Issue(context.Background(), issueRequest("issue-4"))
 	if err != nil {
 		t.Fatal(err)
@@ -506,8 +506,23 @@ func TestCacheInvalidationFailureFailsClosedAndRollsBack(t *testing.T) {
 	if err := service.Check(context.Background()); err == nil {
 		t.Fatal("readiness stayed green")
 	}
-	if _, err := service.Authenticate(context.Background(), AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); err == nil {
+	before, _ := observations.snapshot()
+	if principal, err := service.Authenticate(context.Background(), AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnavailable) || principal.CredentialID != "" {
 		t.Fatal("unhealthy cache failed open")
+	}
+	after, _ := observations.snapshot()
+	if after != before+1 {
+		t.Fatalf("cache dependency failure was not observed: before=%d after=%d", before, after)
+	}
+	observations.mu.Lock()
+	outcome := observations.audits[len(observations.audits)-1].Outcome
+	observations.mu.Unlock()
+	if outcome != observability.OutcomeFailed {
+		t.Fatalf("cache dependency outcome=%s", outcome)
+	}
+	observations.fail = true
+	if principal, err := service.Authenticate(context.Background(), AuthenticateRequest{Credential: issued.Credential, Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()}); !errors.Is(err, ErrUnavailable) || principal.CredentialID != "" {
+		t.Fatalf("audit failure restored authentication: %+v %v", principal, err)
 	}
 	service.RebuildCache()
 	if err := service.Check(context.Background()); err != nil {

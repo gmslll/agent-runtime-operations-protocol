@@ -240,6 +240,9 @@ func (service *Service) Issue(ctx context.Context, request IssueRequest) (Issued
 		return service.deps.Faults.Check(transactionContext, platformports.CheckpointAfterUseCase)
 	})
 	if err != nil {
+		if errors.Is(err, ErrCredentialConflict) {
+			return service.reconcileIdempotency(ctx, request.Metadata, "credential.issue", idempotencyDigest, requestDigest)
+		}
 		return IssuedCredential{}, service.classifyMutationFailure(ctx, request.Metadata, "credential.issue", err)
 	}
 	return IssuedCredential{CredentialID: record.CredentialID, PrincipalID: record.PrincipalID, Credential: raw, ExpiresAt: record.ExpiresAt, Scopes: cloneScopes(record.Scopes)}, nil
@@ -257,7 +260,7 @@ func (service *Service) Authenticate(ctx context.Context, request AuthenticateRe
 	service.mu.RLock()
 	defer service.mu.RUnlock()
 	if err := service.cache.Check(ctx); err != nil {
-		return Principal{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return Principal{}, service.fail(ctx, request.Metadata, "credential.authenticate", err)
 	}
 	cacheKey := credentialID + "\x00" + verifier + "\x00" + request.Audience + "\x00" + strings.Join(request.Scopes, " ")
 	now := service.now()
@@ -342,6 +345,9 @@ func (service *Service) Rotate(ctx context.Context, request RotateRequest) (Issu
 		return service.deps.Faults.Check(transactionContext, platformports.CheckpointAfterUseCase)
 	})
 	if err != nil {
+		if errors.Is(err, ErrCredentialConflict) {
+			return service.reconcileIdempotency(ctx, request.Metadata, "credential.rotate", idempotencyDigest, requestDigest)
+		}
 		return IssuedCredential{}, service.classifyMutationFailure(ctx, request.Metadata, "credential.rotate", err)
 	}
 	return IssuedCredential{CredentialID: replacement.CredentialID, PrincipalID: replacement.PrincipalID, Credential: raw, ExpiresAt: replacement.ExpiresAt, Scopes: cloneScopes(replacement.Scopes)}, nil
@@ -519,6 +525,21 @@ func (service *Service) classifyMutationFailure(ctx context.Context, metadata pl
 		return service.reject(ctx, metadata, operation, 409, ErrCredentialConflict)
 	}
 	return service.fail(ctx, metadata, operation, cause)
+}
+
+func (service *Service) reconcileIdempotency(ctx context.Context, metadata platform.RequestMetadata, operation, keyDigest, requestDigest string) (IssuedCredential, error) {
+	existing, err := service.deps.Repository.GetByIdempotencyDigest(ctx, keyDigest)
+	if errors.Is(err, ErrCredentialNotFound) {
+		return IssuedCredential{}, service.reject(ctx, metadata, operation, 409, ErrCredentialConflict)
+	}
+	if err != nil {
+		return IssuedCredential{}, service.fail(ctx, metadata, operation, err)
+	}
+	if existing.IdempotencyRequestDigest != requestDigest {
+		return IssuedCredential{}, service.reject(ctx, metadata, operation, 409, ErrCredentialConflict)
+	}
+	result := IssuedCredential{CredentialID: existing.CredentialID, PrincipalID: existing.PrincipalID, ExpiresAt: existing.ExpiresAt, Scopes: cloneScopes(existing.Scopes)}
+	return result, service.reject(ctx, metadata, operation, 409, ErrSecretUnavailable)
 }
 
 func (service *Service) now() time.Time {
