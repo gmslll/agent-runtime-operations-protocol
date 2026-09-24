@@ -36,9 +36,10 @@
       "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": "7a9f51544407d1a8e3ce7cf5569b2422d7dbdefd51366552a56d3aaf4175191c",
-      "current_sha256": "11bc5a3ca959e85894537d4a23a66984bb1dc84bf65af9f444df9a827de49e10",
+      "current_sha256": "080c5077f0fd55f26c4c10cbdd0ad57c96acea1e0f2ab425bc62b96e5a74b92a",
       "touch_commits": [
-        "c36f4419b565e7bccdb466ae53f8ec7b13f045af"
+        "c36f4419b565e7bccdb466ae53f8ec7b13f045af",
+        "b520fe61a351466602d12bbab98afec57dcc91d3"
       ],
       "artifact_ids": [
         "phase-report-p08",
@@ -53,9 +54,10 @@
       "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": "343954366fdcd8ce97f232f2032ef2064afe1fdef402490269381e4f9607a49d",
-      "current_sha256": "a69a8b34230ae0b89406c91e24ad199d8c036e3991fa9c901c7b8cc0e94b2a98",
+      "current_sha256": "03d839ef056f748605f178b31595dd6f77c1e5a108bea9230fc05860b82886be",
       "touch_commits": [
-        "c36f4419b565e7bccdb466ae53f8ec7b13f045af"
+        "c36f4419b565e7bccdb466ae53f8ec7b13f045af",
+        "b520fe61a351466602d12bbab98afec57dcc91d3"
       ],
       "artifact_ids": [
         "phase-report-p08",
@@ -70,10 +72,12 @@
       "scope": "p10-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "b280064ec01f84d8fdc6c57ca36ccbb90beb6738a5d6136b4032edea990271d6",
+      "current_sha256": "d0fe91fe94903895dbbd0d9063720ce2268e4d8806c4c9a2353c98b31089be84",
       "touch_commits": [
         "3a46df76ddcc8ffb6c45296c00582410f3bdcc8c",
-        "ea0dd41c57776a5611aa796d3c918dfba16b1cef"
+        "ea0dd41c57776a5611aa796d3c918dfba16b1cef",
+        "1bd14c283b032c4ad91293ed299b6bc37eac726d",
+        "7de3959286aba4945f328489b5b62dd79236c0fa"
       ],
       "artifact_ids": [
         "phase-report-p10",
@@ -81,6 +85,40 @@
       ],
       "owner_phases": [
         "P10"
+      ]
+    },
+    {
+      "path": "reference/control-plane/internal/app/platform/httpadapter/http.go",
+      "scope": "early-owned",
+      "change_type": "modify",
+      "baseline_sha256": "5c2eb180242efeabf30b557a018c863aa105c38ae70629856278cd4b6a2ecc11",
+      "current_sha256": "8790ed3afde5c0b5c8c7f9c63df751597a75b98b0ad1b62a918cfd3e82e3f66c",
+      "touch_commits": [
+        "88dcfec55e91d1c296981ffddd46a36677a5e12a"
+      ],
+      "artifact_ids": [
+        "control-plane-platform-foundation",
+        "phase-report-p08"
+      ],
+      "owner_phases": [
+        "P08"
+      ]
+    },
+    {
+      "path": "reference/control-plane/internal/app/platform/httpadapter/http_test.go",
+      "scope": "early-owned",
+      "change_type": "modify",
+      "baseline_sha256": "b69b42cbbbfc03d8e30e6823370a1502c27bba5778997425378ff9e238869ef3",
+      "current_sha256": "13e4eb1b48ef190d0290f2bf2ba9fb390a1b4f2d1ea69a34faf22ae41b735703",
+      "touch_commits": [
+        "88dcfec55e91d1c296981ffddd46a36677a5e12a"
+      ],
+      "artifact_ids": [
+        "control-plane-platform-foundation",
+        "phase-report-p08"
+      ],
+      "owner_phases": [
+        "P08"
       ]
     },
     {
@@ -108,13 +146,15 @@
       "scope": "p10-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "3ba4943415e4286447996b0a74caaf42101b9c7bdaf3d2e7e4aa5b1fc404c370",
+      "current_sha256": "dc3a10457451d2b50fccb347102020a8bf68abb660d9078bb66b8666894ea8cd",
       "touch_commits": [
         "e36aca311db1d6e43c552c1157d5bcfefa5e2b9e",
         "7fcc6501cb116e2026a22e55d5a5e2876522d2dd",
         "8e1f0f945a81dd84026a60369444538c656bc32c",
         "b4a1d29fdf4209cdc495e10d19f70b19291ccc1b",
-        "9458050282af725b02c990248e92f77943f2fcf3"
+        "9458050282af725b02c990248e92f77943f2fcf3",
+        "1b0a35cca93e8daac096352d0da4e4df90902ab7",
+        "7538f74cc4d5d7e54eeb85c9bcd744941fed8e58"
       ],
       "artifact_ids": [
         "credential-store",
@@ -129,11 +169,13 @@
       "scope": "p10-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "ef85b4584dc397ae08b0589a3ab989dcb364844b65e155c1c487506ce2663ad0",
+      "current_sha256": "8705e72955b7cc5a47c1abe29497c88bd62aab22597b13bb5bb3242c0575a121",
       "touch_commits": [
         "e36aca311db1d6e43c552c1157d5bcfefa5e2b9e",
         "7fcc6501cb116e2026a22e55d5a5e2876522d2dd",
-        "5566927dedec156b863e601c4c122ce01cb58506"
+        "5566927dedec156b863e601c4c122ce01cb58506",
+        "1b0a35cca93e8daac096352d0da4e4df90902ab7",
+        "7538f74cc4d5d7e54eeb85c9bcd744941fed8e58"
       ],
       "artifact_ids": [
         "identity-service",
@@ -199,9 +241,10 @@
       "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": "ac1333c68dafc71c48cc38fd51e02011d536e1af22fb68af32d3165614ad8216",
-      "current_sha256": "3bc7b71fb50aaddbd18d51dc8b80ba5bf9e77141c89a6f1059adc472e17dc5bf",
+      "current_sha256": "4053351f895f4da54c4363354be5b24d331cafd088cec85165a70f609ff06ed9",
       "touch_commits": [
-        "c36f4419b565e7bccdb466ae53f8ec7b13f045af"
+        "c36f4419b565e7bccdb466ae53f8ec7b13f045af",
+        "b520fe61a351466602d12bbab98afec57dcc91d3"
       ],
       "artifact_ids": [
         "migration-engine",
@@ -275,10 +318,11 @@
       "scope": "p10-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "7fc1890df04c694bf16db3947651f52a01cfe4e912fc3a50a98b3a5cfac1a281",
+      "current_sha256": "5d0211ac031d98dd3760701bc19dddd2d96d67cfc74dc5140db6b18ddda75dde",
       "touch_commits": [
         "b8121c6691868ca7219b3df1593fca61966e5248",
-        "e81efec8419627da0d8952e7fec1a28d4836f5c3"
+        "e81efec8419627da0d8952e7fec1a28d4836f5c3",
+        "484b3708621e7061b4c03d6f5987228ce56fcbc6"
       ],
       "artifact_ids": [
         "phase-report-p10",
@@ -293,10 +337,11 @@
       "scope": "p10-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "a90c0ad3cbec2bd538e995acd6e9feb1d2d1d3745d6167dce21cfb3e28cbce3f",
+      "current_sha256": "192ce590834794c68be040237a7611eed2631edf166d6c9fbd9930e63a1cf6ce",
       "touch_commits": [
         "b8121c6691868ca7219b3df1593fca61966e5248",
-        "e81efec8419627da0d8952e7fec1a28d4836f5c3"
+        "e81efec8419627da0d8952e7fec1a28d4836f5c3",
+        "484b3708621e7061b4c03d6f5987228ce56fcbc6"
       ],
       "artifact_ids": [
         "phase-report-p10",
@@ -323,10 +368,12 @@
       "scope": "static-only",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "ae48f922afd978a931e09bb4b922b636fea5402c970f08f86db7f0b2c711c0db",
+      "current_sha256": "1796fa305cc93dacb82c971058e8bda6574ba222694b59bfbeb6f67638ebbfcd",
       "touch_commits": [
         "3a46df76ddcc8ffb6c45296c00582410f3bdcc8c",
-        "ea0dd41c57776a5611aa796d3c918dfba16b1cef"
+        "ea0dd41c57776a5611aa796d3c918dfba16b1cef",
+        "1bd14c283b032c4ad91293ed299b6bc37eac726d",
+        "7de3959286aba4945f328489b5b62dd79236c0fa"
       ]
     },
     {
@@ -334,14 +381,16 @@
       "scope": "static-only",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "2ed6d2cf05c6500cccf325b1be7e39419dfe8cb802200b1e497e7389a9dea5a6",
+      "current_sha256": "51d5c15e3765ef5055ae721b125169618a5144c6d423bbdb330084c34f2b407e",
       "touch_commits": [
         "e36aca311db1d6e43c552c1157d5bcfefa5e2b9e",
         "7fcc6501cb116e2026a22e55d5a5e2876522d2dd",
         "5566927dedec156b863e601c4c122ce01cb58506",
         "8e1f0f945a81dd84026a60369444538c656bc32c",
         "b4a1d29fdf4209cdc495e10d19f70b19291ccc1b",
-        "9458050282af725b02c990248e92f77943f2fcf3"
+        "9458050282af725b02c990248e92f77943f2fcf3",
+        "1b0a35cca93e8daac096352d0da4e4df90902ab7",
+        "7538f74cc4d5d7e54eeb85c9bcd744941fed8e58"
       ]
     },
     {
@@ -349,10 +398,11 @@
       "scope": "static-only",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "e6e87ac65e2cae88b7f4bddf80b6bfba122d60bc2fa6e63f5e1c704a0f084f5e",
+      "current_sha256": "185bc6e66195d7d1e130790081781034040fbbd9714e5764ce61060f99478d29",
       "touch_commits": [
         "b8121c6691868ca7219b3df1593fca61966e5248",
-        "e81efec8419627da0d8952e7fec1a28d4836f5c3"
+        "e81efec8419627da0d8952e7fec1a28d4836f5c3",
+        "484b3708621e7061b4c03d6f5987228ce56fcbc6"
       ]
     },
     {
@@ -360,11 +410,13 @@
       "scope": "static-only",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "c8166f079d90a466fbcceada257226f946471f6beb2cb4758e58f0914e07e609",
+      "current_sha256": "a2e0d3272f965d20e5289019e753e5bd29ef5e994a59846523305a3cbe79078c",
       "touch_commits": [
         "e36aca311db1d6e43c552c1157d5bcfefa5e2b9e",
         "7fcc6501cb116e2026a22e55d5a5e2876522d2dd",
-        "5566927dedec156b863e601c4c122ce01cb58506"
+        "5566927dedec156b863e601c4c122ce01cb58506",
+        "1b0a35cca93e8daac096352d0da4e4df90902ab7",
+        "7538f74cc4d5d7e54eeb85c9bcd744941fed8e58"
       ]
     },
     {
@@ -372,10 +424,11 @@
       "scope": "static-only",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "ad0206e8028166a0dc85124ced89f8bf3ce2ffcca9faac209969fadb64eac154",
+      "current_sha256": "6a36de5d56777436fb1853ad29f74c30852905c0d94b3111bb93a56af50a7dca",
       "touch_commits": [
         "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126",
-        "665b757506180b43fa0f3a248b34605e220d1eb9"
+        "665b757506180b43fa0f3a248b34605e220d1eb9",
+        "b520fe61a351466602d12bbab98afec57dcc91d3"
       ]
     },
     {
@@ -383,9 +436,10 @@
       "scope": "static-only",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "2d99acfd32e440a2945fde677bbc769584ae4f22c6b013f3025d925ef1befd14",
+      "current_sha256": "899e7e00a0d5f17278d9208af58c41285a2ef609a63ffa142147ccd0d58fd2b0",
       "touch_commits": [
-        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126"
+        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126",
+        "b520fe61a351466602d12bbab98afec57dcc91d3"
       ]
     },
     {
