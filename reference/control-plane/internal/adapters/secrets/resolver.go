@@ -130,6 +130,10 @@ func (resolver *Resolver) Use(ctx context.Context, request secretports.ResolveRe
 		return secretports.ErrDenied
 	}
 	if err := invoke(callback, secretports.NewView(value)); err != nil {
+		// The callback boundary ends the only authorized lifetime of the
+		// plaintext. Clear it before any diagnostic I/O, which may block or
+		// fail independently of the callback.
+		zero(value)
 		if observeErr := resolver.observeOperation(resolveCtx, request, startedAt, auditCallbackFailureOperation, observability.OutcomeFailed, 500); observeErr != nil {
 			return secretports.ErrUnavailable
 		}

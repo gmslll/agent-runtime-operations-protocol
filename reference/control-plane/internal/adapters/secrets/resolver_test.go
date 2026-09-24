@@ -173,9 +173,15 @@ func TestResolverPanicIsSanitizedAndStorageIsZeroed(t *testing.T) {
 }
 
 func TestResolverCallbackFailureAuditFailureFailsClosedAndZeroesStorage(t *testing.T) {
-	writer := &captureWriter{failAt: 2}
-	resolver := newResolver(t, []Binding{validBinding(valueProvider())}, writer, nil)
 	var storage []byte
+	var attempts atomic.Int64
+	writer := &captureWriter{failAt: 2, hook: func(context.Context) error {
+		if attempts.Add(1) == 2 {
+			assertZeroed(t, storage)
+		}
+		return nil
+	}}
+	resolver := newResolver(t, []Binding{validBinding(valueProvider())}, writer, nil)
 	err := resolver.Use(context.Background(), validRequest(), func(view secretports.SecretView) error {
 		storage = view.Bytes()
 		return errors.New(sentinel)
@@ -189,6 +195,45 @@ func TestResolverCallbackFailureAuditFailureFailsClosedAndZeroesStorage(t *testi
 		t.Fatalf("unexpected persisted audit prefix after second append failed: entries=%+v spans=%+v", entries, spans)
 	}
 	assertNoSecretInObservations(t, entries, spans)
+}
+
+func TestResolverZeroesStorageBeforeCallbackFailureAuditCanBlock(t *testing.T) {
+	var storage []byte
+	var attempts atomic.Int64
+	secondAuditEntered := make(chan struct{})
+	secondAuditZeroed := make(chan bool, 1)
+	releaseSecondAudit := make(chan struct{})
+	writer := &captureWriter{hook: func(context.Context) error {
+		if attempts.Add(1) == 2 {
+			zeroed := storageIsZeroed(storage)
+			secondAuditZeroed <- zeroed
+			close(secondAuditEntered)
+			<-releaseSecondAudit
+			if !zeroed {
+				return errors.New("callback storage remained live during failure audit")
+			}
+		}
+		return nil
+	}}
+	resolver := newResolver(t, []Binding{validBinding(valueProvider())}, writer, nil)
+	result := make(chan error, 1)
+	go func() {
+		result <- resolver.Use(context.Background(), validRequest(), func(view secretports.SecretView) error {
+			storage = view.Bytes()
+			return errors.New(sentinel)
+		})
+	}()
+	<-secondAuditEntered
+	zeroedInHook := <-secondAuditZeroed
+	zeroedWhileBlocked := storageIsZeroed(storage)
+	close(releaseSecondAudit)
+	if !zeroedInHook || !zeroedWhileBlocked {
+		t.Fatal("callback storage was not zeroed before the failure audit blocked")
+	}
+	if err := <-result; !errors.Is(err, secretports.ErrUnavailable) || containsText(err.Error(), sentinel) {
+		t.Fatalf("blocked callback failure audit returned unsafe result: %v", err)
+	}
+	assertCallbackFailureAudit(t, writer)
 }
 
 func TestResolverDeadlineCancellationAndExpiry(t *testing.T) {
@@ -531,6 +576,15 @@ func assertZeroed(t *testing.T, value []byte) {
 			t.Fatalf("secret storage byte %d was not zeroed", index)
 		}
 	}
+}
+
+func storageIsZeroed(value []byte) bool {
+	for _, item := range value {
+		if item != 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func assertCallbackFailureAudit(t *testing.T, writer *captureWriter) {
