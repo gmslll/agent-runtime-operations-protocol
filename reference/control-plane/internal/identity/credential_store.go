@@ -261,3 +261,373 @@ func credentialWriteError(operation string, err error) error {
 }
 
 var _ CredentialRepository = (*CredentialStore)(nil)
+
+// VerifySchema returns the production identity schema verifier composed into
+// the P09 migration runner. Errors intentionally identify only the failed
+// contract boundary; catalog SQL and database diagnostics are not exposed.
+func VerifySchema(dialect migrate.Dialect) migrate.Verifier {
+	return func(ctx context.Context, queryer migrate.Queryer) error {
+		if dialect == migrate.DialectSQLite {
+			return verifySQLiteIdentitySchema(ctx, queryer)
+		}
+		if dialect == migrate.DialectPostgres {
+			return verifyPostgresIdentitySchema(ctx, queryer)
+		}
+		return errors.New("identity schema dialect is unsupported")
+	}
+}
+
+type identityColumn struct {
+	name, dataType string
+	notNull        bool
+	primaryKey     int
+}
+
+var identityTables = map[string][]identityColumn{
+	"arop_dev_principals": {
+		{"principal_id", "TEXT", true, 1}, {"subject_id", "TEXT", true, 0},
+		{"status", "TEXT", true, 0}, {"created_at_ns", "INTEGER", true, 0},
+		{"updated_at_ns", "INTEGER", true, 0}, {"revision", "INTEGER", true, 0},
+	},
+	"arop_credentials": {
+		{"credential_id", "TEXT", true, 1}, {"principal_id", "TEXT", true, 0},
+		{"credential_kind", "TEXT", true, 0}, {"audience", "TEXT", true, 0},
+		{"scope_canonical", "TEXT", true, 0}, {"secret_verifier", "TEXT", true, 0},
+		{"issued_at_ns", "INTEGER", true, 0}, {"not_before_at_ns", "INTEGER", true, 0},
+		{"expires_at_ns", "INTEGER", true, 0}, {"status", "TEXT", true, 0},
+		{"revoked_at_ns", "INTEGER", false, 0}, {"replaced_at_ns", "INTEGER", false, 0},
+		{"replacement_credential_id", "TEXT", false, 0}, {"revision", "INTEGER", true, 0},
+		{"idempotency_key_digest", "TEXT", true, 0}, {"idempotency_request_digest", "TEXT", true, 0},
+	},
+}
+
+var identityConstraintFragments = map[string][]string{
+	"arop_dev_principals": {
+		"constraintarop_dev_principals_pkeyprimarykey(principal_id)",
+		"constraintarop_dev_principals_subject_uniqueunique(subject_id)",
+		"constraintarop_dev_principals_principal_id_checkcheck(length(principal_id)between1and200)",
+		"constraintarop_dev_principals_subject_id_checkcheck(length(subject_id)between1and200)",
+		"constraintarop_dev_principals_status_checkcheck(statusin('active','disabled'))",
+		"constraintarop_dev_principals_created_checkcheck(created_at_ns>0)",
+		"constraintarop_dev_principals_updated_checkcheck(updated_at_ns>=created_at_ns)",
+		"constraintarop_dev_principals_revision_checkcheck(revision>0)",
+	},
+	"arop_credentials": {
+		"constraintarop_credentials_pkeyprimarykey(credential_id)",
+		"constraintarop_credentials_principal_fkeyforeignkey(principal_id)referencesarop_dev_principals(principal_id)onupdaterestrictondeleterestrict",
+		"constraintarop_credentials_replacement_fkeyforeignkey(replacement_credential_id)referencesarop_credentials(credential_id)onupdaterestrictondeleterestrictdeferrableinitiallydeferred",
+		"constraintarop_credentials_verifier_uniqueunique(secret_verifier)",
+		"constraintarop_credentials_idempotency_uniqueunique(idempotency_key_digest)",
+		"constraintarop_credentials_replacement_uniqueunique(replacement_credential_id)",
+		"constraintarop_credentials_id_checkcheck(length(credential_id)between1and200)",
+		"constraintarop_credentials_kind_checkcheck(length(credential_kind)between1and100)",
+		"constraintarop_credentials_audience_checkcheck(length(audience)between1and500)",
+		"constraintarop_credentials_scope_checkcheck(length(scope_canonical)between1and4096)",
+		"constraintarop_credentials_verifier_checkcheck(length(secret_verifier)=64andsecret_verifiernotglob'*[^0-9a-f]*')",
+		"constraintarop_credentials_idempotency_checkcheck(length(idempotency_key_digest)=64andidempotency_key_digestnotglob'*[^0-9a-f]*')",
+		"constraintarop_credentials_idempotency_request_checkcheck(length(idempotency_request_digest)=64andidempotency_request_digestnotglob'*[^0-9a-f]*')",
+		"constraintarop_credentials_time_checkcheck(issued_at_ns>0andnot_before_at_ns>=issued_at_nsandexpires_at_ns>not_before_at_ns)",
+		"constraintarop_credentials_status_checkcheck(statusin('active','revoked','replaced'))",
+		"constraintarop_credentials_lifecycle_checkcheck((status='active'andrevoked_at_nsisnullandreplaced_at_nsisnullandreplacement_credential_idisnull)or(status='revoked'andrevoked_at_nsisnotnullandrevoked_at_ns>=issued_at_nsandreplaced_at_nsisnullandreplacement_credential_idisnull)or(status='replaced'andrevoked_at_nsisnullandreplaced_at_nsisnotnullandreplaced_at_ns>=issued_at_nsandreplacement_credential_idisnotnullandreplacement_credential_id<>credential_id))",
+		"constraintarop_credentials_revision_checkcheck(revision>0)",
+	},
+}
+
+func verifySQLiteIdentitySchema(ctx context.Context, queryer migrate.Queryer) error {
+	for table, expected := range identityTables {
+		if err := verifySQLiteIdentityColumns(ctx, queryer, table, expected); err != nil {
+			return err
+		}
+		var ddl string
+		if err := queryer.QueryRowContext(ctx, `SELECT sql FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&ddl); err != nil {
+			return errors.New("SQLite identity table is missing")
+		}
+		compact := compactIdentitySQL(ddl)
+		for _, fragment := range identityConstraintFragments[table] {
+			if !strings.Contains(compact, fragment) {
+				return errors.New("SQLite identity constraints are not exact")
+			}
+		}
+	}
+	if err := verifySQLiteIdentityForeignKeys(ctx, queryer); err != nil {
+		return err
+	}
+	return verifySQLiteIdentityIndexes(ctx, queryer)
+}
+
+func verifySQLiteIdentityColumns(ctx context.Context, queryer migrate.Queryer, table string, expected []identityColumn) error {
+	rows, err := queryer.QueryContext(ctx, `PRAGMA table_info('`+table+`')`)
+	if err != nil {
+		return errors.New("inspect SQLite identity columns")
+	}
+	defer rows.Close()
+	index := 0
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, dataType string
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &name, &dataType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return errors.New("scan SQLite identity columns")
+		}
+		if index >= len(expected) || cid != index || name != expected[index].name || strings.ToUpper(dataType) != expected[index].dataType || (notNull != 0) != expected[index].notNull || primaryKey != expected[index].primaryKey || defaultValue.Valid {
+			return errors.New("SQLite identity columns are not exact")
+		}
+		index++
+	}
+	if rows.Err() != nil || index != len(expected) {
+		return errors.New("SQLite identity columns are not exact")
+	}
+	return nil
+}
+
+func verifySQLiteIdentityForeignKeys(ctx context.Context, queryer migrate.Queryer) error {
+	rows, err := queryer.QueryContext(ctx, `PRAGMA foreign_key_list('arop_credentials')`)
+	if err != nil {
+		return errors.New("inspect SQLite identity foreign keys")
+	}
+	defer rows.Close()
+	found := map[string]string{}
+	for rows.Next() {
+		var id, sequence int
+		var table, from, to, onUpdate, onDelete, match string
+		if err := rows.Scan(&id, &sequence, &table, &from, &to, &onUpdate, &onDelete, &match); err != nil {
+			return errors.New("scan SQLite identity foreign keys")
+		}
+		if sequence != 0 || strings.ToUpper(onUpdate) != "RESTRICT" || strings.ToUpper(onDelete) != "RESTRICT" {
+			return errors.New("SQLite identity foreign keys are not exact")
+		}
+		found[from] = table + "." + to
+	}
+	if rows.Err() != nil || len(found) != 2 || found["principal_id"] != "arop_dev_principals.principal_id" || found["replacement_credential_id"] != "arop_credentials.credential_id" {
+		return errors.New("SQLite identity foreign keys are not exact")
+	}
+	return nil
+}
+
+func verifySQLiteIdentityIndexes(ctx context.Context, queryer migrate.Queryer) error {
+	expected := map[string][]string{
+		"arop_credentials_principal_status_expiry_idx": {"principal_id", "status", "expires_at_ns"},
+		"arop_credentials_audience_status_expiry_idx":  {"audience", "status", "expires_at_ns"},
+	}
+	rows, err := queryer.QueryContext(ctx, `PRAGMA index_list('arop_credentials')`)
+	if err != nil {
+		return errors.New("inspect SQLite identity indexes")
+	}
+	defer rows.Close()
+	found := map[string]bool{}
+	uniqueColumns := map[string]bool{}
+	for rows.Next() {
+		var sequence, unique, partial int
+		var name, origin string
+		if err := rows.Scan(&sequence, &name, &unique, &origin, &partial); err != nil {
+			return errors.New("scan SQLite identity indexes")
+		}
+		columns, ok := expected[name]
+		if origin == "c" {
+			if !ok || unique != 0 || partial != 0 || !verifySQLiteIndexColumns(ctx, queryer, name, columns) {
+				return errors.New("SQLite identity indexes are not exact")
+			}
+			found[name] = true
+		} else if origin == "u" {
+			columns := sqliteIndexColumns(ctx, queryer, name)
+			if unique != 1 || partial != 0 || len(columns) != 1 {
+				return errors.New("SQLite identity unique constraints are not exact")
+			}
+			uniqueColumns[columns[0]] = true
+		}
+	}
+	if rows.Err() != nil || len(found) != len(expected) {
+		return errors.New("SQLite identity indexes are not exact")
+	}
+	for _, column := range []string{"secret_verifier", "idempotency_key_digest", "replacement_credential_id"} {
+		if !uniqueColumns[column] {
+			return errors.New("SQLite identity unique constraints are not exact")
+		}
+	}
+	return nil
+}
+
+func verifySQLiteIndexColumns(ctx context.Context, queryer migrate.Queryer, name string, expected []string) bool {
+	columns := sqliteIndexColumns(ctx, queryer, name)
+	if len(columns) != len(expected) {
+		return false
+	}
+	for index := range expected {
+		if columns[index] != expected[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func sqliteIndexColumns(ctx context.Context, queryer migrate.Queryer, name string) []string {
+	rows, err := queryer.QueryContext(ctx, `SELECT name FROM pragma_index_info(?) ORDER BY seqno`, name)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var columns []string
+	for rows.Next() {
+		var column string
+		if rows.Scan(&column) != nil {
+			return nil
+		}
+		columns = append(columns, column)
+	}
+	if rows.Err() != nil {
+		return nil
+	}
+	return columns
+}
+
+func verifyPostgresIdentitySchema(ctx context.Context, queryer migrate.Queryer) error {
+	for table, sqliteColumns := range identityTables {
+		rows, err := queryer.QueryContext(ctx, `SELECT column_name,data_type,is_nullable FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=$1 ORDER BY ordinal_position`, table)
+		if err != nil {
+			return errors.New("inspect PostgreSQL identity columns")
+		}
+		index := 0
+		for rows.Next() {
+			var name, dataType, nullable string
+			if rows.Scan(&name, &dataType, &nullable) != nil || index >= len(sqliteColumns) {
+				rows.Close()
+				return errors.New("PostgreSQL identity columns are not exact")
+			}
+			expectedType := "text"
+			if sqliteColumns[index].dataType == "INTEGER" {
+				expectedType = "bigint"
+			}
+			if name != sqliteColumns[index].name || dataType != expectedType || (nullable == "NO") != sqliteColumns[index].notNull {
+				rows.Close()
+				return errors.New("PostgreSQL identity columns are not exact")
+			}
+			index++
+		}
+		if rows.Close() != nil || index != len(sqliteColumns) {
+			return errors.New("PostgreSQL identity columns are not exact")
+		}
+	}
+	if err := verifyPostgresIdentityConstraints(ctx, queryer); err != nil {
+		return err
+	}
+	return verifyPostgresIdentityIndexes(ctx, queryer)
+}
+
+func verifyPostgresIdentityConstraints(ctx context.Context, queryer migrate.Queryer) error {
+	expected := map[string]byte{
+		"arop_dev_principals_pkey": 'p', "arop_dev_principals_subject_unique": 'u',
+		"arop_dev_principals_principal_id_check": 'c', "arop_dev_principals_subject_id_check": 'c',
+		"arop_dev_principals_status_check": 'c', "arop_dev_principals_created_check": 'c',
+		"arop_dev_principals_updated_check": 'c', "arop_dev_principals_revision_check": 'c',
+		"arop_credentials_pkey": 'p', "arop_credentials_principal_fkey": 'f',
+		"arop_credentials_replacement_fkey": 'f', "arop_credentials_verifier_unique": 'u',
+		"arop_credentials_idempotency_unique": 'u', "arop_credentials_replacement_unique": 'u',
+		"arop_credentials_id_check": 'c', "arop_credentials_kind_check": 'c',
+		"arop_credentials_audience_check": 'c', "arop_credentials_scope_check": 'c',
+		"arop_credentials_verifier_check": 'c', "arop_credentials_idempotency_check": 'c',
+		"arop_credentials_idempotency_request_check": 'c', "arop_credentials_time_check": 'c',
+		"arop_credentials_status_check": 'c', "arop_credentials_lifecycle_check": 'c',
+		"arop_credentials_revision_check": 'c',
+	}
+	rows, err := queryer.QueryContext(ctx, `SELECT c.conname,c.contype,pg_get_constraintdef(c.oid,false) FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace WHERE n.nspname=current_schema() AND t.relname IN ('arop_dev_principals','arop_credentials')`)
+	if err != nil {
+		return errors.New("inspect PostgreSQL identity constraints")
+	}
+	defer rows.Close()
+	found := map[string]string{}
+	for rows.Next() {
+		var name, kind, definition string
+		if rows.Scan(&name, &kind, &definition) != nil || len(kind) != 1 || expected[name] != kind[0] {
+			return errors.New("PostgreSQL identity constraints are not exact")
+		}
+		found[name] = compactIdentitySQL(definition)
+	}
+	if rows.Err() != nil || len(found) != len(expected) {
+		return errors.New("PostgreSQL identity constraints are not exact")
+	}
+	for name := range expected {
+		if _, ok := found[name]; !ok {
+			return errors.New("PostgreSQL identity constraints are not exact")
+		}
+	}
+	structure := map[string][]string{
+		"arop_dev_principals_pkey":            {"primarykey(principal_id)"},
+		"arop_dev_principals_subject_unique":  {"unique(subject_id)"},
+		"arop_credentials_pkey":               {"primarykey(credential_id)"},
+		"arop_credentials_principal_fkey":     {"foreignkey(principal_id)", "referencesarop_dev_principals(principal_id)", "onupdaterestrict", "ondeleterestrict"},
+		"arop_credentials_replacement_fkey":   {"foreignkey(replacement_credential_id)", "referencesarop_credentials(credential_id)", "onupdaterestrict", "ondeleterestrict", "deferrableinitiallydeferred"},
+		"arop_credentials_verifier_unique":    {"unique(secret_verifier)"},
+		"arop_credentials_idempotency_unique": {"unique(idempotency_key_digest)"},
+		"arop_credentials_replacement_unique": {"unique(replacement_credential_id)"},
+	}
+	for name, fragments := range structure {
+		for _, fragment := range fragments {
+			if !strings.Contains(found[name], fragment) {
+				return errors.New("PostgreSQL identity key constraints are not exact")
+			}
+		}
+	}
+	checks := map[string][]string{
+		"arop_dev_principals_principal_id_check":     {"principal_id", "length", ">=1", "<=200"},
+		"arop_dev_principals_subject_id_check":       {"subject_id", "length", ">=1", "<=200"},
+		"arop_dev_principals_status_check":           {"status", "'active'", "'disabled'"},
+		"arop_dev_principals_created_check":          {"created_at_ns>0"},
+		"arop_dev_principals_updated_check":          {"updated_at_ns>=created_at_ns"},
+		"arop_dev_principals_revision_check":         {"revision>0"},
+		"arop_credentials_id_check":                  {"credential_id", "length", ">=1", "<=200"},
+		"arop_credentials_kind_check":                {"credential_kind", "length", ">=1", "<=100"},
+		"arop_credentials_audience_check":            {"audience", "length", ">=1", "<=500"},
+		"arop_credentials_scope_check":               {"scope_canonical", "length", ">=1", "<=4096"},
+		"arop_credentials_verifier_check":            {"secret_verifier", "^[0-9a-f]{64}$"},
+		"arop_credentials_idempotency_check":         {"idempotency_key_digest", "^[0-9a-f]{64}$"},
+		"arop_credentials_idempotency_request_check": {"idempotency_request_digest", "^[0-9a-f]{64}$"},
+		"arop_credentials_time_check":                {"issued_at_ns>0", "not_before_at_ns>=issued_at_ns", "expires_at_ns>not_before_at_ns"},
+		"arop_credentials_status_check":              {"status", "'active'", "'revoked'", "'replaced'"},
+		"arop_credentials_lifecycle_check":           {"status='active'", "status='revoked'", "status='replaced'", "replacement_credential_id<>credential_id"},
+		"arop_credentials_revision_check":            {"revision>0"},
+	}
+	for name, fragments := range checks {
+		for _, fragment := range fragments {
+			if !strings.Contains(found[name], fragment) {
+				return errors.New("PostgreSQL identity constraints are not exact")
+			}
+		}
+	}
+	return nil
+}
+
+func verifyPostgresIdentityIndexes(ctx context.Context, queryer migrate.Queryer) error {
+	expected := map[string][]string{
+		"arop_credentials_principal_status_expiry_idx": {"principal_id", "status", "expires_at_ns"},
+		"arop_credentials_audience_status_expiry_idx":  {"audience", "status", "expires_at_ns"},
+	}
+	rows, err := queryer.QueryContext(ctx, `SELECT indexname,indexdef FROM pg_indexes WHERE schemaname=current_schema() AND tablename='arop_credentials' AND indexname LIKE 'arop_credentials_%_idx' ORDER BY indexname`)
+	if err != nil {
+		return errors.New("inspect PostgreSQL identity indexes")
+	}
+	defer rows.Close()
+	found := 0
+	for rows.Next() {
+		var name, definition string
+		if rows.Scan(&name, &definition) != nil {
+			return errors.New("scan PostgreSQL identity indexes")
+		}
+		columns, ok := expected[name]
+		compact := compactIdentitySQL(definition)
+		if !ok || !strings.Contains(compact, "("+strings.Join(columns, ",")+")") {
+			return errors.New("PostgreSQL identity indexes are not exact")
+		}
+		found++
+	}
+	if rows.Err() != nil || found != len(expected) {
+		return errors.New("PostgreSQL identity indexes are not exact")
+	}
+	return nil
+}
+
+func compactIdentitySQL(value string) string {
+	value = strings.ToLower(value)
+	value = strings.NewReplacer(" ", "", "\n", "", "\r", "", "\t", "", `"`, "").Replace(value)
+	value = strings.ReplaceAll(value, "::text", "")
+	return value
+}
