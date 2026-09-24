@@ -36,6 +36,7 @@ const (
 	expectedCommand = "make test-control-plane-platform"
 	checkerPath     = "reference/control-plane/internal/app/platform/testdata/harness/main.go"
 	reportPath      = "build/reports/P08/report.json"
+	p10WaiverPath   = "reference/control-plane/internal/identity/testdata/transition/p10-baseline-transition-waiver.json"
 	nestedModule    = "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane"
 	rootModule      = "github.com/gmslll/agent-runtime-operations-protocol"
 )
@@ -87,6 +88,7 @@ var ownerDirectories = []string{
 
 var p09CompositionInputs = []string{
 	"reference/control-plane/internal/storage/migrate/testdata/engine-versions/baseline-transition-waiver.json",
+	p10WaiverPath,
 	"reference/control-plane/migrations/postgres/0001_base.sql",
 	"reference/control-plane/migrations/sqlite/0001_base.sql",
 }
@@ -206,6 +208,115 @@ type treeEntry struct {
 	Path   string
 }
 
+type p10WaiverView struct {
+	SchemaVersion int    `json:"schema_version"`
+	WaiverID      string `json:"waiver_id"`
+	Status        string `json:"status"`
+	Policy        struct {
+		OwnerPhaseSemantics  string `json:"owner_phase_semantics"`
+		OwnershipTransferred bool   `json:"ownership_transferred"`
+	} `json:"policy"`
+	Transition struct {
+		FromPhases []string `json:"from_phases"`
+		ToPhase    string   `json:"to_phase"`
+		Reason     string   `json:"reason"`
+	} `json:"transition"`
+	AffectedArtifacts []string `json:"affected_artifacts"`
+	SourceClosure     []struct {
+		Path           string   `json:"path"`
+		ChangeType     string   `json:"change_type"`
+		BaselineSHA256 *string  `json:"baseline_sha256"`
+		CurrentSHA256  *string  `json:"current_sha256"`
+		ArtifactIDs    []string `json:"artifact_ids"`
+		OwnerPhases    []string `json:"owner_phases"`
+	} `json:"source_closure"`
+	Acceptance []struct {
+		Phase   string `json:"phase"`
+		Command string `json:"command"`
+		Report  string `json:"report"`
+	} `json:"acceptance"`
+	Constraints []string `json:"constraints"`
+}
+
+func loadP10WaiverView(root string) (p10WaiverView, error) {
+	data, err := readRegular(root, p10WaiverPath)
+	if err != nil {
+		return p10WaiverView{}, err
+	}
+	if _, err := structuredfile.Parse(data, ".json"); err != nil {
+		return p10WaiverView{}, fmt.Errorf("strict parse P10 waiver: %w", err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var waiver p10WaiverView
+	if err := decoder.Decode(&waiver); err != nil {
+		return p10WaiverView{}, fmt.Errorf("strict decode P10 waiver: %w", err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return p10WaiverView{}, errors.New("P10 waiver contains trailing JSON")
+		}
+		return p10WaiverView{}, err
+	}
+	return waiver, nil
+}
+
+func verifyP10TransitionDeclaration(root string) error {
+	waiver, err := loadP10WaiverView(root)
+	if err != nil {
+		return err
+	}
+	if waiver.SchemaVersion != 1 || waiver.WaiverID != "P10-P08-P09-BASELINE-TRANSITION-001" || (waiver.Status != "declared" && waiver.Status != "validated") {
+		return errors.New("P10 waiver identity/version/status mismatch")
+	}
+	if waiver.Policy.OwnerPhaseSemantics != "first-introduction-and-accountability" || waiver.Policy.OwnershipTransferred || !reflect.DeepEqual(waiver.Transition.FromPhases, []string{"P08", "P09"}) || waiver.Transition.ToPhase != "P10" || waiver.Transition.Reason == "" {
+		return errors.New("P10 waiver transition or ownership policy mismatch")
+	}
+	wantAcceptance := [][3]string{{"P08", "make test-control-plane-platform", "build/reports/P08/report.json"}, {"P09", "make test-storage-migrations", "build/reports/P09/report.json"}, {"P10", "make test-identity-secrets", "build/reports/P10/report.json"}}
+	if len(waiver.Acceptance) != len(wantAcceptance) {
+		return errors.New("P10 waiver acceptance length mismatch")
+	}
+	for index, want := range wantAcceptance {
+		got := waiver.Acceptance[index]
+		if got.Phase != want[0] || got.Command != want[1] || got.Report != want[2] {
+			return errors.New("P10 waiver acceptance binding mismatch")
+		}
+	}
+	required := []string{"control-plane-platform-foundation", "phase-report-p08", "reference-control-plane-server"}
+	for _, artifact := range required {
+		found := false
+		for _, got := range waiver.AffectedArtifacts {
+			if got == artifact {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("P10 waiver misses P08 artifact %s", artifact)
+		}
+	}
+	info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(p10WaiverPath)))
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0o644 {
+		return errors.New("P10 waiver must be regular mode 0644")
+	}
+	return nil
+}
+
+func p10AllowsPackage(root, importPath string) bool {
+	waiver, err := loadP10WaiverView(root)
+	if err != nil || waiver.Status != "validated" || !strings.HasPrefix(importPath, nestedModule+"/") {
+		return false
+	}
+	directory := "reference/control-plane/" + strings.TrimPrefix(importPath, nestedModule+"/")
+	for _, source := range waiver.SourceClosure {
+		if source.ChangeType != "delete" && strings.HasPrefix(source.Path, directory+"/") && strings.HasSuffix(source.Path, ".go") {
+			return true
+		}
+	}
+	return false
+}
+
 func main() {
 	root, err := structuredfile.FindRoot(".")
 	fatal(err)
@@ -229,6 +340,7 @@ func main() {
 	add("exact-command", commandErr, expectedCommand)
 
 	add("p08-owner-boundary", requireOwnerDirectories(root), "the four P08 owner roots and their required platform subpackages exist as real directories")
+	add("p10-transition-declaration", verifyP10TransitionDeclaration(root), "the P10-owned transition declaration is strict, owner-preserving, and binds P08/P09/P10 acceptance before later closure expansion is allowed")
 	add("p05-baseline-unchanged", verifyFrozenInputs(root), "nested module/workspace and internal/server P05 baselines are byte-identical")
 	add("production-import-boundary", verifyProductionImports(root), "P08 production imports stay within stdlib and exact P08 packages, with cmd/aropd alone allowed the approved P09 storage assembly imports")
 	add("trace-validator-reuse", verifyTraceValidatorReuse(root), "request metadata uses the root core TraceContext validator without a copied trace regex or validator")
@@ -398,6 +510,9 @@ func verifyProductionImports(root string) error {
 					continue
 				}
 				if !allowedByDirectory[relativeRoot][value] {
+					if relativeRoot == "reference/control-plane/cmd/aropd" && p10AllowsPackage(root, value) {
+						continue
+					}
 					relative, _ := filepath.Rel(root, path)
 					problems = append(problems, filepath.ToSlash(relative)+" violates P08 import DAG with "+value)
 				}
@@ -1238,6 +1353,10 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 			if item.Module == nil || item.Module.Path != rootModule || item.Module.Version != rootVersion || !pathWithin(moduleCache, item.Dir) || pathWithin(root, item.Dir) {
 				problems = append(problems, "root core did not resolve from the exact isolated commit-backed module")
 			}
+			continue
+		}
+		if p10AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" {
+			seen[item.ImportPath] = true
 			continue
 		}
 		if item.Module != nil {

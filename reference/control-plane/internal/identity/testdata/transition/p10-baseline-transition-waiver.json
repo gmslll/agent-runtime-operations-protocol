@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "waiver_id": "P10-P08-P09-BASELINE-TRANSITION-001",
+  "status": "declared",
+  "policy": {
+    "owner_phase_semantics": "first-introduction-and-accountability",
+    "ownership_transferred": false
+  },
+  "transition": {
+    "from_phases": ["P08", "P09"],
+    "to_phase": "P10",
+    "reason": "P10 composes identity, credential, SecretRef, and identity migrations through the accepted P08/P09 reference implementation without transferring accountable ownership or weakening historical phase evidence."
+  },
+  "affected_artifacts": [
+    "control-plane-platform-foundation",
+    "migration-engine",
+    "migration-engine-fixture-versions",
+    "p10-baseline-transition-waiver",
+    "phase-report-p08",
+    "phase-report-p09",
+    "phase-report-p10",
+    "reference-control-plane-server"
+  ],
+  "source_closure": [
+    {
+      "path": "reference/control-plane/cmd/aropd/main.go",
+      "change_type": "modify",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "artifact_ids": ["reference-control-plane-server", "phase-report-p08"],
+      "owner_phases": ["P08"]
+    },
+    {
+      "path": "reference/control-plane/cmd/aropd/main_test.go",
+      "change_type": "modify",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "artifact_ids": ["reference-control-plane-server", "phase-report-p08"],
+      "owner_phases": ["P08"]
+    },
+    {
+      "path": "reference/control-plane/internal/app/platform/testdata/harness/main.go",
+      "change_type": "modify",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "artifact_ids": ["control-plane-platform-foundation", "phase-report-p08"],
+      "owner_phases": ["P08"]
+    },
+    {
+      "path": "reference/control-plane/internal/identity/testdata/transition/p10-baseline-transition-waiver.json",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "artifact_ids": ["p10-baseline-transition-waiver", "phase-report-p10"],
+      "owner_phases": ["P10"]
+    },
+    {
+      "path": "reference/control-plane/internal/storage/migrate/catalog_closure.go",
+      "change_type": "modify",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "artifact_ids": ["migration-engine", "phase-report-p09"],
+      "owner_phases": ["P09"]
+    },
+    {
+      "path": "reference/control-plane/internal/storage/migrate/catalog_closure_test.go",
+      "change_type": "modify",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "artifact_ids": ["migration-engine", "phase-report-p09"],
+      "owner_phases": ["P09"]
+    },
+    {
+      "path": "reference/control-plane/internal/storage/migrate/production_catalog.go",
+      "change_type": "modify",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "artifact_ids": ["migration-engine", "phase-report-p09"],
+      "owner_phases": ["P09"]
+    },
+    {
+      "path": "reference/control-plane/internal/storage/migrate/testdata/engine-versions/composition/p09_storage_acceptance_test.go",
+      "change_type": "modify",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "artifact_ids": ["migration-engine-fixture-versions", "phase-report-p09"],
+      "owner_phases": ["P09"]
+    },
+    {
+      "path": "reference/control-plane/internal/storage/migrate/testdata/engine-versions/harness/main.go",
+      "change_type": "modify",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "artifact_ids": ["migration-engine-fixture-versions", "phase-report-p09"],
+      "owner_phases": ["P09"]
+    }
+  ],
+  "acceptance": [
+    {"phase": "P08", "command": "make test-control-plane-platform", "report": "build/reports/P08/report.json"},
+    {"phase": "P09", "command": "make test-storage-migrations", "report": "build/reports/P09/report.json"},
+    {"phase": "P10", "command": "make test-identity-secrets", "report": "build/reports/P10/report.json"}
+  ],
+  "constraints": [
+    "frozen-planning-inputs-remain-unchanged",
+    "no-memory-fallback-in-durable-modes",
+    "no-public-secret-value-api",
+    "owner-phase-and-exposure-remain-unchanged",
+    "p08-p09-p10-regressions-must-pass-on-one-head",
+    "p09-historical-closure-has-a-fixed-endpoint",
+    "p10-report-runtime-inputs-remain-empty",
+    "validated-status-requires-exact-git-and-manifest-closure"
+  ]
+}
