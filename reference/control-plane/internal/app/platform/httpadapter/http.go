@@ -9,6 +9,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
 )
@@ -32,7 +33,33 @@ type errorResponse struct {
 	Status string `json:"status"`
 }
 
+var ErrAuthenticationUnavailable = errors.New("authentication unavailable")
+
+type AuthenticatedPrincipal struct {
+	TenantID, PrincipalID, SubjectID, CredentialID string
+}
+
+type AuthenticateFunc func(context.Context, string, platform.RequestMetadata) (AuthenticatedPrincipal, error)
+
+type principalContextKey struct{}
+
+func PrincipalFromContext(ctx context.Context) (AuthenticatedPrincipal, bool) {
+	principal, ok := ctx.Value(principalContextKey{}).(AuthenticatedPrincipal)
+	return principal, ok
+}
+
 func NewHandler(application *platform.Platform) (http.Handler, error) {
+	return newHandler(application, nil)
+}
+
+func NewAuthenticatedHandler(application *platform.Platform, authenticate AuthenticateFunc) (http.Handler, error) {
+	if authenticate == nil {
+		return nil, errors.New("authentication function is required")
+	}
+	return newHandler(application, authenticate)
+}
+
+func newHandler(application *platform.Platform, authenticate AuthenticateFunc) (http.Handler, error) {
 	if application == nil {
 		return nil, errors.New("platform application is required")
 	}
@@ -50,7 +77,7 @@ func NewHandler(application *platform.Platform) (http.Handler, error) {
 		}
 		writeJSON(writer, status, healthResponse{Status: state, Service: application.Service(), Version: application.Version(), Scope: snapshot.Scope, Durability: snapshot.Durability, Checks: snapshot.Checks})
 	})
-	return instrument(application, mux), nil
+	return instrument(application, mux, authenticate), nil
 }
 
 func NewServer(application *platform.Platform, handler http.Handler) *http.Server {
@@ -63,7 +90,7 @@ func NewServer(application *platform.Platform, handler http.Handler) *http.Serve
 	}
 }
 
-func instrument(application *platform.Platform, next http.Handler) http.Handler {
+func instrument(application *platform.Platform, next http.Handler, authenticate AuthenticateFunc) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		config := application.Config()
 		ctx, cancel := context.WithTimeout(request.Context(), config.RequestTimeout)
@@ -96,7 +123,20 @@ func instrument(application *platform.Platform, next http.Handler) http.Handler 
 		case request.ContentLength > config.MaxBodyBytes:
 			writeJSON(capture, http.StatusRequestEntityTooLarge, errorResponse{Status: "rejected"})
 		default:
-			invoke(application, capture, request, next)
+			if authenticate != nil && operation != "health.live" && operation != "health.ready" {
+				principal, authenticationErr := authenticateBearer(ctx, request.Header.Values("Authorization"), metadata, authenticate)
+				switch {
+				case authenticationErr == nil:
+					request = request.WithContext(context.WithValue(request.Context(), principalContextKey{}, principal))
+					invoke(application, capture, request, next)
+				case errors.Is(authenticationErr, ErrAuthenticationUnavailable):
+					writeJSON(capture, http.StatusServiceUnavailable, errorResponse{Status: "unavailable"})
+				default:
+					writeJSON(capture, http.StatusUnauthorized, errorResponse{Status: "unauthorized"})
+				}
+			} else {
+				invoke(application, capture, request, next)
+			}
 		}
 		if metadata.RequestID != "" {
 			capture.Header().Set(requestIDHeader, metadata.RequestID)
@@ -121,6 +161,17 @@ func instrument(application *platform.Platform, next http.Handler) http.Handler 
 		}
 		copyResponse(writer, capture)
 	})
+}
+
+func authenticateBearer(ctx context.Context, values []string, metadata platform.RequestMetadata, authenticate AuthenticateFunc) (AuthenticatedPrincipal, error) {
+	if len(values) != 1 || !strings.HasPrefix(values[0], "Bearer ") {
+		return AuthenticatedPrincipal{}, errors.New("invalid authorization")
+	}
+	credential := strings.TrimPrefix(values[0], "Bearer ")
+	if credential == "" || strings.TrimSpace(credential) != credential || strings.ContainsAny(credential, " \t\r\n,") {
+		return AuthenticatedPrincipal{}, errors.New("invalid authorization")
+	}
+	return authenticate(ctx, credential, metadata)
 }
 
 func bodyIsEmpty(body io.Reader) (bool, error) {

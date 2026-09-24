@@ -3,6 +3,7 @@ package httpadapter
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -31,6 +32,75 @@ func TestHandlerChainPropagatesCorrelatesAndRedacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Run("authenticated-chain-fails-closed-before-usecase", func(t *testing.T) {
+		calls, nextCalls := 0, 0
+		authenticate := func(_ context.Context, credential string, metadata platform.RequestMetadata) (AuthenticatedPrincipal, error) {
+			calls++
+			if metadata.RequestID == "" || metadata.TraceID == "" || metadata.SpanID == "" {
+				t.Fatal("authentication ran before request/trace metadata")
+			}
+			switch credential {
+			case "valid-reference-token":
+				return AuthenticatedPrincipal{TenantID: "reference", PrincipalID: "principal", SubjectID: "subject", CredentialID: "credential"}, nil
+			case "dependency-down":
+				return AuthenticatedPrincipal{}, ErrAuthenticationUnavailable
+			default:
+				return AuthenticatedPrincipal{}, errors.New("credential rejected")
+			}
+		}
+		next := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			nextCalls++
+			if request.URL.Path == "/v1/health/live" {
+				writer.WriteHeader(http.StatusNoContent)
+				return
+			}
+			principal, ok := PrincipalFromContext(request.Context())
+			if !ok || principal.TenantID != "reference" || principal.CredentialID != "credential" {
+				t.Fatal("authenticated principal missing from request context")
+			}
+			writer.WriteHeader(http.StatusNoContent)
+		})
+		authenticated := instrument(application, next, authenticate)
+		for _, test := range []struct {
+			name    string
+			headers []string
+			status  int
+		}{
+			{"missing", nil, http.StatusUnauthorized},
+			{"wrong-scheme", []string{"Basic value"}, http.StatusUnauthorized},
+			{"empty", []string{"Bearer "}, http.StatusUnauthorized},
+			{"whitespace", []string{"Bearer invalid value"}, http.StatusUnauthorized},
+			{"duplicate", []string{"Bearer valid-reference-token", "Bearer other"}, http.StatusUnauthorized},
+			{"rejected", []string{"Bearer rejected"}, http.StatusUnauthorized},
+			{"unavailable", []string{"Bearer dependency-down"}, http.StatusServiceUnavailable},
+			{"valid", []string{"Bearer valid-reference-token"}, http.StatusNoContent},
+		} {
+			t.Run(test.name, func(t *testing.T) {
+				beforeNext := nextCalls
+				request := httptest.NewRequest(http.MethodGet, "/v1/reference-only", nil)
+				for _, value := range test.headers {
+					request.Header.Add("Authorization", value)
+				}
+				response := httptest.NewRecorder()
+				authenticated.ServeHTTP(response, request)
+				if response.Code != test.status {
+					t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+				}
+				if test.name != "valid" && nextCalls != beforeNext {
+					t.Fatal("unauthenticated request reached use case")
+				}
+				if strings.Contains(response.Body.String(), "rejected") || strings.Contains(response.Body.String(), "dependency-down") {
+					t.Fatal("authentication response leaked credential detail")
+				}
+			})
+		}
+		beforeCalls := calls
+		health := httptest.NewRecorder()
+		authenticated.ServeHTTP(health, httptest.NewRequest(http.MethodGet, "/v1/health/live", nil))
+		if health.Code != http.StatusNoContent || calls != beforeCalls {
+			t.Fatal("health request did not bypass authentication")
+		}
+	})
 
 	callerRequestID := "req_01956e7b-9abc-7def-8abc-0123456789ab"
 	traceID := "4bf92f3577b34da6a3ce929d0e0e4736"
