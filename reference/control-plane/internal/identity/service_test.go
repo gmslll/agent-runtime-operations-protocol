@@ -76,6 +76,7 @@ type fakeRepository struct {
 	mu                     sync.Mutex
 	records                map[string]CredentialRecord
 	getStarted, releaseGet chan struct{}
+	getError               error
 }
 
 func newFakeRepository() *fakeRepository {
@@ -123,6 +124,9 @@ func (repo *fakeRepository) Get(_ context.Context, id string) (CredentialRecord,
 	}
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
+	if repo.getError != nil {
+		return CredentialRecord{}, repo.getError
+	}
 	value, ok := repo.records[id]
 	if !ok {
 		return CredentialRecord{}, ErrCredentialNotFound
@@ -198,6 +202,7 @@ func (store *fakeObservability) restore(audits, spans int) {
 type fakeUoW struct {
 	repo         *fakeRepository
 	observations *fakeObservability
+	commitErr    error
 }
 
 func (unit *fakeUoW) Within(ctx context.Context, callback func(context.Context) error) error {
@@ -207,6 +212,11 @@ func (unit *fakeUoW) Within(ctx context.Context, callback func(context.Context) 
 		unit.repo.restore(records)
 		unit.observations.restore(audits, spans)
 		return err
+	}
+	if unit.commitErr != nil {
+		unit.repo.restore(records)
+		unit.observations.restore(audits, spans)
+		return unit.commitErr
 	}
 	return nil
 }
@@ -345,8 +355,8 @@ func TestMutationAndAuditRollbackAtEveryCheckpoint(t *testing.T) {
 			if len(repo.snapshot()) != 0 {
 				t.Fatal("credential survived rollback")
 			}
-			if audits, spans := observations.snapshot(); audits != 0 || spans != 0 {
-				t.Fatal("observation survived rollback")
+			if audits, spans := observations.snapshot(); audits != 1 || spans != 1 {
+				t.Fatalf("failed operation was not durably observed: %d/%d", audits, spans)
 			}
 		})
 	}
@@ -357,6 +367,125 @@ func TestMutationAndAuditRollbackAtEveryCheckpoint(t *testing.T) {
 	}
 	if len(repo.snapshot()) != 0 {
 		t.Fatal("credential committed without audit")
+	}
+}
+
+func TestMutationCommitAndLifecycleAuditFailuresRollback(t *testing.T) {
+	t.Run("commit", func(t *testing.T) {
+		service, _, _, repo, observations := newIdentityService(t)
+		service.deps.UoW.(*fakeUoW).commitErr = errors.New("injected commit failure")
+		if _, err := service.Issue(context.Background(), issueRequest("commit-fault")); !errors.Is(err, ErrUnavailable) {
+			t.Fatalf("commit failure classification: %v", err)
+		}
+		if len(repo.snapshot()) != 0 {
+			t.Fatal("credential survived commit failure")
+		}
+		if audits, spans := observations.snapshot(); audits != 0 || spans != 0 {
+			t.Fatal("observation survived commit failure")
+		}
+	})
+	for _, operation := range []string{"rotate", "revoke"} {
+		t.Run(operation+"-audit", func(t *testing.T) {
+			service, _, _, repo, observations := newIdentityService(t)
+			issued, err := service.Issue(context.Background(), issueRequest("base-"+operation))
+			if err != nil {
+				t.Fatal(err)
+			}
+			observations.fail = true
+			if operation == "rotate" {
+				_, err = service.Rotate(context.Background(), RotateRequest{CredentialID: issued.CredentialID, IdempotencyKey: "rotate-audit", TTL: time.Minute, Metadata: metadata()})
+			} else {
+				err = service.Revoke(context.Background(), RevokeRequest{CredentialID: issued.CredentialID, Metadata: metadata()})
+			}
+			if !errors.Is(err, ErrUnavailable) {
+				t.Fatalf("audit failure classification: %v", err)
+			}
+			record, loadErr := repo.Get(context.Background(), issued.CredentialID)
+			if loadErr != nil {
+				t.Fatal(loadErr)
+			}
+			if record.Status != CredentialActive {
+				t.Fatalf("mutation committed without audit: %s", record.Status)
+			}
+		})
+	}
+	for _, failure := range []string{"after-audit", "commit"} {
+		for _, operation := range []string{"rotate", "revoke"} {
+			t.Run(operation+"-"+failure, func(t *testing.T) {
+				service, _, faults, repo, _ := newIdentityService(t)
+				issued, err := service.Issue(context.Background(), issueRequest("base-"+operation+failure))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if failure == "after-audit" {
+					faults.fail = platformports.CheckpointAfterUseCase
+				} else {
+					service.deps.UoW.(*fakeUoW).commitErr = errors.New("injected commit failure")
+				}
+				if operation == "rotate" {
+					_, err = service.Rotate(context.Background(), RotateRequest{CredentialID: issued.CredentialID, IdempotencyKey: "rotate-" + failure, TTL: time.Minute, Metadata: metadata()})
+				} else {
+					err = service.Revoke(context.Background(), RevokeRequest{CredentialID: issued.CredentialID, Metadata: metadata()})
+				}
+				if !errors.Is(err, ErrUnavailable) {
+					t.Fatalf("%s failure classification: %v", failure, err)
+				}
+				record, loadErr := repo.Get(context.Background(), issued.CredentialID)
+				if loadErr != nil {
+					t.Fatal(loadErr)
+				}
+				if record.Status != CredentialActive {
+					t.Fatalf("%s survived %s failure", operation, failure)
+				}
+			})
+		}
+	}
+}
+
+func TestDependencyErrorsAreUnavailableAndRejectedRequestsAreAudited(t *testing.T) {
+	service, _, _, repo, observations := newIdentityService(t)
+	if _, err := service.Issue(context.Background(), IssueRequest{Metadata: metadata()}); err == nil {
+		t.Fatal("invalid issue accepted")
+	}
+	observations.mu.Lock()
+	outcome := observations.audits[len(observations.audits)-1].Outcome
+	observations.mu.Unlock()
+	if outcome != observability.OutcomeRejected {
+		t.Fatalf("invalid issue outcome=%s", outcome)
+	}
+	repo.getError = errors.New("database offline")
+	_, err := service.Authenticate(context.Background(), AuthenticateRequest{Credential: credentialPrefix + "cred_01956e7b-9abc-7def-8abc-000000000001.AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE", Audience: "reference-control-plane", Scopes: []string{"agent.read"}, Metadata: metadata()})
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("dependency error classification: %v", err)
+	}
+}
+
+func TestConcurrentDuplicateIdempotencyDoesNotReissueSecret(t *testing.T) {
+	service, _, _, _, _ := newIdentityService(t)
+	type outcome struct {
+		result IssuedCredential
+		err    error
+	}
+	results := make(chan outcome, 2)
+	for range 2 {
+		go func() {
+			result, err := service.Issue(context.Background(), issueRequest("concurrent-key"))
+			results <- outcome{result, err}
+		}()
+	}
+	var secrets, replays int
+	for range 2 {
+		current := <-results
+		if current.err == nil && current.result.Credential != "" {
+			secrets++
+		} else if errors.Is(current.err, ErrSecretUnavailable) && current.result.Credential == "" {
+			replays++
+		} else {
+			t.Fatalf("unexpected duplicate result: %+v %v", current.result, current.err)
+		}
+	}
+	if secrets != 1 || replays != 1 {
+		t.Fatalf("secrets=%d replays=%d", secrets, replays)
 	}
 }
 

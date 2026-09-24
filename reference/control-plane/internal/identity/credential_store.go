@@ -58,17 +58,17 @@ VALUES($1,$2,$3,$4,$5,1) ON CONFLICT(subject_id) DO NOTHING`
 	statement := `INSERT INTO arop_credentials(
 credential_id,principal_id,credential_kind,audience,scope_canonical,secret_verifier,
 issued_at_ns,not_before_at_ns,expires_at_ns,status,revoked_at_ns,replaced_at_ns,
-replacement_credential_id,revision,idempotency_key_digest
-) VALUES(?,?,?,?,?,?,?,?,?,'active',NULL,NULL,NULL,1,?)`
+replacement_credential_id,revision,idempotency_key_digest,idempotency_request_digest
+) VALUES(?,?,?,?,?,?,?,?,?,'active',NULL,NULL,NULL,1,?,?)`
 	if store.dialect == migrate.DialectPostgres {
 		statement = `INSERT INTO arop_credentials(
 credential_id,principal_id,credential_kind,audience,scope_canonical,secret_verifier,
 issued_at_ns,not_before_at_ns,expires_at_ns,status,revoked_at_ns,replaced_at_ns,
-replacement_credential_id,revision,idempotency_key_digest
-) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',NULL,NULL,NULL,1,$10)`
+replacement_credential_id,revision,idempotency_key_digest,idempotency_request_digest
+) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',NULL,NULL,NULL,1,$10,$11)`
 	}
-	if _, err := tx.ExecContext(ctx, statement, record.CredentialID, record.PrincipalID, record.Kind, record.Audience, strings.Join(record.Scopes, " "), record.SecretVerifier, record.IssuedAt.UnixNano(), record.NotBefore.UnixNano(), record.ExpiresAt.UnixNano(), record.IdempotencyDigest); err != nil {
-		return fmt.Errorf("create credential: %w", err)
+	if _, err := tx.ExecContext(ctx, statement, record.CredentialID, record.PrincipalID, record.Kind, record.Audience, strings.Join(record.Scopes, " "), record.SecretVerifier, record.IssuedAt.UnixNano(), record.NotBefore.UnixNano(), record.ExpiresAt.UnixNano(), record.IdempotencyDigest, record.IdempotencyRequestDigest); err != nil {
+		return credentialWriteError("create credential", err)
 	}
 	return nil
 }
@@ -91,7 +91,7 @@ func (store *CredentialStore) Replace(ctx context.Context, current CredentialRec
 	if err := validateRecord(replacement); err != nil {
 		return err
 	}
-	if current.Status != CredentialActive || current.PrincipalID != replacement.PrincipalID || current.SubjectID != replacement.SubjectID || !at.Equal(at.UTC()) {
+	if current.Status != CredentialActive || current.PrincipalID != replacement.PrincipalID || current.SubjectID != replacement.SubjectID || at.IsZero() || at.Location() != time.UTC {
 		return ErrCredentialConflict
 	}
 	tx, ok := store.lookup(ctx)
@@ -142,17 +142,17 @@ func (store *CredentialStore) insertReplacement(ctx context.Context, tx *sql.Tx,
 	statement := `INSERT INTO arop_credentials(
 credential_id,principal_id,credential_kind,audience,scope_canonical,secret_verifier,
 issued_at_ns,not_before_at_ns,expires_at_ns,status,revoked_at_ns,replaced_at_ns,
-replacement_credential_id,revision,idempotency_key_digest
-) VALUES(?,?,?,?,?,?,?,?,?,'active',NULL,NULL,NULL,1,?)`
+replacement_credential_id,revision,idempotency_key_digest,idempotency_request_digest
+) VALUES(?,?,?,?,?,?,?,?,?,'active',NULL,NULL,NULL,1,?,?)`
 	if store.dialect == migrate.DialectPostgres {
 		statement = `INSERT INTO arop_credentials(
 credential_id,principal_id,credential_kind,audience,scope_canonical,secret_verifier,
 issued_at_ns,not_before_at_ns,expires_at_ns,status,revoked_at_ns,replaced_at_ns,
-replacement_credential_id,revision,idempotency_key_digest
-) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',NULL,NULL,NULL,1,$10)`
+replacement_credential_id,revision,idempotency_key_digest,idempotency_request_digest
+) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,'active',NULL,NULL,NULL,1,$10,$11)`
 	}
-	if _, err := tx.ExecContext(ctx, statement, record.CredentialID, record.PrincipalID, record.Kind, record.Audience, strings.Join(record.Scopes, " "), record.SecretVerifier, record.IssuedAt.UnixNano(), record.NotBefore.UnixNano(), record.ExpiresAt.UnixNano(), record.IdempotencyDigest); err != nil {
-		return fmt.Errorf("create replacement credential: %w", err)
+	if _, err := tx.ExecContext(ctx, statement, record.CredentialID, record.PrincipalID, record.Kind, record.Audience, strings.Join(record.Scopes, " "), record.SecretVerifier, record.IssuedAt.UnixNano(), record.NotBefore.UnixNano(), record.ExpiresAt.UnixNano(), record.IdempotencyDigest, record.IdempotencyRequestDigest); err != nil {
+		return credentialWriteError("create replacement credential", err)
 	}
 	return nil
 }
@@ -160,7 +160,7 @@ replacement_credential_id,revision,idempotency_key_digest
 func (store *CredentialStore) queryOne(ctx context.Context, predicate string, argument any) (CredentialRecord, error) {
 	statement := `SELECT c.credential_id,c.principal_id,p.subject_id,c.credential_kind,c.audience,c.scope_canonical,
 c.secret_verifier,c.issued_at_ns,c.not_before_at_ns,c.expires_at_ns,c.status,c.revoked_at_ns,
-c.replaced_at_ns,c.replacement_credential_id,c.revision,c.idempotency_key_digest
+c.replaced_at_ns,c.replacement_credential_id,c.revision,c.idempotency_key_digest,c.idempotency_request_digest
 FROM arop_credentials c JOIN arop_dev_principals p ON p.principal_id=c.principal_id WHERE ` + predicate
 	queryer := migrate.Queryer(store.db)
 	if tx, ok := store.lookup(ctx); ok {
@@ -171,7 +171,7 @@ FROM arop_credentials c JOIN arop_dev_principals p ON p.principal_id=c.principal
 	var revoked, replaced sql.NullInt64
 	var replacement sql.NullString
 	var scope string
-	err := queryer.QueryRowContext(ctx, statement, argument).Scan(&record.CredentialID, &record.PrincipalID, &record.SubjectID, &record.Kind, &record.Audience, &scope, &record.SecretVerifier, &issued, &notBefore, &expires, &record.Status, &revoked, &replaced, &replacement, &record.Revision, &record.IdempotencyDigest)
+	err := queryer.QueryRowContext(ctx, statement, argument).Scan(&record.CredentialID, &record.PrincipalID, &record.SubjectID, &record.Kind, &record.Audience, &scope, &record.SecretVerifier, &issued, &notBefore, &expires, &record.Status, &revoked, &replaced, &replacement, &record.Revision, &record.IdempotencyDigest, &record.IdempotencyRequestDigest)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CredentialRecord{}, ErrCredentialNotFound
 	}
@@ -206,7 +206,7 @@ func validateRecord(record *CredentialRecord) error {
 	if record == nil || !validCredentialID(record.CredentialID) || !strings.HasPrefix(record.PrincipalID, "prn_") || !domainIDPattern.MatchString(record.PrincipalID) || !identifierPattern.MatchString(record.SubjectID) || !identifierPattern.MatchString(record.Kind) || !identifierPattern.MatchString(record.Audience) {
 		return errors.New("credential record identity fields are invalid")
 	}
-	if record.Status != CredentialActive || record.Revision != 1 || len(record.SecretVerifier) != 64 || len(record.IdempotencyDigest) != 64 || len(record.Scopes) == 0 {
+	if record.Status != CredentialActive || record.Revision != 1 || !digestPattern.MatchString(record.SecretVerifier) || !digestPattern.MatchString(record.IdempotencyDigest) || !digestPattern.MatchString(record.IdempotencyRequestDigest) || len(record.Scopes) == 0 {
 		return errors.New("new credential record lifecycle fields are invalid")
 	}
 	if record.IssuedAt.IsZero() || record.IssuedAt.Location() != time.UTC || record.NotBefore.Location() != time.UTC || record.ExpiresAt.Location() != time.UTC || record.NotBefore.Before(record.IssuedAt) || !record.NotBefore.Before(record.ExpiresAt) {
@@ -216,7 +216,7 @@ func validateRecord(record *CredentialRecord) error {
 }
 
 func validateStoredRecord(record *CredentialRecord) error {
-	if record == nil || !validCredentialID(record.CredentialID) || !strings.HasPrefix(record.PrincipalID, "prn_") || !domainIDPattern.MatchString(record.PrincipalID) || len(record.SecretVerifier) != 64 || len(record.IdempotencyDigest) != 64 || record.Revision < 1 || len(record.Scopes) == 0 {
+	if record == nil || !validCredentialID(record.CredentialID) || !strings.HasPrefix(record.PrincipalID, "prn_") || !domainIDPattern.MatchString(record.PrincipalID) || !digestPattern.MatchString(record.SecretVerifier) || !digestPattern.MatchString(record.IdempotencyDigest) || !digestPattern.MatchString(record.IdempotencyRequestDigest) || record.Revision < 1 || len(record.Scopes) == 0 {
 		return errors.New("credential record is invalid")
 	}
 	if record.NotBefore.Before(record.IssuedAt) || !record.NotBefore.Before(record.ExpiresAt) {
@@ -250,6 +250,14 @@ func requireOneRow(result sql.Result) error {
 		return ErrCredentialConflict
 	}
 	return nil
+}
+
+func credentialWriteError(operation string, err error) error {
+	lower := strings.ToLower(err.Error())
+	if strings.Contains(lower, "unique constraint") || strings.Contains(lower, "duplicate key") || strings.Contains(lower, "constraint failed") {
+		return fmt.Errorf("%s: %w", operation, ErrCredentialConflict)
+	}
+	return fmt.Errorf("%s: %w", operation, err)
 }
 
 var _ CredentialRepository = (*CredentialStore)(nil)

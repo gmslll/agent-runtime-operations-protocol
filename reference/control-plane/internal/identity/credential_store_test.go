@@ -24,7 +24,7 @@ func TestCredentialStoreRequiresTransactionAndPersistsOnlyVerifier(t *testing.T)
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 9, 24, 2, 0, 0, 0, time.UTC)
-	record := CredentialRecord{CredentialID: "cred_01956e7b-9abc-7def-8abc-000000000001", PrincipalID: "prn_01956e7b-9abc-7def-8abc-000000000001", SubjectID: "developer-1", Kind: "service", Audience: "reference-control-plane", Scopes: []string{"agent.invoke", "agent.read"}, SecretVerifier: strings.Repeat("a", 64), IssuedAt: now, NotBefore: now, ExpiresAt: now.Add(time.Minute), Status: CredentialActive, Revision: 1, IdempotencyDigest: strings.Repeat("b", 64)}
+	record := CredentialRecord{CredentialID: "cred_01956e7b-9abc-7def-8abc-000000000001", PrincipalID: "prn_01956e7b-9abc-7def-8abc-000000000001", SubjectID: "developer-1", Kind: "service", Audience: "reference-control-plane", Scopes: []string{"agent.invoke", "agent.read"}, SecretVerifier: strings.Repeat("a", 64), IssuedAt: now, NotBefore: now, ExpiresAt: now.Add(time.Minute), Status: CredentialActive, Revision: 1, IdempotencyDigest: strings.Repeat("b", 64), IdempotencyRequestDigest: strings.Repeat("c", 64)}
 	if err := store.Create(context.Background(), &record); err == nil || !strings.Contains(err.Error(), "unit-of-work") {
 		t.Fatalf("out-of-transaction write accepted: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestCredentialStoreRequiresTransactionAndPersistsOnlyVerifier(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.SubjectID != record.SubjectID || loaded.SecretVerifier != record.SecretVerifier || strings.Contains(loaded.SecretVerifier, credentialPrefix) {
+	if loaded.SubjectID != record.SubjectID || loaded.SecretVerifier != record.SecretVerifier || loaded.IdempotencyRequestDigest != record.IdempotencyRequestDigest || strings.Contains(loaded.SecretVerifier, credentialPrefix) {
 		t.Fatalf("unexpected stored record: %+v", loaded)
 	}
 	var columns string
@@ -103,7 +103,7 @@ func TestCredentialStoreRotateRevokeAndRollback(t *testing.T) {
 }
 
 func storeRecord(index int, now time.Time, verifier, idempotency string) CredentialRecord {
-	return CredentialRecord{CredentialID: "cred_01956e7b-9abc-7def-8abc-" + leftPad(index), PrincipalID: "prn_01956e7b-9abc-7def-8abc-000000000001", SubjectID: "developer-1", Kind: "service", Audience: "reference-control-plane", Scopes: []string{"agent.read"}, SecretVerifier: strings.Repeat(verifier, 64), IssuedAt: now, NotBefore: now, ExpiresAt: now.Add(time.Minute), Status: CredentialActive, Revision: 1, IdempotencyDigest: strings.Repeat(idempotency, 64)}
+	return CredentialRecord{CredentialID: "cred_01956e7b-9abc-7def-8abc-" + leftPad(index), PrincipalID: "prn_01956e7b-9abc-7def-8abc-000000000001", SubjectID: "developer-1", Kind: "service", Audience: "reference-control-plane", Scopes: []string{"agent.read"}, SecretVerifier: strings.Repeat(verifier, 64), IssuedAt: now, NotBefore: now, ExpiresAt: now.Add(time.Minute), Status: CredentialActive, Revision: 1, IdempotencyDigest: strings.Repeat(idempotency, 64), IdempotencyRequestDigest: strings.Repeat("e", 64)}
 }
 func leftPad(value int) string {
 	if value == 1 {
@@ -120,7 +120,7 @@ func openIdentityDatabase(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	schema := `CREATE TABLE arop_dev_principals(principal_id TEXT PRIMARY KEY,subject_id TEXT NOT NULL UNIQUE,status TEXT NOT NULL CHECK(status IN ('active','disabled')),created_at_ns INTEGER NOT NULL,updated_at_ns INTEGER NOT NULL,revision INTEGER NOT NULL CHECK(revision>0));
-CREATE TABLE arop_credentials(credential_id TEXT PRIMARY KEY,principal_id TEXT NOT NULL REFERENCES arop_dev_principals(principal_id),credential_kind TEXT NOT NULL,audience TEXT NOT NULL,scope_canonical TEXT NOT NULL,secret_verifier TEXT NOT NULL UNIQUE CHECK(length(secret_verifier)=64),issued_at_ns INTEGER NOT NULL,not_before_at_ns INTEGER NOT NULL,expires_at_ns INTEGER NOT NULL,status TEXT NOT NULL CHECK(status IN ('active','revoked','replaced')),revoked_at_ns INTEGER,replaced_at_ns INTEGER,replacement_credential_id TEXT,revision INTEGER NOT NULL CHECK(revision>0),idempotency_key_digest TEXT NOT NULL UNIQUE CHECK(length(idempotency_key_digest)=64));`
+CREATE TABLE arop_credentials(credential_id TEXT PRIMARY KEY,principal_id TEXT NOT NULL REFERENCES arop_dev_principals(principal_id),credential_kind TEXT NOT NULL,audience TEXT NOT NULL,scope_canonical TEXT NOT NULL,secret_verifier TEXT NOT NULL UNIQUE CHECK(length(secret_verifier)=64),issued_at_ns INTEGER NOT NULL,not_before_at_ns INTEGER NOT NULL,expires_at_ns INTEGER NOT NULL,status TEXT NOT NULL CHECK(status IN ('active','revoked','replaced')),revoked_at_ns INTEGER,replaced_at_ns INTEGER,replacement_credential_id TEXT,revision INTEGER NOT NULL CHECK(revision>0),idempotency_key_digest TEXT NOT NULL UNIQUE CHECK(length(idempotency_key_digest)=64),idempotency_request_digest TEXT NOT NULL CHECK(length(idempotency_request_digest)=64));`
 	if _, err := db.Exec(schema); err != nil {
 		t.Fatal(err)
 	}
