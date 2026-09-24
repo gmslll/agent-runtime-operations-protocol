@@ -37,6 +37,7 @@ const (
 var testPackages = []string{
 	"./cmd/aropd",
 	"./internal/adapters/secrets",
+	"./internal/app/platform/httpadapter",
 	"./internal/identity",
 	"./internal/identity/testdata/acceptance",
 	"./internal/ports/secrets",
