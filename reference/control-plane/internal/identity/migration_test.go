@@ -94,8 +94,8 @@ func TestIdentityMigrationDialectContract(t *testing.T) {
 
 	for name, contents := range map[string]string{"sqlite": sqliteSQL, "postgres": postgresSQL} {
 		t.Run(name, func(t *testing.T) {
-			if strings.Count(contents, "\n-- arop:statement\n") != 3 {
-				t.Fatal("identity migration must contain exactly four statements")
+			if strings.Count(contents, "\n-- arop:statement\n") != 4 {
+				t.Fatal("identity migration must contain exactly five statements")
 			}
 			lower := strings.ToLower(contents)
 			for _, forbidden := range []string{"raw_secret", "secret_value", "password", "cookie", "token", "asset", "console", "url"} {
@@ -127,8 +127,18 @@ func TestIdentityMigrationDialectContract(t *testing.T) {
 
 func assertIdentityConstraints(t *testing.T, db *sql.DB) {
 	t.Helper()
-	_, err := db.Exec(`INSERT INTO arop_dev_principals(principal_id,subject_id,status,created_at_ns,updated_at_ns,revision) VALUES(?,?,?,?,?,?)`, "principal-1", "subject-1", "active", 1, 1, 1)
+	_, err := db.Exec(`INSERT INTO arop_dev_principals(principal_id,tenant_id,subject_id,status,created_at_ns,updated_at_ns,revision) VALUES(?,?,?,?,?,?,?)`, "principal-1", "tenant-a", "subject-1", "active", 1, 1, 1)
 	requireMigrationNoError(t, err)
+	_, err = db.Exec(`INSERT INTO arop_dev_principals(principal_id,tenant_id,subject_id,status,created_at_ns,updated_at_ns,revision) VALUES(?,?,?,?,?,?,?)`, "principal-2", "tenant-b", "subject-1", "active", 1, 1, 1)
+	requireMigrationNoError(t, err)
+	if _, err = db.Exec(`INSERT INTO arop_dev_principals(principal_id,tenant_id,subject_id,status,created_at_ns,updated_at_ns,revision) VALUES(?,?,?,?,?,?,?)`, "principal-3", "tenant-a", "subject-1", "active", 1, 1, 1); err == nil {
+		t.Fatal("duplicate subject within one tenant was accepted")
+	}
+	for _, invalidTenant := range []string{"", "Tenant-A", "tenant/a", "tenant..a", ".tenant", "tenant-"} {
+		if _, err = db.Exec(`INSERT INTO arop_dev_principals(principal_id,tenant_id,subject_id,status,created_at_ns,updated_at_ns,revision) VALUES(?,?,?,?,?,?,?)`, "invalid-"+invalidTenant, invalidTenant, "subject-invalid-"+invalidTenant, "active", 1, 1, 1); err == nil {
+			t.Fatalf("invalid tenant identifier %q was accepted", invalidTenant)
+		}
+	}
 	insertCredential := `INSERT INTO arop_credentials(credential_id,principal_id,credential_kind,audience,scope_canonical,secret_verifier,issued_at_ns,not_before_at_ns,expires_at_ns,status,revoked_at_ns,replaced_at_ns,replacement_credential_id,revision,idempotency_key_digest,idempotency_request_digest) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 	_, err = db.Exec(insertCredential, "credential-1", "principal-1", "service", "control-plane", "agent:invoke", strings.Repeat("a", 64), 1, 1, 2, "active", nil, nil, nil, 1, strings.Repeat("b", 64), strings.Repeat("c", 64))
 	requireMigrationNoError(t, err)

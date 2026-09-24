@@ -1,19 +1,23 @@
 CREATE TABLE arop_dev_principals (
   principal_id TEXT NOT NULL,
+  tenant_id TEXT NOT NULL,
   subject_id TEXT NOT NULL,
   status TEXT NOT NULL,
   created_at_ns BIGINT NOT NULL,
   updated_at_ns BIGINT NOT NULL,
   revision BIGINT NOT NULL,
   CONSTRAINT arop_dev_principals_pkey PRIMARY KEY(principal_id),
-  CONSTRAINT arop_dev_principals_subject_unique UNIQUE(subject_id),
+  CONSTRAINT arop_dev_principals_tenant_subject_unique UNIQUE(tenant_id, subject_id),
   CONSTRAINT arop_dev_principals_principal_id_check CHECK(length(principal_id) BETWEEN 1 AND 200),
+  CONSTRAINT arop_dev_principals_tenant_id_check CHECK(tenant_id ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(tenant_id) <= 128),
   CONSTRAINT arop_dev_principals_subject_id_check CHECK(length(subject_id) BETWEEN 1 AND 200),
   CONSTRAINT arop_dev_principals_status_check CHECK(status IN ('active','disabled')),
   CONSTRAINT arop_dev_principals_created_check CHECK(created_at_ns > 0),
   CONSTRAINT arop_dev_principals_updated_check CHECK(updated_at_ns >= created_at_ns),
   CONSTRAINT arop_dev_principals_revision_check CHECK(revision > 0)
 )
+-- arop:statement
+CREATE INDEX arop_dev_principals_tenant_status_idx ON arop_dev_principals(tenant_id, status, principal_id)
 -- arop:statement
 CREATE TABLE arop_credentials (
   credential_id TEXT NOT NULL,
