@@ -436,10 +436,11 @@
       "scope": "static-only",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "899e7e00a0d5f17278d9208af58c41285a2ef609a63ffa142147ccd0d58fd2b0",
+      "current_sha256": "22f2a5e3cf7f0bf8bb34b3131407e5db55a17001e9ee56995af75bffa4988844",
       "touch_commits": [
         "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126",
-        "b520fe61a351466602d12bbab98afec57dcc91d3"
+        "b520fe61a351466602d12bbab98afec57dcc91d3",
+        "5445102180a3e722c3afbb5525428ff8426fb5be"
       ]
     },
     {
