@@ -655,10 +655,12 @@ func canonicalSources(v []Source) bool {
 		if s.Path == "" || (i > 0 && v[i-1].Path >= s.Path) || !canonical(s.ArtifactIDs) || !canonical(s.OwnerPhases) {
 			return false
 		}
-		for j, c := range s.TouchCommits {
-			if len(c) != 40 || (j > 0 && s.TouchCommits[j-1] >= c) {
+		seenCommits := map[string]bool{}
+		for _, c := range s.TouchCommits {
+			if len(c) != 40 || seenCommits[c] {
 				return false
 			}
+			seenCommits[c] = true
 		}
 	}
 	return true
