@@ -269,9 +269,12 @@ func Negative(root string, staticInputs []string) error {
 	if err != nil {
 		return err
 	}
-	discovered, err := discoverSources(root, strings.TrimSpace(string(baseBytes)), m)
+	discovered, staticOnly, err := discoverSources(root, strings.TrimSpace(string(baseBytes)), m)
 	if err != nil {
 		return err
+	}
+	if !canonicalOrEmpty(staticOnly) {
+		return errors.New("static-only touch paths are not canonical")
 	}
 	validated := clone(w)
 	validated.Status = "validated"
@@ -327,6 +330,23 @@ func Negative(root string, staticInputs []string) error {
 	for i, c := range mutations {
 		if err := check(fmt.Sprintf("mutation %d", i), c); err != nil {
 			return err
+		}
+	}
+	classificationCases := []struct{ path, want string }{
+		{"Makefile", "static-only"},
+		{"reference/control-plane/internal/identity/service_test.go", "static-only"},
+		{"reference/control-plane/internal/identity/testdata/harness/main.go", "static-only"},
+		{"reference/control-plane/internal/app/platform/platform.go", "transition"},
+	}
+	for _, test := range classificationCases {
+		_, got, err := classifyTouched(m, test.path)
+		if err != nil || got != test.want {
+			return fmt.Errorf("classification %s got=%s err=%v want=%s", test.path, got, err, test.want)
+		}
+	}
+	for _, path := range []string{"reference/control-plane/internal/adapters/authn/http.go", "docs/unowned-p10-change.md"} {
+		if _, _, err := classifyTouched(m, path); err == nil {
+			return fmt.Errorf("unowned production/static path %s was accepted", path)
 		}
 	}
 	if _, err := decodeBytes([]byte(`{"schema_version":1,"schema_version":1}`)); err == nil {
@@ -414,9 +434,12 @@ func validateGit(root string, w Waiver, m manifest) error {
 		return err
 	}
 	baseline := strings.TrimSpace(string(baseBytes))
-	discovered, err := discoverSources(root, baseline, m)
+	discovered, staticOnly, err := discoverSources(root, baseline, m)
 	if err != nil {
 		return err
+	}
+	if !canonicalOrEmpty(staticOnly) {
+		return errors.New("static-only touch paths are not canonical")
 	}
 	declared := map[string]Source{}
 	for _, s := range w.SourceClosure {
@@ -443,22 +466,23 @@ func validateGit(root string, w Waiver, m manifest) error {
 	return nil
 }
 
-func discoverSources(root, baseline string, m manifest) (map[string]Source, error) {
+func discoverSources(root, baseline string, m manifest) (map[string]Source, []string, error) {
 	commitsBytes, err := git(root, "rev-list", "--reverse", baseline+"..HEAD")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	commits := strings.Fields(string(commitsBytes))
 	touches := map[string][]string{}
+	staticSet := map[string]bool{}
 	for _, commit := range commits {
 		parentBytes, err := git(root, "rev-parse", commit+"^")
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		parent := strings.TrimSpace(string(parentBytes))
 		diff, err := git(root, "diff-tree", "--no-commit-id", "--name-status", "-r", "-z", "--no-renames", parent, commit, "--")
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		parts := bytes.Split(diff, []byte{0})
 		for i := 0; i+1 < len(parts); i += 2 {
@@ -466,24 +490,30 @@ func discoverSources(root, baseline string, m manifest) (map[string]Source, erro
 			if path == "" {
 				continue
 			}
-			if _, _, _, err := mapSource(m, path); err == nil {
-				touches[path] = append(touches[path], commit)
+			_, classification, err := classifyTouched(m, path)
+			if err != nil {
+				return nil, nil, fmt.Errorf("classify tracked touch %s at %s: %w", path, commit, err)
 			}
+			if classification == "static-only" {
+				staticSet[path] = true
+				continue
+			}
+			touches[path] = append(touches[path], commit)
 		}
 	}
 	result := map[string]Source{}
 	for path, commits := range touches {
 		ids, phases, scope, err := mapSource(m, path)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		base, baseOK, err := gitBlob(root, baseline, path)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		current, currentOK, err := worktreeBlob(root, path)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		change := "modify"
 		if !baseOK {
@@ -503,7 +533,7 @@ func discoverSources(root, baseline string, m manifest) (map[string]Source, erro
 		}
 		result[path] = Source{path, scope, change, baseHash, currentHash, commits, ids, phases}
 	}
-	return result, nil
+	return result, keys(staticSet), nil
 }
 
 func mapSource(m manifest, path string) ([]string, []string, string, error) {
@@ -568,16 +598,67 @@ func mapSource(m manifest, path string) ([]string, []string, string, error) {
 			}
 		}
 	}
-	scope := "p10-production"
-	for phase := range phases {
-		if phase == "P08" || phase == "P09" {
-			scope = "early-owned"
+	directID, directPhase := "", ""
+	for id := range ownerIDs {
+		directID = id
+	}
+	for _, a := range direct {
+		if a.ID == directID {
+			directPhase = a.OwnerPhase
+			if directPhase == "" {
+				directPhase = a.ProducerPhase
+			}
+			break
 		}
 	}
+	scope := ""
 	if path == Path {
 		scope = "carrier"
+	} else if directPhase == "P08" || directPhase == "P09" {
+		scope = "early-owned"
+	} else if directPhase == "P10" && p10ProductionArtifacts[directID] {
+		scope = "p10-production"
+	}
+	if scope == "" {
+		return nil, nil, "", fmt.Errorf("source %s owner=%s phase=%s is outside the P10 transition policy", path, directID, directPhase)
 	}
 	return keys(ids), keys(phases), scope, nil
+}
+
+var p10ProductionArtifacts = map[string]bool{
+	"identity-service": true, "credential-store": true, "secret-resolver-port": true,
+	"reference-secret-exchange": true, "sqlite-migration-identity": true, "postgres-migration-identity": true,
+}
+
+func classifyTouched(m manifest, path string) ([]string, string, error) {
+	if isP10StaticOnly(path) {
+		return nil, "static-only", nil
+	}
+	ids, _, _, err := mapSource(m, path)
+	if err != nil {
+		return nil, "", err
+	}
+	return ids, "transition", nil
+}
+
+func isP10StaticOnly(path string) bool {
+	if path == "Makefile" {
+		return true
+	}
+	if path == Path {
+		return false
+	}
+	prefixes := []string{
+		"reference/control-plane/internal/identity/",
+		"reference/control-plane/internal/ports/secrets/",
+		"reference/control-plane/internal/adapters/secrets/",
+	}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(path, prefix) && (strings.HasSuffix(path, "_test.go") || strings.Contains(path, "/testdata/")) {
+			return true
+		}
+	}
+	return false
 }
 
 func loadManifest(root string) (manifest, error) {
@@ -647,6 +728,7 @@ func canonical(v []string) bool {
 	}
 	return true
 }
+func canonicalOrEmpty(v []string) bool { return len(v) == 0 || canonical(v) }
 func canonicalSources(v []Source) bool {
 	if len(v) == 0 {
 		return false
