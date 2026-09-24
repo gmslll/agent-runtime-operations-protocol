@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "transition_id": "P09-P05-MODULE-TRANSITION-001",
+  "status": "validated",
+  "policy": {
+    "owner_phase_semantics": "first-introduction-and-accountability",
+    "exclusive_mutation_ownership": false,
+    "evidence_mode": "git-object-replay"
+  },
+  "from_phase": "P05",
+  "to_phase": "P09",
+  "baseline_commit": "e92c2f5fc82ad7d1f0b2ac9c59d004db6419ec29",
+  "result_commit": "9112737522a72a72b688a8ab01c4ffeaf7a61f37",
+  "reason": "P09 extends the P05-migrated server composition while retaining the P08 root pin.",
+  "changed_paths": [
+    "reference/control-plane/cmd/aropd/main.go",
+    "reference/control-plane/cmd/aropd/main_test.go",
+    "reference/control-plane/go.mod",
+    "reference/control-plane/go.sum"
+  ],
+  "affected_artifacts": [
+    "nested-control-plane-go-module",
+    "reference-control-plane-server"
+  ],
+  "history": [
+    {
+      "commit": "c279071e71ec62e076ebf0d678346de89089c325",
+      "changed_paths": [
+        "reference/control-plane/cmd/aropd/main.go",
+        "reference/control-plane/cmd/aropd/main_test.go",
+        "reference/control-plane/go.mod",
+        "reference/control-plane/go.sum"
+      ],
+      "before": [
+        {
+          "path": "reference/control-plane/cmd/aropd/main.go",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "2b159bae877cf15d9eab5bff69777e9a26196dfb84c2995b0d0d21e48bdf88ad"
+        },
+        {
+          "path": "reference/control-plane/cmd/aropd/main_test.go",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "ca3466e84514637461c9e6c9546b5a0b99353483cd5269df8df8a262c07d4665"
+        },
+        {
+          "path": "reference/control-plane/go.mod",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "e199cc9b9297ae4834bfbd99420074737dced93ed13731c6f9e69d818233001b"
+        },
+        {
+          "path": "reference/control-plane/go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "07d3eebbdfba1d48fba6e6671b9fa861c1db3c6902da2914723387b249560377"
+        }
+      ],
+      "after": [
+        {
+          "path": "reference/control-plane/cmd/aropd/main.go",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "5d30675f4bb9d059f44fedf6e67ac6881c22713fe40e6ebd0d1cc5b4a49f0edf"
+        },
+        {
+          "path": "reference/control-plane/cmd/aropd/main_test.go",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "343954366fdcd8ce97f232f2032ef2064afe1fdef402490269381e4f9607a49d"
+        },
+        {
+          "path": "reference/control-plane/go.mod",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "7aa5d5eb46202b7afcef34aea5ed2976e8b3fab73844a7d99e42829ccf612462"
+        },
+        {
+          "path": "reference/control-plane/go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "6d6a14679f26524818b0f29797834ba4d015c48f365b6131540492057553e382"
+        }
+      ]
+    },
+    {
+      "commit": "9112737522a72a72b688a8ab01c4ffeaf7a61f37",
+      "changed_paths": [
+        "reference/control-plane/cmd/aropd/main.go"
+      ],
+      "before": [
+        {
+          "path": "reference/control-plane/cmd/aropd/main.go",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "5d30675f4bb9d059f44fedf6e67ac6881c22713fe40e6ebd0d1cc5b4a49f0edf"
+        }
+      ],
+      "after": [
+        {
+          "path": "reference/control-plane/cmd/aropd/main.go",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "7a9f51544407d1a8e3ce7cf5569b2422d7dbdefd51366552a56d3aaf4175191c"
+        }
+      ]
+    }
+  ],
+  "root_pin": null,
+  "acceptance": [
+    {
+      "phase": "P05",
+      "command": "make test-go-workspace",
+      "report": "build/reports/P05/report.json"
+    },
+    {
+      "phase": "P09",
+      "command": "make test-storage-migrations",
+      "report": "build/reports/P09/report.json"
+    }
+  ],
+  "constraints": [
+    "frozen-p05-archive-remains-immutable",
+    "no-unrecorded-p05-owned-drift",
+    "runtime-inputs-remain-empty"
+  ]
+}

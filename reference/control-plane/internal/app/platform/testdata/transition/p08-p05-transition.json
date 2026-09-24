@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "transition_id": "P08-P05-MODULE-TRANSITION-001",
+  "status": "validated",
+  "policy": {
+    "owner_phase_semantics": "first-introduction-and-accountability",
+    "exclusive_mutation_ownership": false,
+    "evidence_mode": "git-object-replay"
+  },
+  "from_phase": "P05",
+  "to_phase": "P08",
+  "baseline_commit": "1195e393bc0629b792a09e4401f3ac91e6af2f64",
+  "result_commit": "e92c2f5fc82ad7d1f0b2ac9c59d004db6419ec29",
+  "reason": "P08 extends the migrated P05 server baseline and repins the nested module to the exact root snapshot consumed by the platform foundation.",
+  "changed_paths": [
+    "reference/control-plane/cmd/aropd/main.go",
+    "reference/control-plane/cmd/aropd/main_test.go",
+    "reference/control-plane/go.mod",
+    "reference/control-plane/go.sum"
+  ],
+  "affected_artifacts": [
+    "nested-control-plane-go-module",
+    "reference-control-plane-server"
+  ],
+  "history": [
+    {
+      "commit": "e92c2f5fc82ad7d1f0b2ac9c59d004db6419ec29",
+      "changed_paths": [
+        "reference/control-plane/cmd/aropd/main.go",
+        "reference/control-plane/cmd/aropd/main_test.go",
+        "reference/control-plane/go.mod",
+        "reference/control-plane/go.sum"
+      ],
+      "before": [
+        {
+          "path": "reference/control-plane/cmd/aropd/main.go",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "1691082f307811711d80bde28e4f625b6ea79efb60a4521deaa981355a4ba220"
+        },
+        {
+          "path": "reference/control-plane/go.mod",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "d9cfc5e23327efe052013260b8192e09b0355896bca0f860255971a4b3969b0c"
+        },
+        {
+          "path": "reference/control-plane/go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "230802c1beae700791a394bad8940b49f9453cc17fb1a227ada6d00a0c2bea01"
+        }
+      ],
+      "after": [
+        {
+          "path": "reference/control-plane/cmd/aropd/main.go",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "2b159bae877cf15d9eab5bff69777e9a26196dfb84c2995b0d0d21e48bdf88ad"
+        },
+        {
+          "path": "reference/control-plane/cmd/aropd/main_test.go",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "ca3466e84514637461c9e6c9546b5a0b99353483cd5269df8df8a262c07d4665"
+        },
+        {
+          "path": "reference/control-plane/go.mod",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "e199cc9b9297ae4834bfbd99420074737dced93ed13731c6f9e69d818233001b"
+        },
+        {
+          "path": "reference/control-plane/go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "07d3eebbdfba1d48fba6e6671b9fa861c1db3c6902da2914723387b249560377"
+        }
+      ]
+    }
+  ],
+  "root_pin": {
+    "before": {
+      "commit": "1bc642d6648addb822daec4427d721c25d620043",
+      "version": "v0.0.0-20260923023550-1bc642d6648a",
+      "zip_h1": "h1:Fd+w1T7K4+KQji8aWziLDhU5Pdm3Cxa5Ywy/2aizkDU=",
+      "go_mod_h1": "h1:ov6WTouj8Qdfs+WL7KgViSYyf6mbrYLBDM8N2EvrxxY="
+    },
+    "after": {
+      "commit": "1195e393bc0629b792a09e4401f3ac91e6af2f64",
+      "version": "v0.0.0-20260923092055-1195e393bc06",
+      "zip_h1": "h1:3tJrUIY49T4KBh43mBrY/+wzMcZ5J7bxbF3odles/Ns=",
+      "go_mod_h1": "h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk="
+    }
+  },
+  "acceptance": [
+    {
+      "phase": "P05",
+      "command": "make test-go-workspace",
+      "report": "build/reports/P05/report.json"
+    },
+    {
+      "phase": "P08",
+      "command": "make test-control-plane-platform",
+      "report": "build/reports/P08/report.json"
+    }
+  ],
+  "constraints": [
+    "frozen-p05-archive-remains-immutable",
+    "no-unrecorded-p05-owned-drift",
+    "runtime-inputs-remain-empty"
+  ]
+}

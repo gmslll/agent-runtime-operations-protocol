@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "transition_id": "P06-P05-MODULE-TRANSITION-001",
+  "status": "validated",
+  "policy": {
+    "owner_phase_semantics": "first-introduction-and-accountability",
+    "exclusive_mutation_ownership": false,
+    "evidence_mode": "git-object-replay"
+  },
+  "from_phase": "P05",
+  "to_phase": "P06",
+  "baseline_commit": "0bbf501de769ea7b0d31e42f6acb9eebd74d0503",
+  "result_commit": "a2bfb31bde3fe874e3a9ef215f1dbdd934d1b092",
+  "reason": "P06 updates root module metadata while retaining the frozen P05 nested pin.",
+  "changed_paths": [
+    "go.mod"
+  ],
+  "affected_artifacts": [
+    "root-go-module"
+  ],
+  "history": [
+    {
+      "commit": "a2bfb31bde3fe874e3a9ef215f1dbdd934d1b092",
+      "changed_paths": [
+        "go.mod"
+      ],
+      "before": [
+        {
+          "path": "go.mod",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "732e911003e193ff97c07b345190968d0f617cbe63247bd639b186f0a4d33245"
+        }
+      ],
+      "after": [
+        {
+          "path": "go.mod",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "e400de8a8e81cdb05ed61caee8b915864e0f026c1349d4b9a6e3ee18e52a9964"
+        }
+      ]
+    }
+  ],
+  "root_pin": null,
+  "acceptance": [
+    {
+      "phase": "P05",
+      "command": "make test-go-workspace",
+      "report": "build/reports/P05/report.json"
+    },
+    {
+      "phase": "P06",
+      "command": "make test-protocol-foundation",
+      "report": "build/reports/P06/report.json"
+    }
+  ],
+  "constraints": [
+    "frozen-p05-archive-remains-immutable",
+    "no-unrecorded-p05-owned-drift",
+    "runtime-inputs-remain-empty"
+  ]
+}
