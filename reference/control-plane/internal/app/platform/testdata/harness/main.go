@@ -88,6 +88,7 @@ var ownerDirectories = []string{
 
 var p09CompositionInputs = []string{
 	"reference/control-plane/internal/storage/migrate/testdata/engine-versions/baseline-transition-waiver.json",
+	"reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go",
 	p10WaiverPath,
 	"reference/control-plane/migrations/postgres/0001_base.sql",
 	"reference/control-plane/migrations/sqlite/0001_base.sql",
@@ -304,17 +305,28 @@ func verifyP10TransitionDeclaration(root string) error {
 }
 
 func p10AllowsPackage(root, importPath string) bool {
-	waiver, err := loadP10WaiverView(root)
-	if err != nil || waiver.Status != "validated" || !strings.HasPrefix(importPath, nestedModule+"/") {
+	output, err := runP10TransitionChecker(root, "allowed-packages")
+	if err != nil {
 		return false
 	}
-	directory := "reference/control-plane/" + strings.TrimPrefix(importPath, nestedModule+"/")
-	for _, source := range waiver.SourceClosure {
-		if source.ChangeType != "delete" && strings.HasPrefix(source.Path, directory+"/") && strings.HasSuffix(source.Path, ".go") {
+	for _, pkg := range strings.Fields(string(output)) {
+		if pkg == importPath {
 			return true
 		}
 	}
 	return false
+}
+
+func runP10TransitionChecker(root, mode string) ([]byte, error) {
+	path := filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go")
+	cmd := exec.Command("go", "run", "-modfile="+filepath.Join(root, "go.mod"), path, mode)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GOENV=off", "GOFLAGS=-mod=readonly", "GOWORK=off", "GOTOOLCHAIN=local", "CGO_ENABLED=0")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return output, fmt.Errorf("P10 transition checker %s: %w: %s", mode, err, strings.TrimSpace(string(output)))
+	}
+	return output, nil
 }
 
 func main() {
@@ -340,7 +352,8 @@ func main() {
 	add("exact-command", commandErr, expectedCommand)
 
 	add("p08-owner-boundary", requireOwnerDirectories(root), "the four P08 owner roots and their required platform subpackages exist as real directories")
-	add("p10-transition-declaration", verifyP10TransitionDeclaration(root), "the P10-owned transition declaration is strict, owner-preserving, and binds P08/P09/P10 acceptance before later closure expansion is allowed")
+	_, p10TransitionErr := runP10TransitionChecker(root, "validate")
+	add("p10-transition-declaration", p10TransitionErr, "the shared strict validator independently binds Git touch history, manifest owners/DAG, canonical closure, and all P08/P09/P10 acceptances")
 	add("p05-baseline-unchanged", verifyFrozenInputs(root), "nested module/workspace and internal/server P05 baselines are byte-identical")
 	add("production-import-boundary", verifyProductionImports(root), "P08 production imports stay within stdlib and exact P08 packages, with cmd/aropd alone allowed the approved P09 storage assembly imports")
 	add("trace-validator-reuse", verifyTraceValidatorReuse(root), "request metadata uses the root core TraceContext validator without a copied trace regex or validator")

@@ -24,73 +24,101 @@
   "source_closure": [
     {
       "path": "reference/control-plane/cmd/aropd/main.go",
+      "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": null,
       "current_sha256": null,
-      "artifact_ids": ["reference-control-plane-server", "phase-report-p08"],
+      "touch_commits": [],
+      "artifact_ids": ["phase-report-p08", "reference-control-plane-server"],
       "owner_phases": ["P08"]
     },
     {
       "path": "reference/control-plane/cmd/aropd/main_test.go",
+      "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": null,
       "current_sha256": null,
-      "artifact_ids": ["reference-control-plane-server", "phase-report-p08"],
+      "touch_commits": [],
+      "artifact_ids": ["phase-report-p08", "reference-control-plane-server"],
       "owner_phases": ["P08"]
     },
     {
       "path": "reference/control-plane/internal/app/platform/testdata/harness/main.go",
+      "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": null,
       "current_sha256": null,
+      "touch_commits": [],
       "artifact_ids": ["control-plane-platform-foundation", "phase-report-p08"],
       "owner_phases": ["P08"]
     },
     {
       "path": "reference/control-plane/internal/identity/testdata/transition/p10-baseline-transition-waiver.json",
+      "scope": "carrier",
       "change_type": "add",
       "baseline_sha256": null,
       "current_sha256": null,
+      "touch_commits": [],
       "artifact_ids": ["p10-baseline-transition-waiver", "phase-report-p10"],
       "owner_phases": ["P10"]
     },
     {
       "path": "reference/control-plane/internal/storage/migrate/catalog_closure.go",
+      "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": null,
       "current_sha256": null,
+      "touch_commits": [],
       "artifact_ids": ["migration-engine", "phase-report-p09"],
       "owner_phases": ["P09"]
     },
     {
       "path": "reference/control-plane/internal/storage/migrate/catalog_closure_test.go",
+      "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": null,
       "current_sha256": null,
+      "touch_commits": [],
       "artifact_ids": ["migration-engine", "phase-report-p09"],
       "owner_phases": ["P09"]
     },
     {
       "path": "reference/control-plane/internal/storage/migrate/production_catalog.go",
+      "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": null,
       "current_sha256": null,
+      "touch_commits": [],
       "artifact_ids": ["migration-engine", "phase-report-p09"],
       "owner_phases": ["P09"]
     },
     {
       "path": "reference/control-plane/internal/storage/migrate/testdata/engine-versions/composition/p09_storage_acceptance_test.go",
+      "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": null,
       "current_sha256": null,
+      "touch_commits": [],
       "artifact_ids": ["migration-engine-fixture-versions", "phase-report-p09"],
       "owner_phases": ["P09"]
     },
     {
       "path": "reference/control-plane/internal/storage/migrate/testdata/engine-versions/harness/main.go",
+      "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": null,
       "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": ["migration-engine-fixture-versions", "phase-report-p09"],
+      "owner_phases": ["P09"]
+    },
+    {
+      "path": "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go",
+      "scope": "early-owned",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
       "artifact_ids": ["migration-engine-fixture-versions", "phase-report-p09"],
       "owner_phases": ["P09"]
     }

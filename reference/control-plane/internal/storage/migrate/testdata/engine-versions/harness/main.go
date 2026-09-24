@@ -309,9 +309,10 @@ func main() {
 	waiverErr := verifyBaselineTransitionWaiver(root, inputPaths, standalone.List.Output)
 	add("p09-baseline-transition-waiver", waiverErr, "manifest ownership, the P08 baseline diff, and the actual Go compilation closure independently match the waiver's exact affected artifact/source set")
 	add("p09-baseline-transition-waiver-omission-negatives", verifyBaselineTransitionWaiverOmissionNegatives(root, inputPaths, standalone.List.Output), "omitting any independently discovered P08 artifact, changed source, or acceptance checker is rejected")
-	p10WaiverErr := verifyP10TransitionWaiver(root, inputPaths)
+	_, p10WaiverErr := runP10TransitionChecker(root, "validate")
 	add("p10-transition-waiver-governance", p10WaiverErr, "the P10-owned declaration strictly binds P08/P09 accountable owners, planned source changes, three phase acceptances, and non-transfer constraints")
-	add("p10-transition-waiver-negatives", verifyP10TransitionWaiverNegatives(root, inputPaths), "omission, addition, wrong owner, wrong acceptance, wrong constraint, rename/delete confusion, duplicate keys, and trailing JSON fail closed")
+	_, p10NegativeErr := runP10TransitionChecker(root, "negative")
+	add("p10-transition-waiver-negatives", p10NegativeErr, "omission, addition, duplicate, wrong owner, wrong acceptance, wrong constraint, changed-to-reverted, and delete/add-normalized rename inputs fail through the production validator")
 
 	p08 := runP08Regression(root, scratch)
 	add("p09-p08-regression", commandFailure(p08), "P08 platform acceptance and report verification remain green")
@@ -411,6 +412,18 @@ func verifyMinimalEnvironment() error {
 		return errors.New("explicit child environment override was lost")
 	}
 	return nil
+}
+
+func runP10TransitionChecker(root, mode string) ([]byte, error) {
+	path := filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go")
+	cmd := exec.Command("go", "run", "-modfile="+filepath.Join(root, "go.mod"), path, mode)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GOENV=off", "GOFLAGS=-mod=readonly", "GOWORK=off", "GOTOOLCHAIN=local", "CGO_ENABLED=0")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return output, fmt.Errorf("P10 transition checker %s: %w: %s", mode, err, strings.TrimSpace(string(output)))
+	}
+	return output, nil
 }
 
 func verifyBaselineTransitionWaiver(root string, inputPaths []string, goListOutput []byte) error {
@@ -1035,13 +1048,33 @@ func changedPathsSinceP08(root string) (map[string]bool, error) {
 	if _, err := runGit(root, "merge-base", "--is-ancestor", baseline, "HEAD"); err != nil {
 		return nil, errors.New("resolved P08 baseline is not an ancestor of HEAD")
 	}
-	endpointOutput, err := runGit(root, "log", "-1", "--format=%H", "--", waiverPath)
+	p10IntroOutput, err := runGit(root, "log", "--diff-filter=A", "--format=%H", "--", p10WaiverPath)
 	if err != nil {
-		return nil, fmt.Errorf("resolve accepted P09 transition endpoint: %w", err)
+		return nil, fmt.Errorf("locate P10 waiver introduction: %w", err)
+	}
+	p10Introductions := strings.Fields(string(p10IntroOutput))
+	if len(p10Introductions) != 1 {
+		return nil, fmt.Errorf("P10 waiver introduction commits=%d want=1", len(p10Introductions))
+	}
+	p10ParentOutput, err := runGit(root, "rev-parse", p10Introductions[0]+"^")
+	if err != nil {
+		return nil, fmt.Errorf("resolve P10 introduction parent: %w", err)
+	}
+	p10Parent := strings.TrimSpace(string(p10ParentOutput))
+	endpointOutput, err := runGit(root, "log", "-1", "--format=%H", p10Parent, "--", waiverPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve last P09 waiver touch before P10: %w", err)
 	}
 	endpoint := strings.TrimSpace(string(endpointOutput))
 	if len(endpoint) != 40 {
 		return nil, errors.New("accepted P09 transition endpoint is not a full commit id")
+	}
+	laterTouches, err := runGit(root, "log", "--format=%H", endpoint+"..HEAD", "--", waiverPath)
+	if err != nil {
+		return nil, fmt.Errorf("audit P09 waiver after endpoint: %w", err)
+	}
+	if strings.TrimSpace(string(laterTouches)) != "" {
+		return nil, errors.New("old P09 waiver changed after its accepted endpoint")
 	}
 	if _, err := runGit(root, "merge-base", "--is-ancestor", baseline, endpoint); err != nil {
 		return nil, errors.New("accepted P09 transition endpoint does not descend from the P08 baseline")
