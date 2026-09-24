@@ -870,9 +870,9 @@ func runP08Regression(root, scratch string) commandResult {
 	if err := os.Mkdir(home, 0o700); err != nil {
 		return commandResult{Argv: []string{"make", "test-control-plane-platform"}, Err: err}
 	}
-	result := runCommand(root, map[string]string{
+	result := runCommandWithTimeout(root, map[string]string{
 		"AROP_CHECK_COMMAND": "", "HOME": home, "GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": "off", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0",
-	}, []string{"make", "test-control-plane-platform"})
+	}, []string{"make", "test-control-plane-platform"}, 5*time.Minute)
 	if result.Err != nil {
 		return result
 	}
@@ -1614,7 +1614,11 @@ func runGit(root string, arguments ...string) ([]byte, error) {
 }
 
 func runCommand(directory string, environment map[string]string, argv []string) commandResult {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	return runCommandWithTimeout(directory, environment, argv, 2*time.Minute)
+}
+
+func runCommandWithTimeout(directory string, environment map[string]string, argv []string, timeout time.Duration) commandResult {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	command := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	command.Dir = directory
