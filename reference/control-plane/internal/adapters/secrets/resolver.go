@@ -13,7 +13,10 @@ import (
 	secretports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/ports/secrets"
 )
 
-const auditOperation = "secret.resolve"
+const (
+	auditOperation                = "secret.resolve"
+	auditCallbackFailureOperation = "secret.resolve.callback"
+)
 
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$`)
 
@@ -126,7 +129,13 @@ func (resolver *Resolver) Use(ctx context.Context, request secretports.ResolveRe
 	if !resolver.active(resolveCtx, effectiveDeadline) {
 		return secretports.ErrDenied
 	}
-	return invoke(callback, secretports.NewView(value))
+	if err := invoke(callback, secretports.NewView(value)); err != nil {
+		if observeErr := resolver.observeOperation(resolveCtx, request, startedAt, auditCallbackFailureOperation, observability.OutcomeFailed, 500); observeErr != nil {
+			return secretports.ErrUnavailable
+		}
+		return secretports.ErrUnavailable
+	}
+	return nil
 }
 
 func (resolver *Resolver) active(ctx context.Context, deadline time.Time) bool {
@@ -177,6 +186,10 @@ func (resolver *Resolver) fail(ctx context.Context, request secretports.ResolveR
 }
 
 func (resolver *Resolver) observe(ctx context.Context, request secretports.ResolveRequest, startedAt time.Time, outcome observability.Outcome, status int) error {
+	return resolver.observeOperation(ctx, request, startedAt, auditOperation, outcome, status)
+}
+
+func (resolver *Resolver) observeOperation(ctx context.Context, request secretports.ResolveRequest, startedAt time.Time, operation string, outcome observability.Outcome, status int) error {
 	endedAt := resolver.clock.Now()
 	if endedAt.Before(startedAt) {
 		return errors.New("secret resolver clock moved backwards")
@@ -192,12 +205,12 @@ func (resolver *Resolver) observe(ctx context.Context, request secretports.Resol
 	return resolver.observability.AppendObservation(ctx,
 		observability.AuditEntry{
 			ID: auditID, OccurredAt: endedAt, RequestID: request.RequestID,
-			TraceID: request.TraceID, Operation: auditOperation, Outcome: outcome,
+			TraceID: request.TraceID, Operation: operation, Outcome: outcome,
 			HTTPStatus: status,
 		},
 		observability.SpanRecord{
 			TraceID: request.TraceID, SpanID: spanID, ParentSpanID: request.ParentSpanID,
-			RequestID: request.RequestID, Operation: auditOperation, StartedAt: startedAt,
+			RequestID: request.RequestID, Operation: operation, StartedAt: startedAt,
 			EndedAt: endedAt, Status: spanStatus(outcome),
 		})
 }

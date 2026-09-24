@@ -143,7 +143,8 @@ func TestResolverProviderAndCallbackErrorsDoNotLeak(t *testing.T) {
 		t.Fatalf("provider panic leaked details: %v", err)
 	}
 
-	callbackResolver := newResolver(t, []Binding{validBinding(valueProvider())}, &captureWriter{}, nil)
+	callbackWriter := &captureWriter{}
+	callbackResolver := newResolver(t, []Binding{validBinding(valueProvider())}, callbackWriter, nil)
 	var callbackStorage []byte
 	err = callbackResolver.Use(context.Background(), validRequest(), func(view secretports.SecretView) error {
 		callbackStorage = view.Bytes()
@@ -153,10 +154,12 @@ func TestResolverProviderAndCallbackErrorsDoNotLeak(t *testing.T) {
 		t.Fatalf("callback failure leaked details: %v", err)
 	}
 	assertZeroed(t, callbackStorage)
+	assertCallbackFailureAudit(t, callbackWriter)
 }
 
 func TestResolverPanicIsSanitizedAndStorageIsZeroed(t *testing.T) {
-	resolver := newResolver(t, []Binding{validBinding(valueProvider())}, &captureWriter{}, nil)
+	writer := &captureWriter{}
+	resolver := newResolver(t, []Binding{validBinding(valueProvider())}, writer, nil)
 	var storage []byte
 	err := resolver.Use(context.Background(), validRequest(), func(view secretports.SecretView) error {
 		storage = view.Bytes()
@@ -166,6 +169,26 @@ func TestResolverPanicIsSanitizedAndStorageIsZeroed(t *testing.T) {
 		t.Fatalf("panic was not converted to a safe error: %v", err)
 	}
 	assertZeroed(t, storage)
+	assertCallbackFailureAudit(t, writer)
+}
+
+func TestResolverCallbackFailureAuditFailureFailsClosedAndZeroesStorage(t *testing.T) {
+	writer := &captureWriter{failAt: 2}
+	resolver := newResolver(t, []Binding{validBinding(valueProvider())}, writer, nil)
+	var storage []byte
+	err := resolver.Use(context.Background(), validRequest(), func(view secretports.SecretView) error {
+		storage = view.Bytes()
+		return errors.New(sentinel)
+	})
+	if !errors.Is(err, secretports.ErrUnavailable) || containsText(err.Error(), sentinel) {
+		t.Fatalf("callback failure audit error was not sanitized: %v", err)
+	}
+	assertZeroed(t, storage)
+	entries, spans := writer.snapshot()
+	if len(entries) != 1 || len(spans) != 1 || entries[0].Operation != auditOperation || entries[0].Outcome != observability.OutcomeSucceeded {
+		t.Fatalf("unexpected persisted audit prefix after second append failed: entries=%+v spans=%+v", entries, spans)
+	}
+	assertNoSecretInObservations(t, entries, spans)
 }
 
 func TestResolverDeadlineCancellationAndExpiry(t *testing.T) {
@@ -405,14 +428,17 @@ func (fixedIDs) NewID(_ context.Context, kind platformports.IDKind) (string, err
 }
 
 type captureWriter struct {
-	mutex   sync.Mutex
-	entries []observability.AuditEntry
-	spans   []observability.SpanRecord
-	err     error
-	hook    func(context.Context) error
+	mutex    sync.Mutex
+	entries  []observability.AuditEntry
+	spans    []observability.SpanRecord
+	err      error
+	hook     func(context.Context) error
+	attempts atomic.Int64
+	failAt   int64
 }
 
 func (writer *captureWriter) AppendObservation(ctx context.Context, entry observability.AuditEntry, span observability.SpanRecord) error {
+	attempt := writer.attempts.Add(1)
 	if err := observability.ValidateObservationPair(entry, span); err != nil {
 		return err
 	}
@@ -423,6 +449,9 @@ func (writer *captureWriter) AppendObservation(ctx context.Context, entry observ
 	}
 	if writer.err != nil {
 		return writer.err
+	}
+	if writer.failAt != 0 && attempt == writer.failAt {
+		return errors.New("injected observation failure")
 	}
 	writer.mutex.Lock()
 	defer writer.mutex.Unlock()
@@ -501,6 +530,35 @@ func assertZeroed(t *testing.T, value []byte) {
 		if item != 0 {
 			t.Fatalf("secret storage byte %d was not zeroed", index)
 		}
+	}
+}
+
+func assertCallbackFailureAudit(t *testing.T, writer *captureWriter) {
+	t.Helper()
+	entries, spans := writer.snapshot()
+	if len(entries) != 2 || len(spans) != 2 {
+		t.Fatalf("callback failure audit sequence length mismatch: entries=%d spans=%d", len(entries), len(spans))
+	}
+	if entries[0].Operation != auditOperation || entries[0].Outcome != observability.OutcomeSucceeded || entries[0].HTTPStatus != 200 {
+		t.Fatalf("callback pre-exposure observation is not stable: %+v", entries[0])
+	}
+	if entries[1].Operation != auditCallbackFailureOperation || entries[1].Outcome != observability.OutcomeFailed || entries[1].HTTPStatus != 500 {
+		t.Fatalf("callback failure observation is not stable: %+v", entries[1])
+	}
+	assertNoSecretInObservations(t, entries, spans)
+}
+
+func assertNoSecretInObservations(t *testing.T, entries []observability.AuditEntry, spans []observability.SpanRecord) {
+	t.Helper()
+	encoded, err := json.Marshal(struct {
+		Entries []observability.AuditEntry
+		Spans   []observability.SpanRecord
+	}{Entries: entries, Spans: spans})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if containsText(string(encoded), sentinel) {
+		t.Fatal("secret sentinel escaped into callback observations")
 	}
 }
 
