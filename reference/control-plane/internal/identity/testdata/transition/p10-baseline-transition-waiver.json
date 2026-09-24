@@ -233,13 +233,14 @@
       "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": "f2bb5a1bf4a13bec55d0fdf65cc45ea90950ca0d1ea58d4132e63c6b14613898",
-      "current_sha256": "cba42921198817a2cc3fefc4b34064a8b52b71cd90c3aa778e2f513ed5440470",
+      "current_sha256": "6cb05c693ee31794b100dc927d0cb631e790b08005704eabb284919eb86bcce5",
       "touch_commits": [
         "4f97c42f2b46c17bf0ab5daac4780f43c10234b5",
         "ace230f6e083e23d09c0f807127496defe9ed14c",
         "b24c9ed8bfc7ae02a08d1d143434c6c93db614b8",
         "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126",
-        "665b757506180b43fa0f3a248b34605e220d1eb9"
+        "665b757506180b43fa0f3a248b34605e220d1eb9",
+        "350c3af2d1da038633beb411ebe121fd25cb008a"
       ],
       "artifact_ids": [
         "migration-engine-fixture-versions",
