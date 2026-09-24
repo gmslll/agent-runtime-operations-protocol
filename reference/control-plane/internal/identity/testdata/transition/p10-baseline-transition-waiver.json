@@ -88,11 +88,12 @@
       "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": "ecfab20e1290b246a4e09549c004c0e3490640d7ee288ce25ae2d252da17a4bd",
-      "current_sha256": "426c790fb13dbf91934f0bf1f544cf6e59397e003a62c4711372269df3da08f2",
+      "current_sha256": "acc5619afe902425f064c154450369bf7d54bcd681358c3fb5aa732c7701aa65",
       "touch_commits": [
         "4f97c42f2b46c17bf0ab5daac4780f43c10234b5",
         "ace230f6e083e23d09c0f807127496defe9ed14c",
-        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126"
+        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126",
+        "665b757506180b43fa0f3a248b34605e220d1eb9"
       ],
       "artifact_ids": [
         "control-plane-platform-foundation",
@@ -232,12 +233,13 @@
       "scope": "early-owned",
       "change_type": "modify",
       "baseline_sha256": "f2bb5a1bf4a13bec55d0fdf65cc45ea90950ca0d1ea58d4132e63c6b14613898",
-      "current_sha256": "d3cd7d150dc2c6506ab7bf5a6c2bb18fc0a442b3d1119dfb5eea43fa96a0d9ef",
+      "current_sha256": "cba42921198817a2cc3fefc4b34064a8b52b71cd90c3aa778e2f513ed5440470",
       "touch_commits": [
         "4f97c42f2b46c17bf0ab5daac4780f43c10234b5",
         "ace230f6e083e23d09c0f807127496defe9ed14c",
         "b24c9ed8bfc7ae02a08d1d143434c6c93db614b8",
-        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126"
+        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126",
+        "665b757506180b43fa0f3a248b34605e220d1eb9"
       ],
       "artifact_ids": [
         "migration-engine-fixture-versions",
@@ -369,9 +371,10 @@
       "scope": "static-only",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "d8229838a6cfe852fb9fe687782a4a32655177b638e83813558df0864662418d",
+      "current_sha256": "ad0206e8028166a0dc85124ced89f8bf3ce2ffcca9faac209969fadb64eac154",
       "touch_commits": [
-        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126"
+        "3052d644a8e2c7f2c09bc0aafc62ce6fc7e74126",
+        "665b757506180b43fa0f3a248b34605e220d1eb9"
       ]
     },
     {
