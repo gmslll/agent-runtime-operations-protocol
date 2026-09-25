@@ -832,17 +832,17 @@ func validateWaiver(root string, w waiver) error {
 	if w.SchemaVersion != 1 || w.Status != "validated" || w.Baseline.Rule != "parent-of-unique-waiver-introduction-commit" || w.Baseline.Commit != baselineCommit {
 		return errors.New("waiver status/baseline")
 	}
-	if !reflect.DeepEqual(w.Transition.FromPhases, []string{"P01", "P02", "P06", "P07"}) || w.Transition.ToPhase != "P11" || strings.TrimSpace(w.Transition.Reason) == "" {
+	if !reflect.DeepEqual(w.Transition.FromPhases, []string{"P01", "P02", "P06", "P07", "P08", "P09", "P10"}) || w.Transition.ToPhase != "P11" || strings.TrimSpace(w.Transition.Reason) == "" {
 		return errors.New("transition phases/reason not exact")
 	}
 	if w.Policy.OwnershipTransferred {
 		return errors.New("ownership transfer")
 	}
-	wantArtifacts := []string{"blueprint-check-reports", "blueprint-validation-library", "blueprint-validation-tests", "codegen-pipeline", "codegen-representative-spike", "generated-control-plane-go", "generated-control-plane-python", "generated-control-plane-typescript", "go-manifest-library-baseline", "openapi-control-plane-foundation", "phase-report-p01", "phase-report-p06", "phase-report-p07", "phase-report-p11", "publication-contract-fixtures", "schema-manifest"}
+	wantArtifacts := []string{"blueprint-check-reports", "blueprint-validation-library", "blueprint-validation-tests", "codegen-pipeline", "codegen-representative-spike", "generated-control-plane-go", "generated-control-plane-python", "generated-control-plane-typescript", "go-manifest-library-baseline", "migration-engine-fixture-versions", "openapi-control-plane-foundation", "phase-report-p01", "phase-report-p06", "phase-report-p07", "phase-report-p08", "phase-report-p09", "phase-report-p10", "phase-report-p11", "publication-contract-fixtures", "reference-control-plane-server", "schema-manifest"}
 	if !reflect.DeepEqual(w.AffectedArtifacts, wantArtifacts) {
 		return errors.New("affected artifacts not exact")
 	}
-	wantAcceptance := []acceptance{{"P01", "make spec-index-check", "build/reports/P01/report.json"}, {"P02", "make blueprint-check", "build/reports/P02/report.json"}, {"P06", "make test-protocol-foundation", "build/reports/P06/report.json"}, {"P07", "make test-codegen-pipeline", "build/reports/P07/report.json"}, {"P11", commandWant, "build/reports/P11/report.json"}}
+	wantAcceptance := []acceptance{{"P01", "make spec-index-check", "build/reports/P01/report.json"}, {"P02", "make blueprint-check", "build/reports/P02/report.json"}, {"P06", "make test-protocol-foundation", "build/reports/P06/report.json"}, {"P07", "make test-codegen-pipeline", "build/reports/P07/report.json"}, {"P08", "make test-control-plane-platform", "build/reports/P08/report.json"}, {"P09", "make test-storage-migrations", "build/reports/P09/report.json"}, {"P10", "make test-identity-secrets", "build/reports/P10/report.json"}, {"P11", commandWant, "build/reports/P11/report.json"}}
 	if !reflect.DeepEqual(w.Acceptance, wantAcceptance) {
 		return errors.New("acceptance not exact")
 	}
