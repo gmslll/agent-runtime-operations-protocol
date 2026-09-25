@@ -256,6 +256,19 @@ func affectedArtifacts(root string, sources []string) ([]string, error) {
 		}
 	}
 	for _, source := range sources {
+		if source == "Makefile" {
+			matched := false
+			for _, artifact := range manifest.Artifacts {
+				if artifact.PathRole == "concrete" && artifact.AcceptanceTest == "make-test-asset-broker" {
+					found[artifact.ID] = true
+					matched = true
+				}
+			}
+			if !matched {
+				return nil, errors.New("Makefile has no manifest-owned P13 acceptance")
+			}
+			continue
+		}
 		best := -1
 		var matches []blueprint.Artifact
 		for _, artifact := range manifest.Artifacts {
