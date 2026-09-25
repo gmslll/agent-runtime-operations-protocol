@@ -110,29 +110,31 @@ func main() {
 	add("p13-sqlite-postgres-asset-broker", tests.err, "asset domain, HTTP, composition, migration and both repositories pass")
 	add("p13-no-skips-cache-or-no-tests", rejectIncompleteTests(tests.output), "test stream has no skip/cache/no-tests terminal")
 
-	regressions := []struct{ phase, target, path string }{
-		{"P05", "test-go-workspace", "build/reports/P05/report.json"},
-		{"P06", "test-protocol-foundation", "build/reports/P06/report.json"},
-		{"P07", "test-codegen-pipeline", "build/reports/P07/report.json"},
-		{"P08", "test-control-plane-platform", "build/reports/P08/report.json"},
-		{"P09", "test-storage-migrations", "build/reports/P09/report.json"},
-		{"P10", "test-identity-secrets", "build/reports/P10/report.json"},
-		{"P11", "test-publication-contracts", "build/reports/P11/report.json"},
-		{"P12", "test-publication-service", "build/reports/P12/report.json"},
-	}
 	evidence := []report.RuntimeEvidence{
 		{Kind: "p13-go-test", SHA256: report.Hash(tests.output), Bytes: int64(len(tests.output))},
 		{Kind: "p13-postgres-toolchain", SHA256: report.Hash(pgEvidence), Bytes: int64(len(pgEvidence))},
 	}
-	for _, item := range regressions {
-		result := run(root, nil, "make", item.target)
-		if result.err == nil {
-			verify := run(root, nil, "make", "verify-report", "REPORT="+item.path)
-			result.output = append(result.output, verify.output...)
-			result.err = verify.err
-		}
-		add("p13-"+strings.ToLower(item.phase)+"-regression", result.err, item.phase+" current report verified")
-		evidence = append(evidence, report.RuntimeEvidence{Kind: strings.ToLower(item.phase) + "-regression", SHA256: report.Hash(result.output), Bytes: int64(len(result.output))})
+	p07 := run(root, nil, "make", "test-codegen-pipeline")
+	if p07.err == nil {
+		verify := run(root, nil, "make", "verify-report", "REPORT=build/reports/P07/report.json")
+		p07.output = append(p07.output, verify.output...)
+		p07.err = verify.err
+	}
+	add("p13-p07-regression", p07.err, "P07 code generation report is current")
+	evidence = append(evidence, report.RuntimeEvidence{Kind: "p07-regression", SHA256: report.Hash(p07.output), Bytes: int64(len(p07.output))})
+	p12 := run(root, nil, "make", "test-publication-service")
+	if p12.err == nil {
+		verify := run(root, nil, "make", "verify-report", "REPORT=build/reports/P12/report.json")
+		p12.output = append(p12.output, verify.output...)
+		p12.err = verify.err
+	}
+	add("p13-p12-regression", p12.err, "P12 and its P05-P11 regression chain passed on the current head")
+	evidence = append(evidence, report.RuntimeEvidence{Kind: "p12-regression", SHA256: report.Hash(p12.output), Bytes: int64(len(p12.output))})
+	for _, phase := range []string{"P05", "P06", "P08", "P09", "P10", "P11"} {
+		path := "build/reports/" + phase + "/report.json"
+		verified := run(root, nil, "make", "verify-report", "REPORT="+path)
+		add("p13-"+strings.ToLower(phase)+"-regression", verified.err, phase+" current report verified after P12")
+		evidence = append(evidence, report.RuntimeEvidence{Kind: strings.ToLower(phase) + "-regression", SHA256: report.Hash(verified.output), Bytes: int64(len(verified.output))})
 	}
 	if pg != nil {
 		err = pg.stop()
