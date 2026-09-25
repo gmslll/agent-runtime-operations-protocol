@@ -18,10 +18,11 @@ import (
 // Service implements the P12 publication use case. It is intentionally
 // transport-neutral; HTTP and CLI adapters consume this interface later.
 type Service struct {
-	deps           Dependencies
-	mu             sync.Mutex
-	healthMu       sync.Mutex
-	auditUnhealthy error
+	deps                Dependencies
+	mu                  sync.Mutex
+	healthMu            sync.Mutex
+	auditUnhealthy      error
+	dependencyUnhealthy error
 }
 
 func New(dependencies Dependencies) (*Service, error) {
@@ -38,6 +39,7 @@ func New(dependencies Dependencies) (*Service, error) {
 func (service *Service) Publish(ctx context.Context, request PublishRequest) (PublishResult, error) {
 	started := service.now()
 	request.Bundle = slices.Clone(request.Bundle)
+	defer clear(request.Bundle)
 	if err := request.Validate(); err != nil {
 		status, failure := 400, NewError(CategoryValidation, ReasonInvalidRequest)
 		if len(request.Bundle) > MaxBundleBytes {
@@ -57,8 +59,6 @@ func (service *Service) Publish(ctx context.Context, request PublishRequest) (Pu
 		return PublishResult{}, service.fail(ctx, request.Metadata, OperationPublish, started, err)
 	}
 	bundle, err := service.deps.Validator.ValidateBundle(ctx, request.Bundle)
-	clear(request.Bundle)
-	request.Bundle = nil
 	if err != nil {
 		if typed, ok := AsError(err); ok && typed.Category == CategoryDependency {
 			return PublishResult{}, service.fail(ctx, request.Metadata, OperationPublish, started, err)
@@ -120,7 +120,7 @@ func (service *Service) Publish(ctx context.Context, request PublishRequest) (Pu
 		}
 		return PublishResult{}, service.fail(ctx, request.Metadata, OperationPublish, started, err)
 	}
-	service.markAuditHealthy()
+	service.markHealthy()
 	return resultFor(record), nil
 }
 
@@ -156,6 +156,7 @@ func (service *Service) Get(ctx context.Context, request GetRequest) (GetResult,
 	if err := service.audit(ctx, request.Metadata, OperationGet, started, 200); err != nil {
 		return GetResult{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
 	}
+	service.markDependencyHealthy()
 	return result, nil
 }
 
@@ -166,9 +167,10 @@ func (service *Service) replay(ctx context.Context, metadata platform.RequestMet
 	if record.IdempotencyRequestDigest != requestDigest {
 		return PublishResult{}, service.reject(ctx, metadata, OperationPublish, started, 409, NewError(CategoryConflict, ReasonIdempotencyConflict))
 	}
-	if err := service.audit(ctx, metadata, OperationPublish, started, 200); err != nil {
+	if err := service.audit(ctx, metadata, OperationPublish, started, 201); err != nil {
 		return PublishResult{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
 	}
+	service.markDependencyHealthy()
 	return resultFor(record), nil
 }
 
@@ -197,10 +199,20 @@ func (service *Service) rejectGet(ctx context.Context, metadata platform.Request
 }
 
 func (service *Service) fail(ctx context.Context, metadata platform.RequestMetadata, operation Operation, started time.Time, cause error) error {
-	if err := service.audit(ctx, metadata, operation, started, 503); err != nil {
-		cause = errors.Join(cause, err)
+	var observation observationFailure
+	auditFailed := errors.As(cause, &observation)
+	if auditFailed {
+		service.markAuditUnhealthy(cause)
+	} else {
+		service.markDependencyUnhealthy(cause)
 	}
-	service.markAuditUnhealthy(cause)
+	if err := service.audit(ctx, metadata, operation, started, 503); err != nil {
+		service.markAuditUnhealthy(err)
+	} else if auditFailed {
+		// A compensating failure observation cannot erase the fact that the
+		// required mutation observation failed inside the atomic transaction.
+		service.markAuditUnhealthy(cause)
+	}
 	return NewError(CategoryDependency, ReasonDependencyUnavailable)
 }
 func (service *Service) failGet(ctx context.Context, metadata platform.RequestMetadata, started time.Time, cause error) error {
@@ -213,7 +225,7 @@ func (service *Service) audit(ctx context.Context, metadata platform.RequestMeta
 	})
 	if err != nil {
 		service.markAuditUnhealthy(err)
-	} else {
+	} else if status < 400 {
 		service.markAuditHealthy()
 	}
 	return err
@@ -222,7 +234,7 @@ func (service *Service) audit(ctx context.Context, metadata platform.RequestMeta
 func (service *Service) appendObservation(ctx context.Context, metadata platform.RequestMetadata, operation Operation, started time.Time, status int) error {
 	auditID, err := service.deps.IDs.NewID(ctx, platformports.IDAudit)
 	if err != nil {
-		return err
+		return observationFailure{err}
 	}
 	ended := service.now()
 	outcome, spanStatus := observability.OutcomeSucceeded, observability.SpanStatusOK
@@ -231,17 +243,25 @@ func (service *Service) appendObservation(ctx context.Context, metadata platform
 	} else if status >= 400 {
 		outcome, spanStatus = observability.OutcomeRejected, observability.SpanStatusError
 	}
-	return service.deps.Observability.AppendObservation(ctx,
+	if err := service.deps.Observability.AppendObservation(ctx,
 		observability.AuditEntry{ID: auditID, OccurredAt: ended, RequestID: metadata.RequestID, TraceID: metadata.TraceID, Operation: string(operation), Outcome: outcome, HTTPStatus: status},
-		observability.SpanRecord{TraceID: metadata.TraceID, SpanID: metadata.SpanID, ParentSpanID: metadata.ParentSpanID, RequestID: metadata.RequestID, Operation: string(operation), StartedAt: started, EndedAt: ended, Status: spanStatus})
+		observability.SpanRecord{TraceID: metadata.TraceID, SpanID: metadata.SpanID, ParentSpanID: metadata.ParentSpanID, RequestID: metadata.RequestID, Operation: string(operation), StartedAt: started, EndedAt: ended, Status: spanStatus}); err != nil {
+		return observationFailure{err}
+	}
+	return nil
 }
+
+type observationFailure struct{ cause error }
+
+func (failure observationFailure) Error() string { return "publication observation unavailable" }
+func (failure observationFailure) Unwrap() error { return failure.cause }
 
 func (service *Service) now() time.Time { return service.deps.Clock.Now().UTC() }
 func (service *Service) Name() string   { return "publication-service" }
 func (service *Service) Check(context.Context) error {
 	service.healthMu.Lock()
 	defer service.healthMu.Unlock()
-	return service.auditUnhealthy
+	return errors.Join(service.auditUnhealthy, service.dependencyUnhealthy)
 }
 func (service *Service) markAuditUnhealthy(cause error) {
 	service.healthMu.Lock()
@@ -252,6 +272,22 @@ func (service *Service) markAuditHealthy() {
 	service.healthMu.Lock()
 	defer service.healthMu.Unlock()
 	service.auditUnhealthy = nil
+}
+func (service *Service) markDependencyUnhealthy(cause error) {
+	service.healthMu.Lock()
+	defer service.healthMu.Unlock()
+	service.dependencyUnhealthy = fmt.Errorf("publication dependency unavailable: %w", cause)
+}
+func (service *Service) markDependencyHealthy() {
+	service.healthMu.Lock()
+	defer service.healthMu.Unlock()
+	service.dependencyUnhealthy = nil
+}
+func (service *Service) markHealthy() {
+	service.healthMu.Lock()
+	defer service.healthMu.Unlock()
+	service.auditUnhealthy = nil
+	service.dependencyUnhealthy = nil
 }
 
 func sha256Hex(value string) string {

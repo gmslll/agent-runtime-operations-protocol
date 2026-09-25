@@ -20,6 +20,11 @@ func TestClassifyAllowedHostIsStaticAndFailClosed(t *testing.T) {
 		{"https://example.invalid", HostInvalid, false},
 		{"example.invalid:443", HostInvalid, false},
 		{"localhost", HostLoopback, false},
+		{"*.127.0.0.1", HostInvalid, false},
+		{"127.1", HostInvalid, false},
+		{"0177.0.0.1", HostInvalid, false},
+		{"0x7f.0.0.1", HostInvalid, false},
+		{"2130706433", HostInvalid, false},
 	}
 	for _, test := range tests {
 		test := test

@@ -15,7 +15,8 @@ func ClassifyAllowedHost(declared string) AllowedHost {
 		return host
 	}
 	if strings.HasPrefix(host.Canonical, "*.") {
-		if strings.Count(host.Canonical, "*") == 1 && validPublicHostname(strings.TrimPrefix(host.Canonical, "*.")) {
+		suffix := strings.TrimPrefix(host.Canonical, "*.")
+		if strings.Count(host.Canonical, "*") == 1 && validPublicHostname(suffix) && !ambiguousIPName(suffix) && net.ParseIP(suffix) == nil {
 			host.Class = HostWildcardName
 		}
 		return host
@@ -44,10 +45,27 @@ func ClassifyAllowedHost(declared string) AllowedHost {
 		host.Class = HostLoopback
 		return host
 	}
-	if validPublicHostname(host.Canonical) {
+	if validPublicHostname(host.Canonical) && !ambiguousIPName(host.Canonical) {
 		host.Class = HostPublicName
 	}
 	return host
+}
+
+func ambiguousIPName(value string) bool {
+	labels := strings.Split(value, ".")
+	allNumeric := true
+	for _, label := range labels {
+		if strings.HasPrefix(label, "0x") || strings.HasPrefix(label, "0X") {
+			return true
+		}
+		for _, character := range label {
+			if character < '0' || character > '9' {
+				allNumeric = false
+				break
+			}
+		}
+	}
+	return allNumeric
 }
 
 func classifyAllowedHosts(values []string) ([]AllowedHost, error) {
