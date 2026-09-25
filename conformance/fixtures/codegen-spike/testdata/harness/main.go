@@ -1205,6 +1205,9 @@ func runUnsupportedKeywordMatrix(root string, cases casesDocument) ([]byte, []re
 	matrix := []keywordCase{
 		{name: "number-minimum", property: map[string]any{"type": "number", "minimum": 0}, reason: "number bounds are unsupported"},
 		{name: "number-maximum", property: map[string]any{"type": "number", "maximum": 1}, reason: "number bounds are unsupported"},
+		{name: "pattern-lookahead", property: map[string]any{"type": "string", "pattern": "(?=a)a"}, reason: "outside the portable subset"},
+		{name: "pattern-backreference", property: map[string]any{"type": "string", "pattern": "(a)\\1"}, reason: "outside the portable subset"},
+		{name: "pattern-unicode-property", property: map[string]any{"type": "string", "pattern": "\\p{L}+"}, reason: "outside the portable subset"},
 	}
 	checks := make([]report.Check, 0, len(matrix))
 	var evidence bytes.Buffer
