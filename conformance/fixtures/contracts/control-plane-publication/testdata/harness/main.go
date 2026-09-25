@@ -12,9 +12,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -41,6 +43,9 @@ const (
 	maxEntryBytes       = int64(4194304)
 	maxTotalBytes       = int64(52428800)
 	maxCompressionRatio = int64(100)
+	manifestETagPattern = `^"sha256:[0-9a-f]{64}"$`
+	locationPattern     = `^/v1/agent-definitions/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*/versions/(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`
+	challengePattern    = `^Bearer(?: [A-Za-z][A-Za-z0-9_-]*="[ -!#-~]*")*$`
 )
 
 var orderedCaseIDs = []string{
@@ -195,12 +200,14 @@ func main() {
 	openapi, _, openapiErr := structuredfile.LoadAny(filepath.Join(root, "openapi/fragments/control-plane/publication-v1.yaml"))
 	add("openapi-strict-yaml", openapiErr, "single strict YAML document")
 	add("openapi-exact-contract", verifyOpenAPI(openapi), "exact Publication operations/auth/scopes/headers/status/media")
+	add("openapi-adversarial-negatives", verifyOpenAPINegatives(openapi), "parameter, ref, regex and fractional-number mutations fail closed")
 	add("inventory-openapi-exact-binding", verifyInventoryContract(openapi, inventory), "inventory operations, headers, errors, idempotency, aggregate and bundle policy match parsed OpenAPI")
 	add("offline-reference-closure", verifyOfflineRefs(root, openapi, pipeline), "all references resolve inside declared offline resources")
 
 	for index, c := range cases.Cases {
 		add("case:"+c.ID, verifyCase(root, c, openapi), fmt.Sprintf("ordered case %d/%d executed", index+1, len(cases.Cases)))
 	}
+	add("bundle-adversarial-negatives", verifyBundleAdversarialNegatives(), "missing/nested manifests, non-portable paths, network refs, forged metadata and zip bombs fail closed")
 	add("tracked-aggregate-forbidden", requireAbsent(root, "openapi/control-plane-v1.yaml"), "aggregate remains absent until P20")
 
 	build := filepath.Join(root, "build", "codegen", "P11")
@@ -225,6 +232,7 @@ func main() {
 	add("provenance-run-b-strict", pbe, "strict provenance")
 	add("provenance-deterministic", bytesEqual(pab, pbb, "provenance"), "provenance bytes identical")
 	add("provenance-independent", verifyProvenance(root, pipeline, pa, runA), "all provenance inputs and outputs independently rehashed")
+	add("provenance-adversarial-negatives", verifyProvenanceNegatives(root, pipeline, pa, runA), "missing, extra, empty and forged provenance inventory fails closed")
 	_ = pb
 	add("tracked-models-zero-drift", compareGenerated(root, runA), "three tracked models match generated candidates")
 	trackedProv, _ := os.ReadFile(filepath.Join(root, provenancePath))
@@ -250,7 +258,7 @@ func main() {
 		evidence = append(evidence, report.RuntimeEvidence{Kind: kind, SHA256: report.Hash(logs[kind]), Bytes: int64(len(logs[kind]))})
 	}
 	evidence = append(evidence, report.RuntimeEvidence{Kind: "p11-codegen-provenance", SHA256: report.Hash(pab), Bytes: int64(len(pab))})
-	result, err := report.Write(report.WriteOptions{Root: root, Directory: "build/reports/P11", Suite: "arop-publication-contracts", Class: "arop.publication", Command: command, CheckerPath: checkerPath, InputPaths: inputs, RuntimeInputPaths: []string{}, RuntimeEvidence: evidence, Checks: checks, Summary: map[string]any{"ordered_cases": 52, "logical_derives_from": []string{"openapi-control-plane-foundation", "publication-contract-fixtures", "generated-control-plane-go", "generated-control-plane-python", "generated-control-plane-typescript"}, "runtime_input_count": 0}, AuditNote: "P11 executes every ordered Publication case, independently regenerates and verifies three-language models/provenance, compiles isolated probes, validates the P01/P06/P07 transition and keeps runtime_inputs empty."})
+	result, err := report.Write(report.WriteOptions{Root: root, Directory: "build/reports/P11", Suite: "arop-publication-contracts", Class: "arop.publication", Command: command, CheckerPath: checkerPath, InputPaths: inputs, RuntimeInputPaths: []string{}, RuntimeEvidence: evidence, Checks: checks, Summary: map[string]any{"ordered_cases": 52, "logical_derives_from": []string{"openapi-control-plane-foundation", "publication-contract-fixtures", "generated-control-plane-go", "generated-control-plane-python", "generated-control-plane-typescript"}, "runtime_input_count": 0}, AuditNote: "P11 executes every ordered Publication case, validates the exact OpenAPI surface, streams real ZIP archives under offline limits, independently recomputes the complete codegen provenance inventory and digests, compiles isolated three-language probes, validates the P01/P06/P07 transition and keeps runtime_inputs empty."})
 	fatal(err)
 	verified, mode, err := report.Verify(report.VerifyOptions{Root: root, ReportPath: "build/reports/P11/report.json"})
 	fatal(err)
@@ -306,6 +314,9 @@ func verifyOpenAPI(value any) error {
 	if !ok {
 		return errors.New("OpenAPI must be object")
 	}
+	if err := rejectFractionalNumbers(doc, "OpenAPI"); err != nil {
+		return err
+	}
 	if fmt.Sprint(doc["openapi"]) != "3.1.0" {
 		return errors.New("OpenAPI version")
 	}
@@ -316,6 +327,10 @@ func verifyOpenAPI(value any) error {
 	want := map[string]map[string]string{"/v1/agent-definitions/{agent_id}/versions": {"post": "publishAgentVersion"}, "/v1/agent-definitions/{agent_id}/versions/{version}": {"get": "getAgentVersionManifest"}}
 	wantScopes := map[string][]string{"publishAgentVersion": {"agent:publish"}, "getAgentVersionManifest": {"agent:read"}}
 	wantStatuses := map[string][]string{"publishAgentVersion": {"201", "400", "401", "403", "409", "413", "415", "429", "503"}, "getAgentVersionManifest": {"200", "401", "403", "404", "429", "503"}}
+	wantParameters := map[string][]string{
+		"publishAgentVersion":     {"#/components/parameters/AgentId", "#/components/parameters/IdempotencyKey"},
+		"getAgentVersionManifest": {"#/components/parameters/AgentId", "#/components/parameters/Version"},
+	}
 	for path, methods := range want {
 		item, ok := paths[path].(map[string]any)
 		if !ok || len(item) != len(methods) {
@@ -337,6 +352,9 @@ func verifyOpenAPI(value any) error {
 			if op["x-arop-reject-unknown-security-extensions"] != true {
 				return fmt.Errorf("%s unknown security extension policy", id)
 			}
+			if err := verifyOperationParameters(op, wantParameters[id]); err != nil {
+				return fmt.Errorf("%s parameters: %w", id, err)
+			}
 			responses, _ := op["responses"].(map[string]any)
 			if !reflect.DeepEqual(sortedMapKeys(responses), wantStatuses[id]) {
 				return fmt.Errorf("%s response statuses=%v", id, sortedMapKeys(responses))
@@ -345,12 +363,12 @@ func verifyOpenAPI(value any) error {
 	}
 	comps, _ := doc["components"].(map[string]any)
 	schemes, _ := comps["securitySchemes"].(map[string]any)
-	bearer, _ := schemes["ControlPlaneBearer"].(map[string]any)
-	if bearer["type"] != "http" || bearer["scheme"] != "bearer" {
-		return errors.New("bearer scheme mismatch")
+	if !reflect.DeepEqual(sortedMapKeys(schemes), []string{"ControlPlaneBearer"}) {
+		return errors.New("security scheme inventory")
 	}
-	if _, exists := bearer["bearerFormat"]; exists {
-		return errors.New("bearerFormat forbidden")
+	bearer, _ := schemes["ControlPlaneBearer"].(map[string]any)
+	if !reflect.DeepEqual(bearer, map[string]any{"type": "http", "scheme": "bearer"}) {
+		return errors.New("bearer scheme mismatch")
 	}
 	post, _ := operationByID(doc, "publishAgentVersion")
 	if post["x-arop-agent-id-must-match-manifest"] != true || post["x-arop-content-type-parameters-allowed"] != false {
@@ -365,6 +383,10 @@ func verifyOpenAPI(value any) error {
 	if requestBody["required"] != true || !reflect.DeepEqual(sortedMapKeys(requestContent), []string{"application/vnd.arop.agent-version-bundle+zip"}) {
 		return errors.New("publication request media type")
 	}
+	requestMedia := asMap(requestContent["application/vnd.arop.agent-version-bundle+zip"])
+	if !reflect.DeepEqual(asMap(requestMedia["schema"]), map[string]any{"type": "string", "format": "binary"}) {
+		return errors.New("publication request binary schema")
+	}
 	postResponses, _ := post["responses"].(map[string]any)
 	created, err := resolveLocal(doc, postResponses["201"])
 	if err != nil {
@@ -373,6 +395,9 @@ func verifyOpenAPI(value any) error {
 	if _, exists := created["content"]; exists || !reflect.DeepEqual(sortedMapKeys(asMap(created["headers"])), []string{"ETag", "Location"}) {
 		return errors.New("201 response body/header contract")
 	}
+	if err := verifyResponseHeaderRefs(asMap(created["headers"]), map[string]string{"ETag": "#/components/headers/ManifestETag", "Location": "#/components/headers/AgentVersionLocation"}); err != nil {
+		return fmt.Errorf("201 response headers: %w", err)
+	}
 	get, _ := operationByID(doc, "getAgentVersionManifest")
 	getResponses, _ := get["responses"].(map[string]any)
 	okResponse, err := resolveLocal(doc, getResponses["200"])
@@ -380,23 +405,49 @@ func verifyOpenAPI(value any) error {
 		return err
 	}
 	content := asMap(okResponse["content"])
+	if !reflect.DeepEqual(sortedMapKeys(content), []string{"application/json"}) {
+		return errors.New("200 manifest response media type")
+	}
 	jsonMedia := asMap(content["application/json"])
 	schema := asMap(jsonMedia["schema"])
 	if schema["$ref"] != "../../../schemas/manifest/agent-manifest-v1.schema.json" || !reflect.DeepEqual(sortedMapKeys(asMap(okResponse["headers"])), []string{"ETag"}) {
 		return errors.New("200 manifest response contract")
 	}
+	if err := verifyResponseHeaderRefs(asMap(okResponse["headers"]), map[string]string{"ETag": "#/components/headers/ManifestETag"}); err != nil {
+		return fmt.Errorf("200 response headers: %w", err)
+	}
 	components := asMap(doc["components"])
+	parameters := asMap(components["parameters"])
+	if !reflect.DeepEqual(sortedMapKeys(parameters), []string{"AgentId", "IdempotencyKey", "Version"}) {
+		return errors.New("parameter component inventory")
+	}
+	if err := verifyParameterComponent(parameters["AgentId"], "agent_id", "path", "../../../schemas/common/identifiers.schema.json#/$defs/agentId", 0, 0, ""); err != nil {
+		return fmt.Errorf("AgentId parameter: %w", err)
+	}
+	if err := verifyParameterComponent(parameters["Version"], "version", "path", "../../../schemas/common/identifiers.schema.json#/$defs/semanticVersion", 0, 0, ""); err != nil {
+		return fmt.Errorf("Version parameter: %w", err)
+	}
+	if err := verifyParameterComponent(parameters["IdempotencyKey"], "Idempotency-Key", "header", "", 8, 200, `^[!-~]+$`); err != nil {
+		return fmt.Errorf("IdempotencyKey parameter: %w", err)
+	}
+	schemas := asMap(components["schemas"])
+	if !reflect.DeepEqual(sortedMapKeys(schemas), []string{"AROPError"}) || !reflect.DeepEqual(schemas["AROPError"], map[string]any{"$ref": "../../../schemas/common/error.schema.json"}) {
+		return errors.New("AROPError must be the exact external Error Schema reference")
+	}
 	headers := asMap(components["headers"])
-	if err := verifyHeaderComponent(doc, headers, "ManifestETag", `^"sha256:[0-9a-f]{64}"$`, 0, 0); err != nil {
+	if !reflect.DeepEqual(sortedMapKeys(headers), []string{"AgentVersionLocation", "ManifestETag", "RetryAfter", "WWWAuthenticate"}) {
+		return errors.New("header component inventory")
+	}
+	if err := verifyHeaderComponent(doc, headers, "ManifestETag", manifestETagPattern, 0, 0); err != nil {
 		return err
 	}
-	if err := verifyHeaderComponent(doc, headers, "AgentVersionLocation", `^/v1/agent-definitions/`, 0, 0); err != nil {
+	if err := verifyHeaderComponent(doc, headers, "AgentVersionLocation", locationPattern, 0, 0); err != nil {
 		return err
 	}
 	if err := verifyHeaderComponent(doc, headers, "RetryAfter", "", 1, 86400); err != nil {
 		return err
 	}
-	if err := verifyHeaderComponent(doc, headers, "WWWAuthenticate", `^Bearer`, 0, 0); err != nil {
+	if err := verifyHeaderComponent(doc, headers, "WWWAuthenticate", challengePattern, 0, 0); err != nil {
 		return err
 	}
 	for _, row := range expectedErrors() {
@@ -468,7 +519,58 @@ func resolveLocal(doc map[string]any, raw any) (map[string]any, error) {
 	return nil, errors.New("OpenAPI local ref depth exceeded")
 }
 
-func verifyHeaderComponent(doc map[string]any, headers map[string]any, name, patternPrefix string, minimum, maximum int64) error {
+func verifyOperationParameters(operation map[string]any, refs []string) error {
+	parameters, ok := operation["parameters"].([]any)
+	if !ok || len(parameters) != len(refs) {
+		return fmt.Errorf("count=%d want=%d", len(parameters), len(refs))
+	}
+	for index, ref := range refs {
+		if !reflect.DeepEqual(parameters[index], map[string]any{"$ref": ref}) {
+			return fmt.Errorf("parameter[%d] must be exact ref %s", index, ref)
+		}
+	}
+	return nil
+}
+
+func verifyParameterComponent(raw any, name, location, ref string, minimum, maximum int64, pattern string) error {
+	parameter := asMap(raw)
+	if !reflect.DeepEqual(sortedMapKeys(parameter), []string{"in", "name", "required", "schema"}) || parameter["name"] != name || parameter["in"] != location || parameter["required"] != true {
+		return errors.New("identity/location/required")
+	}
+	schema := asMap(parameter["schema"])
+	if ref != "" {
+		if !reflect.DeepEqual(schema, map[string]any{"$ref": ref}) {
+			return errors.New("schema ref")
+		}
+		return nil
+	}
+	if !reflect.DeepEqual(sortedMapKeys(schema), []string{"maxLength", "minLength", "pattern", "type"}) || schema["type"] != "string" || schema["pattern"] != pattern {
+		return errors.New("inline string schema")
+	}
+	min, err := exactInteger(schema["minLength"])
+	if err != nil || min != minimum {
+		return errors.New("minimum length")
+	}
+	max, err := exactInteger(schema["maxLength"])
+	if err != nil || max != maximum {
+		return errors.New("maximum length")
+	}
+	return nil
+}
+
+func verifyResponseHeaderRefs(headers map[string]any, refs map[string]string) error {
+	if !reflect.DeepEqual(sortedMapKeys(headers), sortedMapKeysString(refs)) {
+		return errors.New("header inventory")
+	}
+	for name, ref := range refs {
+		if !reflect.DeepEqual(headers[name], map[string]any{"$ref": ref}) {
+			return fmt.Errorf("header %s must be exact ref %s", name, ref)
+		}
+	}
+	return nil
+}
+
+func verifyHeaderComponent(doc map[string]any, headers map[string]any, name, pattern string, minimum, maximum int64) error {
 	header, err := resolveLocal(doc, headers[name])
 	if err != nil {
 		return fmt.Errorf("header %s: %w", name, err)
@@ -477,10 +579,18 @@ func verifyHeaderComponent(doc map[string]any, headers map[string]any, name, pat
 		return fmt.Errorf("header %s not required", name)
 	}
 	schema := asMap(header["schema"])
-	if patternPrefix != "" && !strings.HasPrefix(fmt.Sprint(schema["pattern"]), patternPrefix) {
-		return fmt.Errorf("header %s pattern", name)
+	if pattern != "" {
+		if !reflect.DeepEqual(sortedMapKeys(schema), []string{"pattern", "type"}) || schema["type"] != "string" || schema["pattern"] != pattern {
+			return fmt.Errorf("header %s exact string schema", name)
+		}
+		return nil
 	}
-	if minimum != 0 && (integer(schema["minimum"]) != minimum || integer(schema["maximum"]) != maximum) {
+	if !reflect.DeepEqual(sortedMapKeys(schema), []string{"maximum", "minimum", "type"}) || schema["type"] != "integer" {
+		return fmt.Errorf("header %s exact integer schema", name)
+	}
+	min, minErr := exactInteger(schema["minimum"])
+	max, maxErr := exactInteger(schema["maximum"])
+	if minErr != nil || maxErr != nil || min != minimum || max != maximum {
 		return fmt.Errorf("header %s bounds", name)
 	}
 	return nil
@@ -507,6 +617,11 @@ func verifyOpenAPIError(doc map[string]any, want errorContract) error {
 		if !reflect.DeepEqual(headers, want.RequiredHeaders) && !(len(headers) == 0 && len(want.RequiredHeaders) == 0) {
 			return fmt.Errorf("%s status %s headers=%v", operationID, want.Status, headers)
 		}
+		for _, header := range want.RequiredHeaders {
+			if !reflect.DeepEqual(asMap(response["headers"])[header], map[string]any{"$ref": "#/components/headers/" + strings.ReplaceAll(header, "-", "")}) {
+				return fmt.Errorf("%s status %s header %s ref", operationID, want.Status, header)
+			}
+		}
 		content := asMap(response["content"])
 		if !reflect.DeepEqual(sortedMapKeys(content), []string{"application/json"}) {
 			return fmt.Errorf("%s status %s media", operationID, want.Status)
@@ -522,8 +637,71 @@ func verifyOpenAPIError(doc map[string]any, want errorContract) error {
 	return nil
 }
 
+func cloneJSONMap(value any) (map[string]any, error) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	var cloned map[string]any
+	if err := decoder.Decode(&cloned); err != nil {
+		return nil, err
+	}
+	return cloned, nil
+}
+
+func verifyOpenAPINegatives(value any) error {
+	tests := []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{"deleted-operation-parameter", func(doc map[string]any) {
+			post, _ := operationByID(doc, "publishAgentVersion")
+			post["parameters"] = asSlice(post["parameters"])[1:]
+		}},
+		{"changed-parameter-ref", func(doc map[string]any) {
+			get, _ := operationByID(doc, "getAgentVersionManifest")
+			asMap(asSlice(get["parameters"])[1])["$ref"] = "#/components/parameters/AgentId"
+		}},
+		{"changed-success-header-ref", func(doc map[string]any) {
+			post, _ := operationByID(doc, "publishAgentVersion")
+			created := asMap(asMap(post["responses"])["201"])
+			asMap(asMap(created["headers"])["ETag"])["$ref"] = "#/components/headers/AgentVersionLocation"
+		}},
+		{"relaxed-header-regex", func(doc map[string]any) {
+			headers := asMap(asMap(doc["components"])["headers"])
+			asMap(asMap(headers["ManifestETag"])["schema"])["pattern"] = strings.TrimSuffix(manifestETagPattern, "$")
+		}},
+		{"fractional-status", func(doc map[string]any) {
+			post, _ := operationByID(doc, "publishAgentVersion")
+			asMap(post["x-arop-idempotency"])["same-key-different-semantic-digest"] = 409.5
+		}},
+		{"wrong-error-schema-ref", func(doc map[string]any) {
+			schemas := asMap(asMap(doc["components"])["schemas"])
+			asMap(schemas["AROPError"])["$ref"] = "../../../schemas/common/identifiers.schema.json"
+		}},
+	}
+	for _, test := range tests {
+		cloned, err := cloneJSONMap(value)
+		if err != nil {
+			return err
+		}
+		test.mutate(cloned)
+		if err := verifyOpenAPI(cloned); err == nil {
+			return fmt.Errorf("OpenAPI adversarial mutation accepted: %s", test.name)
+		}
+	}
+	return nil
+}
+
 func asMap(value any) map[string]any {
 	result, _ := value.(map[string]any)
+	return result
+}
+
+func asSlice(value any) []any {
+	result, _ := value.([]any)
 	return result
 }
 
@@ -552,20 +730,69 @@ func sortedMapKeys(value map[string]any) []string {
 	return keys
 }
 
-func integer(value any) int64 {
+func sortedMapKeysString(value map[string]string) []string {
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func exactInteger(value any) (int64, error) {
 	switch number := value.(type) {
 	case int:
-		return int64(number)
+		return int64(number), nil
 	case int64:
-		return number
+		return number, nil
 	case float64:
-		return int64(number)
+		if math.IsNaN(number) || math.IsInf(number, 0) || math.Trunc(number) != number || number < math.MinInt64 || number > math.MaxInt64 {
+			return 0, errors.New("not an integer")
+		}
+		return int64(number), nil
 	case json.Number:
-		parsed, _ := number.Int64()
-		return parsed
+		parsed, err := number.Int64()
+		if err != nil {
+			return 0, errors.New("not an integer")
+		}
+		return parsed, nil
 	default:
+		return 0, errors.New("not an integer")
+	}
+}
+
+func rejectFractionalNumbers(value any, path string) error {
+	switch typed := value.(type) {
+	case float64:
+		if _, err := exactInteger(typed); err != nil {
+			return fmt.Errorf("%s contains non-integer number", path)
+		}
+	case json.Number:
+		if strings.ContainsAny(typed.String(), ".eE") {
+			return fmt.Errorf("%s contains non-integer number", path)
+		}
+	case []any:
+		for index, child := range typed {
+			if err := rejectFractionalNumbers(child, fmt.Sprintf("%s[%d]", path, index)); err != nil {
+				return err
+			}
+		}
+	case map[string]any:
+		for key, child := range typed {
+			if err := rejectFractionalNumbers(child, path+"."+key); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func integer(value any) int64 {
+	parsed, err := exactInteger(value)
+	if err != nil {
 		return -1
 	}
+	return parsed
 }
 
 func verifyInventoryContract(openapi any, inventory map[string]any) error {
@@ -1037,7 +1264,11 @@ func verifyBundleCase(root string, c caseDef) error {
 		if err != nil || u.Scheme != "https" || u.Host == "" {
 			return errors.New("network reference fixture is not an absolute HTTPS reference")
 		}
-		return nil
+		archive, err := archiveWithPayloads(map[string][]byte{"agent-manifest.json": []byte(fmt.Sprintf(`{"$ref":%q}`, ref))}, zip.Deflate)
+		if err != nil {
+			return err
+		}
+		return expectBundleReason(archive, fmt.Sprint(asMap(row["expected"])["reason"]))
 	}
 	if limits, ok := row["limits"].(map[string]any); ok {
 		maximums := map[string]int64{"archive_bytes": maxArchiveBytes, "compression_ratio": maxCompressionRatio, "entries": maxArchiveEntries, "entry_uncompressed_bytes": maxEntryBytes, "total_uncompressed_bytes": maxTotalBytes}
@@ -1152,7 +1383,7 @@ func validateBundleArchive(archive []byte) error {
 		return rejectBundle("entry-count")
 	}
 	seen, folded, normalized := map[string]bool{}, map[string]string{}, map[string]string{}
-	manifestCount := 0
+	manifestAliasCount := 0
 	for _, file := range reader.File {
 		name := file.Name
 		if seen[name] {
@@ -1168,31 +1399,21 @@ func validateBundleArchive(archive []byte) error {
 			return rejectBundle("unicode-normalization-collision")
 		}
 		normalized[normal] = name
-		if strings.TrimPrefix(file.Name, "./") == "agent-manifest.json" {
-			manifestCount++
+		if strings.TrimPrefix(name, "./") == "agent-manifest.json" {
+			manifestAliasCount++
 		}
 	}
-	if manifestCount > 1 {
+	if manifestAliasCount > 1 {
 		return rejectBundle("multiple-root-manifests")
 	}
-	seen, folded, normalized = map[string]bool{}, map[string]string{}, map[string]string{}
 	var total uint64
+	manifestCount := 0
+	var manifest []byte
+	entryNames := map[string]bool{}
 	highCompressionRatio := false
 	for _, file := range reader.File {
 		name := file.Name
-		if seen[name] {
-			return rejectBundle("duplicate-entry")
-		}
-		seen[name] = true
-		if prior, exists := folded[strings.ToLower(name)]; exists && prior != name {
-			return rejectBundle("case-collision")
-		}
-		folded[strings.ToLower(name)] = name
-		normal := strings.ReplaceAll(name, "e\u0301", "é")
-		if prior, exists := normalized[normal]; exists && prior != name {
-			return rejectBundle("unicode-normalization-collision")
-		}
-		normalized[normal] = name
+		entryNames[name] = true
 		if strings.HasPrefix(name, "/") || filepath.IsAbs(name) || len(name) >= 3 && name[1] == ':' {
 			return rejectBundle("absolute-path")
 		}
@@ -1208,6 +1429,9 @@ func validateBundleArchive(archive []byte) error {
 				return rejectBundle("parent-path-segment")
 			}
 			if segment == "" || segment == "." {
+				return rejectBundle("non-portable-path")
+			}
+			if !portablePathSegment(segment) {
 				return rejectBundle("non-portable-path")
 			}
 		}
@@ -1226,24 +1450,122 @@ func validateBundleArchive(archive []byte) error {
 		if file.Method != zip.Store && file.Method != zip.Deflate {
 			return rejectBundle("unsupported-compression")
 		}
-		if file.UncompressedSize64 > uint64(maxEntryBytes) {
-			return rejectBundle("entry-size")
+		stream, err := file.Open()
+		if err != nil {
+			return rejectBundle("central-directory-mismatch")
 		}
-		if ^uint64(0)-total < file.UncompressedSize64 {
-			return rejectBundle("total-size")
+		var entryBytes uint64
+		var manifestBuffer bytes.Buffer
+		buffer := make([]byte, 64<<10)
+		for {
+			count, readErr := stream.Read(buffer)
+			if count > 0 {
+				entryBytes += uint64(count)
+				if entryBytes > uint64(maxEntryBytes) {
+					_ = stream.Close()
+					return rejectBundle("entry-size")
+				}
+				if ^uint64(0)-total < uint64(count) {
+					_ = stream.Close()
+					return rejectBundle("total-size")
+				}
+				total += uint64(count)
+				if total > uint64(maxTotalBytes) {
+					_ = stream.Close()
+					return rejectBundle("total-size")
+				}
+				if name == "agent-manifest.json" {
+					_, _ = manifestBuffer.Write(buffer[:count])
+				}
+				if file.CompressedSize64 == 0 || file.CompressedSize64 <= ^uint64(0)/uint64(maxCompressionRatio) && entryBytes > file.CompressedSize64*uint64(maxCompressionRatio) {
+					highCompressionRatio = true
+				}
+			}
+			if readErr == io.EOF {
+				break
+			}
+			if readErr != nil {
+				_ = stream.Close()
+				return rejectBundle("central-directory-mismatch")
+			}
 		}
-		total += file.UncompressedSize64
-		if total > uint64(maxTotalBytes) {
-			return rejectBundle("total-size")
+		if err := stream.Close(); err != nil || entryBytes != file.UncompressedSize64 {
+			return rejectBundle("central-directory-mismatch")
 		}
-		if file.UncompressedSize64 > 0 && (file.CompressedSize64 == 0 || file.CompressedSize64 <= ^uint64(0)/uint64(maxCompressionRatio) && file.UncompressedSize64 > file.CompressedSize64*uint64(maxCompressionRatio)) {
-			highCompressionRatio = true
+		if name == "agent-manifest.json" {
+			manifestCount++
+			manifest = append([]byte(nil), manifestBuffer.Bytes()...)
 		}
+	}
+	if manifestCount != 1 {
+		return rejectBundle("root-manifest-required")
 	}
 	if highCompressionRatio {
 		return rejectBundle("compression-ratio")
 	}
+	if err := verifyOfflineManifest(manifest, entryNames); err != nil {
+		return err
+	}
 	return nil
+}
+
+func portablePathSegment(segment string) bool {
+	if segment == "" || segment == "." || segment == ".." {
+		return false
+	}
+	for index := 0; index < len(segment); index++ {
+		char := segment[index]
+		if !(char >= 'A' && char <= 'Z' || char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '.' || char == '_' || char == '-') {
+			return false
+		}
+	}
+	return utf8.ValidString(segment) && len(segment) == len([]rune(segment))
+}
+
+func verifyOfflineManifest(document []byte, entries map[string]bool) error {
+	parsed, err := structuredfile.Parse(document, "json")
+	if err != nil {
+		return rejectBundle("invalid-manifest")
+	}
+	var walk func(any) error
+	walk = func(value any) error {
+		switch typed := value.(type) {
+		case []any:
+			for _, child := range typed {
+				if err := walk(child); err != nil {
+					return err
+				}
+			}
+		case map[string]any:
+			for key, child := range typed {
+				if key == "$ref" {
+					ref, ok := child.(string)
+					if !ok {
+						return rejectBundle("invalid-manifest-reference")
+					}
+					parsedRef, parseErr := url.Parse(ref)
+					if parseErr != nil || parsedRef.IsAbs() || parsedRef.Host != "" || strings.HasPrefix(ref, "//") {
+						return rejectBundle("network-reference")
+					}
+					refPath := strings.SplitN(ref, "#", 2)[0]
+					if refPath != "" {
+						clean := path.Clean(refPath)
+						if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || strings.HasPrefix(clean, "/") {
+							return rejectBundle("reference-outside-archive")
+						}
+						if !entries[clean] {
+							return rejectBundle("missing-offline-reference")
+						}
+					}
+				}
+				if err := walk(child); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	return walk(parsed)
 }
 
 func verifyCentralDirectory(archive []byte) error {
@@ -1338,6 +1660,94 @@ func archiveWithEntries(names []string, method uint16, payloadBytes int64) ([]by
 		return nil, err
 	}
 	return buffer.Bytes(), nil
+}
+
+func archiveWithPayloads(payloads map[string][]byte, method uint16) ([]byte, error) {
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	names := make([]string, 0, len(payloads))
+	for name := range payloads {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		header := &zip.FileHeader{Name: name, Method: method}
+		header.SetMode(0o600)
+		entry, err := writer.CreateHeader(header)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := entry.Write(payloads[name]); err != nil {
+			return nil, err
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+func forgeFirstCentralUncompressedSize(archive []byte, size uint32) ([]byte, error) {
+	copyOfArchive := append([]byte(nil), archive...)
+	eocd := len(copyOfArchive) - 22
+	if eocd < 0 || binary.LittleEndian.Uint32(copyOfArchive[eocd:eocd+4]) != 0x06054b50 {
+		return nil, errors.New("archive end record absent")
+	}
+	central := int(binary.LittleEndian.Uint32(copyOfArchive[eocd+16 : eocd+20]))
+	if central < 0 || central+46 > eocd || binary.LittleEndian.Uint32(copyOfArchive[central:central+4]) != 0x02014b50 {
+		return nil, errors.New("archive central entry absent")
+	}
+	binary.LittleEndian.PutUint32(copyOfArchive[central+24:central+28], size)
+	return copyOfArchive, nil
+}
+
+func verifyBundleAdversarialNegatives() error {
+	validManifest := []byte(`{"schema_version":1}`)
+	tests := []struct {
+		name   string
+		reason string
+		make   func() ([]byte, error)
+	}{
+		{"missing-root-manifest", "root-manifest-required", func() ([]byte, error) {
+			return archiveWithPayloads(map[string][]byte{"schemas/input.json": []byte(`{}`)}, zip.Deflate)
+		}},
+		{"nested-manifest", "root-manifest-required", func() ([]byte, error) {
+			return archiveWithPayloads(map[string][]byte{"nested/agent-manifest.json": validManifest}, zip.Deflate)
+		}},
+		{"space-path", "non-portable-path", func() ([]byte, error) {
+			return archiveWithPayloads(map[string][]byte{"agent-manifest.json": validManifest, "schemas/bad name.json": []byte(`{}`)}, zip.Deflate)
+		}},
+		{"control-path", "non-portable-path", func() ([]byte, error) {
+			return archiveWithPayloads(map[string][]byte{"agent-manifest.json": validManifest, "schemas/bad\tname.json": []byte(`{}`)}, zip.Deflate)
+		}},
+		{"unicode-path", "non-portable-path", func() ([]byte, error) {
+			return archiveWithPayloads(map[string][]byte{"agent-manifest.json": validManifest, "schemas/café.json": []byte(`{}`)}, zip.Deflate)
+		}},
+		{"network-reference", "network-reference", func() ([]byte, error) {
+			return archiveWithPayloads(map[string][]byte{"agent-manifest.json": []byte(`{"$ref":"https://example.invalid/schema.json"}`)}, zip.Deflate)
+		}},
+		{"forged-uncompressed-metadata", "central-directory-mismatch", func() ([]byte, error) {
+			payload := append([]byte(`{}`), bytes.Repeat([]byte(" "), 1024)...)
+			archive, err := archiveWithPayloads(map[string][]byte{"agent-manifest.json": payload}, zip.Deflate)
+			if err != nil {
+				return nil, err
+			}
+			return forgeFirstCentralUncompressedSize(archive, 1)
+		}},
+		{"streamed-zip-bomb", "entry-size", func() ([]byte, error) {
+			return archiveWithPayloads(map[string][]byte{"agent-manifest.json": bytes.Repeat([]byte("0"), int(maxEntryBytes+1))}, zip.Deflate)
+		}},
+	}
+	for _, test := range tests {
+		archive, err := test.make()
+		if err != nil {
+			return fmt.Errorf("%s fixture: %w", test.name, err)
+		}
+		if err := expectBundleReason(archive, test.reason); err != nil {
+			return fmt.Errorf("%s: %w", test.name, err)
+		}
+	}
+	return nil
 }
 
 func archiveForLimit(name string) ([]byte, error) {
@@ -1515,7 +1925,9 @@ func readProvenance(path string) (provenance, []byte, error) {
 		return p, nil, err
 	}
 	normalized, _ := json.Marshal(v)
-	if err = json.Unmarshal(normalized, &p); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(normalized))
+	decoder.DisallowUnknownFields()
+	if err = decoder.Decode(&p); err != nil {
 		return p, nil, err
 	}
 	return p, b, nil
@@ -1524,14 +1936,317 @@ func verifyProvenance(root string, p pipelineDoc, pr provenance, out string) err
 	if pr.SchemaVersion != 1 || pr.PipelineID != p.PipelineID || pr.MappingProfile != p.MappingProfile {
 		return errors.New("provenance identity")
 	}
-	for _, entry := range pr.Outputs {
-		path := fmt.Sprint(entry["path"])
-		data, err := os.ReadFile(filepath.Join(out, filepath.FromSlash(path)))
+	wantCommand := map[string]any{"entry": "scripts/generate.mjs", "config": configPath, "output": "<output>", "result": "<output>/provenance.json"}
+	if !reflect.DeepEqual(pr.Command, wantCommand) {
+		return errors.New("provenance command")
+	}
+	toolPaths := []string{"scripts/generate.mjs", "scripts/lib/repository.mjs", "package.json", "package-lock.json"}
+	toolEntries := make([]map[string]any, 0, len(toolPaths))
+	for _, toolPath := range toolPaths {
+		entry, err := provenanceFile(root, toolPath, map[string]any{})
 		if err != nil {
 			return err
 		}
-		if fmt.Sprint(entry["sha256"]) != digest(data) {
-			return fmt.Errorf("output digest %s", path)
+		toolEntries = append(toolEntries, entry)
+	}
+	if !reflect.DeepEqual(sortedMapKeys(pr.Generator), []string{"files", "path", "sha256"}) || pr.Generator["path"] != "scripts/generate.mjs" || pr.Generator["sha256"] != toolEntries[0]["sha256"] {
+		return errors.New("provenance generator identity")
+	}
+	if err := verifyRecordList(pr.Generator["files"], toolEntries, "generator files"); err != nil {
+		return err
+	}
+	configuration, err := provenanceFile(root, configPath, map[string]any{})
+	if err != nil {
+		return err
+	}
+	if err := verifyRecord(pr.Configuration, configuration, "configuration"); err != nil {
+		return err
+	}
+	resourceEntries := make([]map[string]any, 0, len(p.Resources))
+	for _, resource := range p.Resources {
+		entry, entryErr := provenanceFile(root, resource.Path, map[string]any{"uri": resource.URI})
+		if entryErr != nil {
+			return entryErr
+		}
+		resourceEntries = append(resourceEntries, entry)
+	}
+	if err := verifyRecordList(pr.Resources, resourceEntries, "resources"); err != nil {
+		return err
+	}
+	fixtureEntries := []map[string]any{}
+	for _, group := range []struct {
+		class string
+		items []fixture
+	}{{"valid", p.Fixtures.Valid}, {"forward", p.Fixtures.Forward}, {"invalid", p.Fixtures.Invalid}} {
+		for _, fixture := range group.items {
+			entry, entryErr := provenanceFile(root, fixture.Path, map[string]any{"id": fixture.ID, "class": group.class, "root": fixture.Root})
+			if entryErr != nil {
+				return entryErr
+			}
+			fixtureEntries = append(fixtureEntries, entry)
+		}
+	}
+	if err := verifyRecordList(pr.Fixtures, fixtureEntries, "fixtures"); err != nil {
+		return err
+	}
+	inputEntries := []map[string]any{}
+	for _, entry := range toolEntries {
+		inputEntries = append(inputEntries, withFields(entry, map[string]any{"kind": "generator", "uri": ""}))
+	}
+	inputEntries = append(inputEntries, withFields(configuration, map[string]any{"kind": "configuration", "uri": ""}))
+	for _, entry := range resourceEntries {
+		inputEntries = append(inputEntries, withFields(entry, map[string]any{"kind": "resource"}))
+	}
+	for _, entry := range fixtureEntries {
+		inputEntries = append(inputEntries, withFields(entry, map[string]any{"kind": "fixture", "uri": ""}))
+	}
+	if pr.InputsSHA256 != aggregateProvenanceInputs(inputEntries) {
+		return errors.New("provenance inputs_sha256")
+	}
+	wantOutputs := make([]map[string]any, 0, len(p.Outputs))
+	for _, language := range []string{"go", "python", "typescript"} {
+		output, exists := p.Outputs[language]
+		if !exists || output.Model == "" {
+			return fmt.Errorf("pipeline output %s absent", language)
+		}
+		entry, entryErr := provenanceFile(out, output.Model, map[string]any{"language": language})
+		if entryErr != nil {
+			return entryErr
+		}
+		wantOutputs = append(wantOutputs, entry)
+	}
+	sort.Slice(wantOutputs, func(left, right int) bool {
+		return fmt.Sprint(wantOutputs[left]["path"]) < fmt.Sprint(wantOutputs[right]["path"])
+	})
+	if err := verifyRecordList(pr.Outputs, wantOutputs, "outputs"); err != nil {
+		return err
+	}
+	if pr.OutputsSHA256 != aggregateProvenanceOutputs(wantOutputs) {
+		return errors.New("provenance outputs_sha256")
+	}
+	if err := verifyOutputTree(out, wantOutputs); err != nil {
+		return err
+	}
+	if err := verifyProvenanceChecks(p, pr.Checks); err != nil {
+		return err
+	}
+	return nil
+}
+
+func provenanceFile(base, relative string, extra map[string]any) (map[string]any, error) {
+	clean := filepath.ToSlash(filepath.Clean(relative))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || filepath.IsAbs(relative) {
+		return nil, fmt.Errorf("provenance path escapes root: %s", relative)
+	}
+	absolute := filepath.Join(base, filepath.FromSlash(clean))
+	info, err := os.Lstat(absolute)
+	if err != nil {
+		return nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("provenance input is not regular: %s", relative)
+	}
+	data, err := os.ReadFile(absolute)
+	if err != nil {
+		return nil, err
+	}
+	mode := "100644"
+	if info.Mode().Perm()&0o111 != 0 {
+		mode = "100755"
+	}
+	entry := map[string]any{"path": clean, "sha256": digest(data), "bytes": int64(len(data)), "mode": mode}
+	for key, value := range extra {
+		entry[key] = value
+	}
+	return entry, nil
+}
+
+func verifyRecordList(raw any, want []map[string]any, label string) error {
+	items := []map[string]any{}
+	switch typed := raw.(type) {
+	case []any:
+		for _, item := range typed {
+			items = append(items, asMap(item))
+		}
+	case []map[string]any:
+		items = typed
+	default:
+		return fmt.Errorf("%s type", label)
+	}
+	if len(items) != len(want) {
+		return fmt.Errorf("%s count", label)
+	}
+	for index := range want {
+		if err := verifyRecord(items[index], want[index], fmt.Sprintf("%s[%d]", label, index)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func sortedBoolKeys(value map[string]bool) []string {
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func verifyRecord(got, want map[string]any, label string) error {
+	if !reflect.DeepEqual(sortedMapKeys(got), sortedMapKeys(want)) {
+		return fmt.Errorf("%s fields", label)
+	}
+	for key, value := range want {
+		if key == "bytes" {
+			gotBytes, err := exactInteger(got[key])
+			if err != nil || gotBytes != value.(int64) {
+				return fmt.Errorf("%s bytes", label)
+			}
+			continue
+		}
+		if got[key] != value {
+			return fmt.Errorf("%s %s", label, key)
+		}
+	}
+	return nil
+}
+
+func withFields(source map[string]any, fields map[string]any) map[string]any {
+	result := map[string]any{}
+	for key, value := range source {
+		result[key] = value
+	}
+	for key, value := range fields {
+		result[key] = value
+	}
+	return result
+}
+
+func aggregateProvenanceInputs(entries []map[string]any) string {
+	ordered := append([]map[string]any(nil), entries...)
+	sort.Slice(ordered, func(left, right int) bool {
+		return fmt.Sprint(ordered[left]["path"]) < fmt.Sprint(ordered[right]["path"])
+	})
+	var material strings.Builder
+	for _, entry := range ordered {
+		fmt.Fprintf(&material, "%s\x00%s\x00%s\x00%s\x00%d\x00%s\n", entry["kind"], entry["path"], entry["uri"], entry["sha256"], entry["bytes"], entry["mode"])
+	}
+	return digest([]byte(material.String()))
+}
+
+func aggregateProvenanceOutputs(entries []map[string]any) string {
+	ordered := append([]map[string]any(nil), entries...)
+	sort.Slice(ordered, func(left, right int) bool {
+		return fmt.Sprint(ordered[left]["path"]) < fmt.Sprint(ordered[right]["path"])
+	})
+	var material strings.Builder
+	for _, entry := range ordered {
+		fmt.Fprintf(&material, "%s\x00%s\x00%s\x00%d\x00%s\n", entry["path"], entry["language"], entry["sha256"], entry["bytes"], entry["mode"])
+	}
+	return digest([]byte(material.String()))
+}
+
+func verifyOutputTree(out string, outputs []map[string]any) error {
+	want := map[string]bool{"provenance.json": true}
+	for _, output := range outputs {
+		want[fmt.Sprint(output["path"])] = true
+	}
+	found := map[string]bool{}
+	err := filepath.WalkDir(out, func(current string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		relative, relErr := filepath.Rel(out, current)
+		if relErr != nil {
+			return relErr
+		}
+		found[filepath.ToSlash(relative)] = true
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(found, want) {
+		return fmt.Errorf("generated output tree=%v want=%v", sortedBoolKeys(found), sortedBoolKeys(want))
+	}
+	return nil
+}
+
+func verifyProvenanceChecks(p pipelineDoc, checks []map[string]any) error {
+	want := []struct{ id, detail string }{}
+	for _, group := range []struct {
+		class string
+		items []fixture
+	}{{"valid", p.Fixtures.Valid}, {"forward", p.Fixtures.Forward}, {"invalid", p.Fixtures.Invalid}} {
+		for _, fixture := range group.items {
+			detail := ""
+			if group.class == "valid" {
+				detail = "accepted"
+			}
+			want = append(want, struct{ id, detail string }{"schema-" + group.class + "-" + fixture.ID, detail})
+		}
+	}
+	want = append(want,
+		struct{ id, detail string }{"offline-resource-closure", fmt.Sprintf("%d explicit resources", len(p.Resources))},
+		struct{ id, detail string }{"mapping-profile", "31 named types"},
+		struct{ id, detail string }{"deterministic-output-set", fmt.Sprintf("%d outputs", len(p.Outputs))},
+	)
+	if len(checks) != len(want) {
+		return errors.New("provenance checks count")
+	}
+	for index, expected := range want {
+		check := checks[index]
+		if !reflect.DeepEqual(sortedMapKeys(check), []string{"detail", "id", "passed"}) || check["id"] != expected.id || check["passed"] != true {
+			return fmt.Errorf("provenance check[%d]", index)
+		}
+		detail, ok := check["detail"].(string)
+		if !ok || detail == "" || expected.detail != "" && detail != expected.detail {
+			return fmt.Errorf("provenance check[%d] detail", index)
+		}
+	}
+	return nil
+}
+
+func cloneProvenance(value provenance) (provenance, error) {
+	var cloned provenance
+	data, err := json.Marshal(value)
+	if err != nil {
+		return cloned, err
+	}
+	err = json.Unmarshal(data, &cloned)
+	return cloned, err
+}
+
+func verifyProvenanceNegatives(root string, p pipelineDoc, valid provenance, out string) error {
+	tests := []struct {
+		name   string
+		mutate func(*provenance)
+	}{
+		{"empty-outputs", func(pr *provenance) { pr.Outputs = nil }},
+		{"missing-output", func(pr *provenance) { pr.Outputs = pr.Outputs[:len(pr.Outputs)-1] }},
+		{"extra-output", func(pr *provenance) {
+			pr.Outputs = append(pr.Outputs, map[string]any{"language": "go", "path": "extra.go", "sha256": strings.Repeat("0", 64), "bytes": float64(0), "mode": "100644"})
+		}},
+		{"wrong-inputs-digest", func(pr *provenance) { pr.InputsSHA256 = strings.Repeat("0", 64) }},
+		{"wrong-outputs-digest", func(pr *provenance) { pr.OutputsSHA256 = strings.Repeat("0", 64) }},
+		{"missing-generator-file", func(pr *provenance) {
+			files := asSlice(pr.Generator["files"])
+			pr.Generator["files"] = files[:len(files)-1]
+		}},
+		{"false-check", func(pr *provenance) { pr.Checks[0]["passed"] = false }},
+	}
+	for _, test := range tests {
+		cloned, err := cloneProvenance(valid)
+		if err != nil {
+			return err
+		}
+		test.mutate(&cloned)
+		if err := verifyProvenance(root, p, cloned, out); err == nil {
+			return fmt.Errorf("provenance adversarial mutation accepted: %s", test.name)
 		}
 	}
 	return nil
