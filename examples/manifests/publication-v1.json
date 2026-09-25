@@ -1,0 +1,63 @@
+{
+  "protocol": "arop/v1",
+  "kind": "AgentManifest",
+  "identity": {
+    "id": "publication.example",
+    "version": "1.0.0",
+    "name": "Publication Example",
+    "summary": "A minimal immutable publication fixture.",
+    "owner": {
+      "team": "example-team"
+    }
+  },
+  "skills": [
+    {
+      "id": "default",
+      "name": "Echo",
+      "invoke_modes": [
+        "params"
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "execution": {
+    "default_timeout_seconds": 30,
+    "max_timeout_seconds": 60,
+    "effects": {
+      "level": "none",
+      "idempotency": "supported",
+      "human_confirmation": false
+    },
+    "capabilities": {
+      "streaming": false,
+      "cancellation": true,
+      "status_query": true
+    },
+    "network": {
+      "egress": "none"
+    }
+  }
+}
