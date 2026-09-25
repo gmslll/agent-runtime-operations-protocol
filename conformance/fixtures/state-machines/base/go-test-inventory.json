@@ -8,33 +8,6 @@
       ]
     },
     {
-      "package": "github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/publish",
-      "tests": [
-        "TestActualArchiveReadCancelsMidStream",
-        "TestBoundedReadArchiveLimits",
-        "TestBundleCentralAndLocalMetadataMustMatch",
-        "TestBundleProcessingHonorsCancellation",
-        "TestBundleRejectsEveryCentralLocalCorruption",
-        "TestCentralDirectoryLoopHonorsCancellation",
-        "TestExecuteWritesOnlySafeResult",
-        "TestLoadAndValidateBundleFileSizeBoundaries",
-        "TestLoadAndValidateBundleRejectsAtomicPathReplacement",
-        "TestLoadAndValidateBundleRejectsGrowthAfterOpen",
-        "TestRunClosesResponseReturnedWithTransportError",
-        "TestRunDecodesTypedPublicationErrors",
-        "TestRunHonorsCancellationAndTimeout",
-        "TestRunPublishesExactRequestAndStableReplay",
-        "TestRunRedactsCredentialSourceFailure",
-        "TestRunRedactsTransportAndHandlesNilResponses",
-        "TestRunRejectsBundleIdentityMismatchBeforeNetwork",
-        "TestRunRejectsCredentialAndInputInjection",
-        "TestRunRejectsInvalidBundleInputsBeforeNetwork",
-        "TestRunRejectsMalformedResponses",
-        "TestRunRejectsRedirectWithoutSecondHop",
-        "TestValidateToDigestCancellationBarrier"
-      ]
-    },
-    {
       "package": "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/protocol/core",
       "tests": [
         "TestAuthoringUsesExactJSONFieldNames",

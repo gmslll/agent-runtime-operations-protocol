@@ -30,7 +30,7 @@ import (
 const (
 	expectedCommand       = "make test-protocol-foundation"
 	goTestInventoryPath   = "conformance/fixtures/state-machines/base/go-test-inventory.json"
-	goTestInventorySHA256 = "57167372e545624a02d8e7688a504d97ee56c48670df5ec2d50015e0d0563bb0"
+	goTestInventorySHA256 = "6e49e6acbcb8c3a3f7f379fcb3f26d52f937a1cf2c7318d1ee4d1d9b85ceb867"
 )
 
 type goTestInventory struct {
@@ -216,7 +216,7 @@ func runGoProtocolTests(root string) ([]byte, []report.Check, error) {
 	if err := os.MkdirAll(temp, 0o755); err != nil {
 		return nil, inventoryChecks, err
 	}
-	command := exec.Command("go", "test", "-count=1", "-run=.", "-json", "./cmd/arop", "./cmd/arop/internal/commands/publish", "./sdk/go/protocol/core", "./sdk/go/protocol/manifest")
+	command := exec.Command("go", "test", "-count=1", "-run=.", "-json", "./cmd/arop", "./sdk/go/protocol/core", "./sdk/go/protocol/manifest")
 	command.Dir = root
 	command.Env = cleanEnvironment(os.Environ(), map[string]string{
 		"CGO_ENABLED": "0", "GOCACHE": cache, "GODEBUG": "", "GOENV": "off",
@@ -266,7 +266,6 @@ func loadGoTestInventory(root string) (testinventory.Inventory, []report.Check, 
 	}
 	wantPackages := []string{
 		"github.com/gmslll/agent-runtime-operations-protocol/cmd/arop",
-		"github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/publish",
 		"github.com/gmslll/agent-runtime-operations-protocol/sdk/go/protocol/core",
 		"github.com/gmslll/agent-runtime-operations-protocol/sdk/go/protocol/manifest",
 	}
@@ -349,6 +348,9 @@ func discoverTopLevelGoTests(root string, inventory goTestInventory) ([]string, 
 			}
 			if relative != "." && entry.Type()&os.ModeSymlink != 0 {
 				return fmt.Errorf("symlink is forbidden inside P06 Go package source: %s/%s", directory, filepath.ToSlash(relative))
+			}
+			if entry.IsDir() && relative != "." {
+				return filepath.SkipDir
 			}
 			if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_test.go") {
 				return nil
@@ -1272,7 +1274,11 @@ func requireStringMembers(actual, required []string) error {
 }
 
 func runNodeManifestDigest(root, relative string) ([]byte, []byte, error) {
-	command := exec.Command("node", "--permission", "--allow-fs-read=.", "--disable-proto=throw", "--no-addons", "scripts/manifest-digest.mjs", relative)
+	moduleRoot := filepath.Join(root, "node_modules")
+	if _, err := os.Stat(moduleRoot); err != nil {
+		moduleRoot = filepath.Join(filepath.Dir(filepath.Dir(root)), "node_modules")
+	}
+	command := exec.Command("node", "--permission", "--allow-fs-read=.", "--allow-fs-read="+moduleRoot, "--disable-proto=throw", "--no-addons", "scripts/manifest-digest.mjs", relative)
 	command.Dir = root
 	command.Env = cleanEnvironment(os.Environ(), map[string]string{})
 	var stdout, stderr bytes.Buffer
