@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -53,17 +55,12 @@ func (source CredentialSourceFunc) Credential(ctx context.Context) (string, erro
 	return source(ctx)
 }
 
-// HTTPDoer is the public net/http seam used by the publish command.
-type HTTPDoer interface {
-	Do(*http.Request) (*http.Response, error)
-}
-
 // Command publishes an immutable AgentVersion bundle through the P11 public
 // HTTP contract. It deliberately has no storage or reference-control-plane
 // dependency.
 type Command struct {
 	BaseURL    *url.URL
-	Client     HTTPDoer
+	Client     *http.Client
 	Credential CredentialSource
 	Stdout     io.Writer
 }
@@ -146,6 +143,9 @@ func (command Command) Run(ctx context.Context, options Options) (Result, error)
 
 	response, err := doWithoutRedirects(command.Client, request)
 	if err != nil {
+		if response != nil && response.Body != nil {
+			_ = response.Body.Close()
+		}
 		if ctxErr := contextError(ctx); ctxErr != nil {
 			return Result{}, ctxErr
 		}
@@ -306,13 +306,12 @@ func contextError(ctx context.Context) error {
 	return nil
 }
 
-func doWithoutRedirects(doer HTTPDoer, request *http.Request) (*http.Response, error) {
-	if client, ok := doer.(*http.Client); ok {
-		copy := *client
-		copy.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-		return copy.Do(request)
+func doWithoutRedirects(client *http.Client, request *http.Request) (*http.Response, error) {
+	transport := client.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
 	}
-	return doer.Do(request)
+	return transport.RoundTrip(request)
 }
 
 func loadAndValidateBundle(ctx context.Context, path string) ([]byte, bundleIdentity, error) {
@@ -373,6 +372,9 @@ func readBounded(ctx context.Context, reader io.Reader, limit int64) ([]byte, er
 }
 
 func validateBundleArchive(ctx context.Context, archive []byte) (bundleIdentity, error) {
+	if err := verifyCentralDirectoryExact(archive); err != nil {
+		return bundleIdentity{}, errors.New("zip directory")
+	}
 	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
 	if err != nil || len(reader.File) == 0 || len(reader.File) > maxArchiveEntries {
 		return bundleIdentity{}, errors.New("zip inventory")
@@ -427,9 +429,15 @@ func validateBundleArchive(ctx context.Context, archive []byte) (bundleIdentity,
 	if err := manifest.ValidatePackageFile(root, "agent-manifest.json"); err != nil {
 		return bundleIdentity{}, errors.New("manifest validation")
 	}
+	if err := contextError(ctx); err != nil {
+		return bundleIdentity{}, err
+	}
 	digest, err := manifest.DigestPackageFile(root, "agent-manifest.json")
 	if err != nil {
 		return bundleIdentity{}, errors.New("manifest digest")
+	}
+	if err := contextError(ctx); err != nil {
+		return bundleIdentity{}, err
 	}
 	document, err := os.ReadFile(filepath.Join(root, "agent-manifest.json"))
 	if err != nil {
@@ -440,6 +448,108 @@ func validateBundleArchive(ctx context.Context, archive []byte) (bundleIdentity,
 		return bundleIdentity{}, errors.New("manifest decode")
 	}
 	return bundleIdentity{agentID: string(decoded.IDentity.ID), version: string(decoded.IDentity.Version), digest: digest}, nil
+}
+
+type zipInterval struct{ start, end int }
+
+func verifyCentralDirectoryExact(archive []byte) error {
+	eocd := -1
+	start := len(archive) - 22 - 65535
+	if start < 0 {
+		start = 0
+	}
+	for index := len(archive) - 22; index >= start; index-- {
+		if index >= 0 && index+4 <= len(archive) && binary.LittleEndian.Uint32(archive[index:index+4]) == 0x06054b50 {
+			eocd = index
+			break
+		}
+	}
+	if eocd < 0 || eocd+22 > len(archive) {
+		return errors.New("end record")
+	}
+	commentLength := int(binary.LittleEndian.Uint16(archive[eocd+20 : eocd+22]))
+	if eocd+22+commentLength != len(archive) || binary.LittleEndian.Uint16(archive[eocd+4:eocd+6]) != 0 || binary.LittleEndian.Uint16(archive[eocd+6:eocd+8]) != 0 {
+		return errors.New("multi-disk or trailing")
+	}
+	countDisk := int(binary.LittleEndian.Uint16(archive[eocd+8 : eocd+10]))
+	countTotal := int(binary.LittleEndian.Uint16(archive[eocd+10 : eocd+12]))
+	centralSize := int(binary.LittleEndian.Uint32(archive[eocd+12 : eocd+16]))
+	centralOffset := int(binary.LittleEndian.Uint32(archive[eocd+16 : eocd+20]))
+	if countTotal == 0 || countTotal == 0xffff || countDisk != countTotal || centralOffset < 0 || centralSize < 0 || centralOffset+centralSize != eocd {
+		return errors.New("central bounds")
+	}
+	position := centralOffset
+	intervals := make([]zipInterval, 0, countTotal)
+	offsets := map[int]bool{}
+	for range countTotal {
+		if position+46 > eocd || binary.LittleEndian.Uint32(archive[position:position+4]) != 0x02014b50 {
+			return errors.New("central entry")
+		}
+		flags := binary.LittleEndian.Uint16(archive[position+8 : position+10])
+		method := binary.LittleEndian.Uint16(archive[position+10 : position+12])
+		crc := binary.LittleEndian.Uint32(archive[position+16 : position+20])
+		compressed := binary.LittleEndian.Uint32(archive[position+20 : position+24])
+		uncompressed := binary.LittleEndian.Uint32(archive[position+24 : position+28])
+		nameLength := int(binary.LittleEndian.Uint16(archive[position+28 : position+30]))
+		extraLength := int(binary.LittleEndian.Uint16(archive[position+30 : position+32]))
+		commentLength := int(binary.LittleEndian.Uint16(archive[position+32 : position+34]))
+		localOffset := int(binary.LittleEndian.Uint32(archive[position+42 : position+46]))
+		centralEnd := position + 46 + nameLength + extraLength + commentLength
+		if compressed == 0xffffffff || uncompressed == 0xffffffff || centralEnd > eocd || localOffset < 0 || localOffset+30 > centralOffset || offsets[localOffset] || binary.LittleEndian.Uint32(archive[localOffset:localOffset+4]) != 0x04034b50 {
+			return errors.New("entry bounds")
+		}
+		offsets[localOffset] = true
+		localFlags := binary.LittleEndian.Uint16(archive[localOffset+6 : localOffset+8])
+		localMethod := binary.LittleEndian.Uint16(archive[localOffset+8 : localOffset+10])
+		localNameLength := int(binary.LittleEndian.Uint16(archive[localOffset+26 : localOffset+28]))
+		localExtraLength := int(binary.LittleEndian.Uint16(archive[localOffset+28 : localOffset+30]))
+		localEnd := localOffset + 30 + localNameLength + localExtraLength
+		if localEnd > centralOffset || flags != localFlags || method != localMethod || nameLength != localNameLength || !bytes.Equal(archive[position+46:position+46+nameLength], archive[localOffset+30:localOffset+30+localNameLength]) {
+			return errors.New("metadata mismatch")
+		}
+		dataEnd64 := int64(localEnd) + int64(compressed)
+		if dataEnd64 < int64(localEnd) || dataEnd64 > int64(centralOffset) {
+			return errors.New("data bounds")
+		}
+		entryEnd := int(dataEnd64)
+		if flags&8 == 0 {
+			if crc != binary.LittleEndian.Uint32(archive[localOffset+14:localOffset+18]) || compressed != binary.LittleEndian.Uint32(archive[localOffset+18:localOffset+22]) || uncompressed != binary.LittleEndian.Uint32(archive[localOffset+22:localOffset+26]) {
+				return errors.New("digest size mismatch")
+			}
+		} else {
+			if binary.LittleEndian.Uint32(archive[localOffset+14:localOffset+18]) != 0 || binary.LittleEndian.Uint32(archive[localOffset+18:localOffset+22]) != 0 || binary.LittleEndian.Uint32(archive[localOffset+22:localOffset+26]) != 0 {
+				return errors.New("descriptor local values")
+			}
+			descriptor := entryEnd
+			descriptorEnd := -1
+			if descriptor+12 <= centralOffset && crc == binary.LittleEndian.Uint32(archive[descriptor:descriptor+4]) && compressed == binary.LittleEndian.Uint32(archive[descriptor+4:descriptor+8]) && uncompressed == binary.LittleEndian.Uint32(archive[descriptor+8:descriptor+12]) {
+				descriptorEnd = descriptor + 12
+			} else if descriptor+16 <= centralOffset && binary.LittleEndian.Uint32(archive[descriptor:descriptor+4]) == 0x08074b50 && crc == binary.LittleEndian.Uint32(archive[descriptor+4:descriptor+8]) && compressed == binary.LittleEndian.Uint32(archive[descriptor+8:descriptor+12]) && uncompressed == binary.LittleEndian.Uint32(archive[descriptor+12:descriptor+16]) {
+				descriptorEnd = descriptor + 16
+			}
+			if descriptorEnd < 0 {
+				return errors.New("descriptor mismatch")
+			}
+			entryEnd = descriptorEnd
+		}
+		intervals = append(intervals, zipInterval{start: localOffset, end: entryEnd})
+		position = centralEnd
+	}
+	if position != eocd {
+		return errors.New("central trailing")
+	}
+	sort.Slice(intervals, func(i, j int) bool { return intervals[i].start < intervals[j].start })
+	cursor := 0
+	for _, interval := range intervals {
+		if interval.start != cursor || interval.end <= interval.start || interval.end > centralOffset {
+			return errors.New("overlap or gap")
+		}
+		cursor = interval.end
+	}
+	if cursor != centralOffset {
+		return errors.New("local trailing")
+	}
+	return nil
 }
 
 func portableArchivePath(name string) bool {

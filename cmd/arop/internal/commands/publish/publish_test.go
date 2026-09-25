@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -165,6 +166,18 @@ func TestRunRejectsMalformedResponses(t *testing.T) {
 			w.Header().Set("ETag", testETag)
 			w.WriteHeader(201)
 		}},
+		{"duplicate-location", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Add("Location", "/v1/agent-definitions/hello.agent/versions/1.2.3")
+			w.Header().Add("Location", "/v1/agent-definitions/hello.agent/versions/1.2.3")
+			w.Header().Set("ETag", testETag)
+			w.WriteHeader(201)
+		}},
+		{"duplicate-etag", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Location", "/v1/agent-definitions/hello.agent/versions/1.2.3")
+			w.Header().Add("ETag", testETag)
+			w.Header().Add("ETag", testETag)
+			w.WriteHeader(201)
+		}},
 		{"wrong-error-media", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(400)
@@ -256,6 +269,10 @@ func TestRunRejectsRedirectWithoutSecondHop(t *testing.T) {
 			}))
 			defer server.Close()
 			command, options := testCommand(t, server.URL)
+			command.Client.Transport = roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				return http.DefaultTransport.RoundTrip(request)
+			})
+			command.Client.CheckRedirect = func(*http.Request, []*http.Request) error { return nil }
 			if _, err := command.Run(context.Background(), options); err == nil {
 				t.Fatal("redirect accepted")
 			}
@@ -266,11 +283,68 @@ func TestRunRejectsRedirectWithoutSecondHop(t *testing.T) {
 	}
 }
 
+func TestBundleCentralAndLocalMetadataMustMatch(t *testing.T) {
+	t.Parallel()
+	path := writeBundle(t)
+	archive, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	forged := append([]byte(nil), archive...)
+	eocd := bytes.LastIndex(forged, []byte{'P', 'K', 5, 6})
+	if eocd < 0 {
+		t.Fatal("EOCD absent")
+	}
+	central := int(binary.LittleEndian.Uint32(forged[eocd+16 : eocd+20]))
+	if central+28 > eocd {
+		t.Fatal("central entry absent")
+	}
+	binary.LittleEndian.PutUint32(forged[central+24:central+28], binary.LittleEndian.Uint32(forged[central+24:central+28])+1)
+	if _, err := validateBundleArchive(context.Background(), forged); err == nil {
+		t.Fatal("forged central/local size mismatch accepted")
+	}
+}
+
+func TestBoundedReadArchiveLimits(t *testing.T) {
+	t.Parallel()
+	for _, size := range []int64{maxArchiveBytes - 1, maxArchiveBytes} {
+		data, err := readBounded(context.Background(), io.LimitReader(zeroReader{}, size), maxArchiveBytes)
+		if err != nil || int64(len(data)) != size {
+			t.Fatalf("size %d: len=%d err=%v", size, len(data), err)
+		}
+	}
+	if _, err := readBounded(context.Background(), io.LimitReader(zeroReader{}, maxArchiveBytes+1), maxArchiveBytes); err == nil {
+		t.Fatal("archive limit+1 accepted")
+	}
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(buffer []byte) (int, error) {
+	for index := range buffer {
+		buffer[index] = 0
+	}
+	return len(buffer), nil
+}
+
+func TestBundleProcessingHonorsCancellation(t *testing.T) {
+	t.Parallel()
+	archive, err := os.ReadFile(writeBundle(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := validateBundleArchive(ctx, archive); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancel error = %v", err)
+	}
+}
+
 func TestRunRejectsInvalidBundleInputsBeforeNetwork(t *testing.T) {
 	t.Parallel()
 	var calls atomic.Int32
 	base, _ := url.Parse("https://control.example.invalid")
-	command := Command{BaseURL: base, Client: doerFunc(func(*http.Request) (*http.Response, error) { calls.Add(1); return nil, errors.New("called") }), Stdout: io.Discard, Credential: CredentialSourceFunc(func(context.Context) (string, error) { return testCredential, nil })}
+	command := Command{BaseURL: base, Client: clientFunc(func(*http.Request) (*http.Response, error) { calls.Add(1); return nil, errors.New("called") }), Stdout: io.Discard, Credential: CredentialSourceFunc(func(context.Context) (string, error) { return testCredential, nil })}
 	root := t.TempDir()
 	regular := filepath.Join(root, "not-a-zip-AROP_LOCAL_PATH_CANARY")
 	if err := os.WriteFile(regular, []byte("not a zip"), 0o600); err != nil {
@@ -295,7 +369,7 @@ func TestRunRejectsBundleIdentityMismatchBeforeNetwork(t *testing.T) {
 	t.Parallel()
 	command, options := testCommand(t, "https://control.example.invalid")
 	var calls atomic.Int32
-	command.Client = doerFunc(func(*http.Request) (*http.Response, error) { calls.Add(1); return nil, errors.New("called") })
+	command.Client = clientFunc(func(*http.Request) (*http.Response, error) { calls.Add(1); return nil, errors.New("called") })
 	options.AgentID = "another.agent"
 	if _, err := command.Run(context.Background(), options); err == nil {
 		t.Fatal("identity mismatch accepted")
@@ -309,13 +383,13 @@ func TestRunRedactsTransportAndHandlesNilResponses(t *testing.T) {
 	t.Parallel()
 	for _, item := range []struct {
 		name string
-		do   HTTPDoer
+		do   *http.Client
 	}{
-		{"transport-error", doerFunc(func(*http.Request) (*http.Response, error) {
+		{"transport-error", clientFunc(func(*http.Request) (*http.Response, error) {
 			return nil, errors.New("AROP_TRANSPORT_CANARY " + testCredential + " https://secret.invalid")
 		})},
-		{"nil-response", doerFunc(func(*http.Request) (*http.Response, error) { return nil, nil })},
-		{"nil-body", doerFunc(func(request *http.Request) (*http.Response, error) {
+		{"nil-response", clientFunc(func(*http.Request) (*http.Response, error) { return nil, nil })},
+		{"nil-body", clientFunc(func(request *http.Request) (*http.Response, error) {
 			return &http.Response{StatusCode: 201, Header: make(http.Header), Request: request}, nil
 		})},
 	} {
@@ -330,10 +404,32 @@ func TestRunRedactsTransportAndHandlesNilResponses(t *testing.T) {
 	}
 }
 
+func TestRunClosesResponseReturnedWithTransportError(t *testing.T) {
+	t.Parallel()
+	closed := &atomic.Bool{}
+	command, options := testCommand(t, "https://control.example.invalid")
+	command.Client = clientFunc(func(request *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 503, Header: make(http.Header), Body: closeTracker{Reader: strings.NewReader("ignored"), closed: closed}, Request: request}, errors.New("AROP_TRANSPORT_CANARY")
+	})
+	if _, err := command.Run(context.Background(), options); err == nil {
+		t.Fatal("transport error accepted")
+	}
+	if !closed.Load() {
+		t.Fatal("response body returned with error was not closed")
+	}
+}
+
+type closeTracker struct {
+	io.Reader
+	closed *atomic.Bool
+}
+
+func (tracker closeTracker) Close() error { tracker.closed.Store(true); return nil }
+
 func TestRunHonorsCancellationAndTimeout(t *testing.T) {
 	t.Parallel()
 	command, options := testCommand(t, "https://control.example.invalid")
-	command.Client = doerFunc(func(request *http.Request) (*http.Response, error) {
+	command.Client = clientFunc(func(request *http.Request) (*http.Response, error) {
 		<-request.Context().Done()
 		return nil, request.Context().Err()
 	})
@@ -355,9 +451,13 @@ func typedError(code, category string, retryable bool, suffix string) string {
 	return fmt.Sprintf(`{"code":%q,"category":%q,"message":"safe","retryable":%t%s}`, code, category, retryable, suffix)
 }
 
-type doerFunc func(*http.Request) (*http.Response, error)
+type roundTripFunc func(*http.Request) (*http.Response, error)
 
-func (do doerFunc) Do(request *http.Request) (*http.Response, error) { return do(request) }
+func (roundTrip roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return roundTrip(request)
+}
+
+func clientFunc(roundTrip roundTripFunc) *http.Client { return &http.Client{Transport: roundTrip} }
 
 func TestRunRejectsCredentialAndInputInjection(t *testing.T) {
 	t.Parallel()
@@ -408,7 +508,7 @@ func testCommand(t *testing.T, rawURL string) (Command, Options) {
 	path := writeBundle(t)
 	command := Command{
 		BaseURL:    base,
-		Client:     http.DefaultClient,
+		Client:     &http.Client{Transport: http.DefaultTransport},
 		Credential: CredentialSourceFunc(func(context.Context) (string, error) { return testCredential, nil }),
 		Stdout:     io.Discard,
 	}
