@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/storage/migrate"
@@ -131,7 +132,7 @@ WHERE n.nspname=current_schema() AND t.relname=$1 ORDER BY c.conname`, table)
 	}
 	for name, definition := range expected {
 		if found[name] != definition {
-			return errors.New("PostgreSQL asset constraints are not exact")
+			return fmt.Errorf("PostgreSQL asset constraint %s=%s want %s", name, found[name], definition)
 		}
 	}
 	return nil
@@ -189,7 +190,7 @@ var assetConstraints = map[string]string{
 	"arop_assets_media_type_check":          "check(((media_type~'^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$')and(length(media_type)<=127)))",
 	"arop_assets_size_check":                "check(((size_bytes>=0)and(size_bytes<=104857600)))",
 	"arop_assets_digest_check":              "check((content_digest~'^sha256:[0-9a-f]{64}$'))",
-	"arop_assets_content_check":             "check(((((status='pending')and(octet_length(content_bytes)=0))or((status='available')and(octet_length(content_bytes)=size_bytes)))or((status='isolated')and(octet_length(content_bytes)=0))))",
+	"arop_assets_content_check":             "check((((status='pending')and(octet_length(content_bytes)=0))or((status='available')and(octet_length(content_bytes)=size_bytes))or((status='isolated')and(octet_length(content_bytes)=0))))",
 	"arop_assets_object_key_check":          "check(((object_key~'^[a-z0-9][a-z0-9._/-]{0,255}$')and(object_key!~'\\.\\.')))",
 	"arop_assets_status_check":              "check((status=any(array['pending','available','isolated'])))",
 	"arop_assets_revision_check":            "check((revision>0))",
@@ -211,7 +212,7 @@ var grantConstraints = map[string]string{
 	"arop_asset_grants_asset_id_check":            "check((asset_id~'^asset_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'))",
 	"arop_asset_grants_run_id_check":              "check((run_id~'^run_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'))",
 	"arop_asset_grants_operation_check":           "check((operation=any(array['upload','download'])))",
-	"arop_asset_grants_name_check":                "check(((((length(name)>=1)and(length(name)<=512))and(name!~'\\.\\.'))and(name!~'[/\\\\]')))",
+	"arop_asset_grants_name_check":                "check((((length(name)>=1)and(length(name)<=512))and(name!~'\\.\\.')and(name!~'[/\\\\]')))",
 	"arop_asset_grants_media_type_check":          "check(((media_type~'^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$')and(length(media_type)<=127)))",
 	"arop_asset_grants_size_check":                "check(((size_bytes>=0)and(size_bytes<=104857600)))",
 	"arop_asset_grants_digest_check":              "check((content_digest~'^sha256:[0-9a-f]{64}$'))",
@@ -223,7 +224,7 @@ var grantConstraints = map[string]string{
 	"arop_asset_grants_active_check":              "check(((status<>'active')or(use_count<use_limit)))",
 	"arop_asset_grants_consumed_check":            "check(((status<>'consumed')or(use_count=use_limit)))",
 	"arop_asset_grants_not_before_check":          "check((not_before_ns>0))",
-	"arop_asset_grants_expires_check":             "check(((expires_at_ns>not_before_ns)and((expires_at_ns-not_before_ns)<=900000000000)))",
+	"arop_asset_grants_expires_check":             "check(((expires_at_ns>not_before_ns)and((expires_at_ns-not_before_ns)<='900000000000'::bigint)))",
 	"arop_asset_grants_status_check":              "check((status=any(array['active','consumed','revoked'])))",
 	"arop_asset_grants_revision_check":            "check((revision>0))",
 	"arop_asset_grants_created_check":             "check((created_at_ns>0))",
