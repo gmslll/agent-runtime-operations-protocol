@@ -40,7 +40,10 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 	}
 
 	t.Run("durable-sqlite-composes-reference-auth-without-secret-route", func(t *testing.T) {
-		root := t.TempDir()
+		root, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
 		migrationRoot := filepath.Join(root, "migrations")
 		for _, relative := range []string{"sqlite/0001_base.sql", "sqlite/0005_identity.sql", "postgres/0001_base.sql", "postgres/0005_identity.sql"} {
 			source := filepath.Join("..", "..", "migrations", filepath.FromSlash(relative))
