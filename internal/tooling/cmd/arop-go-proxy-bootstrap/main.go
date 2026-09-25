@@ -57,10 +57,10 @@ const (
 )
 
 var transitionPaths = []string{
+	"cmd/arop/internal/commands/publish/testdata/transition/p12-p05-transition.json",
 	"conformance/harness/base/testdata/transition/p06-p05-transition.json",
 	"reference/control-plane/internal/app/platform/testdata/transition/p08-p05-transition.json",
 	"reference/control-plane/internal/storage/migrate/testdata/engine-versions/p09-p05-transition.json",
-	"cmd/arop/internal/commands/publish/testdata/transition/p12-p05-transition.json",
 }
 
 var pseudoVersionPattern = regexp.MustCompile(`^v0\.0\.0-(\d{14})-([0-9a-f]{12})$`)
@@ -1725,6 +1725,7 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 		return replay, err
 	}
 	expected := []transitionRecord{p06, p08, p09, p12}
+	expectedByPath := []transitionRecord{p12, p06, p08, p09}
 	manifest, err := loadArtifactManifest(root)
 	if err != nil {
 		return replay, err
@@ -1736,22 +1737,22 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 	if err := validateExactSet(discoveredRecords, transitionPaths, "transition record set"); err != nil {
 		return replay, err
 	}
-	expectedCarrierArtifacts := []string{"conformance-harness-base", "control-plane-platform-foundation", "migration-engine-fixture-versions", "arop-cli-publication-command"}
+	expectedCarrierArtifacts := []string{"arop-cli-publication-command", "conformance-harness-base", "control-plane-platform-foundation", "migration-engine-fixture-versions"}
 	expectedAffectedOwners := []map[string]string{
+		{"nested-control-plane-go-module": "P05"},
 		{"root-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05", "reference-control-plane-server": "P08"},
-		{"nested-control-plane-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05", "reference-control-plane-server": "P08"},
 	}
 	for index, path := range transitionPaths {
-		if err := validateTransitionCarrier(path, expected[index].ToPhase, expectedCarrierArtifacts[index], manifest); err != nil {
+		if err := validateTransitionCarrier(path, expectedByPath[index].ToPhase, expectedCarrierArtifacts[index], manifest); err != nil {
 			return replay, err
 		}
 		record, data, err := loadTransitionRecord(root, path)
 		if err != nil {
 			return replay, err
 		}
-		if err := compareTransitionRecord(record, expected[index]); err != nil {
+		if err := compareTransitionRecord(record, expectedByPath[index]); err != nil {
 			return replay, fmt.Errorf("%s: %w", path, err)
 		}
 		_ = data // tracked carrier bytes are bound by static report inputs, not runtime evidence.
