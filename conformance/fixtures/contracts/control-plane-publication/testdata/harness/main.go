@@ -1764,7 +1764,7 @@ func fixedSafeASCIIPattern(pattern string) bool {
 
 func schemaValueKeyword(key string) bool {
 	switch key {
-	case "additionalProperties", "unevaluatedProperties", "items", "contains", "propertyNames", "not", "if", "then", "else":
+	case "additionalProperties", "unevaluatedProperties", "items", "contains", "unevaluatedItems", "propertyNames", "not", "if", "then", "else", "contentSchema":
 		return true
 	default:
 		return false
@@ -2093,9 +2093,13 @@ func verifyBundleAdversarialNegatives() error {
 	if err != nil {
 		return err
 	}
-	extensionDigest, err := semanticDocumentDigest(extensionParsed)
+	const extensionDigest = "sha256:32cc5b0c21fb7abe6a379a93ae64883e121957a9a8c8470358b9b2d539237782"
+	actualExtensionDigest, err := semanticDocumentDigest(extensionParsed)
 	if err != nil {
-		return err
+		return fmt.Errorf("extension JCS digest oracle: %w", err)
+	}
+	if actualExtensionDigest != extensionDigest {
+		return fmt.Errorf("extension JCS digest oracle got=%s want=%s", actualExtensionDigest, extensionDigest)
 	}
 	extensionManifest := []byte(fmt.Sprintf(`{"extensions":{"example":{"schema_ref":"schemas/extension~v1.json#/$defs/Extension","schema_digest":%q,"data":{"schema_ref":"https://example.invalid/not-a-schema","schema_digest":"not-a-digest","data":{"input_schema":{"format":"uuid","multipleOf":0.5}}}}}}`, extensionDigest))
 	extensionArchive, err := archiveWithPayloads(map[string][]byte{"agent-manifest.json": extensionManifest, "schemas/extension~v1.json": extensionDocument}, zip.Deflate)
@@ -2141,8 +2145,18 @@ func verifyBundleAdversarialNegatives() error {
 				"schemas/nested.json":    []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Nested":{"$ref":"https://example.invalid/network.json"}}}`),
 			}, zip.Deflate)
 		}},
+		{"publisher-unevaluated-items-network-ref", "network-reference", func() ([]byte, error) {
+			return archiveWithPayloads(map[string][]byte{
+				"agent-manifest.json": []byte(`{"skills":[{"input_schema":{"type":"array","unevaluatedItems":{"$ref":"https://example.invalid/unevaluated.json"}}}]}`),
+			}, zip.Deflate)
+		}},
+		{"publisher-content-schema-unsafe-pattern", "unsafe-schema-pattern", func() ([]byte, error) {
+			return archiveWithPayloads(map[string][]byte{
+				"agent-manifest.json": []byte(`{"skills":[{"input_schema":{"type":"string","contentSchema":{"type":"string","pattern":"^(a+)+$"}}}]}`),
+			}, zip.Deflate)
+		}},
 		{"extension-schema-local-file-ref", "extension-schema-not-self-contained", func() ([]byte, error) {
-			extension := []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Extension":{"$ref":"schemas/nested.json#/$defs/Nested"}}}`)
+			extension := []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Extension":{"type":"string","contentSchema":{"$ref":"schemas/nested.json#/$defs/Nested"}}}}`)
 			parsed, err := structuredfile.Parse(extension, "json")
 			if err != nil {
 				return nil, err
@@ -2155,6 +2169,12 @@ func verifyBundleAdversarialNegatives() error {
 				"agent-manifest.json":    []byte(fmt.Sprintf(`{"extensions":{"example":{"schema_ref":"schemas/extension.json#/$defs/Extension","schema_digest":%q,"data":{}}}}`, digest)),
 				"schemas/extension.json": extension,
 				"schemas/nested.json":    []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Nested":{"$ref":"https://example.invalid/network.json"}}}`),
+			}, zip.Deflate)
+		}},
+		{"extension-schema-fragment-external-digest-mismatch", "schema-digest-mismatch", func() ([]byte, error) {
+			return archiveWithPayloads(map[string][]byte{
+				"agent-manifest.json":    []byte(fmt.Sprintf(`{"extensions":{"example":{"schema_ref":"schemas/extension.json#/$defs/Extension","schema_digest":%q,"data":{}}}}`, extensionDigest)),
+				"schemas/extension.json": []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Extension":{"type":"object"},"OutsideFragment":{"type":"string"}}}`),
 			}, zip.Deflate)
 		}},
 		{"unsafe-variable-length-schema-pattern", "unsafe-schema-pattern", func() ([]byte, error) {
