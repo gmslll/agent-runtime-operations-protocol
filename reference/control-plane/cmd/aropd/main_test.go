@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	controlplane "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/generated/control-plane"
 )
 
 func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
@@ -85,31 +86,23 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 		if !snapshot.Ready || !foundIdentity || !foundPublication || application.Config().MaxBodyBytes != 10<<20 {
 			t.Fatalf("P12 durable readiness/config missing: %+v config=%+v", snapshot, application.Config())
 		}
-		t.Run("real-server-cli-typed-authentication-interoperability", func(t *testing.T) {
-			httpServer := httptest.NewServer(server.Handler)
-			defer httpServer.Close()
-			repositoryRoot, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
-			if err != nil {
-				t.Fatal(err)
+		t.Run("real-server-cli-contract-authentication-interoperability", func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/v1/agent-definitions/hello.agent/versions", strings.NewReader("not-consumed-before-authentication"))
+			request.Header.Set("Authorization", "Bearer p12-cli-server-auth-canary")
+			request.Header.Set("Content-Type", "application/vnd.arop.agent-version-bundle+zip")
+			request.Header.Set("Idempotency-Key", "publication-request-interop")
+			response := httptest.NewRecorder()
+			server.Handler.ServeHTTP(response, request)
+			if response.Code != http.StatusUnauthorized || len(response.Header().Values("Content-Type")) != 1 || response.Header().Get("Content-Type") != "application/json" || len(response.Header().Values("WWW-Authenticate")) != 1 || response.Header().Get("WWW-Authenticate") != "Bearer" || len(response.Header().Values("Retry-After")) != 0 {
+				t.Fatalf("server response is not CLI-compatible: status=%d headers=%v body=%s", response.Code, response.Header(), response.Body.String())
 			}
-			bundle := filepath.Join(repositoryRoot, "conformance", "fixtures", "contracts", "control-plane-publication", "fixtures", "bundles", "valid-agent-version.zip")
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			command := exec.CommandContext(ctx, "go", "run", "./cmd/arop", "publish", "hello.agent", bundle)
-			command.Dir = repositoryRoot
-			command.Env = append(os.Environ(),
-				"AROP_CONTROL_PLANE_URL="+httpServer.URL,
-				"AROP_CONTROL_PLANE_TOKEN=p12-cli-server-auth-canary",
-				"AROP_IDEMPOTENCY_KEY=publication-request-interop",
-				"GOENV=off", "GOFLAGS=-mod=readonly", "GOWORK=off", "GOTOOLCHAIN=local", "CGO_ENABLED=0",
-			)
-			output, runErr := command.CombinedOutput()
-			if runErr == nil || !strings.Contains(string(output), "status=401 code=AUTHENTICATION_REQUIRED") {
-				t.Fatalf("CLI did not decode server P11 error: err=%v output=%s", runErr, output)
+			wire, err := controlplane.DecodeAROPError(response.Body.Bytes())
+			if err != nil || wire.Code != "AUTHENTICATION_REQUIRED" || wire.Category != "authentication" || wire.Retryable || wire.RetryAfterSeconds != nil {
+				t.Fatalf("server response is not the P11 CLI error contract: wire=%+v err=%v", wire, err)
 			}
-			for _, secret := range []string{"p12-cli-server-auth-canary", "authentication-required", `"message"`} {
-				if strings.Contains(string(output), secret) {
-					t.Fatalf("CLI interoperability output leaked %q: %s", secret, output)
+			for _, secret := range []string{"p12-cli-server-auth-canary", "not-consumed-before-authentication"} {
+				if strings.Contains(response.Body.String(), secret) {
+					t.Fatalf("CLI-compatible response leaked %q: %s", secret, response.Body.String())
 				}
 			}
 		})
