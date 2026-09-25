@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"syscall"
 	"time"
 
@@ -22,6 +23,9 @@ import (
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/httpadapter"
 	platformports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/ports"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication"
+	publicationpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication/storage/postgres"
+	publicationsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication/storage/sqlite"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/identity"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/ports/observability"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/storage/migrate"
@@ -45,6 +49,9 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	if catalogClosure.ReportPhase == "P12" {
+		config.MaxBodyBytes = publication.MaxBundleBytes
+	}
 	clock := platform.RealClock{}
 	ids := platform.SystemIDSource{Clock: clock}
 	faults := platform.NoopFaultHook{}
@@ -62,7 +69,11 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 	}
 	handler, err := httpadapter.NewHandler(application)
 	if identityService := identityServiceFromChecks(checks); identityService != nil {
-		handler, err = httpadapter.NewAuthenticatedHandler(application, referenceAuthenticate(identityService, ids))
+		if publicationService := publicationServiceFromChecks(checks); publicationService != nil {
+			handler, err = httpadapter.NewPublicationHandler(application, referenceAuthenticate(identityService, ids), publicationService)
+		} else {
+			handler, err = httpadapter.NewAuthenticatedHandler(application, referenceAuthenticate(identityService, ids))
+		}
 	}
 	if err != nil {
 		_ = cleanup()
@@ -152,13 +163,21 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			return nil, nil, nil, nil, err
 		}
 		checks := []platformports.ReadinessCheck{runner}
-		if catalogClosure.ReportPhase == "P10" {
+		if catalogClosure.ReportPhase != "P09" {
 			identityService, err := composeIdentity(db, migrate.DialectSQLite, uow.Transaction, uow, store, clock, ids, faults)
 			if err != nil {
 				_ = cleanup()
 				return nil, nil, nil, nil, err
 			}
 			checks = append(checks, identityService)
+		}
+		if catalogClosure.ReportPhase == "P12" {
+			publicationService, err := composePublication(db, migrate.DialectSQLite, uow.Transaction, uow, store, clock, ids, faults)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, publicationService)
 		}
 		return uow, store, checks, cleanup, nil
 	case platform.ModePostgres:
@@ -226,13 +245,21 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			return nil, nil, nil, nil, err
 		}
 		checks := []platformports.ReadinessCheck{runner}
-		if catalogClosure.ReportPhase == "P10" {
+		if catalogClosure.ReportPhase != "P09" {
 			identityService, err := composeIdentity(db, migrate.DialectPostgres, uow.Transaction, uow, store, clock, ids, faults)
 			if err != nil {
 				_ = cleanup()
 				return nil, nil, nil, nil, err
 			}
 			checks = append(checks, identityService)
+		}
+		if catalogClosure.ReportPhase == "P12" {
+			publicationService, err := composePublication(db, migrate.DialectPostgres, uow.Transaction, uow, store, clock, ids, faults)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, publicationService)
 		}
 		return uow, store, checks, cleanup, nil
 	default:
@@ -250,7 +277,16 @@ func schemaVerifier(catalog migrate.CatalogClosure, dialect migrate.Dialect) mig
 		if err := durableVerifier(ctx, query); err != nil {
 			return err
 		}
-		return identityVerifier(ctx, query)
+		if err := identityVerifier(ctx, query); err != nil {
+			return err
+		}
+		if catalog.ReportPhase != "P12" {
+			return nil
+		}
+		if dialect == migrate.DialectSQLite {
+			return publicationsqlite.VerifySchema()(ctx, query)
+		}
+		return publicationpostgres.VerifySchema()(ctx, query)
 	}
 }
 
@@ -261,7 +297,7 @@ func composeIdentity(db *sql.DB, dialect migrate.Dialect, lookup durable.Transac
 	}
 	service, err := identity.New(identity.Dependencies{
 		Clock: clock, IDs: ids, Faults: faults, UoW: uow, Observability: observations, Repository: repository,
-		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"secret.read"}, AllowedTenants: []string{"reference-dev"},
+		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent:publish", "agent:read", "secret.read"}, AllowedTenants: []string{"reference-dev"},
 	})
 	if err != nil {
 		return nil, errors.New("initialize identity service")
@@ -270,6 +306,41 @@ func composeIdentity(db *sql.DB, dialect migrate.Dialect, lookup durable.Transac
 	// binding every SecretRef remains denied, and no public handler is registered.
 	if _, err := secretadapter.New(secretadapter.Config{Clock: clock, IDs: ids, Observability: observations}); err != nil {
 		return nil, errors.New("initialize deny-by-default secret resolver")
+	}
+	return service, nil
+}
+
+type referencePublicationAuthorizer struct{}
+
+func (referencePublicationAuthorizer) Authorize(_ context.Context, request publication.AuthorizationRequest) error {
+	if err := request.Validate(); err != nil {
+		return err
+	}
+	want := "agent:read"
+	if request.Operation == publication.OperationPublish {
+		want = "agent:publish"
+	}
+	if !slices.Contains(request.Caller.Scopes, want) {
+		return publication.NewError(publication.CategoryAuthorization, publication.ReasonPublicationForbidden)
+	}
+	return nil
+}
+
+func composePublication(db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, observations observability.Store, clock platformports.Clock, ids platformports.IDSource, faults platformports.FaultHook) (*publication.Service, error) {
+	digester := publication.RFC8785ManifestDigester{}
+	var repository publication.Repository
+	var err error
+	if dialect == migrate.DialectSQLite {
+		repository, err = publicationsqlite.New(db, lookup, digester)
+	} else {
+		repository, err = publicationpostgres.New(db, lookup, digester)
+	}
+	if err != nil {
+		return nil, errors.New("initialize publication repository")
+	}
+	service, err := publication.New(publication.Dependencies{Clock: clock, IDs: ids, Faults: faults, UoW: uow, Observability: observations, Authorizer: referencePublicationAuthorizer{}, Repository: repository, Validator: publication.OfflineBundleValidator{}, ManifestDigester: digester, Fingerprinter: publication.SHA256RequestFingerprinter{}})
+	if err != nil {
+		return nil, errors.New("initialize publication service")
 	}
 	return service, nil
 }
@@ -283,6 +354,15 @@ func identityServiceFromChecks(checks []platformports.ReadinessCheck) *identity.
 	return nil
 }
 
+func publicationServiceFromChecks(checks []platformports.ReadinessCheck) *publication.Service {
+	for _, check := range checks {
+		if service, ok := check.(*publication.Service); ok {
+			return service
+		}
+	}
+	return nil
+}
+
 func referenceAuthenticate(service *identity.Service, ids platformports.IDSource) httpadapter.AuthenticateFunc {
 	return func(ctx context.Context, credential string, metadata platform.RequestMetadata) (httpadapter.AuthenticatedPrincipal, error) {
 		spanID, err := ids.NewID(ctx, platformports.IDSpan)
@@ -290,11 +370,15 @@ func referenceAuthenticate(service *identity.Service, ids platformports.IDSource
 			return httpadapter.AuthenticatedPrincipal{}, httpadapter.ErrAuthenticationUnavailable
 		}
 		metadata.ParentSpanID, metadata.SpanID = metadata.SpanID, spanID
+		requiredScopes := httpadapter.RequiredScopesFromContext(ctx)
+		if len(requiredScopes) == 0 {
+			requiredScopes = []string{"secret.read"}
+		}
 		principal, err := service.Authenticate(ctx, identity.AuthenticateRequest{
 			Credential: credential,
 			TenantID:   "reference-dev",
 			Audience:   "reference-control-plane",
-			Scopes:     []string{"secret.read"},
+			Scopes:     requiredScopes,
 			Metadata:   metadata,
 		})
 		if err != nil {
@@ -305,7 +389,7 @@ func referenceAuthenticate(service *identity.Service, ids platformports.IDSource
 		}
 		return httpadapter.AuthenticatedPrincipal{
 			TenantID: principal.TenantID, PrincipalID: principal.PrincipalID,
-			SubjectID: principal.SubjectID, CredentialID: principal.CredentialID,
+			SubjectID: principal.SubjectID, CredentialID: principal.CredentialID, Scopes: slices.Clone(principal.Scopes),
 		}, nil
 	}
 }

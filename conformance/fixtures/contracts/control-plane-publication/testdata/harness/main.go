@@ -39,6 +39,7 @@ const (
 	casesPath           = rootDir + "/cases.json"
 	inventoryPath       = rootDir + "/contract-inventory.json"
 	waiverPath          = rootDir + "/transition/p11-p07-codegen-transition.json"
+	p12CarrierPath      = "reference/control-plane/internal/domain/publication/testdata/transition/p12-baseline-transition-waiver.json"
 	provenancePath      = rootDir + "/generated/provenance.json"
 	baselineCommit      = "a7b357dfd6a102622e7767539732d3cbbf184dbc"
 	maxArchiveBytes     = int64(10485760)
@@ -2989,13 +2990,43 @@ func verifyWaiverNegatives(root string) error {
 	return nil
 }
 func changedPaths(root string) ([]string, error) {
-	r := run(root, 30*time.Second, cleanEnv(nil), "git", "diff", "--name-only", "--no-renames", baselineCommit+"..HEAD", "--")
+	endpoint, err := p11HistoricalEndpoint(root)
+	if err != nil {
+		return nil, err
+	}
+	r := run(root, 30*time.Second, cleanEnv(nil), "git", "diff", "--name-only", "--no-renames", baselineCommit+".."+endpoint, "--")
 	if r.err != nil {
 		return nil, r.err
 	}
 	lines := strings.Fields(string(r.stdout))
 	sort.Strings(lines)
 	return lines, nil
+}
+
+// p11HistoricalEndpoint freezes P11 at the parent of the unique P12 carrier
+// introduction. Later implementation commits must not expand P11's accepted
+// transition by making its checker compare the old baseline with HEAD.
+func p11HistoricalEndpoint(root string) (string, error) {
+	introduced := run(root, 30*time.Second, cleanEnv(nil), "git", "log", "--format=%H", "--diff-filter=A", "--", p12CarrierPath)
+	if introduced.err != nil {
+		return "", introduced.err
+	}
+	commits := strings.Fields(string(introduced.stdout))
+	if len(commits) != 1 {
+		return "", fmt.Errorf("P12 carrier introduction count=%d want=1", len(commits))
+	}
+	parent := run(root, 30*time.Second, cleanEnv(nil), "git", "rev-parse", commits[0]+"^")
+	if parent.err != nil {
+		return "", parent.err
+	}
+	endpoint := strings.TrimSpace(string(parent.stdout))
+	if endpoint != "31da1c8353b61e5eceae97f90b5e633e29abf3e5" {
+		return "", fmt.Errorf("P11 historical endpoint=%s", endpoint)
+	}
+	if ancestry := run(root, 30*time.Second, cleanEnv(nil), "git", "merge-base", "--is-ancestor", endpoint, "HEAD"); ancestry.err != nil {
+		return "", errors.New("P11 historical endpoint is not an ancestor of HEAD")
+	}
+	return endpoint, nil
 }
 
 func staticInputs(root string) ([]string, error) {
