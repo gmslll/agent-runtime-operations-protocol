@@ -19,6 +19,7 @@ import (
 	"path"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -1278,7 +1279,7 @@ func verifyBundleCase(root string, c caseDef) error {
 		if err != nil || u.Scheme != "https" || u.Host == "" {
 			return errors.New("network reference fixture is not an absolute HTTPS reference")
 		}
-		archive, err := archiveWithPayloads(map[string][]byte{"agent-manifest.json": []byte(fmt.Sprintf(`{"$ref":%q}`, ref))}, zip.Deflate)
+		archive, err := archiveWithPayloads(map[string][]byte{"agent-manifest.json": []byte(fmt.Sprintf(`{"skills":[{"input_schema":{"$ref":%q}}]}`, ref))}, zip.Deflate)
 		if err != nil {
 			return err
 		}
@@ -1537,7 +1538,7 @@ func portablePathSegment(segment string) bool {
 type offlineClosure struct {
 	entries map[string][]byte
 	parsed  map[string]any
-	visited map[string]bool
+	visited map[string]uint8
 }
 
 func verifyOfflineManifest(document []byte, entries map[string][]byte) error {
@@ -1545,21 +1546,28 @@ func verifyOfflineManifest(document []byte, entries map[string][]byte) error {
 	if err != nil {
 		return rejectBundle("invalid-manifest")
 	}
-	closure := offlineClosure{entries: entries, parsed: map[string]any{"agent-manifest.json": parsed}, visited: map[string]bool{}}
-	return closure.walkDocument("agent-manifest.json", parsed)
+	closure := offlineClosure{entries: entries, parsed: map[string]any{"agent-manifest.json": parsed}, visited: map[string]uint8{}}
+	return closure.walkDocument("agent-manifest.json", parsed, false, false)
 }
 
-func (closure *offlineClosure) walkDocument(currentPath string, document any) error {
-	if closure.visited[currentPath] {
+func (closure *offlineClosure) walkDocument(currentPath string, document any, schemaContext, extensionSchema bool) error {
+	mode := uint8(1)
+	if schemaContext {
+		mode |= 2
+	}
+	if extensionSchema {
+		mode |= 4
+	}
+	if closure.visited[currentPath]&mode == mode {
 		return nil
 	}
-	closure.visited[currentPath] = true
-	var walk func(any) error
-	walk = func(value any) error {
+	closure.visited[currentPath] |= mode
+	var walk func(any, bool, bool) error
+	walk = func(value any, isSchema, manifestContext bool) error {
 		switch typed := value.(type) {
 		case []any:
 			for _, child := range typed {
-				if err := walk(child); err != nil {
+				if err := walk(child, false, manifestContext); err != nil {
 					return err
 				}
 			}
@@ -1569,96 +1577,206 @@ func (closure *offlineClosure) walkDocument(currentPath string, document any) er
 					return rejectBundle("dangerous-schema-key")
 				}
 			}
-			if schemaURI, exists := typed["$schema"]; exists && schemaURI != "https://json-schema.org/draft/2020-12/schema" {
-				return rejectBundle("unsupported-schema-dialect")
-			}
-			if _, exists := typed["$recursiveRef"]; exists {
-				return rejectBundle("legacy-recursive-schema-keyword")
-			}
-			if _, exists := typed["$recursiveAnchor"]; exists {
-				return rejectBundle("legacy-recursive-schema-keyword")
-			}
-			if _, exists := typed["patternProperties"]; exists {
-				return rejectBundle("unsupported-schema-keyword")
-			}
-			if _, exists := typed["multipleOf"]; exists {
-				return rejectBundle("unsupported-schema-keyword")
-			}
-			if format, exists := typed["format"]; exists && format != "date-time" {
-				return rejectBundle("unsupported-schema-format")
-			}
-			if patternValue, exists := typed["pattern"]; exists {
-				pattern, ok := patternValue.(string)
-				if !ok || len(pattern) > 512 || !strings.HasPrefix(pattern, "^") || !strings.HasSuffix(pattern, "$") || strings.IndexFunc(pattern, func(r rune) bool { return r < 0x20 || r > 0x7e }) >= 0 {
-					return rejectBundle("unsafe-schema-pattern")
+			if isSchema {
+				if err := verifySchemaObject(typed, currentPath); err != nil {
+					return err
 				}
-			}
-			for _, anchorKey := range []string{"$anchor", "$dynamicAnchor"} {
-				if raw, exists := typed[anchorKey]; exists {
-					anchor, ok := raw.(string)
-					if !ok || !portablePathSegment(anchor) || strings.Contains(anchor, "/") {
-						return rejectBundle("invalid-reference-fragment")
+				for _, refKey := range []string{"$ref", "$dynamicRef"} {
+					if rawRef, exists := typed[refKey]; exists {
+						if err := closure.followReference(currentPath, rawRef, nil, false, extensionSchema); err != nil {
+							return err
+						}
 					}
 				}
 			}
-			if rawID, exists := typed["$id"]; exists {
-				identifier, ok := rawID.(string)
-				if !ok {
-					return rejectBundle("invalid-schema-id")
-				}
-				if _, _, err := resolvePortableReference(currentPath, identifier); err != nil {
-					return err
-				}
-			}
-			for _, refKey := range []string{"$ref", "$dynamicRef", "schema_ref"} {
-				rawRef, exists := typed[refKey]
-				if !exists {
-					continue
-				}
-				ref, ok := rawRef.(string)
-				if !ok {
-					return rejectBundle("invalid-manifest-reference")
-				}
-				target, fragment, err := resolvePortableReference(currentPath, ref)
-				if err != nil {
-					return err
-				}
-				if target == "" {
-					target = currentPath
-				}
-				targetDocument, err := closure.document(target)
-				if err != nil {
-					return err
-				}
-				if refKey == "schema_ref" {
-					wantDigest, ok := typed["schema_digest"].(string)
-					if !ok {
-						return rejectBundle("schema-digest-mismatch")
+			if manifestContext {
+				_, hasRef := typed["schema_ref"]
+				if _, hasDigest := typed["schema_digest"]; hasDigest {
+					if _, hasData := typed["data"]; hasRef && hasData {
+						if err := closure.followReference(currentPath, typed["schema_ref"], typed["schema_digest"], true, false); err != nil {
+							return err
+						}
 					}
-					actualDigest, digestErr := semanticDocumentDigest(targetDocument)
-					if digestErr != nil || wantDigest != actualDigest {
-						return rejectBundle("schema-digest-mismatch")
-					}
-				}
-				if err := verifyReferenceFragment(targetDocument, fragment); err != nil {
-					return err
-				}
-				if err := closure.walkDocument(target, targetDocument); err != nil {
-					return err
 				}
 			}
 			for key, child := range typed {
-				if key == "$ref" || key == "$dynamicRef" || key == "$id" || key == "schema_ref" {
+				if key == "$ref" || key == "$dynamicRef" || key == "$id" || key == "schema_ref" || key == "schema_digest" {
 					continue
 				}
-				if err := walk(child); err != nil {
+				childIsSchema := manifestContext && !isSchema && (key == "input_schema" || key == "output_schema")
+				childManifestContext := manifestContext && !childIsSchema
+				if key == "data" && typed["schema_ref"] != nil && typed["schema_digest"] != nil {
+					childManifestContext = false
+				}
+				if isSchema && schemaValueKeyword(key) {
+					childIsSchema = true
+					childManifestContext = false
+				}
+				if isSchema && schemaMapKeyword(key) {
+					for _, schemaChild := range asMap(child) {
+						if err := walk(schemaChild, true, false); err != nil {
+							return err
+						}
+					}
+					continue
+				}
+				if isSchema && schemaArrayKeyword(key) {
+					for _, schemaChild := range asSlice(child) {
+						if err := walk(schemaChild, true, false); err != nil {
+							return err
+						}
+					}
+					continue
+				}
+				if err := walk(child, childIsSchema, childManifestContext); err != nil {
 					return err
 				}
 			}
 		}
 		return nil
 	}
-	return walk(document)
+	return walk(document, schemaContext, !schemaContext)
+}
+
+func (closure *offlineClosure) followReference(currentPath string, rawRef, rawDigest any, schemaRef, extensionSchema bool) error {
+	ref, ok := rawRef.(string)
+	if !ok {
+		return rejectBundle("invalid-manifest-reference")
+	}
+	target, fragment, err := resolvePortableReference(currentPath, ref)
+	if err != nil {
+		return err
+	}
+	if extensionSchema && !schemaRef && strings.SplitN(ref, "#", 2)[0] != "" {
+		return rejectBundle("extension-schema-not-self-contained")
+	}
+	if target == "" {
+		target = currentPath
+	}
+	targetDocument, err := closure.document(target)
+	if err != nil {
+		return err
+	}
+	if schemaRef {
+		wantDigest, ok := rawDigest.(string)
+		if !ok {
+			return rejectBundle("schema-digest-mismatch")
+		}
+		actualDigest, digestErr := semanticDocumentDigest(targetDocument)
+		if digestErr != nil || wantDigest != actualDigest {
+			return rejectBundle("schema-digest-mismatch")
+		}
+	}
+	if err := verifyReferenceFragment(targetDocument, fragment); err != nil {
+		return err
+	}
+	return closure.walkDocument(target, targetDocument, true, schemaRef || extensionSchema)
+}
+
+func verifySchemaObject(schema map[string]any, currentPath string) error {
+	if schemaURI, exists := schema["$schema"]; exists && schemaURI != "https://json-schema.org/draft/2020-12/schema" {
+		return rejectBundle("unsupported-schema-dialect")
+	}
+	if _, exists := schema["$recursiveRef"]; exists {
+		return rejectBundle("legacy-recursive-schema-keyword")
+	}
+	if _, exists := schema["$recursiveAnchor"]; exists {
+		return rejectBundle("legacy-recursive-schema-keyword")
+	}
+	if _, exists := schema["patternProperties"]; exists {
+		return rejectBundle("unsupported-schema-keyword")
+	}
+	if _, exists := schema["multipleOf"]; exists {
+		return rejectBundle("unsupported-schema-keyword")
+	}
+	if format, exists := schema["format"]; exists && format != "date-time" {
+		return rejectBundle("unsupported-schema-format")
+	}
+	if patternValue, exists := schema["pattern"]; exists {
+		pattern, ok := patternValue.(string)
+		if !ok || !fixedSafeASCIIPattern(pattern) {
+			return rejectBundle("unsafe-schema-pattern")
+		}
+	}
+	for _, anchorKey := range []string{"$anchor", "$dynamicAnchor"} {
+		if raw, exists := schema[anchorKey]; exists {
+			anchor, ok := raw.(string)
+			if !ok || !portablePathSegment(anchor) || strings.Contains(anchor, "/") {
+				return rejectBundle("invalid-reference-fragment")
+			}
+		}
+	}
+	if rawID, exists := schema["$id"]; exists {
+		identifier, ok := rawID.(string)
+		if !ok {
+			return rejectBundle("invalid-schema-id")
+		}
+		if _, _, err := resolvePortableReference(currentPath, identifier); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func fixedSafeASCIIPattern(pattern string) bool {
+	if len(pattern) < 2 || len(pattern) > 512 || pattern[0] != '^' || pattern[len(pattern)-1] != '$' || strings.IndexFunc(pattern, func(r rune) bool { return r < 0x20 || r > 0x7e }) >= 0 {
+		return false
+	}
+	inner := pattern[1 : len(pattern)-1]
+	for index := 0; index < len(inner); index++ {
+		char := inner[index]
+		switch char {
+		case '\\', '*', '+', '?', '|', '(', ')', '^', '$', '.':
+			return false
+		case '[':
+			end := index + 1
+			for end < len(inner) && inner[end] != ']' {
+				if inner[end] == '\\' || inner[end] == '[' || inner[end] == '^' {
+					return false
+				}
+				end++
+			}
+			if end == index+1 || end >= len(inner) {
+				return false
+			}
+			index = end
+		case ']':
+			return false
+		case '{':
+			end := strings.IndexByte(inner[index+1:], '}')
+			if end < 0 {
+				return false
+			}
+			end += index + 1
+			count := inner[index+1 : end]
+			repetitions, err := strconv.Atoi(count)
+			if err != nil || repetitions < 1 || repetitions > 256 || strconv.Itoa(repetitions) != count {
+				return false
+			}
+			index = end
+		case '}':
+			return false
+		}
+	}
+	_, err := regexp.Compile(pattern)
+	return err == nil
+}
+
+func schemaValueKeyword(key string) bool {
+	switch key {
+	case "additionalProperties", "unevaluatedProperties", "items", "contains", "propertyNames", "not", "if", "then", "else":
+		return true
+	default:
+		return false
+	}
+}
+
+func schemaMapKeyword(key string) bool {
+	return key == "$defs" || key == "properties" || key == "dependentSchemas"
+}
+
+func schemaArrayKeyword(key string) bool {
+	return key == "allOf" || key == "anyOf" || key == "oneOf" || key == "prefixItems"
 }
 
 func (closure *offlineClosure) document(target string) (any, error) {
@@ -1961,8 +2079,8 @@ func forgeFirstCentralUncompressedSize(archive []byte, size uint32) ([]byte, err
 func verifyBundleAdversarialNegatives() error {
 	validManifest := []byte(`{"schema_version":1}`)
 	portableArchive, err := archiveWithPayloads(map[string][]byte{
-		"agent-manifest.json":   []byte(`{"$ref":"schemas/model~v1.json#/$defs/Thing"}`),
-		"schemas/model~v1.json": []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"./model~v1.json","$defs":{"Thing":{"type":"object"}}}`),
+		"agent-manifest.json":   []byte(`{"skills":[{"input_schema":{"$ref":"schemas/model~v1.json#/$defs/Thing"}}]}`),
+		"schemas/model~v1.json": []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"./schemas/model~v1.json","$defs":{"Thing":{"type":"string","pattern":"^[A-Z0-9._~-]{8}$"}}}`),
 	}, zip.Deflate)
 	if err != nil {
 		return err
@@ -1979,7 +2097,7 @@ func verifyBundleAdversarialNegatives() error {
 	if err != nil {
 		return err
 	}
-	extensionManifest := []byte(fmt.Sprintf(`{"extensions":{"example":{"schema_ref":"schemas/extension~v1.json#/$defs/Extension","schema_digest":%q,"data":{}}}}`, extensionDigest))
+	extensionManifest := []byte(fmt.Sprintf(`{"extensions":{"example":{"schema_ref":"schemas/extension~v1.json#/$defs/Extension","schema_digest":%q,"data":{"schema_ref":"https://example.invalid/not-a-schema","schema_digest":"not-a-digest","data":{"input_schema":{"format":"uuid","multipleOf":0.5}}}}}}`, extensionDigest))
 	extensionArchive, err := archiveWithPayloads(map[string][]byte{"agent-manifest.json": extensionManifest, "schemas/extension~v1.json": extensionDocument}, zip.Deflate)
 	if err != nil {
 		return err
@@ -2008,15 +2126,22 @@ func verifyBundleAdversarialNegatives() error {
 			return archiveWithPayloads(map[string][]byte{"agent-manifest.json": validManifest, "schemas/café.json": []byte(`{}`)}, zip.Deflate)
 		}},
 		{"network-reference", "network-reference", func() ([]byte, error) {
-			return archiveWithPayloads(map[string][]byte{"agent-manifest.json": []byte(`{"$ref":"https://example.invalid/schema.json"}`)}, zip.Deflate)
+			return archiveWithPayloads(map[string][]byte{"agent-manifest.json": []byte(`{"skills":[{"input_schema":{"$ref":"https://example.invalid/schema.json"}}]}`)}, zip.Deflate)
 		}},
 		{"network-schema-id", "network-reference", func() ([]byte, error) {
 			return archiveWithPayloads(map[string][]byte{
-				"agent-manifest.json":    []byte(`{"$ref":"schemas/publisher.json"}`),
+				"agent-manifest.json":    []byte(`{"skills":[{"input_schema":{"$ref":"schemas/publisher.json"}}]}`),
 				"schemas/publisher.json": []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://example.invalid/publisher.json","type":"object"}`),
 			}, zip.Deflate)
 		}},
-		{"recursive-extension-schema-network-ref", "network-reference", func() ([]byte, error) {
+		{"recursive-publisher-schema-network-ref", "network-reference", func() ([]byte, error) {
+			return archiveWithPayloads(map[string][]byte{
+				"agent-manifest.json":    []byte(`{"skills":[{"input_schema":{"$ref":"schemas/publisher.json#/$defs/Publisher"}}]}`),
+				"schemas/publisher.json": []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Publisher":{"$ref":"schemas/nested.json#/$defs/Nested"}}}`),
+				"schemas/nested.json":    []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Nested":{"$ref":"https://example.invalid/network.json"}}}`),
+			}, zip.Deflate)
+		}},
+		{"extension-schema-local-file-ref", "extension-schema-not-self-contained", func() ([]byte, error) {
 			extension := []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Extension":{"$ref":"schemas/nested.json#/$defs/Nested"}}}`)
 			parsed, err := structuredfile.Parse(extension, "json")
 			if err != nil {
@@ -2032,6 +2157,12 @@ func verifyBundleAdversarialNegatives() error {
 				"schemas/nested.json":    []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Nested":{"$ref":"https://example.invalid/network.json"}}}`),
 			}, zip.Deflate)
 		}},
+		{"unsafe-variable-length-schema-pattern", "unsafe-schema-pattern", func() ([]byte, error) {
+			return archiveWithPayloads(map[string][]byte{
+				"agent-manifest.json":  []byte(`{"skills":[{"input_schema":{"$ref":"schemas/pattern.json"}}]}`),
+				"schemas/pattern.json": []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","pattern":"^(a+)+$"}`),
+			}, zip.Deflate)
+		}},
 		{"extension-schema-digest-mismatch", "schema-digest-mismatch", func() ([]byte, error) {
 			return archiveWithPayloads(map[string][]byte{
 				"agent-manifest.json":    []byte(`{"extensions":{"example":{"schema_ref":"schemas/extension.json#/$defs/Extension","schema_digest":"sha256:0000000000000000000000000000000000000000000000000000000000000000","data":{}}}}`),
@@ -2040,7 +2171,7 @@ func verifyBundleAdversarialNegatives() error {
 		}},
 		{"invalid-reference-fragment", "invalid-reference-fragment", func() ([]byte, error) {
 			return archiveWithPayloads(map[string][]byte{
-				"agent-manifest.json":    []byte(`{"$ref":"schemas/publisher.json#/$defs/~2bad"}`),
+				"agent-manifest.json":    []byte(`{"skills":[{"input_schema":{"$ref":"schemas/publisher.json#/$defs/~2bad"}}]}`),
 				"schemas/publisher.json": []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"bad":{"type":"object"}}}`),
 			}, zip.Deflate)
 		}},
