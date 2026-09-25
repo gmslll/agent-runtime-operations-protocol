@@ -2959,10 +2959,11 @@ func validateWaiver(root string, w waiver) error {
 		if item.Path == waiverPath {
 			continue
 		}
-		data, err := git(root, "show", endpoint+":"+item.Path)
-		if err != nil {
-			return err
+		shown := run(root, 30*time.Second, cleanEnv(nil), "git", "show", endpoint+":"+item.Path)
+		if shown.err != nil {
+			return shown.err
 		}
+		data := shown.stdout
 		if item.CurrentSHA256 == nil || *item.CurrentSHA256 != digest(data) {
 			return fmt.Errorf("digest %s", item.Path)
 		}
