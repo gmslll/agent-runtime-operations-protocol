@@ -280,7 +280,7 @@ func affectedArtifacts(root string, sources []string) ([]string, error) {
 				score = len(artifact.Path)*2 + 1
 			} else if strings.HasPrefix(source, artifact.Path+"/") {
 				score = len(artifact.Path) * 2
-			} else if directory := filepath.ToSlash(filepath.Dir(filepath.FromSlash(artifact.Path))); directory != "." && filepath.ToSlash(filepath.Dir(filepath.FromSlash(source))) == directory {
+			} else if directory := filepath.ToSlash(filepath.Dir(filepath.FromSlash(artifact.Path))); directory != "." && (filepath.ToSlash(filepath.Dir(filepath.FromSlash(source))) == directory || strings.HasPrefix(source, directory+"/")) {
 				score = len(directory)
 			}
 			if score > best {
