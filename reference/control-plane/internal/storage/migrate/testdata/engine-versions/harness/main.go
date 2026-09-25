@@ -412,6 +412,14 @@ func p10AllowsPackage(root, importPath string) bool {
 	return false
 }
 
+func p13AllowsPackage(root, importPath string) bool {
+	data, err := os.ReadFile(filepath.Join(root, "reference/control-plane/internal/domain/assets/testdata/transition/p13-baseline-transition-waiver.json"))
+	if err != nil || !bytes.Contains(data, []byte(`"status": "validated"`)) || !bytes.Contains(data, []byte(`"commit": "3db6ee93a693d62d47e2d2fd25c5de43749f2e7d"`)) {
+		return false
+	}
+	return strings.HasPrefix(importPath, nestedModule+"/internal/domain/assets")
+}
+
 func verifyBaselineTransitionWaiver(root string, inputPaths []string, goListOutput []byte) error {
 	data, err := readRegular(root, waiverPath)
 	if err != nil {
@@ -1996,6 +2004,10 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 			continue
 		}
 		if p10AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) {
+			seenNested[item.ImportPath] = true
+			continue
+		}
+		if p13AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) {
 			seenNested[item.ImportPath] = true
 			continue
 		}
