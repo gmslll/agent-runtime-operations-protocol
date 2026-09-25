@@ -25,6 +25,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/report"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile"
 )
@@ -1629,6 +1630,16 @@ func (closure *offlineClosure) walkDocument(currentPath string, document any) er
 				if err != nil {
 					return err
 				}
+				if refKey == "schema_ref" {
+					wantDigest, ok := typed["schema_digest"].(string)
+					if !ok {
+						return rejectBundle("schema-digest-mismatch")
+					}
+					actualDigest, digestErr := semanticDocumentDigest(targetDocument)
+					if digestErr != nil || wantDigest != actualDigest {
+						return rejectBundle("schema-digest-mismatch")
+					}
+				}
 				if err := verifyReferenceFragment(targetDocument, fragment); err != nil {
 					return err
 				}
@@ -1675,6 +1686,18 @@ func (closure *offlineClosure) document(target string) (any, error) {
 	return parsed, nil
 }
 
+func semanticDocumentDigest(document any) (string, error) {
+	raw, err := json.Marshal(document)
+	if err != nil {
+		return "", err
+	}
+	canonical, err := jsoncanonicalizer.Transform(raw)
+	if err != nil {
+		return "", err
+	}
+	return "sha256:" + digest(canonical), nil
+}
+
 func resolvePortableReference(currentPath, reference string) (string, string, error) {
 	if reference == "" || !utf8.ValidString(reference) || strings.ContainsAny(reference, "\\%") || strings.IndexFunc(reference, func(r rune) bool { return r < 0x20 || r > 0x7e }) >= 0 {
 		return "", "", rejectBundle("invalid-manifest-reference")
@@ -1710,7 +1733,7 @@ func resolvePortableReference(currentPath, reference string) (string, string, er
 			return "", "", rejectBundle("invalid-manifest-reference")
 		}
 	}
-	target := path.Clean(path.Join(path.Dir(currentPath), referencePath))
+	target := path.Clean(referencePath)
 	if target == "." || target == ".." || strings.HasPrefix(target, "../") || strings.HasPrefix(target, "/") {
 		return "", "", rejectBundle("reference-outside-archive")
 	}
@@ -1947,6 +1970,23 @@ func verifyBundleAdversarialNegatives() error {
 	if err := validateBundleArchive(portableArchive); err != nil {
 		return fmt.Errorf("portable tilde/reference archive rejected: %w", err)
 	}
+	extensionDocument := []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Extension":{"type":"object"}}}`)
+	extensionParsed, err := structuredfile.Parse(extensionDocument, "json")
+	if err != nil {
+		return err
+	}
+	extensionDigest, err := semanticDocumentDigest(extensionParsed)
+	if err != nil {
+		return err
+	}
+	extensionManifest := []byte(fmt.Sprintf(`{"extensions":{"example":{"schema_ref":"schemas/extension~v1.json#/$defs/Extension","schema_digest":%q,"data":{}}}}`, extensionDigest))
+	extensionArchive, err := archiveWithPayloads(map[string][]byte{"agent-manifest.json": extensionManifest, "schemas/extension~v1.json": extensionDocument}, zip.Deflate)
+	if err != nil {
+		return err
+	}
+	if err := validateBundleArchive(extensionArchive); err != nil {
+		return fmt.Errorf("extension schema digest archive rejected: %w", err)
+	}
 	tests := []struct {
 		name   string
 		reason string
@@ -1977,10 +2017,25 @@ func verifyBundleAdversarialNegatives() error {
 			}, zip.Deflate)
 		}},
 		{"recursive-extension-schema-network-ref", "network-reference", func() ([]byte, error) {
+			extension := []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Extension":{"$ref":"schemas/nested.json#/$defs/Nested"}}}`)
+			parsed, err := structuredfile.Parse(extension, "json")
+			if err != nil {
+				return nil, err
+			}
+			digest, err := semanticDocumentDigest(parsed)
+			if err != nil {
+				return nil, err
+			}
+			return archiveWithPayloads(map[string][]byte{
+				"agent-manifest.json":    []byte(fmt.Sprintf(`{"extensions":{"example":{"schema_ref":"schemas/extension.json#/$defs/Extension","schema_digest":%q,"data":{}}}}`, digest)),
+				"schemas/extension.json": extension,
+				"schemas/nested.json":    []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Nested":{"$ref":"https://example.invalid/network.json"}}}`),
+			}, zip.Deflate)
+		}},
+		{"extension-schema-digest-mismatch", "schema-digest-mismatch", func() ([]byte, error) {
 			return archiveWithPayloads(map[string][]byte{
 				"agent-manifest.json":    []byte(`{"extensions":{"example":{"schema_ref":"schemas/extension.json#/$defs/Extension","schema_digest":"sha256:0000000000000000000000000000000000000000000000000000000000000000","data":{}}}}`),
-				"schemas/extension.json": []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Extension":{"$ref":"nested.json#/$defs/Nested"}}}`),
-				"schemas/nested.json":    []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Nested":{"$ref":"https://example.invalid/network.json"}}}`),
+				"schemas/extension.json": []byte(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$defs":{"Extension":{"type":"object"}}}`),
 			}, zip.Deflate)
 		}},
 		{"invalid-reference-fragment", "invalid-reference-fragment", func() ([]byte, error) {
