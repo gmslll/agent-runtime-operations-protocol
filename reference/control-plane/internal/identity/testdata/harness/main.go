@@ -537,13 +537,14 @@ func verifyCatalogSource(root string) error {
 		return err
 	}
 	text := string(data)
-	for _, required := range []string{"func P09ProductionCatalog()", `ReportPhase: "P09"`, "func CurrentProductionCatalog()", `ReportPhase: "P10"`, "0005_identity.sql"} {
+	for _, required := range []string{"func P09ProductionCatalog()", `ReportPhase: "P09"`, "func P10ProductionCatalog()", `ReportPhase: "P10"`, "func CurrentProductionCatalog()", `ReportPhase: "P12"`, "0005_identity.sql", "0010_publication.sql"} {
 		if !strings.Contains(text, required) {
 			return errors.New("catalog source misses " + required)
 		}
 	}
-	if strings.Contains(text, "0010_publication.sql") {
-		return errors.New("production catalog contains future 0010")
+	p10Start, currentStart := strings.Index(text, "func P10ProductionCatalog()"), strings.Index(text, "func CurrentProductionCatalog()")
+	if p10Start < 0 || currentStart <= p10Start || strings.Contains(text[p10Start:currentStart], "0010_publication.sql") {
+		return errors.New("P10 historical catalog contains future 0010")
 	}
 	return nil
 }

@@ -34,7 +34,7 @@ func TestP10DurableIdentityConformance(t *testing.T) {
 		t.Run(string(dialect), func(t *testing.T) {
 			db, uow, _, cleanup := acceptanceDatabase(t, dialect)
 			defer cleanup()
-			catalog, err := migrate.LoadCatalogClosure(os.DirFS(requiredEnv(t, "AROP_P10_MIGRATION_ROOT")), migrate.CurrentProductionCatalog(), dialect)
+			catalog, err := migrate.LoadCatalogClosure(os.DirFS(requiredEnv(t, "AROP_P10_MIGRATION_ROOT")), migrate.P10ProductionCatalog(), dialect)
 			requireNoError(t, err)
 			runner, err := migrate.NewRunner(db, catalog, testLocker{}, migrate.WithVerifier(combinedVerifier(dialect)))
 			requireNoError(t, err)
@@ -127,7 +127,7 @@ func testOneToFive(t *testing.T, dialect migrate.Dialect) {
 	if result.FromVersion != 0 || result.ToVersion != 1 || len(result.Applied) != 1 {
 		t.Fatalf("unexpected P09 setup result: %#v", result)
 	}
-	p10Catalog, err := migrate.LoadCatalogClosure(os.DirFS(rootPath), migrate.CurrentProductionCatalog(), dialect)
+	p10Catalog, err := migrate.LoadCatalogClosure(os.DirFS(rootPath), migrate.P10ProductionCatalog(), dialect)
 	requireNoError(t, err)
 	p10, err := migrate.NewRunner(db, p10Catalog, testLocker{}, migrate.WithVerifier(combinedVerifier(dialect)), migrate.WithBackupRestore(backup))
 	requireNoError(t, err)
@@ -150,7 +150,7 @@ func testOneToFiveRecovery(t *testing.T, dialect migrate.Dialect, failure string
 	requireNoError(t, err)
 	seedDurableObservation(t, db, uow, dialect, p09)
 
-	p10Catalog, err := migrate.LoadCatalogClosure(os.DirFS(rootPath), migrate.CurrentProductionCatalog(), dialect)
+	p10Catalog, err := migrate.LoadCatalogClosure(os.DirFS(rootPath), migrate.P10ProductionCatalog(), dialect)
 	requireNoError(t, err)
 	verifier := combinedVerifier(dialect)
 	usedBackup := backup
