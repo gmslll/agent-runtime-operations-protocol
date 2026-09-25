@@ -1,0 +1,426 @@
+{
+  "schema_version": 1,
+  "waiver_id": "P11-P07-CODEGEN-TRANSITION-001",
+  "status": "declared",
+  "policy": {
+    "owner_phase_semantics": "first-introduction-and-accountability",
+    "ownership_transferred": false
+  },
+  "baseline": {
+    "rule": "parent-of-unique-waiver-introduction-commit",
+    "commit": null
+  },
+  "transition": {
+    "from_phases": [
+      "P07"
+    ],
+    "to_phase": "P11",
+    "reason": "P11 extends the accepted P07 generator and capability matrix for the first public Control Plane Publication contract while retaining P07 ownership and reproducibility guarantees."
+  },
+  "affected_artifacts": [
+    "codegen-pipeline",
+    "codegen-representative-spike",
+    "generated-control-plane-go",
+    "generated-control-plane-python",
+    "generated-control-plane-typescript",
+    "openapi-control-plane-foundation",
+    "phase-report-p07",
+    "phase-report-p11",
+    "publication-contract-fixtures"
+  ],
+  "source_closure": [
+    {
+      "path": "conformance/fixtures/codegen-spike/testdata/harness/main.go",
+      "scope": "early-owned",
+      "change_type": "modify",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "codegen-representative-spike",
+        "phase-report-p07"
+      ],
+      "owner_phases": [
+        "P07"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/cases.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/contract-inventory.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/invalid-path-traversal.zip",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/valid-agent-version.zip",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/manifest-read-future-field.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/publish-created-future-field.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/error-secret-egress.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-secret-egress.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/publish-created-unknown-field.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/aggregation.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/authorization.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/publish-created.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/generated/provenance.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/pipeline.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/testdata/harness/main.go",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/testdata/transitioncheck/check.go",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/transition/p11-p07-codegen-transition.json",
+      "scope": "carrier",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "openapi/fragments/control-plane/publication-v1.yaml",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "openapi-control-plane-foundation",
+        "phase-report-p11"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "scripts/generate.mjs",
+      "scope": "early-owned",
+      "change_type": "modify",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "codegen-pipeline",
+        "phase-report-p07"
+      ],
+      "owner_phases": [
+        "P07"
+      ]
+    },
+    {
+      "path": "sdk/go/generated/control-plane/publication.gen.go",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "generated-control-plane-go",
+        "phase-report-p11"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "sdk/python/src/arop/generated/control-plane/publication_gen.py",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "generated-control-plane-python",
+        "phase-report-p11"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "sdk/typescript/src/generated/control-plane/publication.gen.ts",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "generated-control-plane-typescript",
+        "phase-report-p11"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    }
+  ],
+  "static_source_closure": [
+    {
+      "path": "Makefile",
+      "scope": "static-only",
+      "change_type": "modify",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": []
+    }
+  ],
+  "acceptance": [
+    {
+      "phase": "P07",
+      "command": "make test-codegen-pipeline",
+      "report": "build/reports/P07/report.json"
+    },
+    {
+      "phase": "P11",
+      "command": "make test-publication-contracts",
+      "report": "build/reports/P11/report.json"
+    }
+  ],
+  "constraints": [
+    "d-054-no-public-secret-value-api",
+    "d-062-single-deterministic-three-language-pipeline",
+    "frozen-planning-inputs-remain-unchanged",
+    "no-p12-or-later-contracts",
+    "owner-phase-and-exposure-remain-unchanged",
+    "p07-p11-regressions-must-pass-on-one-head",
+    "p11-report-runtime-inputs-remain-empty",
+    "tracked-control-plane-aggregate-forbidden-before-p20",
+    "validated-status-requires-exact-git-manifest-and-inventory-closure"
+  ]
+}

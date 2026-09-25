@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "contract_id": "arop-control-plane-publication-v1",
+  "phase": "P11",
+  "exposure": "public-contract",
+  "aggregate_policy": {
+    "aggregate_path": "openapi/control-plane-v1.yaml",
+    "completion_phase": "P20",
+    "p11_rule": "tracked-aggregate-forbidden-synthetic-bundle-only"
+  },
+  "security": {
+    "scheme_name": "ControlPlaneBearer",
+    "type": "http",
+    "scheme": "bearer",
+    "bearer_format_declared": false
+  },
+  "operations": [
+    {
+      "operation_id": "getAgentVersionManifest",
+      "method": "GET",
+      "path": "/v1/agent-definitions/{agent_id}/versions/{version}",
+      "request_media_types": [],
+      "response_media_types": [
+        "application/json"
+      ],
+      "required_scopes": [
+        "agent:read"
+      ]
+    },
+    {
+      "operation_id": "publishAgentVersion",
+      "method": "POST",
+      "path": "/v1/agent-definitions/{agent_id}/versions",
+      "request_media_types": [
+        "application/vnd.arop.agent-version-bundle+zip"
+      ],
+      "response_media_types": [
+        "application/json"
+      ],
+      "required_scopes": [
+        "agent:publish"
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "path": "openapi/fragments/control-plane/publication-v1.yaml",
+      "role": "openapi-fragment"
+    },
+    {
+      "path": "schemas/common/error.schema.json",
+      "role": "offline-schema-resource"
+    },
+    {
+      "path": "schemas/common/identifiers.schema.json",
+      "role": "offline-schema-resource"
+    },
+    {
+      "path": "schemas/manifest/agent-manifest-v1.schema.json",
+      "role": "offline-schema-resource"
+    },
+    {
+      "path": "schemas/resources/asset-ref-v1.schema.json",
+      "role": "offline-schema-resource"
+    },
+    {
+      "path": "schemas/resources/secret-ref-v1.schema.json",
+      "role": "offline-schema-resource"
+    }
+  ],
+  "codegen": {
+    "pipeline_id": "arop-codegen-v1",
+    "mapping_profile": "arop-wire-model-v1",
+    "generator_path": "scripts/generate.mjs",
+    "configuration_path": "conformance/fixtures/contracts/control-plane-publication/pipeline.json",
+    "roots": [
+      {
+        "name": "AgentManifest",
+        "ref": "https://arop.invalid/schemas/v1/manifest/agent-manifest-v1.schema.json"
+      },
+      {
+        "name": "AROPError",
+        "ref": "https://arop.invalid/schemas/v1/common/error.schema.json"
+      },
+      {
+        "name": "PublishedAgentVersion",
+        "ref": "https://arop.invalid/openapi/control-plane/publication-v1.yaml#/components/schemas/PublishedAgentVersion"
+      }
+    ],
+    "outputs": [
+      {
+        "language": "go",
+        "model_path": "sdk/go/generated/control-plane/publication.gen.go",
+        "package": "controlplane"
+      },
+      {
+        "language": "python",
+        "model_path": "sdk/python/src/arop/generated/control-plane/publication_gen.py",
+        "package": "arop.generated.control_plane"
+      },
+      {
+        "language": "typescript",
+        "model_path": "sdk/typescript/src/generated/control-plane/publication.gen.ts",
+        "package": "@arop/sdk/generated/control-plane"
+      }
+    ],
+    "provenance_path": "conformance/fixtures/contracts/control-plane-publication/generated/provenance.json",
+    "tracked_probe_files": []
+  },
+  "fixtures": {
+    "index_path": "conformance/fixtures/contracts/control-plane-publication/cases.json",
+    "bundle_paths": [
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/invalid-path-traversal.zip",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/valid-agent-version.zip"
+    ],
+    "valid_paths": [
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/publish-created.json"
+    ],
+    "forward_paths": [
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/manifest-read-future-field.json",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/publish-created-future-field.json"
+    ],
+    "invalid_paths": [
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/error-secret-egress.json",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-secret-egress.json",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/publish-created-unknown-field.json"
+    ],
+    "matrix_paths": [
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/aggregation.json",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/authorization.json"
+    ]
+  },
+  "constraints": [
+    "d-054-no-public-secret-value-api",
+    "d-062-single-deterministic-three-language-pipeline",
+    "no-p12-or-later-contracts",
+    "offline-explicit-resource-closure",
+    "p11-report-runtime-inputs-empty",
+    "public-and-reference-only-apis-remain-separated",
+    "tracked-control-plane-aggregate-forbidden-before-p20"
+  ]
+}
