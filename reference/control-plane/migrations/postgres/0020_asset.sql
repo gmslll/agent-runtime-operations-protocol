@@ -1,0 +1,77 @@
+CREATE TABLE arop_assets (
+  tenant_id TEXT NOT NULL,
+  asset_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  media_type TEXT NOT NULL,
+  size_bytes BIGINT NOT NULL,
+  content_digest TEXT NOT NULL,
+  object_key TEXT NOT NULL,
+  status TEXT NOT NULL,
+  revision BIGINT NOT NULL,
+  created_at_ns BIGINT NOT NULL,
+  updated_at_ns BIGINT NOT NULL,
+  idempotency_key_digest TEXT NOT NULL,
+  idempotency_request_digest TEXT NOT NULL,
+  CONSTRAINT arop_assets_pkey PRIMARY KEY(tenant_id, asset_id),
+  CONSTRAINT arop_assets_idempotency_unique UNIQUE(tenant_id, idempotency_key_digest),
+  CONSTRAINT arop_assets_tenant_check CHECK(tenant_id ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(tenant_id) <= 128),
+  CONSTRAINT arop_assets_asset_id_check CHECK(asset_id ~ '^asset_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+  CONSTRAINT arop_assets_name_check CHECK(length(name) BETWEEN 1 AND 512 AND name !~ '\.\.'),
+  CONSTRAINT arop_assets_media_type_check CHECK(media_type ~ '^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$' AND length(media_type) <= 127),
+  CONSTRAINT arop_assets_size_check CHECK(size_bytes >= 0 AND size_bytes <= 104857600),
+  CONSTRAINT arop_assets_digest_check CHECK(content_digest ~ '^sha256:[0-9a-f]{64}$'),
+  CONSTRAINT arop_assets_object_key_check CHECK(object_key ~ '^[a-z0-9][a-z0-9._/-]{0,255}$' AND object_key !~ '\.\.'),
+  CONSTRAINT arop_assets_status_check CHECK(status IN ('pending','available','isolated')),
+  CONSTRAINT arop_assets_revision_check CHECK(revision > 0),
+  CONSTRAINT arop_assets_created_check CHECK(created_at_ns > 0),
+  CONSTRAINT arop_assets_updated_check CHECK(updated_at_ns >= created_at_ns),
+  CONSTRAINT arop_assets_idempotency_key_check CHECK(idempotency_key_digest ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT arop_assets_idempotency_request_check CHECK(idempotency_request_digest ~ '^[0-9a-f]{64}$')
+)
+-- arop:statement
+CREATE INDEX arop_assets_tenant_status_idx ON arop_assets(tenant_id, status, asset_id)
+-- arop:statement
+CREATE INDEX arop_assets_tenant_digest_idx ON arop_assets(tenant_id, content_digest)
+-- arop:statement
+CREATE TABLE arop_asset_grants (
+  tenant_id TEXT NOT NULL,
+  grant_id TEXT NOT NULL,
+  asset_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  operation TEXT NOT NULL,
+  token_digest TEXT NOT NULL,
+  use_limit BIGINT NOT NULL,
+  use_count BIGINT NOT NULL,
+  expires_at_ns BIGINT NOT NULL,
+  status TEXT NOT NULL,
+  revision BIGINT NOT NULL,
+  created_at_ns BIGINT NOT NULL,
+  updated_at_ns BIGINT NOT NULL,
+  idempotency_key_digest TEXT NOT NULL,
+  idempotency_request_digest TEXT NOT NULL,
+  CONSTRAINT arop_asset_grants_pkey PRIMARY KEY(tenant_id, grant_id),
+  CONSTRAINT arop_asset_grants_idempotency_unique UNIQUE(tenant_id, idempotency_key_digest),
+  CONSTRAINT arop_asset_grants_token_unique UNIQUE(tenant_id, token_digest),
+  CONSTRAINT arop_asset_grants_asset_fkey FOREIGN KEY(tenant_id, asset_id) REFERENCES arop_assets(tenant_id, asset_id) ON UPDATE RESTRICT ON DELETE RESTRICT,
+  CONSTRAINT arop_asset_grants_tenant_check CHECK(tenant_id ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(tenant_id) <= 128),
+  CONSTRAINT arop_asset_grants_grant_id_check CHECK(grant_id ~ '^grnt_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+  CONSTRAINT arop_asset_grants_asset_id_check CHECK(asset_id ~ '^asset_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+  CONSTRAINT arop_asset_grants_run_id_check CHECK(run_id ~ '^run_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+  CONSTRAINT arop_asset_grants_operation_check CHECK(operation IN ('upload','download')),
+  CONSTRAINT arop_asset_grants_token_check CHECK(token_digest ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT arop_asset_grants_use_limit_check CHECK(use_limit BETWEEN 1 AND 1000),
+  CONSTRAINT arop_asset_grants_use_count_check CHECK(use_count >= 0 AND use_count <= use_limit),
+  CONSTRAINT arop_asset_grants_active_check CHECK(status <> 'active' OR use_count < use_limit),
+  CONSTRAINT arop_asset_grants_consumed_check CHECK(status <> 'consumed' OR use_count = use_limit),
+  CONSTRAINT arop_asset_grants_expires_check CHECK(expires_at_ns > 0),
+  CONSTRAINT arop_asset_grants_status_check CHECK(status IN ('active','consumed','revoked')),
+  CONSTRAINT arop_asset_grants_revision_check CHECK(revision > 0),
+  CONSTRAINT arop_asset_grants_created_check CHECK(created_at_ns > 0),
+  CONSTRAINT arop_asset_grants_updated_check CHECK(updated_at_ns >= created_at_ns),
+  CONSTRAINT arop_asset_grants_idempotency_key_check CHECK(idempotency_key_digest ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT arop_asset_grants_idempotency_request_check CHECK(idempotency_request_digest ~ '^[0-9a-f]{64}$')
+)
+-- arop:statement
+CREATE INDEX arop_asset_grants_tenant_asset_idx ON arop_asset_grants(tenant_id, asset_id, status)
+-- arop:statement
+CREATE INDEX arop_asset_grants_tenant_run_idx ON arop_asset_grants(tenant_id, run_id, status)
