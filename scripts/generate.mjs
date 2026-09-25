@@ -138,7 +138,7 @@ function validateConfiguration(config) {
   exactKeys(config, ["schema_version", "pipeline_id", "mapping_profile", "resources", "roots", "fixtures", "outputs"], [], "configuration");
   if (config.schema_version !== 1 || config.pipeline_id !== pipelineID || config.mapping_profile !== mappingProfile) fail("configuration version/profile mismatch");
   if (!Array.isArray(config.resources) || config.resources.length === 0) fail("resources must be a non-empty array");
-  if (!Array.isArray(config.roots) || config.roots.length !== 1) fail("P07 profile requires exactly one root");
+  if (!Array.isArray(config.roots) || config.roots.length === 0) fail("roots must be a non-empty array");
   exactKeys(config.fixtures, ["valid", "forward", "invalid"], [], "fixtures");
   exactKeys(config.outputs, ["go", "python", "typescript"], [], "outputs");
   const resourcePaths = new Set();
@@ -151,18 +151,24 @@ function validateConfiguration(config) {
     resourcePaths.add(resource.path);
     resourceURIs.add(resource.uri);
   }
+  const rootRefs = new Set();
+  const rootNames = new Set();
   for (const [index, root] of config.roots.entries()) {
     exactKeys(root, ["ref", "name"], [], `roots[${index}]`);
     if (typeof root.ref !== "string" || typeof root.name !== "string" || !/^[A-Z][A-Za-z0-9]*$/u.test(root.name)) fail("root ref/name is invalid");
+    if (rootRefs.has(root.ref) || rootNames.has(root.name)) fail("root ref and name must be unique");
+    rootRefs.add(root.ref);
+    rootNames.add(root.name);
   }
   const fixturePaths = new Set();
   for (const fixtureClass of ["valid", "forward", "invalid"]) {
     const fixtures = config.fixtures[fixtureClass];
     if (!Array.isArray(fixtures) || fixtures.length === 0) fail(`${fixtureClass} fixtures must be non-empty`);
     for (const [index, fixture] of fixtures.entries()) {
-      exactKeys(fixture, ["id", "path"], [], `${fixtureClass}[${index}]`);
+      exactKeys(fixture, ["id", "path"], ["root"], `${fixtureClass}[${index}]`);
       if (!/^[a-z][a-z0-9-]*$/u.test(fixture.id)) fail(`invalid fixture id ${JSON.stringify(fixture.id)}`);
       fixture.path = safeRelative(fixture.path, `${fixtureClass}[${index}].path`);
+      if (fixture.root !== undefined && !rootNames.has(fixture.root)) fail(`${fixtureClass}[${index}].root is not a configured root`);
       if (fixturePaths.has(fixture.path)) fail(`duplicate fixture path ${fixture.path}`);
       fixturePaths.add(fixture.path);
     }
@@ -209,9 +215,10 @@ function rejectUnpairedSurrogates(value, pointer = "") {
 }
 
 const schemaKeywords = new Set([
-  "$schema", "$id", "$ref", "$defs", "$comment", "title", "description", "type", "const", "enum",
+  "$schema", "$id", "$ref", "$defs", "$comment", "title", "description", "default", "type", "const", "enum",
   "oneOf", "anyOf", "properties", "required", "additionalProperties", "items", "format",
-  "minimum", "maximum",
+  "minimum", "maximum", "minLength", "maxLength", "pattern", "minItems", "maxItems", "uniqueItems",
+  "minProperties", "maxProperties", "propertyNames", "allOf", "not", "if", "then",
 ]);
 
 function validateSchemaKeywords(schema, pointer = "") {
@@ -221,7 +228,7 @@ function validateSchemaKeywords(schema, pointer = "") {
   for (const container of ["properties", "$defs"]) {
     if (schema[container] !== undefined) for (const [key, child] of Object.entries(schema[container])) validateSchemaKeywords(child, `${pointer}/${container}/${key}`);
   }
-  for (const key of ["additionalProperties", "items", "not"]) if (schema[key] !== undefined) validateSchemaKeywords(schema[key], `${pointer}/${key}`);
+  for (const key of ["additionalProperties", "items", "propertyNames", "not", "if", "then"]) if (schema[key] !== undefined) validateSchemaKeywords(schema[key], `${pointer}/${key}`);
   for (const key of ["oneOf", "anyOf", "allOf"]) if (schema[key] !== undefined) schema[key].forEach((child, index) => validateSchemaKeywords(child, `${pointer}/${key}/${index}`));
 }
 
@@ -255,6 +262,29 @@ function splitReference(reference, baseURI) {
   const fragment = resolved.hash.length === 0 ? "" : decodeURIComponent(resolved.hash.slice(1));
   resolved.hash = "";
   return { uri: resolved.href, fragment };
+}
+
+function parseConditionalRule(branch, label) {
+  if (branch === null || typeof branch !== "object" || Array.isArray(branch)) fail(`${label} must be an object`);
+  const unsupported = Object.keys(branch).filter((key) => !["if", "then"].includes(key));
+  if (unsupported.length > 0 || branch.if === undefined || branch.then === undefined) fail(`${label} must contain only if/then`);
+  const conditionProperties = branch.if?.properties;
+  const conditionRequired = branch.if?.required;
+  if (conditionProperties === null || typeof conditionProperties !== "object" || Array.isArray(conditionProperties) || !Array.isArray(conditionRequired) || conditionRequired.length !== 1) fail(`${label}.if must require exactly one discriminating property`);
+  const property = conditionRequired[0];
+  const condition = conditionProperties[property];
+  const values = Object.hasOwn(condition ?? {}, "const") ? [condition.const] : condition?.enum;
+  if (!Array.isArray(values) || values.length === 0 || values.some((value) => typeof value !== "string")) fail(`${label}.if discriminator must use string const/enum`);
+  const thenRequired = branch.then?.required ?? [];
+  const thenProperties = branch.then?.properties ?? {};
+  if (!Array.isArray(thenRequired) || thenProperties === null || typeof thenProperties !== "object" || Array.isArray(thenProperties)) fail(`${label}.then is outside the supported conditional profile`);
+  const allowed = {};
+  for (const [wire, constraint] of Object.entries(thenProperties)) {
+    if (constraint === true) continue;
+    if (constraint === null || typeof constraint !== "object" || !Array.isArray(constraint.enum) || constraint.enum.some((value) => typeof value !== "string") || Object.keys(constraint).some((key) => key !== "enum")) fail(`${label}.then.properties.${wire} must be true or a string enum`);
+    allowed[wire] = [...constraint.enum];
+  }
+  return { property, values: [...values], required: [...thenRequired], allowed };
 }
 
 class ModelCompiler {
@@ -303,8 +333,8 @@ class ModelCompiler {
       if (siblings.length > 0) fail(`$ref siblings are outside ${mappingProfile}: ${siblings.join(",")}`);
       return this.compileReference(schema.$ref, baseURI, hint);
     }
-    if (Array.isArray(schema.anyOf)) {
-      if (schema.anyOf.length !== 2) fail(`anyOf at ${hint} must express exactly T|null`);
+    if (Array.isArray(schema.anyOf) && schema.anyOf.some((branch) => branch?.type === "null")) {
+      if (schema.anyOf.length !== 2) fail(`nullable anyOf at ${hint} must express exactly T|null`);
       const nullIndex = schema.anyOf.findIndex((branch) => branch?.type === "null");
       if (nullIndex < 0) fail(`anyOf at ${hint} is not the supported nullable form`);
       return { kind: "nullable", value: this.compileSchema(schema.anyOf[1 - nullIndex], baseURI, hint) };
@@ -361,7 +391,12 @@ class ModelCompiler {
     switch (schema.type) {
       case "string":
         if (schema.format !== undefined && !["date-time", "uri-reference"].includes(schema.format)) fail(`unsupported string format ${schema.format}`);
-        return { kind: schema.format === "date-time" ? "date-time" : schema.format === "uri-reference" ? "uri-reference" : "string" };
+        if (schema.minLength !== undefined && (!Number.isSafeInteger(schema.minLength) || schema.minLength < 0)) fail(`minLength at ${hint} must be a non-negative safe integer`);
+        if (schema.maxLength !== undefined && (!Number.isSafeInteger(schema.maxLength) || schema.maxLength < 0)) fail(`maxLength at ${hint} must be a non-negative safe integer`);
+        if (schema.minLength !== undefined && schema.maxLength !== undefined && schema.minLength > schema.maxLength) fail(`string bounds at ${hint} are inverted`);
+        if (schema.pattern !== undefined && typeof schema.pattern !== "string") fail(`pattern at ${hint} must be a string`);
+        if (schema.not !== undefined && (typeof schema.not?.pattern !== "string" || Object.keys(schema.not).some((key) => key !== "pattern"))) fail(`not at ${hint} only supports a pattern constraint`);
+        return { kind: schema.format === "date-time" ? "date-time" : schema.format === "uri-reference" ? "uri-reference" : "string", minLength: schema.minLength, maxLength: schema.maxLength, pattern: schema.pattern, notPattern: schema.not?.pattern };
       case "integer":
         if (!Number.isSafeInteger(schema.minimum) || !Number.isSafeInteger(schema.maximum) || schema.minimum > schema.maximum) fail(`integer bounds at ${hint} must declare finite safe minimum and maximum`);
         return { kind: "integer", minimum: schema.minimum, maximum: schema.maximum };
@@ -374,23 +409,31 @@ class ModelCompiler {
         return { kind: "null" };
       case "array":
         if (schema.items === undefined || Array.isArray(schema.items)) fail(`array at ${hint} requires one item schema`);
-        return { kind: "array", item: this.compileSchema(schema.items, baseURI, `${hint}Item`) };
+        if (schema.minItems !== undefined && (!Number.isSafeInteger(schema.minItems) || schema.minItems < 0)) fail(`minItems at ${hint} must be a non-negative safe integer`);
+        if (schema.maxItems !== undefined && (!Number.isSafeInteger(schema.maxItems) || schema.maxItems < 0)) fail(`maxItems at ${hint} must be a non-negative safe integer`);
+        if (schema.minItems !== undefined && schema.maxItems !== undefined && schema.minItems > schema.maxItems) fail(`array bounds at ${hint} are inverted`);
+        if (schema.uniqueItems !== undefined && schema.uniqueItems !== true && schema.uniqueItems !== false) fail(`uniqueItems at ${hint} must be boolean`);
+        return { kind: "array", item: this.compileSchema(schema.items, baseURI, `${hint}Item`), minItems: schema.minItems, maxItems: schema.maxItems, uniqueItems: schema.uniqueItems === true };
       case "object": {
         const properties = schema.properties ?? {};
         if (properties === null || typeof properties !== "object" || Array.isArray(properties)) fail(`properties at ${hint} must be an object`);
         const required = new Set(schema.required ?? []);
         for (const key of required) if (!Object.hasOwn(properties, key)) fail(`required property ${key} is not declared at ${hint}`);
         const fields = Object.keys(properties).sort().map((wire) => {
-          if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(wire) || pythonKeywords.has(wire)) fail(`wire field ${JSON.stringify(wire)} has no portable generated identifier`);
+          const languageName = wire === "$ref" ? "ref" : wire;
+          if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(languageName) || pythonKeywords.has(languageName)) fail(`wire field ${JSON.stringify(wire)} has no portable generated identifier`);
           const fieldHint = `${hint}${pascal(wire)}`;
           const fieldSchema = properties[wire];
           const inlineObject = fieldSchema !== null && typeof fieldSchema === "object" && !Array.isArray(fieldSchema)
             && fieldSchema.type === "object"
-            && (Object.keys(fieldSchema.properties ?? {}).length > 0 || fieldSchema.additionalProperties === false);
+            && (Object.keys(fieldSchema.properties ?? {}).length > 0 || fieldSchema.additionalProperties === false
+              || (fieldSchema.additionalProperties !== undefined && fieldSchema.additionalProperties !== true)
+              || fieldSchema.propertyNames !== undefined || fieldSchema.minProperties !== undefined || fieldSchema.maxProperties !== undefined
+              || fieldSchema.anyOf !== undefined || fieldSchema.allOf !== undefined);
           const fieldType = inlineObject
             ? this.compileInlineNamed(fieldSchema, baseURI, fieldHint, `${baseURI}#/$arop-codegen/${encodeURIComponent(fieldHint)}`)
             : this.compileSchema(fieldSchema, baseURI, fieldHint);
-          return { wire, name: wire, required: required.has(wire), type: fieldType };
+          return { wire, name: languageName, required: required.has(wire), type: fieldType };
         });
         for (const [language, mapper] of [["Go", goName], ["Python", (wire) => wire], ["TypeScript", (wire) => wire]]) {
           const generated = new Map();
@@ -405,8 +448,20 @@ class ModelCompiler {
         if (schema.additionalProperties === false) additional = false;
         else if (schema.additionalProperties === true || schema.additionalProperties === undefined) additional = { kind: "json" };
         else additional = this.compileSchema(schema.additionalProperties, baseURI, `${hint}Value`);
-        if (fields.length === 0 && additional !== false) return { kind: "map", value: additional };
-        return { kind: "object", fields, additional };
+        const hasObjectConstraints = schema.minProperties !== undefined || schema.maxProperties !== undefined || schema.propertyNames !== undefined || schema.anyOf !== undefined || schema.allOf !== undefined;
+        if (fields.length === 0 && additional !== false && !hasObjectConstraints) return { kind: "map", value: additional };
+        if (schema.minProperties !== undefined && (!Number.isSafeInteger(schema.minProperties) || schema.minProperties < 0)) fail(`minProperties at ${hint} must be a non-negative safe integer`);
+        if (schema.maxProperties !== undefined && (!Number.isSafeInteger(schema.maxProperties) || schema.maxProperties < 0)) fail(`maxProperties at ${hint} must be a non-negative safe integer`);
+        if (schema.minProperties !== undefined && schema.maxProperties !== undefined && schema.minProperties > schema.maxProperties) fail(`object bounds at ${hint} are inverted`);
+        const propertyNames = schema.propertyNames === undefined ? undefined : this.compileSchema(schema.propertyNames, baseURI, `${hint}PropertyName`);
+        const anyOfRequired = schema.anyOf === undefined ? [] : schema.anyOf.map((branch, index) => {
+          if (branch === null || typeof branch !== "object" || Array.isArray(branch)) fail(`anyOf[${index}] at ${hint} must be an object`);
+          const unsupported = Object.keys(branch).filter((key) => !["required", "properties"].includes(key));
+          if (unsupported.length > 0 || !Array.isArray(branch.required) || branch.required.length === 0) fail(`anyOf[${index}] at ${hint} must be a required-property alternative`);
+          return [...branch.required];
+        });
+        const conditionals = (schema.allOf ?? []).map((branch, index) => parseConditionalRule(branch, `${hint}.allOf[${index}]`));
+        return { kind: "object", fields, additional, minProperties: schema.minProperties, maxProperties: schema.maxProperties, propertyNames, anyOfRequired, conditionals };
       }
       default:
         fail(`schema at ${hint} has no supported type/ref/union`);
@@ -470,7 +525,7 @@ function goType(type) {
     case "const": return typeof type.value === "number" ? "int64" : typeof type.value === "boolean" ? "bool" : "string";
     case "nullable": return `Nullable[${type.value.kind === "named" ? `*${goType(type.value)}` : goType(type.value)}]`;
     case "union": fail("anonymous Go unions are forbidden");
-    default: fail(`unsupported Go type ${type.kind}`);
+    default: fail(`unsupported Go type ${type.kind}: ${JSON.stringify(type)}`);
   }
 }
 
@@ -490,6 +545,16 @@ function pythonType(type) {
     case "union": return type.variants.map((variant) => pythonType(variant.type)).join(" | ");
     default: fail(`unsupported Python type ${type.kind}`);
   }
+}
+
+function pythonAliasType(type, types, seen = new Set()) {
+  if (type.kind !== "named") return pythonType(type);
+  if (seen.has(type.name)) fail(`unsupported Python alias cycle at ${type.name}`);
+  const target = types.get(type.name);
+  if (target === undefined || target.kind === "object" || target.kind === "union") return type.name;
+  const next = new Set(seen);
+  next.add(type.name);
+  return pythonAliasType(target, types, next);
 }
 
 function tsType(type) {
@@ -532,6 +597,14 @@ function goValidation(type, expression, indent = "\t", sequence = { value: 0 }) 
       add(`if err := validateRawJSON(${expression}); err != nil { return err }`);
       break;
     case "array": {
+      if (type.minItems !== undefined) add(`if len(${expression}) < ${type.minItems} { return fmt.Errorf("array shorter than minItems") }`);
+      if (type.maxItems !== undefined) add(`if len(${expression}) > ${type.maxItems} { return fmt.Errorf("array longer than maxItems") }`);
+      if (type.uniqueItems) {
+        const seen = `seen${sequence.value++}`;
+        const item = `uniqueItem${sequence.value++}`;
+        add(`${seen} := map[string]bool{}`);
+        add(`for _, ${item} := range ${expression} { encoded, err := json.Marshal(${item}); if err != nil { return err }; key := string(encoded); if ${seen}[key] { return fmt.Errorf("array violates uniqueItems") }; ${seen}[key] = true }`);
+      }
       const item = `item${sequence.value++}`;
       const child = goValidation(type.item, item, `${indent}\t`, sequence);
       if (child.length > 0) { add(`for _, ${item} := range ${expression} {`); lines.push(...child); add("}"); }
@@ -555,7 +628,13 @@ function goValidation(type, expression, indent = "\t", sequence = { value: 0 }) 
       lines.push(...goValidation(type.value, `${expression}.Value`, `${indent}\t`, sequence));
       add("}");
       break;
-    case "string": case "date-time": case "uri-reference": case "boolean": case "null":
+    case "string": case "date-time": case "uri-reference":
+      if (type.minLength !== undefined) add(`if utf8.RuneCountInString(string(${expression})) < ${type.minLength} { return fmt.Errorf("string shorter than minLength") }`);
+      if (type.maxLength !== undefined) add(`if utf8.RuneCountInString(string(${expression})) > ${type.maxLength} { return fmt.Errorf("string longer than maxLength") }`);
+      if (type.pattern !== undefined) add(`if matched, err := regexp.MatchString(${literal(type.pattern)}, string(${expression})); err != nil || !matched { return fmt.Errorf("string does not match pattern") }`);
+      if (type.notPattern !== undefined) add(`if matched, err := regexp.MatchString(${literal(type.notPattern)}, string(${expression})); err != nil || matched { return fmt.Errorf("string matches forbidden pattern") }`);
+      break;
+    case "boolean": case "null":
       break;
     default:
       fail(`unsupported Go validation type ${type.kind}`);
@@ -563,7 +642,8 @@ function goValidation(type, expression, indent = "\t", sequence = { value: 0 }) 
   return lines;
 }
 
-function buildGoRuntime(types, rootName) {
+function buildGoRuntime(types, rootNames) {
+  const rootName = rootNames[0];
   const sanitizers = [];
   let helperSequence = 0;
   const sanitizerFor = (type, hint) => {
@@ -605,7 +685,11 @@ function buildGoRuntime(types, rootName) {
         : additionalSanitizer === ""
           ? "continue"
           : `clean, err := ${additionalSanitizer}(object[key], forward); if err != nil { return nil, err }; object[key] = clean`;
-      namedSanitizers.push(`func sanitize${name}(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable ${name} is null") }; var object map[string]json.RawMessage; if err := decodeJSON(data, &object); err != nil { return nil, err };${required} known := map[string]bool{${known.split(", ").filter(Boolean).map((item) => `${item}: true`).join(", ")}}; for key := range object { if !known[key] { ${unknown} } };${nested} return json.Marshal(object) }`);
+      const propertyCount = `${type.minProperties === undefined ? "" : ` if len(object) < ${type.minProperties} { return nil, fmt.Errorf("${name} has fewer than minProperties") };`}${type.maxProperties === undefined ? "" : ` if len(object) > ${type.maxProperties} { return nil, fmt.Errorf("${name} has more than maxProperties") };`}`;
+      const propertyNameValidation = type.propertyNames === undefined ? "" : ` for key := range object { ${goValidation(type.propertyNames, type.propertyNames.kind === "named" ? `${type.propertyNames.name}(key)` : "key", "", { value: 0 }).join(" ").replaceAll("return err", "return nil, err")} };`;
+      const alternatives = type.anyOfRequired.length === 0 ? "" : ` alternatives := 0; ${type.anyOfRequired.map((group) => `{ matched := true; ${group.map((wire) => `if _, ok := object[${literal(wire)}]; !ok { matched = false };`).join(" ")} if matched { alternatives++ } }`).join("; ")}; if alternatives == 0 { return nil, fmt.Errorf("${name} does not satisfy any required-property alternative") };`;
+      const conditionals = type.conditionals.map((rule) => ` if raw, ok := object[${literal(rule.property)}]; ok { var discriminator string; if err := json.Unmarshal(raw, &discriminator); err != nil { return nil, err }; if ${rule.values.map((value) => `discriminator == ${literal(value)}`).join(" || ")} { ${rule.required.map((wire) => `if _, exists := object[${literal(wire)}]; !exists { return nil, fmt.Errorf("${name}.${wire} is conditionally required") };`).join(" ")} ${Object.entries(rule.allowed).map(([wire, values]) => `if candidate, exists := object[${literal(wire)}]; exists { var value string; if err := json.Unmarshal(candidate, &value); err != nil { return nil, err }; allowed := map[string]bool{${values.map((value) => `${literal(value)}: true`).join(", ")}}; if !allowed[value] { return nil, fmt.Errorf("${name}.${wire} violates conditional enum") } }`).join(" ")} } };`).join("");
+      namedSanitizers.push(`func sanitize${name}(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable ${name} is null") }; var object map[string]json.RawMessage; if err := decodeJSON(data, &object); err != nil { return nil, err };${propertyCount}${propertyNameValidation}${required}${alternatives}${conditionals} known := map[string]bool{${known.split(", ").filter(Boolean).map((item) => `${item}: true`).join(", ")}}; for key := range object { if !known[key] { ${unknown} } };${nested} return json.Marshal(object) }`);
       const statements = [];
       for (const field of type.fields) {
         const fieldExpression = `value.${goName(field.wire)}`;
@@ -632,14 +716,17 @@ function buildGoRuntime(types, rootName) {
       validators.push(`func (value ${name}) validate() error { count := 0; ${selected}; if count != 1 { return fmt.Errorf("${name} requires exactly one variant") }; return nil }`);
     } else {
       namedSanitizers.push(`func sanitize${name}(data []byte, forward bool) ([]byte, error) { return data, nil }`);
-      validators.push(`func (value ${name}) validate() error {\n${goValidation(type, "value").join("\n")}\n\treturn nil\n}`);
+      const validationExpression = type.kind === "named" ? `${type.name}(value)` : "value";
+      validators.push(`func (value ${name}) validate() error {\n${goValidation(type, validationExpression).join("\n")}\n\treturn nil\n}`);
     }
   }
   const strictJSON = `func hexValue(value byte) (int, bool) { switch { case value >= '0' && value <= '9': return int(value - '0'), true; case value >= 'a' && value <= 'f': return int(value - 'a' + 10), true; case value >= 'A' && value <= 'F': return int(value - 'A' + 10), true; default: return 0, false } }\nfunc escapedCodeUnit(data []byte, offset int) (int, bool) { if offset+4 > len(data) { return 0, false }; value := 0; for index := offset; index < offset+4; index++ { digit, ok := hexValue(data[index]); if !ok { return 0, false }; value = value*16 + digit }; return value, true }\nfunc validateSurrogateEscapes(data []byte) error { inString := false; for index := 0; index < len(data); index++ { if data[index] == '"' { inString = !inString; continue }; if !inString || data[index] != '\\\\' { continue }; index++; if index >= len(data) { return fmt.Errorf("truncated JSON escape") }; if data[index] != 'u' { continue }; first, ok := escapedCodeUnit(data, index+1); if !ok { return fmt.Errorf("invalid Unicode escape") }; index += 4; if first >= 0xD800 && first <= 0xDBFF { if index+6 >= len(data) || data[index+1] != '\\\\' || data[index+2] != 'u' { return fmt.Errorf("unpaired high surrogate") }; second, ok := escapedCodeUnit(data, index+3); if !ok || second < 0xDC00 || second > 0xDFFF { return fmt.Errorf("unpaired high surrogate") }; index += 6 } else if first >= 0xDC00 && first <= 0xDFFF { return fmt.Errorf("unpaired low surrogate") } }; return nil }\nfunc walkStrictJSON(decoder *json.Decoder) error { token, err := decoder.Token(); if err != nil { return err }; delimiter, compound := token.(json.Delim); if !compound { return nil }; switch delimiter { case '{': seen := map[string]bool{}; for decoder.More() { keyToken, err := decoder.Token(); if err != nil { return err }; key, ok := keyToken.(string); if !ok { return fmt.Errorf("object key is not a string") }; if seen[key] { return fmt.Errorf("duplicate JSON key %s", key) }; seen[key] = true; if err := walkStrictJSON(decoder); err != nil { return err } }; closing, err := decoder.Token(); if err != nil || closing != json.Delim('}') { return fmt.Errorf("invalid object close") }; case '[': for decoder.More() { if err := walkStrictJSON(decoder); err != nil { return err } }; closing, err := decoder.Token(); if err != nil || closing != json.Delim(']') { return fmt.Errorf("invalid array close") }; default: return fmt.Errorf("unexpected JSON delimiter") }; return nil }\nfunc validateStrictJSON(data []byte) error { if !utf8.Valid(data) { return fmt.Errorf("JSON is not valid UTF-8") }; if err := validateSurrogateEscapes(data); err != nil { return err }; decoder := json.NewDecoder(bytes.NewReader(data)); decoder.UseNumber(); if err := walkStrictJSON(decoder); err != nil { return err }; if _, err := decoder.Token(); err != io.EOF { if err == nil { return fmt.Errorf("trailing JSON value") }; return err }; return nil }`;
   return `${sanitizers.join("\n")}\n${namedSanitizers.join("\n")}\n${validators.join("\n")}\n${strictJSON}\nfunc DecodeAuthoring(data []byte) (${rootName}, error) { var value ${rootName}; if err := validateStrictJSON(data); err != nil { return value, err }; clean, err := sanitize${rootName}(data, false); if err != nil { return value, err }; if err := decodeExact(clean, &value); err != nil { return value, err }; if err := value.validate(); err != nil { return value, err }; return value, nil }\nfunc DecodeForward(data []byte) (${rootName}, error) { var value ${rootName}; if err := validateStrictJSON(data); err != nil { return value, err }; clean, err := sanitize${rootName}(data, true); if err != nil { return value, err }; if err := decodeExact(clean, &value); err != nil { return value, err }; if err := value.validate(); err != nil { return value, err }; value.forwardWire = append([]byte(nil), data...); return value, nil }`;
 }
 
-function emitGo(types, inputDigest, validFixtures, forwardFixtures, invalidFixtures, rootName) {
+function emitGo(types, inputDigest, validFixtures, forwardFixtures, invalidFixtures, rootNames) {
+  const rootName = rootNames[0];
+  const rootSet = new Set(rootNames);
   const definitions = [];
   for (const [name, type] of [...types.entries()].sort(([left], [right]) => byteCompare(left, right))) {
     if (type.kind === "object") {
@@ -653,14 +740,14 @@ function emitGo(types, inputDigest, validFixtures, forwardFixtures, invalidFixtu
         return `\t${goName(field.wire)} ${valueType} \`json:"${field.wire}${options}"\``;
       });
       if (type.additional !== false) fields.push(`\tadditionalProperties map[string]${goType(type.additional)}`);
-      const internal = name === rootName ? "\n\tforwardWire json.RawMessage" : "";
+      const internal = rootSet.has(name) ? "\n\tforwardWire json.RawMessage" : "";
       let methods = "";
       if (type.additional !== false) {
         const known = type.fields.map((field) => `${literal(field.wire)}: true`).join(", ");
-        const rootForward = name === rootName ? "if value.forwardWire != nil { return append([]byte(nil), value.forwardWire...), nil }; " : "";
+        const rootForward = rootSet.has(name) ? "if value.forwardWire != nil { return append([]byte(nil), value.forwardWire...), nil }; " : "";
         methods = `\nfunc (value *${name}) UnmarshalJSON(data []byte) error { type wire ${name}; var decoded wire; if err := decodeExact(data, &decoded); err != nil { return err }; var object map[string]json.RawMessage; if err := decodeJSON(data, &object); err != nil { return err }; known := map[string]bool{${known}}; additional := map[string]${goType(type.additional)}{}; for key, raw := range object { if known[key] { continue }; var item ${goType(type.additional)}; if err := decodeExact(raw, &item); err != nil { return err }; additional[key] = item }; *value = ${name}(decoded); value.additionalProperties = additional; return nil }\nfunc (value ${name}) MarshalJSON() ([]byte, error) { ${rootForward}type wire ${name}; encoded, err := json.Marshal(wire(value)); if err != nil { return nil, err }; var object map[string]json.RawMessage; if err := decodeJSON(encoded, &object); err != nil { return nil, err }; for key, item := range value.additionalProperties { if _, exists := object[key]; exists { return nil, fmt.Errorf("additional property collides with declared field %s", key) }; raw, err := json.Marshal(item); if err != nil { return nil, err }; object[key] = raw }; return json.Marshal(object) }`;
         methods = methods.replace("decodeExact(data, &decoded)", "json.Unmarshal(data, &decoded)");
-      } else if (name === rootName) methods = `\nfunc (value ${name}) MarshalJSON() ([]byte, error) { if value.forwardWire != nil { return append([]byte(nil), value.forwardWire...), nil }; type wire ${name}; return json.Marshal(wire(value)) }`;
+      } else if (rootSet.has(name)) methods = `\nfunc (value ${name}) MarshalJSON() ([]byte, error) { if value.forwardWire != nil { return append([]byte(nil), value.forwardWire...), nil }; type wire ${name}; return json.Marshal(wire(value)) }`;
       definitions.push(`type ${name} struct {\n${fields.join("\n")}${internal}\n}${methods}`);
     } else if (type.kind === "union") {
       const fields = type.variants.map((variant) => `\t${goName(variant.tag)} *${goType(variant.type)}`).join("\n");
@@ -687,7 +774,7 @@ function emitGo(types, inputDigest, validFixtures, forwardFixtures, invalidFixtu
     "\tif value.SchemaVersion != 1 || value.SafeInteger < -9007199254740991 || value.SafeInteger > 9007199254740991 { return value, fmt.Errorf(\"wire constraints failed\") }\n\treturn value, nil",
     "\tif value.SchemaVersion != 1 || value.SafeInteger < -9007199254740991 || value.SafeInteger > 9007199254740991 { return value, fmt.Errorf(\"wire constraints failed\") }\n\tfor _, raw := range value.Attributes { if err := validateRawJSON(raw); err != nil { return value, err } }\n\tif err := validateRawJSON(value.Extension.Data); err != nil { return value, err }\n\tif value.Payload.Json != nil { if err := validateRawJSON(value.Payload.Json.Value); err != nil { return value, err } }\n\treturn value, nil",
   );
-  hardenedModel = hardenedModel.replace(/func DecodeAuthoring[\s\S]*?func decodeJSON/u, `${buildGoRuntime(types, rootName)}\nfunc decodeJSON`);
+  hardenedModel = hardenedModel.replace(/func DecodeAuthoring[\s\S]*?func decodeJSON/u, () => `${buildGoRuntime(types, rootNames)}\nfunc decodeJSON`);
   hardenedModel = hardenedModel.replace(
     "func DecodeForward(data []byte)",
     "func validateRawJSON(data []byte) error { var value any; if err := decodeJSON(data, &value); err != nil { return err }; return validateJSONValue(value) }\nfunc validateJSONValue(value any) error { switch item := value.(type) { case json.Number: rational, ok := new(big.Rat).SetString(item.String()); if !ok { return fmt.Errorf(\"invalid JSON number\") }; if rational.IsInt() { limit := big.NewInt(9007199254740991); negativeLimit := new(big.Int).Neg(new(big.Int).Set(limit)); if rational.Num().Cmp(limit) > 0 || rational.Num().Cmp(negativeLimit) < 0 { return fmt.Errorf(\"JSON integer outside safe range\") } }; case []any: for _, child := range item { if err := validateJSONValue(child); err != nil { return err } }; case map[string]any: for _, child := range item { if err := validateJSONValue(child); err != nil { return err } } }; return nil }\nfunc DecodeForward(data []byte)",
@@ -733,14 +820,14 @@ function emitPython(types, inputDigest, validFixtures) {
 function pythonDecode(type, expression, forward = "forward") {
   switch (type.kind) {
     case "named": return `_decode_${type.name}(${expression}, ${forward})`;
-    case "string": return `_string(${expression})`;
-    case "date-time": return `_date_time(${expression})`;
-    case "uri-reference": return `_uri_reference(${expression})`;
+    case "string": return `_string_constraints(_string(${expression}), ${type.minLength ?? "None"}, ${type.maxLength ?? "None"}, ${type.pattern === undefined ? "None" : literal(type.pattern)}, ${type.notPattern === undefined ? "None" : literal(type.notPattern)})`;
+    case "date-time": return `_string_constraints(_date_time(${expression}), ${type.minLength ?? "None"}, ${type.maxLength ?? "None"}, ${type.pattern === undefined ? "None" : literal(type.pattern)}, ${type.notPattern === undefined ? "None" : literal(type.notPattern)})`;
+    case "uri-reference": return `_string_constraints(_uri_reference(${expression}), ${type.minLength ?? "None"}, ${type.maxLength ?? "None"}, ${type.pattern === undefined ? "None" : literal(type.pattern)}, ${type.notPattern === undefined ? "None" : literal(type.notPattern)})`;
     case "integer": return `_integer(${expression}, ${type.minimum}, ${type.maximum})`;
     case "number": return `_number(${expression})`;
     case "boolean": return `_boolean(${expression})`;
     case "json": return `_json_value(${expression})`;
-    case "array": return `[${pythonDecode(type.item, "item", forward)} for item in _array(${expression})]`;
+    case "array": return `_array_constraints([${pythonDecode(type.item, "item", forward)} for item in _array(${expression})], ${type.minItems ?? "None"}, ${type.maxItems ?? "None"}, ${type.uniqueItems ? "True" : "False"})`;
     case "map": return `{key: ${pythonDecode(type.value, "item", forward)} for key, item in _object(${expression}).items()}`;
     case "enum": return `cast(${pythonType(type)}, _literal(${expression}, ${JSON.stringify(type.values)}))`;
     case "const": return `cast(${pythonType(type)}, _literal(${expression}, [${literal(type.value)}]))`;
@@ -749,14 +836,16 @@ function pythonDecode(type, expression, forward = "forward") {
   }
 }
 
-function emitPythonTyped(types, inputDigest, validFixtures, forwardFixtures, invalidFixtures, rootName) {
+function emitPythonTyped(types, inputDigest, validFixtures, forwardFixtures, invalidFixtures, rootNames) {
+  const rootName = rootNames[0];
+  const rootSet = new Set(rootNames);
   const definitions = [], aliases = [], decoders = [];
   for (const [name, type] of [...types.entries()].sort(([left], [right]) => byteCompare(left, right))) {
     if (type.kind === "object") {
       const required = type.fields.filter((item) => item.required);
       const fields = [...required, ...type.fields.filter((item) => !item.required)].map((item) => item.required ? `    ${item.name}: ${pythonType(item.type)}` : `    ${item.name}: ${pythonType(item.type)} | UnsetType = UNSET`);
       if (type.additional !== false) fields.push(`    _additional_properties: dict[str, ${pythonType(type.additional)}] = field(default_factory=dict, repr=False)`);
-      if (name === rootName) fields.push("    _forward_wire: JsonValue | UnsetType = field(default=UNSET, init=False, repr=False)");
+      if (rootSet.has(name)) fields.push("    _forward_wire: JsonValue | UnsetType = field(default=UNSET, init=False, repr=False)");
       definitions.push(`@dataclass(slots=True)\nclass ${name}:\n${fields.length === 0 ? "    pass" : fields.join("\n")}`);
       const requiredChecks = required.map((item) => `    if ${literal(item.wire)} not in value: raise ValueError("${name}.${item.wire} is required")`).join("\n");
       const knownFields = JSON.stringify(type.fields.map((item) => item.wire));
@@ -765,25 +854,32 @@ function emitPythonTyped(types, inputDigest, validFixtures, forwardFixtures, inv
       const unknownPolicy = type.additional === false ? `    if unknown and not forward: raise ValueError("${name} has unknown fields: " + ",".join(sorted(unknown)))` : "";
       decoders.push(`def _decode_${name}(raw: object, forward: bool) -> ${name}:\n    value = _object(raw)\n    known = set(${knownFields})\n    unknown = set(value) - known\n${unknownPolicy}\n${requiredChecks}\n    return ${name}(\n${constructorArgs}${additionalArgument}\n    )`);
     } else if (type.kind === "union") {
-      aliases.push(`${name}: TypeAlias = ${pythonType(type)}`);
+      aliases.push(`${name}: TypeAlias = ${pythonAliasType(type, types)}`);
       const cases = type.variants.map((variant) => `    if tag == ${literal(variant.tag)}: return ${pythonDecode(variant.type, "value", "forward")}`).join("\n");
       decoders.push(`def _decode_${name}(raw: object, forward: bool) -> ${name}:\n    value = _object(raw); tag = value.get(${literal(type.discriminator)})\n${cases}\n    raise ValueError("unknown ${name} discriminator")`);
-    } else aliases.push(`${name}: TypeAlias = ${pythonType(type)}`);
+    } else {
+      aliases.push(`${name}: TypeAlias = ${pythonAliasType(type, types)}`);
+      decoders.push(`def _decode_${name}(raw: object, forward: bool) -> ${name}:\n    return ${pythonDecode(type, "raw", "forward")}`);
+    }
   }
   const helpers = `def _object(value: object) -> dict[str, object]:\n    if not isinstance(value, dict) or not all(isinstance(key, str) for key in value): raise ValueError("expected object")\n    return value\ndef _array(value: object) -> list[object]:\n    if not isinstance(value, list): raise ValueError("expected array")\n    return value\ndef _string(value: object) -> str:\n    if not isinstance(value, str): raise ValueError("expected string")\n    return value\ndef _boolean(value: object) -> bool:\n    if not isinstance(value, bool): raise ValueError("expected boolean")\n    return value\ndef _number(value: object) -> float:\n    if isinstance(value, bool) or not isinstance(value, (int, float)): raise ValueError("expected number")\n    return float(value)\ndef _integer(value: object, minimum: int, maximum: int) -> int:\n    if isinstance(value, bool) or not isinstance(value, int) or value < minimum or value > maximum: raise ValueError("integer outside safe bounds")\n    return value\ndef _literal(value: object, allowed: list[object]):\n    if value not in allowed or isinstance(value, bool) != isinstance(allowed[0], bool): raise ValueError("unexpected literal")\n    return value\ndef _json_value(value: object) -> JsonValue:\n    if value is None or isinstance(value, (bool, int, float, str)): return value\n    if isinstance(value, list): return [_json_value(item) for item in value]\n    if isinstance(value, dict) and all(isinstance(key, str) for key in value): return {key: _json_value(item) for key, item in value.items()}\n    raise ValueError("invalid JSON value")\ndef _date_time(value: object) -> str:\n    wire = _string(value)\n    if re.fullmatch(r"[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])", wire) is None: raise ValueError("invalid RFC3339 date-time")\n    datetime.fromisoformat(wire.replace("Z", "+00:00")); return wire\ndef _uri_reference(value: object) -> str:\n    wire = _string(value)\n    if any(character.isspace() for character in wire): raise ValueError("invalid URI-reference")\n    urlsplit(wire); return wire`;
   const model = `${generatedHeader("python", inputDigest)}from __future__ import annotations\n\nfrom dataclasses import dataclass, field, fields, is_dataclass\nfrom datetime import datetime\nimport json\nimport re\nfrom typing import Literal, TypeAlias\nfrom urllib.parse import urlsplit\n\nJsonValue: TypeAlias = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]\n\n@dataclass(frozen=True, slots=True)\nclass UnsetType:\n    pass\nUNSET = UnsetType()\n\n${definitions.join("\n\n")}\n\n${aliases.join("\n")}\n\n${helpers}\n\n${decoders.join("\n\n")}\n\ndef _pairs(items: list[tuple[str, object]]) -> dict[str, object]:\n    result: dict[str, object] = {}\n    for key, value in items:\n        if key in result: raise ValueError("duplicate JSON key")\n        result[key] = value\n    return result\ndef _parse(data: str | bytes) -> object:\n    return json.loads(data, object_pairs_hook=_pairs, parse_constant=lambda value: (_ for _ in ()).throw(ValueError(value)))\ndef decode_authoring(data: str | bytes) -> CodegenSpikeEnvelope:\n    return _decode_CodegenSpikeEnvelope(_parse(data), False)\ndef decode_forward(data: str | bytes) -> CodegenSpikeEnvelope:\n    document = _parse(data); value = _decode_CodegenSpikeEnvelope(document, True); value._forward_wire = _json_value(document); return value\ndef _to_wire(value):\n    if isinstance(value, CodegenSpikeEnvelope) and value._forward_wire is not UNSET: return value._forward_wire\n    if value is UNSET: raise ValueError("UNSET has no wire representation")\n    if is_dataclass(value): return {item.name: _to_wire(getattr(value, item.name)) for item in fields(value) if not item.name.startswith("_") and getattr(value, item.name) is not UNSET}\n    if isinstance(value, list): return [_to_wire(item) for item in value]\n    if isinstance(value, dict): return {key: _to_wire(item) for key, item in value.items()}\n    return value\ndef encode_wire(value: CodegenSpikeEnvelope) -> str:\n    return json.dumps(_to_wire(value), ensure_ascii=False, separators=(",", ":"), sort_keys=True)\n`;
   const safePythonHelpers = `def _json_value(value: object) -> JsonValue:\n    if isinstance(value, bool) or value is None or isinstance(value, str): return value\n    if isinstance(value, int):\n        if not -9007199254740991 <= value <= 9007199254740991: raise ValueError("JSON integer outside safe range")\n        return value\n    if isinstance(value, float):\n        if not math.isfinite(value): raise ValueError("non-finite JSON number")\n        return value\n    if isinstance(value, list): return [_json_value(item) for item in value]\n    if isinstance(value, dict) and all(isinstance(key, str) for key in value): return {key: _json_value(item) for key, item in value.items()}\n    raise ValueError("invalid JSON value")\ndef _uri_reference(value: object) -> str:\n    wire = _string(value)\n    if any(character.isspace() or ord(character) < 32 for character in wire) or re.search(r"%(?![0-9A-Fa-f]{2})", wire): raise ValueError("invalid URI-reference")\n    urlsplit(wire); return wire`;
   const strictPythonJSON = `def _validate_json_text(text: str) -> None:\n    index = 0; in_string = False\n    while index < len(text):\n        character = text[index]\n        if character == '"': in_string = not in_string; index += 1; continue\n        if in_string and 0xD800 <= ord(character) <= 0xDFFF: raise ValueError("unpaired Unicode surrogate")\n        if not in_string or character != "\\\\": index += 1; continue\n        index += 1\n        if index >= len(text): raise ValueError("truncated JSON escape")\n        if text[index] != "u": index += 1; continue\n        if index + 4 >= len(text): raise ValueError("truncated Unicode escape")\n        first = int(text[index + 1:index + 5], 16); index += 5\n        if 0xD800 <= first <= 0xDBFF:\n            if index + 5 >= len(text) or text[index] != "\\\\" or text[index + 1] != "u": raise ValueError("unpaired high surrogate")\n            second = int(text[index + 2:index + 6], 16)\n            if not 0xDC00 <= second <= 0xDFFF: raise ValueError("unpaired high surrogate")\n            index += 6\n        elif 0xDC00 <= first <= 0xDFFF: raise ValueError("unpaired low surrogate")`;
+  const constraintPythonHelpers = `def _array_constraints(value: list, minimum: int | None, maximum: int | None, unique: bool):\n    if minimum is not None and len(value) < minimum: raise ValueError("array shorter than minItems")\n    if maximum is not None and len(value) > maximum: raise ValueError("array longer than maxItems")\n    if unique and len({json.dumps(item, ensure_ascii=False, separators=(",", ":"), sort_keys=True) for item in value}) != len(value): raise ValueError("array violates uniqueItems")\n    return value\ndef _string_constraints(value: str, minimum: int | None, maximum: int | None, pattern: str | None, forbidden: str | None) -> str:\n    if minimum is not None and len(value) < minimum: raise ValueError("string shorter than minLength")\n    if maximum is not None and len(value) > maximum: raise ValueError("string longer than maxLength")\n    if pattern is not None and re.search(pattern, value) is None: raise ValueError("string does not match pattern")\n    if forbidden is not None and re.search(forbidden, value) is not None: raise ValueError("string matches forbidden pattern")\n    return value`;
   let hardenedPythonModel = model.replaceAll("CodegenSpikeEnvelope", rootName).replace("import json\n", "import json\nimport math\n").replace("from typing import Literal, TypeAlias", "from typing import Literal, TypeAlias, cast");
   hardenedPythonModel = hardenedPythonModel.replace("from datetime import datetime\n", "from datetime import datetime\nfrom decimal import Decimal\n");
   hardenedPythonModel = hardenedPythonModel.replace(
     "    if is_dataclass(value): return {item.name: _to_wire(getattr(value, item.name)) for item in fields(value) if not item.name.startswith(\"_\") and getattr(value, item.name) is not UNSET}\n",
-    "    if is_dataclass(value):\n        result = {item.name: _to_wire(getattr(value, item.name)) for item in fields(value) if not item.name.startswith(\"_\") and getattr(value, item.name) is not UNSET}\n        additional = getattr(value, \"_additional_properties\", UNSET)\n        if isinstance(additional, dict): result.update({key: _to_wire(item) for key, item in additional.items()})\n        elif additional is not UNSET: raise ValueError(\"invalid additional properties\")\n        return result\n",
+    "    if is_dataclass(value):\n        result = {(\"$ref\" if item.name == \"ref\" else item.name): _to_wire(getattr(value, item.name)) for item in fields(value) if not item.name.startswith(\"_\") and getattr(value, item.name) is not UNSET}\n        additional = getattr(value, \"_additional_properties\", UNSET)\n        if isinstance(additional, dict): result.update({key: _to_wire(item) for key, item in additional.items()})\n        elif additional is not UNSET: raise ValueError(\"invalid additional properties\")\n        return result\n",
   );
   hardenedPythonModel = hardenedPythonModel.replace("def _json_value(", "def _json_value_unchecked(").replace("def _uri_reference(", "def _uri_reference_unchecked(");
-  hardenedPythonModel = hardenedPythonModel.replace(decoders.join("\n\n"), `${safePythonHelpers}\n\n${strictPythonJSON}\n\n${decoders.join("\n\n")}`);
+  hardenedPythonModel = hardenedPythonModel.replace(decoders.join("\n\n"), () => `${constraintPythonHelpers}\n\n${safePythonHelpers}\n\n${strictPythonJSON}\n\n${decoders.join("\n\n")}`);
   hardenedPythonModel = hardenedPythonModel.replace(/def _json_value_unchecked[\s\S]*?(?=def _date_time)/u, "");
   hardenedPythonModel = hardenedPythonModel.replace(/def _uri_reference_unchecked[\s\S]*?(?=def _json_value)/u, "");
+  if (!hardenedPythonModel.includes("def _array_constraints(")) {
+    hardenedPythonModel = hardenedPythonModel.replace(decoders.join("\n\n"), () => `${constraintPythonHelpers}\n\n${decoders.join("\n\n")}`);
+  }
   hardenedPythonModel = hardenedPythonModel.replace("def _number(value: object) -> float:\n    if isinstance(value, bool) or not isinstance(value, (int, float)): raise ValueError(\"expected number\")\n    return float(value)", "def _number(value: object) -> float:\n    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)) or not math.isfinite(value): raise ValueError(\"expected finite number\")\n    return float(value)");
   hardenedPythonModel = hardenedPythonModel.replace("def _integer(value: object, minimum: int, maximum: int) -> int:\n    if isinstance(value, bool) or not isinstance(value, int) or value < minimum or value > maximum: raise ValueError(\"integer outside safe bounds\")\n    return value", "def _integer(value: object, minimum: int, maximum: int) -> int:\n    if isinstance(value, bool) or not isinstance(value, (int, float, Decimal)) or not math.isfinite(value) or int(value) != value or value < minimum or value > maximum: raise ValueError(\"integer outside safe bounds\")\n    return int(value)");
   hardenedPythonModel = hardenedPythonModel.replace("    if isinstance(value, float):\n        if not math.isfinite(value): raise ValueError(\"non-finite JSON number\")\n        return value", "    if isinstance(value, (float, Decimal)):\n        if not math.isfinite(value): raise ValueError(\"non-finite JSON number\")\n        integral = value.to_integral_value() if isinstance(value, Decimal) else float(int(value))\n        floating = float(value)\n        if (value == integral and not -9007199254740991 <= value <= 9007199254740991) or (value != integral and floating.is_integer()): raise ValueError(\"unsafe JSON number\")\n        return floating");
@@ -831,14 +927,14 @@ function emitTypeScript(types, inputDigest, validFixtures) {
 function tsDecode(type, expression, forward = "forward") {
   switch (type.kind) {
     case "named": return `_decode${type.name}(${expression}, ${forward})`;
-    case "string": return `_string(${expression})`;
-    case "date-time": return `_safeDateTime(${expression})`;
-    case "uri-reference": return `_safeURIReference(${expression})`;
+    case "string": return `_stringConstraints(_string(${expression}), ${type.minLength ?? "undefined"}, ${type.maxLength ?? "undefined"}, ${literal(type.pattern ?? null)}, ${literal(type.notPattern ?? null)})`;
+    case "date-time": return `_stringConstraints(_safeDateTime(${expression}), ${type.minLength ?? "undefined"}, ${type.maxLength ?? "undefined"}, ${literal(type.pattern ?? null)}, ${literal(type.notPattern ?? null)}) as DateTime`;
+    case "uri-reference": return `_stringConstraints(_safeURIReference(${expression}), ${type.minLength ?? "undefined"}, ${type.maxLength ?? "undefined"}, ${literal(type.pattern ?? null)}, ${literal(type.notPattern ?? null)}) as URIReference`;
     case "integer": return `_integer(${expression}, ${type.minimum}, ${type.maximum})`;
     case "number": return `_number(${expression})`;
     case "boolean": return `_boolean(${expression})`;
     case "json": return `_safeJSONValue(${expression})`;
-    case "array": return `_array(${expression}).map((item) => ${tsDecode(type.item, "item", forward)})`;
+    case "array": return `_arrayConstraints(_array(${expression}).map((item) => ${tsDecode(type.item, "item", forward)}), ${type.minItems ?? "undefined"}, ${type.maxItems ?? "undefined"}, ${type.uniqueItems})`;
     case "map": return `Object.fromEntries(Object.entries(_object(${expression})).map(([key, item]) => [key, ${tsDecode(type.value, "item", forward)}]))`;
     case "enum": return `_literal(${expression}, ${JSON.stringify(type.values)})`;
     case "const": return `_literal(${expression}, [${literal(type.value)}])`;
@@ -847,7 +943,8 @@ function tsDecode(type, expression, forward = "forward") {
   }
 }
 
-function emitTypeScriptTyped(types, inputDigest, validFixtures, forwardFixtures, invalidFixtures, rootName) {
+function emitTypeScriptTyped(types, inputDigest, validFixtures, forwardFixtures, invalidFixtures, rootNames) {
+  const rootName = rootNames[0];
   const definitions = [], decoders = [];
   definitions.push(`function _safeJSONValue(value: unknown): JsonValue { if (value === null || typeof value === "string" || typeof value === "boolean") return value; if (typeof value === "number") { if (!Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value))) throw new Error("JSON integer outside safe range"); return value; } if (Array.isArray(value)) return value.map(_safeJSONValue); const object = _object(value); return Object.fromEntries(Object.entries(object).map(([key, item]) => [key, _safeJSONValue(item)])); }\nfunction _safeDateTime(value: unknown): DateTime { const wire = _string(value); const match = /^([0-9]{4})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$/.exec(wire); if (match === null) throw new Error("invalid RFC3339 date-time"); const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]); const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0); const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]; const maximum = days[month - 1]; if (maximum === undefined || day > maximum || Number.isNaN(Date.parse(wire))) throw new Error("invalid RFC3339 date-time"); return wire as DateTime; }\nfunction _safeURIReference(value: unknown): URIReference { const wire = _string(value); if (/\\s/.test(wire) || Array.from(wire).some((character) => character.charCodeAt(0) < 32) || /%(?![0-9A-Fa-f]{2})/.test(wire)) throw new Error("invalid URI-reference"); return wire as URIReference; }`);
   definitions[0] = definitions[0]
@@ -855,6 +952,7 @@ function emitTypeScriptTyped(types, inputDigest, validFixtures, forwardFixtures,
     .replace("if (/\\\\s/.test(wire) || Array.from(wire).some((character) => character.charCodeAt(0) < 32) || /%(?![0-9A-Fa-f]{2})/.test(wire))", () => "if (!_validURIReference(wire))");
   definitions[0] += `\nfunction _validURIReference(wire: string): boolean { if (/\\s/.test(wire) || Array.from(wire).some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) > 127) || /%(?![0-9A-Fa-f]{2})/.test(wire) || /[^A-Za-z0-9._~!$&'()*+,;=:@/?#%\\[\\]-]/.test(wire)) return false; const open = wire.indexOf("["), close = wire.indexOf("]"); if (open < 0 && close < 0) return true; if (open < 0 || close <= open || wire.indexOf("[", open + 1) >= 0 || wire.indexOf("]", close + 1) >= 0) return false; const authority = wire.indexOf("//"); if (authority < 0 || open < authority + 2) return false; const separators = [wire.indexOf("/", authority + 2), wire.indexOf("?", authority + 2), wire.indexOf("#", authority + 2)].filter((value) => value >= 0); const end = separators.length === 0 ? wire.length : Math.min(...separators); return close < end && /^[0-9A-Fa-f:.]+$/.test(wire.slice(open + 1, close)); }`;
   definitions[0] = definitions[0].replace(/function _safeURIReference[\s\S]*?return wire as URIReference; \}/u, "function _safeURIReference(value: unknown): URIReference { const wire = _string(value); if (!_validURIReference(wire)) throw new Error(\"invalid URI-reference\"); return wire as URIReference; }");
+  definitions[0] += `\nfunction _stableJSON(value: unknown): string { if (value === null || typeof value !== "object") return JSON.stringify(value); if (Array.isArray(value)) return "[" + value.map(_stableJSON).join(",") + "]"; const object = value as Record<string, unknown>; return "{" + Object.keys(object).sort().map((key) => JSON.stringify(key) + ":" + _stableJSON(object[key])).join(",") + "}"; }\nfunction _arrayConstraints<T>(value: ReadonlyArray<T>, minimum: number | undefined, maximum: number | undefined, unique: boolean): ReadonlyArray<T> { if (minimum !== undefined && value.length < minimum) throw new Error("array shorter than minItems"); if (maximum !== undefined && value.length > maximum) throw new Error("array longer than maxItems"); if (unique && new Set(value.map(_stableJSON)).size !== value.length) throw new Error("array violates uniqueItems"); return value; }\nfunction _stringConstraints(value: string, minimum: number | undefined, maximum: number | undefined, pattern: string | null, forbidden: string | null): string { if (minimum !== undefined && Array.from(value).length < minimum) throw new Error("string shorter than minLength"); if (maximum !== undefined && Array.from(value).length > maximum) throw new Error("string longer than maxLength"); if (pattern !== null && !(new RegExp(pattern, "u")).test(value)) throw new Error("string does not match pattern"); if (forbidden !== null && (new RegExp(forbidden, "u")).test(value)) throw new Error("string matches forbidden pattern"); return value; }`;
   for (const [name, type] of [...types.entries()].sort(([left], [right]) => byteCompare(left, right))) {
     if (type.kind === "object") {
       const fields = type.fields.map((item) => `  readonly ${item.wire}${item.required ? "" : "?"}: ${tsType(item.type)};`);
@@ -864,13 +962,16 @@ function emitTypeScriptTyped(types, inputDigest, validFixtures, forwardFixtures,
       const knownFields = JSON.stringify(type.fields.map((item) => item.wire));
       const additionalPolicy = type.additional === false
         ? `_unknown(value, ${knownFields}, forward);`
-        : `for (const [key, item] of Object.entries(value)) if (!${knownFields}.includes(key)) ${tsDecode(type.additional, "item")};`;
+        : `for (const [key, item] of Object.entries(value)) if (!(${knownFields} as ReadonlyArray<string>).includes(key)) ${tsDecode(type.additional, "item")};`;
       decoders.push(`function _decode${name}(raw: unknown, forward: boolean): ${name} {\n  const value = _object(raw); ${additionalPolicy}\n${required}\n${validate}\n  return value as unknown as ${name};\n}`);
     } else if (type.kind === "union") {
       definitions.push(`export type ${name} = ${tsType(type)};`);
       const cases = type.variants.map((variant) => `    case ${literal(variant.tag)}: return ${tsDecode(variant.type, "value", "forward")};`).join("\n");
       decoders.push(`function _decode${name}(raw: unknown, forward: boolean): ${name} {\n  const value = _object(raw);\n  switch (value[${literal(type.discriminator)}]) {\n${cases}\n    default: throw new Error("unknown ${name} discriminator");\n  }\n}`);
-    } else definitions.push(`export type ${name} = ${tsType(type)};`);
+    } else {
+      definitions.push(`export type ${name} = ${tsType(type)};`);
+      decoders.push(`function _decode${name}(raw: unknown, forward: boolean): ${name} { return ${tsDecode(type, "raw", "forward")} as ${name}; }`);
+    }
   }
   const strictTypeScriptJSON = `function _mathematicalInteger(token: string): boolean { const match = /^(-?)([0-9]+)(?:\\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$/.exec(token); if (match === null) return false; const fraction = match[3] ?? ""; const exponent = Number(match[4] ?? "0"); if (!Number.isSafeInteger(exponent)) return false; const scale = fraction.length - exponent; if (scale <= 0) return true; const digits = (match[2] ?? "") + fraction; if (scale >= digits.length) return /^0+$/.test(digits); return /^0+$/.test(digits.slice(digits.length - scale)); }\nfunction _validateStrictJSONText(source: string): void { let index = 0; const whitespace = () => { while (index < source.length && /[ \\t\\r\\n]/.test(source[index] ?? "")) index += 1; }; const stringValue = (): string => { const start = index; if (source[index] !== '"') throw new Error("expected JSON string"); index += 1; while (index < source.length) { const code = source.charCodeAt(index); if (code >= 0xD800 && code <= 0xDFFF) throw new Error("unpaired Unicode surrogate"); if (source[index] === '"') { index += 1; return JSON.parse(source.slice(start, index)) as string; } if (source[index] !== "\\\\") { if (code < 32) throw new Error("control character in JSON string"); index += 1; continue; } index += 1; if (index >= source.length) throw new Error("truncated JSON escape"); if (source[index] !== "u") { if (!'"\\\\/bfnrt'.includes(source[index] ?? "")) throw new Error("invalid JSON escape"); index += 1; continue; } const firstText = source.slice(index + 1, index + 5); if (!/^[0-9A-Fa-f]{4}$/.test(firstText)) throw new Error("invalid Unicode escape"); const first = Number.parseInt(firstText, 16); index += 5; if (first >= 0xD800 && first <= 0xDBFF) { if (source[index] !== "\\\\" || source[index + 1] !== "u") throw new Error("unpaired high surrogate"); const secondText = source.slice(index + 2, index + 6); if (!/^[0-9A-Fa-f]{4}$/.test(secondText)) throw new Error("invalid Unicode escape"); const second = Number.parseInt(secondText, 16); if (second < 0xDC00 || second > 0xDFFF) throw new Error("unpaired high surrogate"); index += 6; } else if (first >= 0xDC00 && first <= 0xDFFF) throw new Error("unpaired low surrogate"); } throw new Error("unterminated JSON string"); }; const value = (): void => { whitespace(); const character = source[index]; if (character === '"') { stringValue(); return; } if (character === '{') { index += 1; whitespace(); const seen = new Set<string>(); if (source[index] === '}') { index += 1; return; } while (true) { whitespace(); const key = stringValue(); if (seen.has(key)) throw new Error("duplicate JSON key " + key); seen.add(key); whitespace(); if (source[index] !== ':') throw new Error("expected colon"); index += 1; value(); whitespace(); if (source[index] === '}') { index += 1; return; } if (source[index] !== ',') throw new Error("expected object separator"); index += 1; } } if (character === '[') { index += 1; whitespace(); if (source[index] === ']') { index += 1; return; } while (true) { value(); whitespace(); if (source[index] === ']') { index += 1; return; } if (source[index] !== ',') throw new Error("expected array separator"); index += 1; } } const remainder = source.slice(index); const number = /^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/.exec(remainder); if (number !== null) { const token = number[0]; const parsed = Number(token); if (!Number.isFinite(parsed) || (Number.isInteger(parsed) && !_mathematicalInteger(token))) throw new Error("unsafe JSON number lexeme"); index += token.length; return; } for (const literalValue of ["true", "false", "null"]) if (source.startsWith(literalValue, index)) { index += literalValue.length; return; } throw new Error("invalid JSON value"); }; value(); whitespace(); if (index !== source.length) throw new Error("trailing JSON value"); }`;
   const helpers = `function _object(value: unknown): Record<string, unknown> { if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("expected object"); return value as Record<string, unknown>; }\nfunction _array(value: unknown): ReadonlyArray<unknown> { if (!Array.isArray(value)) throw new Error("expected array"); return value; }\nfunction _string(value: unknown): string { if (typeof value !== "string") throw new Error("expected string"); return value; }\nfunction _boolean(value: unknown): boolean { if (typeof value !== "boolean") throw new Error("expected boolean"); return value; }\nfunction _number(value: unknown): number { if (typeof value !== "number" || !Number.isFinite(value)) throw new Error("expected finite number"); return value; }\nfunction _integer(value: unknown, minimum: number, maximum: number): number { const number = _number(value); if (!Number.isSafeInteger(number) || number < minimum || number > maximum) throw new Error("integer outside safe bounds"); return number; }\nfunction _literal<T extends string | number | boolean>(value: unknown, allowed: ReadonlyArray<T>): T { if (!allowed.some((item) => item === value)) throw new Error("unexpected literal"); return value as T; }\nfunction _jsonValue(value: unknown): JsonValue { if (value === null || typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value))) return value; if (Array.isArray(value)) return value.map(_jsonValue); const object = _object(value); return Object.fromEntries(Object.entries(object).map(([key, item]) => [key, _jsonValue(item)])); }\nfunction _dateTime(value: unknown): DateTime { const wire = _string(value); if (!/^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$/.test(wire) || Number.isNaN(Date.parse(wire))) throw new Error("invalid RFC3339 date-time"); return wire as DateTime; }\nfunction _uriReference(value: unknown): URIReference { const wire = _string(value); if (/\\s/.test(wire)) throw new Error("invalid URI-reference"); return wire as URIReference; }\nfunction _unknown(value: Record<string, unknown>, known: ReadonlyArray<string>, forward: boolean): void { if (!forward) for (const key of Object.keys(value)) if (!known.includes(key)) throw new Error("unknown field " + key); }`;
@@ -970,13 +1071,17 @@ async function main() {
     if (!ajv.validateSchema(document)) fail(`${resource.path} is not valid Draft 2020-12: ${ajv.errorsText(ajv.errors)}`);
     ajv.addSchema(document, resource.uri);
   }
-  const rootConfig = config.roots[0];
-  const rootSplit = splitReference(rootConfig.ref, rootConfig.ref);
-  const rootValidate = ajv.getSchema(rootConfig.ref) ?? ajv.compile({ $ref: rootConfig.ref });
-  if (!resources.has(rootSplit.uri)) fail(`root resource is outside the explicit bundle: ${rootSplit.uri}`);
-  const names = new Map([[rootConfig.ref, rootConfig.name]]);
+  const rootConfigs = config.roots;
+  const rootValidators = new Map();
+  const names = new Map();
+  for (const rootConfig of rootConfigs) {
+    const rootSplit = splitReference(rootConfig.ref, rootConfig.ref);
+    if (!resources.has(rootSplit.uri)) fail(`root resource is outside the explicit bundle: ${rootSplit.uri}`);
+    rootValidators.set(rootConfig.name, ajv.getSchema(rootConfig.ref) ?? ajv.compile({ $ref: rootConfig.ref }));
+    names.set(rootConfig.ref, rootConfig.name);
+  }
   const compiler = new ModelCompiler(resources, names);
-  compiler.compileRoot(rootConfig.ref, rootConfig.name);
+  for (const rootConfig of rootConfigs) compiler.compileRoot(rootConfig.ref, rootConfig.name);
   if ([...compiler.types.values()].some((type) => type.kind === "pending")) fail("recursive type compilation left an unresolved placeholder");
 
   const fixtureEntries = [];
@@ -998,14 +1103,16 @@ async function main() {
         if (fixtureClass !== "invalid") throw error;
         fixtureInputError = error;
       }
+      const rootName = fixture.root ?? rootConfigs[0].name;
+      const rootValidate = rootValidators.get(rootName);
       const accepted = fixtureInputError === undefined && rootValidate(document);
       const passed = fixtureClass === "valid" ? accepted : !accepted;
       checks.push({ id: `schema-${fixtureClass}-${fixture.id}`, passed, detail: accepted ? "accepted" : fixtureInputError?.message ?? ajv.errorsText(rootValidate.errors) });
       if (!passed) fail(`${fixtureClass} fixture ${fixture.id} had the wrong schema result`);
-      fixtureEntries.push({ kind: "fixture", id: fixture.id, class: fixtureClass, path: file.path, sha256: file.sha256, bytes: file.bytes, mode: file.mode });
-      if (fixtureClass === "valid") validFixtures.push({ id: fixture.id, text: file.data.toString("utf8").trim(), document });
-      if (fixtureClass === "forward") forwardFixtures.push({ id: fixture.id, text: file.data.toString("utf8").trim(), document });
-      if (fixtureClass === "invalid") invalidFixtures.push({ id: fixture.id, text: file.data.toString("utf8").trim(), document });
+      fixtureEntries.push({ kind: "fixture", id: fixture.id, class: fixtureClass, ...(rootConfigs.length > 1 ? { root: rootName } : {}), path: file.path, sha256: file.sha256, bytes: file.bytes, mode: file.mode });
+      if (fixtureClass === "valid") validFixtures.push({ id: fixture.id, root: rootName, text: file.data.toString("utf8").trim(), document });
+      if (fixtureClass === "forward") forwardFixtures.push({ id: fixture.id, root: rootName, text: file.data.toString("utf8").trim(), document });
+      if (fixtureClass === "invalid") invalidFixtures.push({ id: fixture.id, root: rootName, text: file.data.toString("utf8").trim(), document });
     }
   }
 
@@ -1019,9 +1126,9 @@ async function main() {
   const inputsSHA256 = aggregateInputs(inputEntries);
 
   const generated = {
-    ...emitGo(compiler.types, inputsSHA256, validFixtures, forwardFixtures, invalidFixtures, rootConfig.name),
-    ...emitPythonTyped(compiler.types, inputsSHA256, validFixtures, forwardFixtures, invalidFixtures, rootConfig.name),
-    ...emitTypeScriptTyped(compiler.types, inputsSHA256, validFixtures, forwardFixtures, invalidFixtures, rootConfig.name),
+    ...emitGo(compiler.types, inputsSHA256, validFixtures, forwardFixtures, invalidFixtures, rootConfigs.map((root) => root.name)),
+    ...emitPythonTyped(compiler.types, inputsSHA256, validFixtures, forwardFixtures, invalidFixtures, rootConfigs.map((root) => root.name)),
+    ...emitTypeScriptTyped(compiler.types, inputsSHA256, validFixtures, forwardFixtures, invalidFixtures, rootConfigs.map((root) => root.name)),
   };
   const expectedOutputPaths = new Set(Object.values(config.outputs).flatMap((value) => [value.model, value.probe]));
   const actualOutputPaths = new Set(Object.keys(generated));

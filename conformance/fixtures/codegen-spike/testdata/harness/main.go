@@ -1192,6 +1192,10 @@ func runNegativeConfigs(root string, cases casesDocument) ([]byte, []report.Chec
 	return evidence.Bytes(), checks
 }
 
+// runUnsupportedKeywordMatrix keeps the fail-closed boundary explicit. Keywords
+// promoted into the D-062 mapping profile are exercised by the P11 synthetic
+// AgentManifest/AROPError smoke; only schema semantics that remain deliberately
+// unsupported belong in this negative matrix.
 func runUnsupportedKeywordMatrix(root string, cases casesDocument) ([]byte, []report.Check) {
 	type keywordCase struct {
 		name     string
@@ -1199,16 +1203,6 @@ func runUnsupportedKeywordMatrix(root string, cases casesDocument) ([]byte, []re
 		reason   string
 	}
 	matrix := []keywordCase{
-		{name: "minLength", property: map[string]any{"type": "string", "minLength": 1}},
-		{name: "maxLength", property: map[string]any{"type": "string", "maxLength": 4}},
-		{name: "pattern", property: map[string]any{"type": "string", "pattern": "^[a-z]+$"}},
-		{name: "minItems", property: map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "minItems": 1}},
-		{name: "maxItems", property: map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "maxItems": 2}},
-		{name: "uniqueItems", property: map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "uniqueItems": true}},
-		{name: "minProperties", property: map[string]any{"type": "object", "additionalProperties": true, "minProperties": 1}},
-		{name: "maxProperties", property: map[string]any{"type": "object", "additionalProperties": true, "maxProperties": 2}},
-		{name: "allOf", property: map[string]any{"allOf": []any{map[string]any{"type": "string"}}}},
-		{name: "not", property: map[string]any{"not": map[string]any{"type": "null"}}},
 		{name: "number-minimum", property: map[string]any{"type": "number", "minimum": 0}, reason: "number bounds are unsupported"},
 		{name: "number-maximum", property: map[string]any{"type": "number", "maximum": 1}, reason: "number bounds are unsupported"},
 	}
