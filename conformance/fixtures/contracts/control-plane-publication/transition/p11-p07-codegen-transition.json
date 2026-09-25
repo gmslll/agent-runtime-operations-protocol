@@ -697,7 +697,7 @@
       "path": "conformance/fixtures/contracts/control-plane-publication/testdata/harness/main.go",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "caab99ccad8901bcf9fe6873d2a09415f889e1468db835b46d149eecb1b1cc1d",
+      "current_sha256": "30306c6fd90faddb44cc2ed0b93f8975bd07dd3d1110675382adcd1cb09c7580",
       "touch_commits": [
         "1118ecdb802a546365ff7f116d9d859c81d3e1c2",
         "51cd85cc5b5fb37ef3cd2825979c1cda79d37101",
@@ -705,7 +705,8 @@
         "b19d977389a4c2e72424652decd286737a512eca",
         "b92e8bc9e680857876d59af4ef16f388cc7e684b",
         "bb16025e8d8900c3ba3005f6cdba80c32710db55",
-        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8",
+        "ce460435cc93c346adef202821a49b6b02ac74aa"
       ],
       "scope": "p11-production",
       "artifact_ids": [
