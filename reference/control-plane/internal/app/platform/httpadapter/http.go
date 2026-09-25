@@ -11,10 +11,13 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
 	platformports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/ports"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication"
+	assetwire "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/generated/asset"
 	controlplane "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/generated/control-plane"
 )
 
@@ -83,11 +86,22 @@ func NewPublicationHandler(application *platform.Platform, authenticate Authenti
 	return newHandlerWithPublication(application, authenticate, service)
 }
 
+func NewApplicationHandler(application *platform.Platform, authenticate AuthenticateFunc, publicationService publication.PublicationService, assetService assets.AssetBrokerService) (http.Handler, error) {
+	if authenticate == nil || publicationService == nil || assetService == nil {
+		return nil, errors.New("authentication, publication, and asset services are required")
+	}
+	return newHandlerWithServices(application, authenticate, publicationService, assetService)
+}
+
 func newHandler(application *platform.Platform, authenticate AuthenticateFunc) (http.Handler, error) {
 	return newHandlerWithPublication(application, authenticate, nil)
 }
 
 func newHandlerWithPublication(application *platform.Platform, authenticate AuthenticateFunc, service publication.PublicationService) (http.Handler, error) {
+	return newHandlerWithServices(application, authenticate, service, nil)
+}
+
+func newHandlerWithServices(application *platform.Platform, authenticate AuthenticateFunc, service publication.PublicationService, assetService assets.AssetBrokerService) (http.Handler, error) {
 	if application == nil {
 		return nil, errors.New("platform application is required")
 	}
@@ -109,7 +123,142 @@ func newHandlerWithPublication(application *platform.Platform, authenticate Auth
 		mux.HandleFunc("POST /v1/agent-definitions/{agent_id}/versions", publicationPublish(application, service))
 		mux.HandleFunc("GET /v1/agent-definitions/{agent_id}/versions/{version}", publicationGet(application, service))
 	}
+	if assetService != nil {
+		mux.HandleFunc("POST /v1/runs/{run_id}/assets:exchange", assetExchange(application, assetService))
+		mux.HandleFunc("PUT /v1/asset-content/{grant_id}", assetUpload(application, assetService))
+		mux.HandleFunc("GET /v1/asset-content/{grant_id}", assetDownload(application, assetService))
+	}
 	return instrument(application, mux, authenticate), nil
+}
+
+func assetExchange(application *platform.Platform, service assets.AssetBrokerService) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		if request.Header.Get("Content-Type") != "application/json" || len(request.Header.Values("Content-Type")) != 1 {
+			writeAssetError(writer, assets.NewError(assets.CategoryValidation, assets.ReasonInvalidRequest))
+			return
+		}
+		keys := request.Header.Values("Idempotency-Key")
+		if len(keys) != 1 {
+			writeAssetError(writer, assets.NewError(assets.CategoryValidation, assets.ReasonInvalidRequest))
+			return
+		}
+		body, err := io.ReadAll(io.LimitReader(request.Body, (1<<20)+1))
+		if err != nil {
+			writeAssetError(writer, assets.NewError(assets.CategoryCapacity, assets.ReasonAssetTooLarge))
+			return
+		}
+		if len(body) > 1<<20 {
+			clear(body)
+			writeAssetError(writer, assets.NewError(assets.CategoryCapacity, assets.ReasonAssetTooLarge))
+			return
+		}
+		caller, metadata, ok := assetCallerContext(application, request)
+		if !ok {
+			writeAssetError(writer, assets.NewError(assets.CategoryDependency, assets.ReasonDependencyUnavailable))
+			return
+		}
+		now := application.Now()
+		issue := assets.IssueRequest{Metadata: metadata, Caller: caller, IdempotencyKey: keys[0], NotBefore: now, ExpiresAt: now.Add(5 * time.Minute), MaxUses: 1}
+		var discriminator struct {
+			Kind string `json:"kind"`
+		}
+		if err := json.Unmarshal(body, &discriminator); err != nil {
+			writeAssetError(writer, assets.NewError(assets.CategoryValidation, assets.ReasonInvalidRequest))
+			return
+		}
+		switch discriminator.Kind {
+		case "upload_request":
+			model, decodeErr := assetwire.DecodeUploadRequest(body)
+			if decodeErr != nil || string(model.RunID) != request.PathValue("run_id") {
+				writeAssetError(writer, assets.NewError(assets.CategoryValidation, assets.ReasonInvalidRequest))
+				return
+			}
+			issue.RunID, issue.Operation = string(model.RunID), assets.OperationUpload
+			issue.Name, issue.MediaType, issue.SizeBytes, issue.Digest = string(model.Name), string(model.MediaType), int64(model.SizeBytes), string(model.Digest)
+		case "download_request":
+			model, decodeErr := assetwire.DecodeDownloadRequest(body)
+			if decodeErr != nil || string(model.RunID) != request.PathValue("run_id") {
+				writeAssetError(writer, assets.NewError(assets.CategoryValidation, assets.ReasonInvalidRequest))
+				return
+			}
+			issue.RunID, issue.Operation, issue.AssetID = string(model.RunID), assets.OperationDownload, string(model.AssetID)
+		default:
+			writeAssetError(writer, assets.NewError(assets.CategoryValidation, assets.ReasonInvalidRequest))
+			return
+		}
+		issued, err := service.IssueGrant(request.Context(), issue)
+		if err != nil {
+			writeAssetError(writer, err)
+			return
+		}
+		digest := assetwire.Sha256Digest(issued.Grant.Binding.Digest)
+		expires := assetwire.DateTime(issued.Grant.ExpiresAt.Format(time.RFC3339Nano))
+		response := assetwire.GrantResponse{
+			Kind: "grant", GrantID: assetwire.GrantId(issued.Grant.GrantID), Method: strings.TrimPrefix(string(issued.Grant.Binding.Operation), "asset."),
+			BrokerPath: assetwire.BrokerPath("/v1/asset-content/" + issued.Grant.GrantID), BearerToken: assetwire.BearerToken(issued.Token), ExpiresAt: expires, MaxUses: assetwire.MaxUses(issued.Grant.MaxUses),
+			Asset: assetwire.AROPV1AssetRef{AssetID: assetwire.AssetId(issued.Grant.Binding.AssetID), Name: issued.Grant.Binding.Name, MediaType: issued.Grant.Binding.MediaType, SizeBytes: assetwire.SafeInteger(issued.Grant.Binding.SizeBytes), Digest: &digest, Access: assetwire.AROPV1AssetRefAccess{Mode: "brokered", ExpiresAt: &expires}},
+		}
+		encoded, err := assetwire.EncodeGrantResponse(response)
+		if err != nil {
+			writeAssetError(writer, assets.NewError(assets.CategoryDependency, assets.ReasonDependencyUnavailable))
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write(encoded)
+	}
+}
+
+func assetUpload(application *platform.Platform, service assets.AssetBrokerService) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		metadata, ok := assetMetadata(application, request)
+		if !ok {
+			writeAssetError(writer, assets.NewError(assets.CategoryDependency, assets.ReasonDependencyUnavailable))
+			return
+		}
+		token, err := assetGrantBearer(request.Header.Values("Authorization"))
+		if err != nil {
+			writeAssetError(writer, err)
+			return
+		}
+		body, err := io.ReadAll(request.Body)
+		if err != nil {
+			writeAssetError(writer, assets.NewError(assets.CategoryCapacity, assets.ReasonAssetTooLarge))
+			return
+		}
+		if _, err := service.ReceiveUpload(request.Context(), assets.UploadReceipt{Metadata: metadata, GrantID: request.PathValue("grant_id"), GrantToken: token, Content: body}); err != nil {
+			clear(body)
+			writeAssetError(writer, err)
+			return
+		}
+		clear(body)
+		writer.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func assetDownload(application *platform.Platform, service assets.AssetBrokerService) http.HandlerFunc {
+	return func(writer http.ResponseWriter, request *http.Request) {
+		metadata, ok := assetMetadata(application, request)
+		if !ok {
+			writeAssetError(writer, assets.NewError(assets.CategoryDependency, assets.ReasonDependencyUnavailable))
+			return
+		}
+		token, err := assetGrantBearer(request.Header.Values("Authorization"))
+		if err != nil {
+			writeAssetError(writer, err)
+			return
+		}
+		result, err := service.Download(request.Context(), assets.DownloadReceipt{Metadata: metadata, GrantID: request.PathValue("grant_id"), GrantToken: token})
+		if err != nil {
+			writeAssetError(writer, err)
+			return
+		}
+		defer clear(result.Content)
+		writer.Header().Set("Content-Type", result.MediaType)
+		writer.Header().Set("Digest", result.Digest)
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write(result.Content)
+	}
 }
 
 func publicationPublish(application *platform.Platform, service publication.PublicationService) http.HandlerFunc {
@@ -187,6 +336,69 @@ func publicationContext(application *platform.Platform, request *http.Request) (
 	return publication.Caller{TenantID: principal.TenantID, PrincipalID: principal.PrincipalID, CredentialID: principal.CredentialID, Scopes: slices.Clone(principal.Scopes)}, metadata, true
 }
 
+func assetCallerContext(application *platform.Platform, request *http.Request) (assets.Caller, platform.RequestMetadata, bool) {
+	principal, principalOK := PrincipalFromContext(request.Context())
+	metadata, metadataOK := MetadataFromContext(request.Context())
+	if !principalOK || !metadataOK {
+		return assets.Caller{}, platform.RequestMetadata{}, false
+	}
+	childSpan, err := application.NewID(request.Context(), platformports.IDSpan)
+	if err != nil {
+		return assets.Caller{}, platform.RequestMetadata{}, false
+	}
+	metadata.ParentSpanID, metadata.SpanID = metadata.SpanID, childSpan
+	return assets.Caller{TenantID: principal.TenantID, PrincipalID: principal.PrincipalID, CredentialID: principal.CredentialID}, metadata, true
+}
+
+func assetMetadata(application *platform.Platform, request *http.Request) (platform.RequestMetadata, bool) {
+	metadata, ok := MetadataFromContext(request.Context())
+	if !ok {
+		return platform.RequestMetadata{}, false
+	}
+	childSpan, err := application.NewID(request.Context(), platformports.IDSpan)
+	if err != nil {
+		return platform.RequestMetadata{}, false
+	}
+	metadata.ParentSpanID, metadata.SpanID = metadata.SpanID, childSpan
+	return metadata, true
+}
+
+func assetGrantBearer(values []string) (string, error) {
+	if len(values) != 1 || !strings.HasPrefix(values[0], "Bearer ") {
+		return "", assets.NewError(assets.CategoryAuthentication, assets.ReasonAuthenticationRequired)
+	}
+	token := strings.TrimPrefix(values[0], "Bearer ")
+	if len(token) != 47 || strings.TrimSpace(token) != token || strings.ContainsAny(token, " \t\r\n,") {
+		return "", assets.NewError(assets.CategoryAuthentication, assets.ReasonAuthenticationRequired)
+	}
+	return token, nil
+}
+
+func writeAssetError(writer http.ResponseWriter, err error) {
+	typed, ok := assets.AsError(err)
+	if !ok {
+		typed, _ = assets.AsError(assets.NewError(assets.CategoryDependency, assets.ReasonDependencyUnavailable))
+	}
+	status, code := http.StatusBadRequest, "INVALID_ASSET_REQUEST"
+	switch typed.Category {
+	case assets.CategoryAuthentication:
+		status, code = http.StatusUnauthorized, "ASSET_GRANT_AUTHENTICATION_REQUIRED"
+	case assets.CategoryAuthorization:
+		status, code = http.StatusForbidden, "ASSET_GRANT_FORBIDDEN"
+	case assets.CategoryNotFound:
+		status, code = http.StatusNotFound, "ASSET_NOT_FOUND"
+	case assets.CategoryConflict:
+		status, code = http.StatusConflict, "ASSET_CONFLICT"
+	case assets.CategoryCapacity:
+		status, code = http.StatusRequestEntityTooLarge, "ASSET_TOO_LARGE"
+	case assets.CategoryNetwork:
+		status, code = http.StatusForbidden, "ASSET_NETWORK_DENIED"
+	case assets.CategoryDependency:
+		status, code = http.StatusServiceUnavailable, "DEPENDENCY_UNAVAILABLE"
+	}
+	writePublicationError(writer, status, code, string(typed.Category), typed.Retryable)
+}
+
 func writeDomainError(writer http.ResponseWriter, err error) {
 	typed, ok := publication.AsError(err)
 	if !ok {
@@ -252,6 +464,9 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 		operation := classifyOperation(request.Method, request.URL.Path)
 		startedAt := application.Now()
 		metadata, metadataErr := application.BeginRequest(ctx, request.Header.Values(requestIDHeader), request.Header.Values(traceparentHeader), request.Header.Values(tracestateHeader))
+		if metadataErr == nil {
+			request = request.WithContext(context.WithValue(request.Context(), metadataContextKey{}, metadata))
+		}
 		capture := newResponseCapture()
 		if metadata.RequestID != "" {
 			capture.Header().Set(requestIDHeader, metadata.RequestID)
@@ -274,11 +489,13 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 		case request.ContentLength > config.MaxBodyBytes:
 			if operation == "publication.publish" {
 				writePublicationError(capture, http.StatusRequestEntityTooLarge, "BUNDLE_TOO_LARGE", "capacity", false)
+			} else if operation == "asset.upload" {
+				writeAssetError(capture, assets.NewError(assets.CategoryCapacity, assets.ReasonAssetTooLarge))
 			} else {
 				writeJSON(capture, http.StatusRequestEntityTooLarge, errorResponse{Status: "rejected"})
 			}
 		default:
-			if authenticate != nil && operation != "health.live" && operation != "health.ready" {
+			if authenticate != nil && requiresControlPlaneAuthentication(operation) {
 				requiredScopes := scopesForOperation(operation)
 				authenticationContext := context.WithValue(ctx, requiredScopesContextKey{}, requiredScopes)
 				principal, authenticationErr := authenticateBearer(authenticationContext, request.Header.Values("Authorization"), metadata, authenticate)
@@ -289,13 +506,15 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 					request = request.WithContext(requestContext)
 					invoke(application, capture, request, next)
 				case errors.Is(authenticationErr, ErrAuthenticationUnavailable):
-					if isPublicationOperation(operation) {
+					if isContractOperation(operation) {
 						writePublicationError(capture, http.StatusServiceUnavailable, "DEPENDENCY_UNAVAILABLE", "dependency", true)
 					} else {
 						writeJSON(capture, http.StatusServiceUnavailable, errorResponse{Status: "unavailable"})
 					}
 				default:
-					if isPublicationOperation(operation) {
+					if operation == "asset.exchange" {
+						writeAssetError(capture, assets.NewError(assets.CategoryAuthentication, assets.ReasonAuthenticationRequired))
+					} else if isPublicationOperation(operation) {
 						writePublicationError(capture, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication", false)
 					} else {
 						writeJSON(capture, http.StatusUnauthorized, errorResponse{Status: "unauthorized"})
@@ -323,7 +542,7 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 				setSecurityHeaders(capture.Header())
 				capture.Header().Set(requestIDHeader, metadata.RequestID)
 				capture.Header().Set(traceparentHeader, metadata.Traceparent())
-				if isPublicationOperation(operation) {
+				if isContractOperation(operation) {
 					writePublicationError(capture, http.StatusServiceUnavailable, "DEPENDENCY_UNAVAILABLE", "dependency", true)
 				} else {
 					writeJSON(capture, http.StatusServiceUnavailable, errorResponse{Status: "unavailable"})
@@ -336,6 +555,18 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 
 func isPublicationOperation(operation string) bool {
 	return operation == "publication.publish" || operation == "publication.get"
+}
+
+func isAssetOperation(operation string) bool {
+	return operation == "asset.exchange" || operation == "asset.upload" || operation == "asset.download"
+}
+
+func isContractOperation(operation string) bool {
+	return isPublicationOperation(operation) || isAssetOperation(operation)
+}
+
+func requiresControlPlaneAuthentication(operation string) bool {
+	return operation != "health.live" && operation != "health.ready" && operation != "asset.upload" && operation != "asset.download"
 }
 
 func authenticateBearer(ctx context.Context, values []string, metadata platform.RequestMetadata, authenticate AuthenticateFunc) (AuthenticatedPrincipal, error) {
@@ -368,7 +599,7 @@ func invoke(application *platform.Platform, writer http.ResponseWriter, request 
 		}
 	}()
 	operation := classifyOperation(request.Method, request.URL.Path)
-	if operation == "health.live" || operation == "health.ready" || operation == "publication.publish" || operation == "publication.get" {
+	if operation == "health.live" || operation == "health.ready" || isContractOperation(operation) {
 		next.ServeHTTP(writer, request)
 		return
 	}
@@ -396,6 +627,17 @@ func classifyOperation(method, path string) string {
 	if method == http.MethodGet && len(segments) == 5 && segments[0] == "v1" && segments[1] == "agent-definitions" && segments[3] == "versions" {
 		return "publication.get"
 	}
+	if method == http.MethodPost && len(segments) == 4 && segments[0] == "v1" && segments[1] == "runs" && segments[3] == "assets:exchange" {
+		return "asset.exchange"
+	}
+	if len(segments) == 3 && segments[0] == "v1" && segments[1] == "asset-content" {
+		if method == http.MethodPut {
+			return "asset.upload"
+		}
+		if method == http.MethodGet {
+			return "asset.download"
+		}
+	}
 	return "http.unmatched"
 }
 
@@ -405,6 +647,8 @@ func scopesForOperation(operation string) []string {
 		return []string{"agent:publish"}
 	case "publication.get":
 		return []string{"agent:read"}
+	case "asset.exchange":
+		return []string{"asset:exchange"}
 	default:
 		return []string{"secret.read"}
 	}

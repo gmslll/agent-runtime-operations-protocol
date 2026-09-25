@@ -4,6 +4,8 @@
 package assets
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"regexp"
 	"strings"
@@ -117,6 +119,7 @@ func (binding Binding) SameIdentity(other Binding) bool {
 type Asset struct {
 	Binding   Binding
 	State     State
+	Content   []byte
 	CreatedAt time.Time
 	ReadyAt   time.Time
 }
@@ -133,6 +136,18 @@ func (asset Asset) Validate() error {
 	}
 	if asset.State == StateQuarantine && !asset.ReadyAt.IsZero() {
 		return NewError(CategoryValidation, ReasonInvalidRequest)
+	}
+	if asset.State == StateQuarantine && len(asset.Content) != 0 {
+		return NewError(CategoryValidation, ReasonInvalidRequest)
+	}
+	if asset.State == StateReady {
+		if int64(len(asset.Content)) != asset.Binding.SizeBytes {
+			return NewError(CategoryValidation, ReasonDigestMismatch)
+		}
+		digest := sha256.Sum256(asset.Content)
+		if asset.Binding.Digest != "sha256:"+hex.EncodeToString(digest[:]) {
+			return NewError(CategoryValidation, ReasonDigestMismatch)
+		}
 	}
 	return nil
 }
@@ -238,7 +253,23 @@ func (request IssueRequest) Validate() error {
 	if request.MaxUses < 1 || request.MaxUses > MaxGrantUses {
 		return NewError(CategoryValidation, ReasonInvalidRequest)
 	}
-	return request.Binding().Validate()
+	if !runPattern.MatchString(request.RunID) || !request.Operation.valid() {
+		return NewError(CategoryValidation, ReasonInvalidRequest)
+	}
+	switch request.Operation {
+	case OperationUpload:
+		if request.AssetID != "" && !assetPattern.MatchString(request.AssetID) {
+			return NewError(CategoryValidation, ReasonInvalidRequest)
+		}
+		if !validAssetName(request.Name) || !mediaPattern.MatchString(request.MediaType) || len(request.MediaType) > 127 || request.SizeBytes < 0 || request.SizeBytes > MaxAssetBytes || validateDigest(request.Digest) != nil {
+			return NewError(CategoryValidation, ReasonInvalidRequest)
+		}
+	case OperationDownload:
+		if !assetPattern.MatchString(request.AssetID) {
+			return NewError(CategoryValidation, ReasonInvalidRequest)
+		}
+	}
+	return nil
 }
 
 type IssuedGrant struct {
@@ -251,13 +282,10 @@ type IssuedGrant struct {
 }
 
 type UploadReceipt struct {
-	Metadata       platform.RequestMetadata
-	Caller         Caller
-	GrantToken     string
-	MediaType      string
-	SizeBytes      int64
-	Digest         string
-	IdempotencyKey string
+	Metadata   platform.RequestMetadata
+	GrantID    string
+	GrantToken string
+	Content    []byte
 }
 
 type PromoteRequest struct {
@@ -265,6 +293,7 @@ type PromoteRequest struct {
 	Caller   Caller
 	AssetID  string
 	Digest   string
+	Content  []byte
 }
 
 type RevokeRequest struct {
@@ -280,16 +309,28 @@ type ConnectRequest struct {
 	URL        string
 }
 
+type DownloadReceipt struct {
+	Metadata   platform.RequestMetadata
+	GrantID    string
+	GrantToken string
+}
+
+type DownloadResult struct {
+	Content   []byte
+	Name      string
+	MediaType string
+	Digest    string
+}
+
 func sameCaller(caller Caller, binding Binding) bool {
 	return caller.TenantID == binding.TenantID && caller.PrincipalID == binding.PrincipalID && caller.CredentialID == binding.CredentialID
 }
 
 func downloadMatches(stored, requested Binding) bool {
 	return stored.TenantID == requested.TenantID &&
-		stored.PrincipalID == requested.PrincipalID &&
-		stored.CredentialID == requested.CredentialID &&
 		stored.RunID == requested.RunID &&
 		stored.AssetID == requested.AssetID &&
+		stored.Name == requested.Name &&
 		stored.MediaType == requested.MediaType &&
 		stored.SizeBytes == requested.SizeBytes &&
 		stored.Digest == requested.Digest &&

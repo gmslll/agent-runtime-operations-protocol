@@ -41,7 +41,7 @@ type AssetRepository interface {
 type GrantRepository interface {
 	Save(context.Context, Grant) error
 	GetGrant(context.Context, string, string) (Grant, error)
-	FindByOpaqueDigest(context.Context, string, string) (Grant, error)
+	FindByOpaqueDigest(context.Context, string) (Grant, error)
 	FindByIdempotency(context.Context, string, string) (Grant, error)
 	Consume(context.Context, string, string, time.Time) (Grant, error)
 	Revoke(context.Context, string, string, time.Time) error
@@ -59,6 +59,12 @@ type NameResolver interface {
 type TokenIssuer interface {
 	KeyID() string
 	IssueToken(context.Context, Grant) (OpaqueToken, error)
+}
+
+type AssetBrokerService interface {
+	IssueGrant(context.Context, IssueRequest) (IssuedGrant, error)
+	ReceiveUpload(context.Context, UploadReceipt) (Asset, error)
+	Download(context.Context, DownloadReceipt) (DownloadResult, error)
 }
 
 // Dependencies fail closed when the authorizer or any other required port is

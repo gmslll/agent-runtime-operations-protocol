@@ -5,6 +5,8 @@ package assets
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"regexp"
 	"strings"
@@ -67,6 +69,7 @@ type AssetRecord struct {
 	MediaType                string
 	SizeBytes                int64
 	ContentDigest            string
+	ContentBytes             []byte
 	ObjectKey                string
 	Status                   AssetStatus
 	Revision                 int64
@@ -82,6 +85,7 @@ type AssetUpdate struct {
 	MediaType     string
 	SizeBytes     int64
 	ContentDigest string
+	ContentBytes  []byte
 	ObjectKey     string
 	Status        AssetStatus
 	UpdatedAtNs   int64
@@ -122,7 +126,7 @@ type StorageRepository interface {
 	UpdateAsset(ctx context.Context, tenantID, assetID string, expectedRevision int64, update AssetUpdate) (AssetRecord, error)
 	CreateGrant(ctx context.Context, grant GrantRecord) (GrantRecord, error)
 	GetGrant(ctx context.Context, tenantID, grantID string) (GrantRecord, error)
-	GetGrantByTokenDigest(ctx context.Context, tenantID, tokenDigest string) (GrantRecord, error)
+	GetGrantByTokenDigest(ctx context.Context, tokenDigest string) (GrantRecord, error)
 	GetGrantByIdempotencyDigest(ctx context.Context, tenantID, keyDigest string) (GrantRecord, error)
 	ConsumeGrant(ctx context.Context, tenantID, grantID string, expectedRevision, nowNs int64) (GrantRecord, error)
 	RevokeGrant(ctx context.Context, tenantID, grantID string, expectedRevision, nowNs int64) (GrantRecord, error)
@@ -154,6 +158,9 @@ func (asset AssetRecord) Validate() error {
 		!storageHexPattern.MatchString(asset.IdempotencyKeyDigest) || !storageHexPattern.MatchString(asset.IdempotencyRequestDigest) {
 		return NewStorageError(StorageReasonValidation)
 	}
+	if !validStoredContent(asset.Status, asset.ContentBytes, asset.SizeBytes, asset.ContentDigest) {
+		return NewStorageError(StorageReasonValidation)
+	}
 	return nil
 }
 
@@ -161,6 +168,9 @@ func (update AssetUpdate) Validate(createdAtNs int64) error {
 	if !validName(update.Name) || !storageMediaPattern.MatchString(update.MediaType) || len(update.MediaType) > 127 ||
 		update.SizeBytes < 0 || update.SizeBytes > 104857600 || !storageDigestPattern.MatchString(update.ContentDigest) ||
 		!validObjectKey(update.ObjectKey) || !validAssetStatus(update.Status) || update.UpdatedAtNs < createdAtNs {
+		return NewStorageError(StorageReasonValidation)
+	}
+	if !validStoredContent(update.Status, update.ContentBytes, update.SizeBytes, update.ContentDigest) {
 		return NewStorageError(StorageReasonValidation)
 	}
 	return nil
@@ -196,6 +206,20 @@ func containsDotDot(value string) bool { return strings.Contains(value, "..") }
 
 func validAssetStatus(status AssetStatus) bool {
 	return status == AssetPending || status == AssetAvailable || status == AssetIsolated
+}
+
+func validStoredContent(status AssetStatus, content []byte, size int64, digest string) bool {
+	if status == AssetPending {
+		return len(content) == 0
+	}
+	if status == AssetIsolated {
+		return len(content) == 0
+	}
+	if status != AssetAvailable || int64(len(content)) != size {
+		return false
+	}
+	sum := sha256.Sum256(content)
+	return digest == "sha256:"+hex.EncodeToString(sum[:])
 }
 
 func validGrantStatus(status GrantStatus, useCount, useLimit int64) bool {

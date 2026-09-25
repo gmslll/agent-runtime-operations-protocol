@@ -73,7 +73,7 @@ func TestPostgresAssetRepository(t *testing.T) {
 	}
 	updated, err := within(t, unit, func(ctx context.Context) (assets.AssetRecord, error) {
 		return repository.UpdateAsset(ctx, asset.TenantID, asset.AssetID, 1, assets.AssetUpdate{
-			Name: "photo.png", MediaType: "image/png", SizeBytes: 12, ContentDigest: asset.ContentDigest,
+			Name: "photo.png", MediaType: "image/png", SizeBytes: 12, ContentDigest: "sha256:a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447", ContentBytes: []byte("hello world\n"),
 			ObjectKey: "tenant-a/photo.png", Status: assets.AssetAvailable, UpdatedAtNs: asset.CreatedAtNs + 5,
 		})
 	})
@@ -82,7 +82,7 @@ func TestPostgresAssetRepository(t *testing.T) {
 	}
 	if _, err := within(t, unit, func(ctx context.Context) (assets.AssetRecord, error) {
 		return repository.UpdateAsset(ctx, asset.TenantID, asset.AssetID, 1, assets.AssetUpdate{
-			Name: "photo.png", MediaType: "image/png", SizeBytes: 12, ContentDigest: asset.ContentDigest,
+			Name: "photo.png", MediaType: "image/png", SizeBytes: 12, ContentDigest: "sha256:a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447", ContentBytes: []byte("hello world\n"),
 			ObjectKey: "tenant-a/photo.png", Status: assets.AssetAvailable, UpdatedAtNs: asset.CreatedAtNs + 6,
 		})
 	}); !assets.HasStorageReason(err, assets.StorageReasonConflict) {

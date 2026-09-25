@@ -45,10 +45,10 @@ func (repository *Repository) CreateAsset(ctx context.Context, asset assets.Asse
 		return assets.AssetRecord{}, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO arop_assets(
-tenant_id,principal_id,credential_id,run_id,asset_id,name,media_type,size_bytes,content_digest,object_key,status,revision,
+tenant_id,principal_id,credential_id,run_id,asset_id,name,media_type,size_bytes,content_digest,content_bytes,object_key,status,revision,
 created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest
-) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, asset.TenantID, asset.PrincipalID, asset.CredentialID, asset.RunID, asset.AssetID, asset.Name, asset.MediaType, asset.SizeBytes,
-		asset.ContentDigest, asset.ObjectKey, string(asset.Status), asset.Revision, asset.CreatedAtNs, asset.UpdatedAtNs,
+) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`, asset.TenantID, asset.PrincipalID, asset.CredentialID, asset.RunID, asset.AssetID, asset.Name, asset.MediaType, asset.SizeBytes,
+		asset.ContentDigest, nonNilBytes(asset.ContentBytes), asset.ObjectKey, string(asset.Status), asset.Revision, asset.CreatedAtNs, asset.UpdatedAtNs,
 		asset.IdempotencyKeyDigest, asset.IdempotencyRequestDigest)
 	if err == nil {
 		return asset, nil
@@ -78,9 +78,9 @@ func (repository *Repository) UpdateAsset(ctx context.Context, tenantID, assetID
 	if expectedRevision != current.Revision {
 		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonConflict)
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE arop_assets SET name=$1,media_type=$2,size_bytes=$3,content_digest=$4,object_key=$5,status=$6,revision=revision+1,updated_at_ns=$7
-WHERE tenant_id=$8 AND asset_id=$9 AND revision=$10`, update.Name, update.MediaType, update.SizeBytes, update.ContentDigest,
-		update.ObjectKey, string(update.Status), update.UpdatedAtNs, tenantID, assetID, expectedRevision)
+	result, err := tx.ExecContext(ctx, `UPDATE arop_assets SET name=$1,media_type=$2,size_bytes=$3,content_digest=$4,content_bytes=$5,object_key=$6,status=$7,revision=revision+1,updated_at_ns=$8
+WHERE tenant_id=$9 AND asset_id=$10 AND revision=$11`, update.Name, update.MediaType, update.SizeBytes, update.ContentDigest,
+		nonNilBytes(update.ContentBytes), update.ObjectKey, string(update.Status), update.UpdatedAtNs, tenantID, assetID, expectedRevision)
 	if err != nil {
 		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonUnavailable)
 	}
@@ -102,7 +102,7 @@ func (repository *Repository) CreateGrant(ctx context.Context, grant assets.Gran
 	if err := lockKeys(ctx, tx,
 		"grant/id/"+grant.TenantID+"/"+grant.GrantID,
 		"grant/idempotency/"+grant.TenantID+"/"+grant.IdempotencyKeyDigest,
-		"grant/token/"+grant.TenantID+"/"+grant.TokenDigest); err != nil {
+		"grant/token/"+grant.TokenDigest); err != nil {
 		return assets.GrantRecord{}, err
 	}
 	if stored, err := scanGrant(ctx, tx, `tenant_id=$1 AND idempotency_key_digest=$2`, grant.TenantID, grant.IdempotencyKeyDigest); err == nil {
@@ -129,8 +129,8 @@ func (repository *Repository) GetGrant(ctx context.Context, tenantID, grantID st
 	return scanGrant(ctx, repository.queryer(ctx), `tenant_id=$1 AND grant_id=$2`, tenantID, grantID)
 }
 
-func (repository *Repository) GetGrantByTokenDigest(ctx context.Context, tenantID, tokenDigest string) (assets.GrantRecord, error) {
-	return scanGrant(ctx, repository.queryer(ctx), `tenant_id=$1 AND token_digest=$2`, tenantID, tokenDigest)
+func (repository *Repository) GetGrantByTokenDigest(ctx context.Context, tokenDigest string) (assets.GrantRecord, error) {
+	return scanGrant(ctx, repository.queryer(ctx), `token_digest=$1`, tokenDigest)
 }
 
 func (repository *Repository) GetGrantByIdempotencyDigest(ctx context.Context, tenantID, keyDigest string) (assets.GrantRecord, error) {
@@ -261,8 +261,8 @@ func constraintViolation(err error) bool {
 func scanAsset(ctx context.Context, queryer migrate.Queryer, predicate string, args ...any) (assets.AssetRecord, error) {
 	var asset assets.AssetRecord
 	var status string
-	err := queryer.QueryRowContext(ctx, `SELECT tenant_id,principal_id,credential_id,run_id,asset_id,name,media_type,size_bytes,content_digest,object_key,status,revision,created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest FROM arop_assets WHERE `+predicate, args...).Scan(
-		&asset.TenantID, &asset.PrincipalID, &asset.CredentialID, &asset.RunID, &asset.AssetID, &asset.Name, &asset.MediaType, &asset.SizeBytes, &asset.ContentDigest, &asset.ObjectKey, &status, &asset.Revision, &asset.CreatedAtNs, &asset.UpdatedAtNs, &asset.IdempotencyKeyDigest, &asset.IdempotencyRequestDigest)
+	err := queryer.QueryRowContext(ctx, `SELECT tenant_id,principal_id,credential_id,run_id,asset_id,name,media_type,size_bytes,content_digest,content_bytes,object_key,status,revision,created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest FROM arop_assets WHERE `+predicate, args...).Scan(
+		&asset.TenantID, &asset.PrincipalID, &asset.CredentialID, &asset.RunID, &asset.AssetID, &asset.Name, &asset.MediaType, &asset.SizeBytes, &asset.ContentDigest, &asset.ContentBytes, &asset.ObjectKey, &status, &asset.Revision, &asset.CreatedAtNs, &asset.UpdatedAtNs, &asset.IdempotencyKeyDigest, &asset.IdempotencyRequestDigest)
 	if errors.Is(err, sql.ErrNoRows) {
 		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonNotFound)
 	}
@@ -296,3 +296,5 @@ func scanGrant(ctx context.Context, queryer migrate.Queryer, predicate string, a
 }
 
 var _ assets.StorageRepository = (*Repository)(nil)
+
+func nonNilBytes(value []byte) []byte { return append([]byte{}, value...) }

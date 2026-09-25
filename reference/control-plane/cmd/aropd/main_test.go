@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/storage/migrate"
 	controlplane "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/generated/control-plane"
 )
 
@@ -65,10 +66,10 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 		if err := os.Mkdir(backup, 0o700); err != nil {
 			t.Fatal(err)
 		}
-		application, server, cleanup, err := compose([]string{
+		application, server, cleanup, err := composeWithCatalog([]string{
 			"--listen=127.0.0.1:0", "--mode=sqlite", "--database-dsn=" + filepath.Join(root, "identity.db"),
 			"--migration-root=" + migrationRoot, "--backup-directory=" + backup,
-		}, nil)
+		}, nil, migrate.P12ProductionCatalog())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -122,6 +123,95 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 		server.Handler.ServeHTTP(health, httptest.NewRequest(http.MethodGet, "/v1/health/live", nil))
 		if health.Code != http.StatusOK {
 			t.Fatalf("health did not bypass authentication: %d %s", health.Code, health.Body.String())
+		}
+	})
+
+	t.Run("p13-durable-sqlite-composes-assets-with-private-key", func(t *testing.T) {
+		root, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		migrationRoot := filepath.Join(root, "migrations")
+		for _, relative := range []string{
+			"sqlite/0001_base.sql", "sqlite/0005_identity.sql", "sqlite/0010_publication.sql", "sqlite/0020_asset.sql",
+			"postgres/0001_base.sql", "postgres/0005_identity.sql", "postgres/0010_publication.sql", "postgres/0020_asset.sql",
+		} {
+			source := filepath.Join("..", "..", "migrations", filepath.FromSlash(relative))
+			contents, readErr := os.ReadFile(source)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			target := filepath.Join(migrationRoot, filepath.FromSlash(relative))
+			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target, contents, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		backup := filepath.Join(root, "backup")
+		if err := os.Mkdir(backup, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		keyPath := filepath.Join(root, "asset-token.key")
+		if err := os.WriteFile(keyPath, []byte("0123456789abcdef0123456789abcdef"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		application, _, cleanup, err := compose([]string{
+			"--listen=127.0.0.1:0", "--mode=sqlite", "--database-dsn=" + filepath.Join(root, "p13.db"),
+			"--migration-root=" + migrationRoot, "--backup-directory=" + backup,
+			"--asset-token-key-file=" + keyPath, "--asset-token-key-id=atk_reference_test",
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer cleanup()
+		snapshot := application.Readiness(context.Background())
+		found := map[string]bool{}
+		for _, check := range snapshot.Checks {
+			found[check.Name] = check.Ready
+		}
+		if !snapshot.Ready || !found["identity-cache"] || !found["publication-service"] || !found["asset-broker-service"] || application.Config().MaxBodyBytes != 100<<20 {
+			t.Fatalf("P13 durable readiness/config missing: %+v config=%+v", snapshot, application.Config())
+		}
+	})
+
+	t.Run("asset-token-key-loader-fails-closed", func(t *testing.T) {
+		root, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		good := filepath.Join(root, "good.key")
+		if err := os.WriteFile(good, []byte("0123456789abcdef0123456789abcdef"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		key, err := readPrivateAssetTokenKey(good)
+		if err != nil || string(key) != "0123456789abcdef0123456789abcdef" {
+			t.Fatalf("private key rejected: %v", err)
+		}
+		clear(key)
+		for name, mode := range map[string]os.FileMode{"group.key": 0o640, "world.key": 0o604} {
+			path := filepath.Join(root, name)
+			if err := os.WriteFile(path, []byte("0123456789abcdef0123456789abcdef"), mode); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := readPrivateAssetTokenKey(path); err == nil {
+				t.Fatalf("unsafe key mode %o accepted", mode)
+			}
+		}
+		short := filepath.Join(root, "short.key")
+		if err := os.WriteFile(short, []byte("short"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := readPrivateAssetTokenKey(short); err == nil {
+			t.Fatal("short key accepted")
+		}
+		link := filepath.Join(root, "link.key")
+		if err := os.Symlink(good, link); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := readPrivateAssetTokenKey(link); err == nil {
+			t.Fatal("symlink key accepted")
 		}
 	})
 

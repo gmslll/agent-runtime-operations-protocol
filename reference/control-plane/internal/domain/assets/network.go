@@ -8,6 +8,28 @@ import (
 	"strings"
 )
 
+// SystemResolver performs a fresh operating-system resolver lookup for each
+// connect or redirect decision. It deliberately carries no application cache.
+type SystemResolver struct {
+	Resolver *net.Resolver
+}
+
+func (resolver SystemResolver) LookupIP(ctx context.Context, host string) ([]net.IP, error) {
+	lookup := resolver.Resolver
+	if lookup == nil {
+		lookup = net.DefaultResolver
+	}
+	addresses, err := lookup.LookupIP(ctx, "ip", host)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]net.IP, len(addresses))
+	for index, address := range addresses {
+		result[index] = append(net.IP(nil), address...)
+	}
+	return result, nil
+}
+
 // AddressClass is the connection-time classification of one resolved address.
 type AddressClass string
 

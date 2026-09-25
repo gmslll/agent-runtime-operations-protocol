@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,8 @@ type Config struct {
 	DatabaseDSN           string
 	MigrationRoot         string
 	BackupDirectory       string
+	AssetTokenKeyFile     string
+	AssetTokenKeyID       string
 	ListenAddress         string
 	AllowNonLoopback      bool
 	ReadHeaderTimeout     time.Duration
@@ -63,6 +66,7 @@ var configBindings = []configBinding{
 	{"AROP_CP_MODE", "mode"}, {"AROP_CP_LISTEN", "listen"},
 	{"AROP_CP_DATABASE_DSN", "database-dsn"}, {"AROP_CP_MIGRATION_ROOT", "migration-root"},
 	{"AROP_CP_BACKUP_DIRECTORY", "backup-directory"},
+	{"AROP_CP_ASSET_TOKEN_KEY_FILE", "asset-token-key-file"}, {"AROP_CP_ASSET_TOKEN_KEY_ID", "asset-token-key-id"},
 	{"AROP_CP_ALLOW_NON_LOOPBACK", "allow-non-loopback"},
 	{"AROP_CP_READ_HEADER_TIMEOUT", "read-header-timeout"},
 	{"AROP_CP_READ_TIMEOUT", "read-timeout"}, {"AROP_CP_WRITE_TIMEOUT", "write-timeout"},
@@ -113,6 +117,8 @@ func ParseConfig(args, environment []string) (Config, error) {
 	flags.StringVar(&config.DatabaseDSN, "database-dsn", config.DatabaseDSN, "database DSN or absolute SQLite path")
 	flags.StringVar(&config.MigrationRoot, "migration-root", config.MigrationRoot, "absolute migration catalog root")
 	flags.StringVar(&config.BackupDirectory, "backup-directory", config.BackupDirectory, "private durable backup directory")
+	flags.StringVar(&config.AssetTokenKeyFile, "asset-token-key-file", config.AssetTokenKeyFile, "absolute private 32-byte asset token key file")
+	flags.StringVar(&config.AssetTokenKeyID, "asset-token-key-id", config.AssetTokenKeyID, "asset token key identifier")
 	flags.StringVar(&config.ListenAddress, "listen", config.ListenAddress, "HTTP listen address")
 	flags.BoolVar(&config.AllowNonLoopback, "allow-non-loopback", config.AllowNonLoopback, "allow an explicit non-loopback bind")
 	flags.DurationVar(&config.ReadHeaderTimeout, "read-header-timeout", config.ReadHeaderTimeout, "HTTP read-header timeout")
@@ -141,6 +147,18 @@ func ParseConfig(args, environment []string) (Config, error) {
 }
 
 func (config Config) Validate() error {
+	if (config.AssetTokenKeyFile == "") != (config.AssetTokenKeyID == "") {
+		return errors.New("asset token key file and key id must be configured together")
+	}
+	if config.AssetTokenKeyFile != "" && (!filepath.IsAbs(config.AssetTokenKeyFile) || filepath.Clean(config.AssetTokenKeyFile) != config.AssetTokenKeyFile) {
+		return errors.New("asset token key file must be an absolute clean path")
+	}
+	if config.AssetTokenKeyID != "" {
+		matched, _ := regexp.MatchString(`^atk_[A-Za-z0-9._-]{1,60}$`, config.AssetTokenKeyID)
+		if !matched {
+			return errors.New("asset token key id is invalid")
+		}
+	}
 	if config.Mode != ModeDevelopmentMemory && config.Mode != ModeSQLite && config.Mode != ModePostgres {
 		return errors.New("unsupported Control Plane mode")
 	}
@@ -200,7 +218,7 @@ func (config Config) Validate() error {
 	if config.MaxHeaderBytes < 1024 || config.MaxHeaderBytes > 16<<20 {
 		return errors.New("max-header-bytes is outside the safe range")
 	}
-	if config.MaxBodyBytes < 1 || config.MaxBodyBytes > 64<<20 {
+	if config.MaxBodyBytes < 1 || config.MaxBodyBytes > 128<<20 {
 		return errors.New("max-body-bytes is outside the safe range")
 	}
 	if config.AuditCapacity < 1 || config.AuditCapacity > 1_000_000 || config.TraceCapacity < 1 || config.TraceCapacity > 1_000_000 {

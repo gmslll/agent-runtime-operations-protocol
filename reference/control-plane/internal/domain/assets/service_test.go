@@ -3,6 +3,7 @@ package assets
 import (
 	"context"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -18,7 +19,7 @@ const (
 	testCred   = "cred_018f3b2a-7c31-7a11-8abc-1234567890ab"
 	testRun    = "run_018f3b2a-7c31-7a11-8abc-1234567890ab"
 	testAsset  = "asset_018f3b2a-7c31-7a11-8abc-1234567890ab"
-	testDigest = "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	testDigest = "sha256:a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"
 )
 
 func TestIssueGrantFailClosedWithoutAuthorizer(t *testing.T) {
@@ -68,34 +69,22 @@ func TestGrantLifecycleQuarantineReadyAndNetwork(t *testing.T) {
 
 	receipt := UploadReceipt{
 		Metadata: testMetadata(),
-		Caller:   request.Caller, GrantToken: issued.Token, MediaType: request.MediaType,
-		SizeBytes: request.SizeBytes, Digest: request.Digest, IdempotencyKey: "upload-key",
+		GrantID:  issued.Grant.GrantID, GrantToken: issued.Token, Content: []byte("hello world\n"),
 	}
-	quarantine, err := service.ReceiveUpload(context.Background(), receipt)
-	if err != nil || quarantine.State != StateQuarantine {
-		t.Fatalf("quarantine: %+v %v", quarantine, err)
+	ready, err := service.ReceiveUpload(context.Background(), receipt)
+	if err != nil || ready.State != StateReady {
+		t.Fatalf("ready: %+v %v", ready, err)
 	}
 	download := request
 	download.Operation = OperationDownload
 	download.IdempotencyKey = "download-key"
-	download.MaxUses = 2
-	_, err = service.IssueGrant(context.Background(), download)
-	requireReason(t, err, ReasonNotReady)
-
+	download.MaxUses = 3
 	_, err = service.Connect(context.Background(), ConnectRequest{Metadata: testMetadata(), Caller: request.Caller, GrantToken: issued.Token, URL: "https://objects.example/put"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	_, err = service.Connect(context.Background(), ConnectRequest{Metadata: testMetadata(), Caller: request.Caller, GrantToken: issued.Token, URL: "https://objects.example/put"}, nil)
 	requireReason(t, err, ReasonNetworkDenied)
-
-	promoted, err := service.PromoteReady(context.Background(), PromoteRequest{Metadata: testMetadata(), Caller: request.Caller, AssetID: testAsset, Digest: testDigest})
-	if err != nil || promoted.State != StateReady {
-		t.Fatalf("promote: %+v %v", promoted, err)
-	}
-	_, err = service.PromoteReady(context.Background(), PromoteRequest{Metadata: testMetadata(), Caller: request.Caller, AssetID: testAsset, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
-	requireReason(t, err, ReasonDigestMismatch)
-
 	issuedDownload, err := service.IssueGrant(context.Background(), download)
 	if err != nil {
 		t.Fatal(err)
@@ -110,6 +99,10 @@ func TestGrantLifecycleQuarantineReadyAndNetwork(t *testing.T) {
 		Metadata: testMetadata(), Caller: request.Caller, GrantToken: issuedDownload.Token, URL: "https://cdn.example/get",
 	}, []string{"http://cdn.example/insecure"})
 	requireReason(t, err, ReasonNetworkDenied)
+	downloaded, err := service.Download(context.Background(), DownloadReceipt{Metadata: testMetadata(), GrantID: issuedDownload.Grant.GrantID, GrantToken: issuedDownload.Token})
+	if err != nil || string(downloaded.Content) != "hello world\n" || downloaded.MediaType != "application/pdf" {
+		t.Fatalf("download: %+v %v", downloaded, err)
+	}
 
 	if err := service.RevokeGrant(context.Background(), RevokeRequest{Metadata: testMetadata(), Caller: request.Caller, GrantID: issuedDownload.Grant.GrantID}); err != nil {
 		t.Fatal(err)
@@ -137,21 +130,18 @@ func TestGrantWindowAndUses(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = service.ReceiveUpload(context.Background(), UploadReceipt{
-		Metadata: testMetadata(), Caller: request.Caller, GrantToken: issued.Token, MediaType: request.MediaType,
-		SizeBytes: request.SizeBytes, Digest: request.Digest, IdempotencyKey: "early-key",
+		Metadata: testMetadata(), GrantID: issued.Grant.GrantID, GrantToken: issued.Token, Content: []byte("hello world\n"),
 	})
 	requireReason(t, err, ReasonGrantNotYetValid)
 	clock.now = now.Add(3 * time.Minute)
 	_, err = service.ReceiveUpload(context.Background(), UploadReceipt{
-		Metadata: testMetadata(), Caller: request.Caller, GrantToken: issued.Token, MediaType: request.MediaType,
-		SizeBytes: request.SizeBytes, Digest: request.Digest, IdempotencyKey: "late-key",
+		Metadata: testMetadata(), GrantID: issued.Grant.GrantID, GrantToken: issued.Token, Content: []byte("hello world\n"),
 	})
 	requireReason(t, err, ReasonGrantExpired)
 
 	clock.now = now.Add(90 * time.Second)
 	if _, err := service.ReceiveUpload(context.Background(), UploadReceipt{
-		Metadata: testMetadata(), Caller: request.Caller, GrantToken: issued.Token, MediaType: request.MediaType,
-		SizeBytes: request.SizeBytes, Digest: request.Digest, IdempotencyKey: "once-key",
+		Metadata: testMetadata(), GrantID: issued.Grant.GrantID, GrantToken: issued.Token, Content: []byte("hello world\n"),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -267,6 +257,7 @@ func newMemStore() *memStore {
 func (store *memStore) Put(_ context.Context, asset Asset) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
+	asset.Content = append([]byte(nil), asset.Content...)
 	store.assets[asset.Binding.TenantID+"/"+asset.Binding.AssetID] = asset
 	return nil
 }
@@ -278,6 +269,7 @@ func (store *memStore) Get(_ context.Context, tenantID, assetID string) (Asset, 
 	if !ok {
 		return Asset{}, NewError(CategoryNotFound, ReasonNotFound)
 	}
+	asset.Content = append([]byte(nil), asset.Content...)
 	return asset, nil
 }
 
@@ -289,7 +281,7 @@ func (store *memStore) Save(_ context.Context, grant Grant) error {
 		return NewError(CategoryConflict, ReasonIdempotencyConflict)
 	}
 	store.grants[grant.Binding.TenantID+"/"+grant.GrantID] = grant
-	store.opaque[grant.Binding.TenantID+"/"+grant.OpaqueDigest] = grant.GrantID
+	store.opaque[grant.OpaqueDigest] = grant.Binding.TenantID + "/" + grant.GrantID
 	store.idem[idemKey] = grant.GrantID
 	return nil
 }
@@ -304,12 +296,16 @@ func (store *memStore) GetGrant(_ context.Context, tenantID, grantID string) (Gr
 	return grant, nil
 }
 
-func (store *memStore) FindByOpaqueDigest(_ context.Context, tenantID, digest string) (Grant, error) {
+func (store *memStore) FindByOpaqueDigest(_ context.Context, digest string) (Grant, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	grantID, ok := store.opaque[tenantID+"/"+digest]
+	key, ok := store.opaque[digest]
 	if !ok {
 		return Grant{}, NewError(CategoryNotFound, ReasonNotFound)
+	}
+	tenantID, grantID, ok := strings.Cut(key, "/")
+	if !ok {
+		return Grant{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
 	}
 	return store.grants[tenantID+"/"+grantID], nil
 }
@@ -395,7 +391,7 @@ func testIssue(operation Operation) IssueRequest {
 		Operation:      operation,
 		Name:           "asset.pdf",
 		MediaType:      "application/pdf",
-		SizeBytes:      128,
+		SizeBytes:      12,
 		Digest:         testDigest,
 		IdempotencyKey: "idem-key-1",
 		NotBefore:      now,

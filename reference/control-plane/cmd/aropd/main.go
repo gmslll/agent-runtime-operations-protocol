@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,6 +24,9 @@ import (
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/httpadapter"
 	platformports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/ports"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets"
+	assetpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets/storage/postgres"
+	assetsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets/storage/sqlite"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication"
 	publicationpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication/storage/postgres"
 	publicationsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication/storage/sqlite"
@@ -49,13 +53,20 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if catalogClosure.ReportPhase == "P12" {
+	if catalogOwns(catalogClosure, "P13") {
+		config.MaxBodyBytes = assets.MaxAssetBytes
+	} else if catalogOwns(catalogClosure, "P12") {
 		config.MaxBodyBytes = publication.MaxBundleBytes
 	}
+	assetKey, err := assetTokenMaterial(config, catalogClosure)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	defer clear(assetKey)
 	clock := platform.RealClock{}
 	ids := platform.SystemIDSource{Clock: clock}
 	faults := platform.NoopFaultHook{}
-	uow, store, checks, cleanup, err := composeStorageContext(context.Background(), config, catalogClosure, clock, ids, faults)
+	uow, store, checks, cleanup, err := composeStorageContext(context.Background(), config, catalogClosure, clock, ids, faults, assetKey)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -70,7 +81,11 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 	handler, err := httpadapter.NewHandler(application)
 	if identityService := identityServiceFromChecks(checks); identityService != nil {
 		if publicationService := publicationServiceFromChecks(checks); publicationService != nil {
-			handler, err = httpadapter.NewPublicationHandler(application, referenceAuthenticate(identityService, ids), publicationService)
+			if assetService := assetServiceFromChecks(checks); assetService != nil {
+				handler, err = httpadapter.NewApplicationHandler(application, referenceAuthenticate(identityService, ids), publicationService, assetService)
+			} else {
+				handler, err = httpadapter.NewPublicationHandler(application, referenceAuthenticate(identityService, ids), publicationService)
+			}
 		} else {
 			handler, err = httpadapter.NewAuthenticatedHandler(application, referenceAuthenticate(identityService, ids))
 		}
@@ -96,10 +111,16 @@ func run(args, environment []string) error {
 
 func composeStorage(config platform.Config) (platformports.UnitOfWork, observability.Store, []platformports.ReadinessCheck, func() error, error) {
 	clock := platform.RealClock{}
-	return composeStorageContext(context.Background(), config, migrate.CurrentProductionCatalog(), clock, platform.SystemIDSource{Clock: clock}, platform.NoopFaultHook{})
+	catalog := migrate.CurrentProductionCatalog()
+	assetKey, err := assetTokenMaterial(config, catalog)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	defer clear(assetKey)
+	return composeStorageContext(context.Background(), config, catalog, clock, platform.SystemIDSource{Clock: clock}, platform.NoopFaultHook{}, assetKey)
 }
 
-func composeStorageContext(ctx context.Context, config platform.Config, catalogClosure migrate.CatalogClosure, clock platformports.Clock, ids platformports.IDSource, faults platformports.FaultHook) (platformports.UnitOfWork, observability.Store, []platformports.ReadinessCheck, func() error, error) {
+func composeStorageContext(ctx context.Context, config platform.Config, catalogClosure migrate.CatalogClosure, clock platformports.Clock, ids platformports.IDSource, faults platformports.FaultHook, assetKey []byte) (platformports.UnitOfWork, observability.Store, []platformports.ReadinessCheck, func() error, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -171,13 +192,21 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			}
 			checks = append(checks, identityService)
 		}
-		if catalogClosure.ReportPhase == "P12" {
+		if catalogOwns(catalogClosure, "P12") {
 			publicationService, err := composePublication(db, migrate.DialectSQLite, uow.Transaction, uow, store, clock, ids, faults)
 			if err != nil {
 				_ = cleanup()
 				return nil, nil, nil, nil, err
 			}
 			checks = append(checks, publicationService)
+		}
+		if catalogOwns(catalogClosure, "P13") {
+			assetService, err := composeAssets(db, migrate.DialectSQLite, uow.Transaction, uow, store, clock, ids, faults, config.AssetTokenKeyID, assetKey)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, assetService)
 		}
 		return uow, store, checks, cleanup, nil
 	case platform.ModePostgres:
@@ -253,13 +282,21 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			}
 			checks = append(checks, identityService)
 		}
-		if catalogClosure.ReportPhase == "P12" {
+		if catalogOwns(catalogClosure, "P12") {
 			publicationService, err := composePublication(db, migrate.DialectPostgres, uow.Transaction, uow, store, clock, ids, faults)
 			if err != nil {
 				_ = cleanup()
 				return nil, nil, nil, nil, err
 			}
 			checks = append(checks, publicationService)
+		}
+		if catalogOwns(catalogClosure, "P13") {
+			assetService, err := composeAssets(db, migrate.DialectPostgres, uow.Transaction, uow, store, clock, ids, faults, config.AssetTokenKeyID, assetKey)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, assetService)
 		}
 		return uow, store, checks, cleanup, nil
 	default:
@@ -280,13 +317,22 @@ func schemaVerifier(catalog migrate.CatalogClosure, dialect migrate.Dialect) mig
 		if err := identityVerifier(ctx, query); err != nil {
 			return err
 		}
-		if catalog.ReportPhase != "P12" {
+		if !catalogOwns(catalog, "P12") {
 			return nil
 		}
+		var err error
 		if dialect == migrate.DialectSQLite {
-			return publicationsqlite.VerifySchema()(ctx, query)
+			err = publicationsqlite.VerifySchema()(ctx, query)
+		} else {
+			err = publicationpostgres.VerifySchema()(ctx, query)
 		}
-		return publicationpostgres.VerifySchema()(ctx, query)
+		if err != nil || !catalogOwns(catalog, "P13") {
+			return err
+		}
+		if dialect == migrate.DialectSQLite {
+			return assetsqlite.VerifySchema()(ctx, query)
+		}
+		return assetpostgres.VerifySchema()(ctx, query)
 	}
 }
 
@@ -297,7 +343,7 @@ func composeIdentity(db *sql.DB, dialect migrate.Dialect, lookup durable.Transac
 	}
 	service, err := identity.New(identity.Dependencies{
 		Clock: clock, IDs: ids, Faults: faults, UoW: uow, Observability: observations, Repository: repository,
-		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent:publish", "agent:read", "secret.read"}, AllowedTenants: []string{"reference-dev"},
+		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent:publish", "agent:read", "asset:exchange", "secret.read"}, AllowedTenants: []string{"reference-dev"},
 	})
 	if err != nil {
 		return nil, errors.New("initialize identity service")
@@ -345,6 +391,47 @@ func composePublication(db *sql.DB, dialect migrate.Dialect, lookup durable.Tran
 	return service, nil
 }
 
+type denyRunGrantAuthorizer struct{}
+
+func (denyRunGrantAuthorizer) Authorize(_ context.Context, request assets.RunGrantRequest) error {
+	if err := request.Validate(); err != nil {
+		return err
+	}
+	// P13 owns the mandatory authorization seam but not the later run-grant
+	// ledger. Production therefore denies until a durable adapter is composed.
+	return assets.NewError(assets.CategoryAuthorization, assets.ReasonGrantForbidden)
+}
+
+func composeAssets(db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, observations observability.Store, clock platformports.Clock, ids platformports.IDSource, faults platformports.FaultHook, keyID string, key []byte) (*assets.Service, error) {
+	var storage assets.StorageRepository
+	var err error
+	if dialect == migrate.DialectSQLite {
+		storage, err = assetsqlite.New(db, lookup)
+	} else {
+		storage, err = assetpostgres.New(db, lookup)
+	}
+	if err != nil {
+		return nil, errors.New("initialize asset repository")
+	}
+	repository, err := assets.NewPersistenceAdapter(storage)
+	if err != nil {
+		return nil, errors.New("initialize asset persistence adapter")
+	}
+	tokens, err := assets.NewHMACTokenIssuer(keyID, key)
+	if err != nil {
+		return nil, errors.New("initialize asset token issuer")
+	}
+	service, err := assets.New(assets.Dependencies{
+		Clock: clock, IDs: ids, Faults: faults, UoW: uow, Audit: observations,
+		Authorizer: denyRunGrantAuthorizer{}, Assets: repository, Grants: repository,
+		Resolver: assets.SystemResolver{}, Tokens: tokens,
+	})
+	if err != nil {
+		return nil, errors.New("initialize asset broker service")
+	}
+	return service, nil
+}
+
 func identityServiceFromChecks(checks []platformports.ReadinessCheck) *identity.Service {
 	for _, check := range checks {
 		if service, ok := check.(*identity.Service); ok {
@@ -361,6 +448,60 @@ func publicationServiceFromChecks(checks []platformports.ReadinessCheck) *public
 		}
 	}
 	return nil
+}
+
+func assetServiceFromChecks(checks []platformports.ReadinessCheck) *assets.Service {
+	for _, check := range checks {
+		if service, ok := check.(*assets.Service); ok {
+			return service
+		}
+	}
+	return nil
+}
+
+func catalogOwns(catalog migrate.CatalogClosure, phase string) bool {
+	return slices.Contains(catalog.OwnerPhases, phase)
+}
+
+func assetTokenMaterial(config platform.Config, catalog migrate.CatalogClosure) ([]byte, error) {
+	if !catalogOwns(catalog, "P13") || config.Mode == platform.ModeDevelopmentMemory {
+		return nil, nil
+	}
+	if config.AssetTokenKeyFile == "" || config.AssetTokenKeyID == "" {
+		return nil, errors.New("asset token key configuration is required")
+	}
+	key, err := readPrivateAssetTokenKey(config.AssetTokenKeyFile)
+	if err != nil {
+		return nil, errors.New("load asset token key")
+	}
+	return key, nil
+}
+
+func readPrivateAssetTokenKey(path string) ([]byte, error) {
+	if path == "" || !filepath.IsAbs(path) || filepath.Clean(path) != path {
+		return nil, errors.New("asset token key path is invalid")
+	}
+	current := string(filepath.Separator)
+	for _, component := range strings.Split(strings.TrimPrefix(path, current), string(filepath.Separator)) {
+		if component == "" {
+			return nil, errors.New("asset token key path is invalid")
+		}
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 {
+			return nil, errors.New("asset token key path is not private")
+		}
+	}
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 || info.Size() != 32 {
+		return nil, errors.New("asset token key file is not private")
+	}
+	key, err := os.ReadFile(path)
+	if err != nil || len(key) != 32 {
+		clear(key)
+		return nil, errors.New("asset token key file is invalid")
+	}
+	return key, nil
 }
 
 func referenceAuthenticate(service *identity.Service, ids platformports.IDSource) httpadapter.AuthenticateFunc {

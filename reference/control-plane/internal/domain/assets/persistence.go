@@ -41,7 +41,7 @@ func (adapter *PersistenceAdapter) Put(ctx context.Context, asset Asset) error {
 	}
 	_, err = adapter.repository.UpdateAsset(ctx, stored.TenantID, stored.AssetID, stored.Revision, AssetUpdate{
 		Name: asset.Binding.Name, MediaType: asset.Binding.MediaType, SizeBytes: asset.Binding.SizeBytes,
-		ContentDigest: asset.Binding.Digest, ObjectKey: stored.ObjectKey, Status: statusForAsset(asset.State),
+		ContentDigest: asset.Binding.Digest, ContentBytes: append([]byte(nil), asset.Content...), ObjectKey: stored.ObjectKey, Status: statusForAsset(asset.State),
 		UpdatedAtNs: assetUpdateTime(asset),
 	})
 	return translateStorageError(err)
@@ -71,8 +71,8 @@ func (adapter *PersistenceAdapter) GetGrant(ctx context.Context, tenantID, grant
 	return domainGrant(record)
 }
 
-func (adapter *PersistenceAdapter) FindByOpaqueDigest(ctx context.Context, tenantID, digest string) (Grant, error) {
-	record, err := adapter.repository.GetGrantByTokenDigest(ctx, tenantID, digest)
+func (adapter *PersistenceAdapter) FindByOpaqueDigest(ctx context.Context, digest string) (Grant, error) {
+	record, err := adapter.repository.GetGrantByTokenDigest(ctx, digest)
 	if err != nil {
 		return Grant{}, translateStorageError(err)
 	}
@@ -115,7 +115,8 @@ func assetRecord(asset Asset) AssetRecord {
 		TenantID: asset.Binding.TenantID, PrincipalID: asset.Binding.PrincipalID, CredentialID: asset.Binding.CredentialID,
 		RunID: asset.Binding.RunID, AssetID: asset.Binding.AssetID, Name: asset.Binding.Name,
 		MediaType: asset.Binding.MediaType, SizeBytes: asset.Binding.SizeBytes, ContentDigest: asset.Binding.Digest,
-		ObjectKey: "assets/" + asset.Binding.TenantID + "/" + asset.Binding.AssetID, Status: statusForAsset(asset.State),
+		ContentBytes: append([]byte(nil), asset.Content...),
+		ObjectKey:    "assets/" + asset.Binding.TenantID + "/" + asset.Binding.AssetID, Status: statusForAsset(asset.State),
 		Revision: 1, CreatedAtNs: created, UpdatedAtNs: assetUpdateTime(asset),
 		IdempotencyKeyDigest: identityDigest, IdempotencyRequestDigest: identityDigest,
 	}
@@ -132,7 +133,7 @@ func domainAsset(record AssetRecord) (Asset, error) {
 		TenantID: record.TenantID, PrincipalID: record.PrincipalID, CredentialID: record.CredentialID,
 		RunID: record.RunID, AssetID: record.AssetID, Operation: OperationUpload, Name: record.Name,
 		MediaType: record.MediaType, SizeBytes: record.SizeBytes, Digest: record.ContentDigest,
-	}, State: state, CreatedAt: time.Unix(0, record.CreatedAtNs).UTC()}
+	}, State: state, Content: append([]byte(nil), record.ContentBytes...), CreatedAt: time.Unix(0, record.CreatedAtNs).UTC()}
 	if state == StateReady {
 		asset.ReadyAt = time.Unix(0, record.UpdatedAtNs).UTC()
 	}

@@ -14,7 +14,7 @@ type column struct{ name, dataType string }
 var assetColumns = []column{
 	{"tenant_id", "text"}, {"principal_id", "text"}, {"credential_id", "text"}, {"run_id", "text"},
 	{"asset_id", "text"}, {"name", "text"}, {"media_type", "text"},
-	{"size_bytes", "bigint"}, {"content_digest", "text"}, {"object_key", "text"}, {"status", "text"},
+	{"size_bytes", "bigint"}, {"content_digest", "text"}, {"content_bytes", "bytea"}, {"object_key", "text"}, {"status", "text"},
 	{"revision", "bigint"}, {"created_at_ns", "bigint"}, {"updated_at_ns", "bigint"},
 	{"idempotency_key_digest", "text"}, {"idempotency_request_digest", "text"},
 }
@@ -53,7 +53,7 @@ func VerifySchema() migrate.Verifier {
 		if err := verifyIndexes(ctx, queryer, "arop_asset_grants", map[string]indexExpectation{
 			"arop_asset_grants_pkey":               {true, true, "tenant_id,grant_id"},
 			"arop_asset_grants_idempotency_unique": {true, false, "tenant_id,idempotency_key_digest"},
-			"arop_asset_grants_token_unique":       {true, false, "tenant_id,token_digest"},
+			"arop_asset_grants_token_unique":       {true, false, "token_digest"},
 			"arop_asset_grants_tenant_asset_idx":   {false, false, "tenant_id,asset_id,status"},
 			"arop_asset_grants_tenant_run_idx":     {false, false, "tenant_id,run_id,status"},
 		}); err != nil {
@@ -189,6 +189,7 @@ var assetConstraints = map[string]string{
 	"arop_assets_media_type_check":          "check(((media_type~'^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$')and(length(media_type)<=127)))",
 	"arop_assets_size_check":                "check(((size_bytes>=0)and(size_bytes<=104857600)))",
 	"arop_assets_digest_check":              "check((content_digest~'^sha256:[0-9a-f]{64}$'))",
+	"arop_assets_content_check":             "check(((((status='pending')and(octet_length(content_bytes)=0))or((status='available')and(octet_length(content_bytes)=size_bytes)))or((status='isolated')and(octet_length(content_bytes)=0))))",
 	"arop_assets_object_key_check":          "check(((object_key~'^[a-z0-9][a-z0-9._/-]{0,255}$')and(object_key!~'\\.\\.')))",
 	"arop_assets_status_check":              "check((status=any(array['pending','available','isolated'])))",
 	"arop_assets_revision_check":            "check((revision>0))",
@@ -201,7 +202,7 @@ var assetConstraints = map[string]string{
 var grantConstraints = map[string]string{
 	"arop_asset_grants_pkey":                      "primarykey(tenant_id,grant_id)",
 	"arop_asset_grants_idempotency_unique":        "unique(tenant_id,idempotency_key_digest)",
-	"arop_asset_grants_token_unique":              "unique(tenant_id,token_digest)",
+	"arop_asset_grants_token_unique":              "unique(token_digest)",
 	"arop_asset_grants_asset_fkey":                "foreignkey(tenant_id,asset_id)referencesarop_assets(tenant_id,asset_id)onupdaterestrictondeleterestrict",
 	"arop_asset_grants_tenant_check":              "check(((tenant_id~'^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$')and(length(tenant_id)<=128)))",
 	"arop_asset_grants_principal_check":           "check((principal_id~'^prn_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'))",

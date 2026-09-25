@@ -43,8 +43,31 @@ func (service *Service) IssueGrant(ctx context.Context, request IssueRequest) (I
 	if !now.Before(request.ExpiresAt) {
 		return IssuedGrant{}, NewError(CategoryAuthorization, ReasonGrantExpired)
 	}
-	if err := service.authorize(ctx, request.Binding()); err != nil {
-		return IssuedGrant{}, err
+	keyDigest := digestIdempotency(request.IdempotencyKey)
+	if existing, err := service.deps.Grants.FindByIdempotency(ctx, request.Caller.TenantID, keyDigest); err == nil {
+		if !sameGrantRequest(existing, request) {
+			return IssuedGrant{}, NewError(CategoryConflict, ReasonIdempotencyConflict)
+		}
+		if err := service.authorize(ctx, existing.Binding); err != nil {
+			return IssuedGrant{}, err
+		}
+		token, err := service.deps.Tokens.IssueToken(ctx, existing)
+		if err != nil || token.Digest != existing.OpaqueDigest {
+			return IssuedGrant{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
+		}
+		if err := service.audit(ctx, request.Metadata, string(existing.Binding.Operation), started, 200); err != nil {
+			return IssuedGrant{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
+		}
+		return IssuedGrant{Grant: existing, Token: token.Value, Replay: true}, nil
+	} else if !isNotFound(err) {
+		return IssuedGrant{}, NewError(CategoryDependency, ReasonDependencyUnavailable, err)
+	}
+	if request.Operation == OperationUpload && request.AssetID == "" {
+		assetID, err := newAssetID(now)
+		if err != nil {
+			return IssuedGrant{}, err
+		}
+		request.AssetID = assetID
 	}
 	if request.Operation == OperationDownload {
 		asset, err := service.deps.Assets.Get(ctx, request.Caller.TenantID, request.AssetID)
@@ -54,22 +77,17 @@ func (service *Service) IssueGrant(ctx context.Context, request IssueRequest) (I
 		if asset.State != StateReady {
 			return IssuedGrant{}, NewError(CategoryAuthorization, ReasonNotReady)
 		}
-		if !downloadMatches(asset.Binding, request.Binding()) {
+		if asset.Binding.TenantID != request.Caller.TenantID || asset.Binding.RunID != request.RunID || asset.Binding.AssetID != request.AssetID {
 			return IssuedGrant{}, NewError(CategoryValidation, ReasonBindingMismatch)
 		}
+		request.Name, request.MediaType, request.SizeBytes, request.Digest = asset.Binding.Name, asset.Binding.MediaType, asset.Binding.SizeBytes, asset.Binding.Digest
 	}
-	keyDigest := digestIdempotency(request.IdempotencyKey)
-	if existing, err := service.deps.Grants.FindByIdempotency(ctx, request.Caller.TenantID, keyDigest); err == nil {
-		if !sameGrantRequest(existing, request) {
-			return IssuedGrant{}, NewError(CategoryConflict, ReasonIdempotencyConflict)
-		}
-		token, err := service.deps.Tokens.IssueToken(ctx, existing)
-		if err != nil || token.Digest != existing.OpaqueDigest {
-			return IssuedGrant{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
-		}
-		return IssuedGrant{Grant: existing, Token: token.Value, Replay: true}, nil
-	} else if !isNotFound(err) {
-		return IssuedGrant{}, NewError(CategoryDependency, ReasonDependencyUnavailable, err)
+	binding := request.Binding()
+	if err := binding.Validate(); err != nil {
+		return IssuedGrant{}, err
+	}
+	if err := service.authorize(ctx, binding); err != nil {
+		return IssuedGrant{}, err
 	}
 	grantID, err := newGrantID(now)
 	if err != nil {
@@ -77,7 +95,7 @@ func (service *Service) IssueGrant(ctx context.Context, request IssueRequest) (I
 	}
 	grant := Grant{
 		GrantID:              grantID,
-		Binding:              request.Binding(),
+		Binding:              binding,
 		NotBefore:            request.NotBefore.UTC(),
 		ExpiresAt:            request.ExpiresAt.UTC(),
 		MaxUses:              request.MaxUses,
@@ -95,7 +113,7 @@ func (service *Service) IssueGrant(ctx context.Context, request IssueRequest) (I
 	}
 	err = service.mutate(ctx, request.Metadata, string(request.Operation), started, 201, func(transactionContext context.Context) error {
 		if request.Operation == OperationUpload {
-			asset := Asset{Binding: request.Binding(), State: StateQuarantine, CreatedAt: now}
+			asset := Asset{Binding: binding, State: StateQuarantine, CreatedAt: now}
 			if err := asset.Validate(); err != nil {
 				return err
 			}
@@ -125,38 +143,75 @@ func (service *Service) IssueGrant(ctx context.Context, request IssueRequest) (I
 // until PromoteReady confirms the same digest.
 func (service *Service) ReceiveUpload(ctx context.Context, receipt UploadReceipt) (Asset, error) {
 	started := service.now()
-	if err := receipt.Caller.Validate(); err != nil {
-		return Asset{}, err
-	}
-	if !idempotencyPattern.MatchString(receipt.IdempotencyKey) || receipt.GrantToken == "" {
+	receipt.Content = append([]byte(nil), receipt.Content...)
+	defer clear(receipt.Content)
+	if !grantPattern.MatchString(receipt.GrantID) || receipt.GrantToken == "" {
 		return Asset{}, NewError(CategoryValidation, ReasonInvalidRequest)
 	}
-	grant, err := service.loadUsable(ctx, receipt.Caller, receipt.GrantToken, OperationUpload)
+	grant, err := service.loadUsable(ctx, receipt.GrantToken, OperationUpload)
 	if err != nil {
 		return Asset{}, err
 	}
-	if grant.Binding.MediaType != receipt.MediaType || grant.Binding.SizeBytes != receipt.SizeBytes || grant.Binding.Digest != receipt.Digest {
+	if grant.GrantID != receipt.GrantID {
 		return Asset{}, NewError(CategoryValidation, ReasonBindingMismatch)
 	}
 	var asset Asset
 	err = service.mutate(ctx, receipt.Metadata, string(OperationUpload), started, 200, func(transactionContext context.Context) error {
-		consumed, consumeErr := service.deps.Grants.Consume(transactionContext, receipt.Caller.TenantID, grant.GrantID, service.now())
+		stored, consumeErr := service.deps.Assets.Get(transactionContext, grant.Binding.TenantID, grant.Binding.AssetID)
 		if consumeErr != nil {
 			return consumeErr
 		}
-		if !consumed.Binding.SameIdentity(grant.Binding) {
+		if !stored.Binding.SameIdentity(grant.Binding) || stored.State != StateQuarantine {
 			return NewError(CategoryConflict, ReasonIdempotencyConflict)
 		}
-		asset, consumeErr = service.deps.Assets.Get(transactionContext, receipt.Caller.TenantID, grant.Binding.AssetID)
-		if consumeErr != nil {
-			return consumeErr
+		asset = stored
+		asset.Content = append([]byte(nil), receipt.Content...)
+		asset.State = StateReady
+		asset.ReadyAt = service.now()
+		if err := asset.Validate(); err != nil {
+			return err
 		}
-		if !asset.Binding.SameIdentity(grant.Binding) || (asset.State != StateQuarantine && asset.State != StateReady) {
-			return NewError(CategoryConflict, ReasonIdempotencyConflict)
+		if err := service.deps.Assets.Put(transactionContext, asset); err != nil {
+			return err
 		}
-		return nil
+		_, consumeErr = service.deps.Grants.Consume(transactionContext, grant.Binding.TenantID, grant.GrantID, service.now())
+		return consumeErr
 	})
 	return asset, err
+}
+
+// Download returns a defensive copy of ready bytes and consumes one grant use
+// in the same transaction as its durable observation.
+func (service *Service) Download(ctx context.Context, receipt DownloadReceipt) (DownloadResult, error) {
+	started := service.now()
+	if !grantPattern.MatchString(receipt.GrantID) || receipt.GrantToken == "" {
+		return DownloadResult{}, NewError(CategoryValidation, ReasonInvalidRequest)
+	}
+	grant, err := service.loadUsable(ctx, receipt.GrantToken, OperationDownload)
+	if err != nil {
+		return DownloadResult{}, err
+	}
+	if grant.GrantID != receipt.GrantID {
+		return DownloadResult{}, NewError(CategoryValidation, ReasonBindingMismatch)
+	}
+	var content []byte
+	err = service.mutate(ctx, receipt.Metadata, string(OperationDownload), started, 200, func(transactionContext context.Context) error {
+		asset, loadErr := service.deps.Assets.Get(transactionContext, grant.Binding.TenantID, grant.Binding.AssetID)
+		if loadErr != nil {
+			return loadErr
+		}
+		if asset.State != StateReady || !downloadMatches(asset.Binding, grant.Binding) {
+			return NewError(CategoryAuthorization, ReasonNotReady)
+		}
+		content = append([]byte(nil), asset.Content...)
+		_, loadErr = service.deps.Grants.Consume(transactionContext, grant.Binding.TenantID, grant.GrantID, service.now())
+		return loadErr
+	})
+	if err != nil {
+		clear(content)
+		return DownloadResult{}, err
+	}
+	return DownloadResult{Content: content, Name: grant.Binding.Name, MediaType: grant.Binding.MediaType, Digest: grant.Binding.Digest}, nil
 }
 
 // PromoteReady moves a quarantined upload to ready only when the digest matches.
@@ -189,6 +244,7 @@ func (service *Service) PromoteReady(ctx context.Context, request PromoteRequest
 	}
 	asset.State = StateReady
 	asset.ReadyAt = service.now()
+	asset.Content = append([]byte(nil), request.Content...)
 	if err := asset.Validate(); err != nil {
 		return Asset{}, err
 	}
@@ -233,9 +289,12 @@ func (service *Service) Connect(ctx context.Context, request ConnectRequest, red
 	if request.GrantToken == "" || request.URL == "" {
 		return nil, NewError(CategoryValidation, ReasonInvalidRequest)
 	}
-	grant, err := service.loadUsable(ctx, request.Caller, request.GrantToken, "")
+	grant, err := service.loadUsable(ctx, request.GrantToken, "")
 	if err != nil {
 		return nil, err
+	}
+	if !sameCaller(request.Caller, grant.Binding) {
+		return nil, NewError(CategoryAuthorization, ReasonGrantForbidden)
 	}
 	if grant.Binding.Operation == OperationDownload {
 		asset, err := service.deps.Assets.Get(ctx, request.Caller.TenantID, grant.Binding.AssetID)
@@ -274,9 +333,12 @@ func (service *Service) authorize(ctx context.Context, binding Binding) error {
 }
 
 func (service *Service) consume(ctx context.Context, caller Caller, token string, operation Operation) (Grant, error) {
-	grant, err := service.loadUsable(ctx, caller, token, operation)
+	grant, err := service.loadUsable(ctx, token, operation)
 	if err != nil {
 		return Grant{}, err
+	}
+	if !sameCaller(caller, grant.Binding) {
+		return Grant{}, NewError(CategoryAuthorization, ReasonGrantForbidden)
 	}
 	consumed, err := service.deps.Grants.Consume(ctx, caller.TenantID, grant.GrantID, service.now())
 	if err != nil {
@@ -285,16 +347,13 @@ func (service *Service) consume(ctx context.Context, caller Caller, token string
 	return consumed, nil
 }
 
-func (service *Service) loadUsable(ctx context.Context, caller Caller, token string, operation Operation) (Grant, error) {
+func (service *Service) loadUsable(ctx context.Context, token string, operation Operation) (Grant, error) {
 	if !opaqueTokenPattern.MatchString(token) {
 		return Grant{}, NewError(CategoryAuthentication, ReasonAuthenticationRequired)
 	}
-	grant, err := service.deps.Grants.FindByOpaqueDigest(ctx, caller.TenantID, digestOpaque(token))
+	grant, err := service.deps.Grants.FindByOpaqueDigest(ctx, digestOpaque(token))
 	if err != nil {
 		return Grant{}, notFoundOrDependency(err)
-	}
-	if !sameCaller(caller, grant.Binding) {
-		return Grant{}, NewError(CategoryAuthorization, ReasonGrantForbidden)
 	}
 	if operation != "" && grant.Binding.Operation != operation {
 		return Grant{}, NewError(CategoryValidation, ReasonBindingMismatch)
@@ -309,8 +368,20 @@ func (service *Service) loadUsable(ctx context.Context, caller Caller, token str
 }
 
 func sameGrantRequest(grant Grant, request IssueRequest) bool {
-	return grant.Binding.SameIdentity(request.Binding()) &&
-		grant.NotBefore.Equal(request.NotBefore.UTC()) &&
+	if grant.Binding.TenantID != request.Caller.TenantID || grant.Binding.PrincipalID != request.Caller.PrincipalID || grant.Binding.CredentialID != request.Caller.CredentialID || grant.Binding.RunID != request.RunID || grant.Binding.Operation != request.Operation {
+		return false
+	}
+	if request.Operation == OperationUpload {
+		if request.AssetID != "" && grant.Binding.AssetID != request.AssetID {
+			return false
+		}
+		if grant.Binding.Name != request.Name || grant.Binding.MediaType != request.MediaType || grant.Binding.SizeBytes != request.SizeBytes || grant.Binding.Digest != request.Digest {
+			return false
+		}
+	} else if grant.Binding.AssetID != request.AssetID {
+		return false
+	}
+	return grant.NotBefore.Equal(request.NotBefore.UTC()) &&
 		grant.ExpiresAt.Equal(request.ExpiresAt.UTC()) &&
 		grant.MaxUses == request.MaxUses
 }
@@ -466,3 +537,4 @@ func notFoundOrDependency(err error) error {
 }
 
 var _ platformports.ReadinessCheck = (*Service)(nil)
+var _ AssetBrokerService = (*Service)(nil)
