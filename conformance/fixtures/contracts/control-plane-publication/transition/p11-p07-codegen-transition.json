@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "waiver_id": "P11-MANIFEST-SCHEMA-CODEGEN-TRANSITION-001",
-  "status": "declared",
+  "status": "validated",
   "policy": {
     "owner_phase_semantics": "first-introduction-and-accountability",
     "ownership_transferred": false
   },
   "baseline": {
     "rule": "parent-of-unique-waiver-introduction-commit",
-    "commit": null
+    "commit": "a7b357dfd6a102622e7767539732d3cbbf184dbc"
   },
   "transition": {
     "from_phases": [
@@ -35,12 +35,153 @@
   ],
   "source_closure": [
     {
-      "path": "conformance/fixtures/codegen-spike/testdata/harness/main.go",
-      "scope": "early-owned",
+      "path": "conformance/fixtures/codegen-spike/expected/go/models.gen.go.golden",
       "change_type": "modify",
-      "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "baseline_sha256": "7b155f0cb02395948116575024889b85e3e973cfdf1a40975ce741f3e03ed783",
+      "current_sha256": "fe75ba0ecc6e95133b5467e1adf59b130a911e7e670c04fa3b0cf8ad12a7fed4",
+      "touch_commits": [
+        "4654f743a833177f964957aa0c6ef27fb6d26e20",
+        "844039364d0de11981f4123f6fa8dee3ddde8d75",
+        "9a6ea23e242d8d0385591fdae3242a1ea4f93d59"
+      ],
+      "scope": "early-owned",
+      "artifact_ids": [
+        "codegen-pipeline",
+        "codegen-representative-spike",
+        "phase-report-p07"
+      ],
+      "owner_phases": [
+        "P07"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/codegen-spike/expected/go/models_gen_test.go.golden",
+      "change_type": "modify",
+      "baseline_sha256": "8d74abe23e982e479aca766067ede11af0c93020651eb94b10a0808697cff61f",
+      "current_sha256": "19f70bd0ae97021cec8c1085fc9c3d52b8bfd6479cc100d22c606e430670823d",
+      "touch_commits": [
+        "4654f743a833177f964957aa0c6ef27fb6d26e20",
+        "844039364d0de11981f4123f6fa8dee3ddde8d75",
+        "9a6ea23e242d8d0385591fdae3242a1ea4f93d59"
+      ],
+      "scope": "early-owned",
+      "artifact_ids": [
+        "codegen-pipeline",
+        "codegen-representative-spike",
+        "phase-report-p07"
+      ],
+      "owner_phases": [
+        "P07"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/codegen-spike/expected/python/models_gen.py.golden",
+      "change_type": "modify",
+      "baseline_sha256": "fd29ec51c14550f2d5d1ab16e66c158362e59de78534021f67f320fc9b73028f",
+      "current_sha256": "7964f6638fac52563a9a852e4bb579d66f6dc1656edcdd5c5c2638b2ee356818",
+      "touch_commits": [
+        "4654f743a833177f964957aa0c6ef27fb6d26e20",
+        "844039364d0de11981f4123f6fa8dee3ddde8d75",
+        "9a6ea23e242d8d0385591fdae3242a1ea4f93d59"
+      ],
+      "scope": "early-owned",
+      "artifact_ids": [
+        "codegen-pipeline",
+        "codegen-representative-spike",
+        "phase-report-p07"
+      ],
+      "owner_phases": [
+        "P07"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/codegen-spike/expected/python/probe.py.golden",
+      "change_type": "modify",
+      "baseline_sha256": "bdcd3cb225c42b10cfb4a745ff0e81cfa58f12eb46877d8a2d4e35f46cfce82e",
+      "current_sha256": "35e60dbd0c516ada9039ba21e51a358696f72be687634973fbae29c30b22672b",
+      "touch_commits": [
+        "4654f743a833177f964957aa0c6ef27fb6d26e20",
+        "844039364d0de11981f4123f6fa8dee3ddde8d75",
+        "9a6ea23e242d8d0385591fdae3242a1ea4f93d59"
+      ],
+      "scope": "early-owned",
+      "artifact_ids": [
+        "codegen-pipeline",
+        "codegen-representative-spike",
+        "phase-report-p07"
+      ],
+      "owner_phases": [
+        "P07"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/codegen-spike/expected/typescript/models.gen.ts.golden",
+      "change_type": "modify",
+      "baseline_sha256": "4392b31c12c13f7f8a95a3532014784e5c8409be305c61c377d9d6a2bda7141a",
+      "current_sha256": "319765fbb155dd9249a649aa13c7df5a4b1c2a03f5657b86fa5d19a7157f4d24",
+      "touch_commits": [
+        "4654f743a833177f964957aa0c6ef27fb6d26e20",
+        "844039364d0de11981f4123f6fa8dee3ddde8d75",
+        "9a6ea23e242d8d0385591fdae3242a1ea4f93d59"
+      ],
+      "scope": "early-owned",
+      "artifact_ids": [
+        "codegen-pipeline",
+        "codegen-representative-spike",
+        "phase-report-p07"
+      ],
+      "owner_phases": [
+        "P07"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/codegen-spike/expected/typescript/probe.ts.golden",
+      "change_type": "modify",
+      "baseline_sha256": "bb1e699ed2500b905e48bfb4b312f74bbe750ffaa57eb0279adc5499d1c8c633",
+      "current_sha256": "5357883396c907eb5085f7d92905406d11149023c9b2e83fc178b379e4c93ac2",
+      "touch_commits": [
+        "4654f743a833177f964957aa0c6ef27fb6d26e20",
+        "844039364d0de11981f4123f6fa8dee3ddde8d75",
+        "9a6ea23e242d8d0385591fdae3242a1ea4f93d59"
+      ],
+      "scope": "early-owned",
+      "artifact_ids": [
+        "codegen-pipeline",
+        "codegen-representative-spike",
+        "phase-report-p07"
+      ],
+      "owner_phases": [
+        "P07"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/codegen-spike/schemas/negative/unknown-keyword.schema.json",
+      "change_type": "modify",
+      "baseline_sha256": "1856712f46a35cd74a0a8249b66e69501f9525d3aa2c64d56560358c12cfa5d0",
+      "current_sha256": "5cc92c97355d17b6479e4b8848df7765b2ba217ada423bb5c96fb3e95cc0df92",
+      "touch_commits": [
+        "9a6ea23e242d8d0385591fdae3242a1ea4f93d59"
+      ],
+      "scope": "early-owned",
+      "artifact_ids": [
+        "codegen-pipeline",
+        "codegen-representative-spike",
+        "phase-report-p07"
+      ],
+      "owner_phases": [
+        "P07"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/codegen-spike/testdata/harness/main.go",
+      "change_type": "modify",
+      "baseline_sha256": "8500e02a49845f1a20ba33fdd82b9148d1fc5ffbbdc7cb603104e4f0569368dd",
+      "current_sha256": "9f848efcaad2a96e313baa3972b760b4bfb829af97ae17971c7a8cb05decdbd6",
+      "touch_commits": [
+        "844039364d0de11981f4123f6fa8dee3ddde8d75",
+        "9a6ea23e242d8d0385591fdae3242a1ea4f93d59"
+      ],
+      "scope": "early-owned",
       "artifact_ids": [
         "codegen-representative-spike",
         "phase-report-p07"
@@ -51,11 +192,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/cases.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "9b8f4959e85156b675f9547a21c6612ed63dbe7b0c351443112fca236a1c7399",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -66,11 +209,17 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/contract-inventory.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "063a7cbb728f98d874c91d0b9cf705d7f45a376123bd0f3273308ba144886607",
+      "touch_commits": [
+        "1fdc3248f11545d31e056420a9b6cc53126e0d11",
+        "3198524fc677836351fd75ba57f418a63a11ff01",
+        "503f46fa042630caac1b0dfb68415ef66bac2bb4",
+        "ba0d0ebb6bb008ef55f717043deabf510b814e4c",
+        "ce2c3551bf2698a46a2bcf5c4523e0b2b70e09c4"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -81,11 +230,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/duplicate-entry.zip",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "056369329d8cedf6cddf42fdb37abc24aa6257e209d25a925bce3c054be07390",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -96,11 +247,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/encrypted-entry.zip",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "147b63dd81fe40adbcb21e4a9d3b28003cf68cc96d9d78e706e3620118a65980",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -111,11 +264,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/hardlink-entry.zip",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "62e9e9d6f3cf277c59ee3c888ba7bc69a929d9793033c96cc158778045aff66d",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -126,11 +281,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/invalid-path-traversal.zip",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "1c0ca9bf13eab60667706027dc5fa7d88c0cfa168474dc68cb266befd33d7f5c",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -141,11 +298,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/multiple-manifests.zip",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "af8080b3be8810b77d505b428e94b95e8f086fecf153ffa779bfe1b5d20995a1",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -156,11 +315,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/symlink-entry.zip",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "adba752f40faae6dc7fb46eaf11f2f19d3f05501ef4599b9209dba7ee22683b8",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -171,11 +332,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/valid-agent-version.zip",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "60f06d84cc862b99bc1a8c4240ce5132929049fc451a96a16bf84f9265053e38",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -186,11 +349,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/manifest-read-future-field.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "cdd891ce3ae88bd99a438b76b423ced9f6d4c4bd18f3bf374c53f0c8ff1adff8",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -201,11 +366,14 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/http/publish-created.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "5620eb72f6b4674ce22ca7cffc17036dd3aa2afee327782ae3c9939783da08a5",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3",
+        "9a68af4317eadfad2bfa3a323e4296418a0ad327"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -216,11 +384,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/error-secret-egress.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "85a2dec1a57140280af8edfb4d4fa7966af7cbaf53f23f0d829ab01bdf23b6dc",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -231,11 +401,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-content-max-input-bytes-safe-maximum-plus-one.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "3c81a796d88a471b36e8443c1a104918a08cb347ba9da19326300b8d8ce904d8",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -246,11 +418,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-execution-max-concurrency-safe-maximum-plus-one.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "996264027401d763dc405226ff038257c6b91a37290ca8ccb1fe398296661927",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -261,11 +435,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-secret-egress.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "31c6fc9ee84a560a801bdc7aafa4faa7836c57802b90e54802a1726a442e05e0",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -276,11 +452,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-session-idle-timeout-safe-maximum-plus-one.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "81158b87e6d58b7496583ecd85f9113e51e48ace2754be459df2c2827d600813",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -291,11 +469,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/aggregation.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "14e53fdfaac8d21b54243990e55ed1b033d775edf95007898aa1048f7eb1d194",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -306,11 +486,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/authorization.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "f8b5a7a3f6f49f9f0e1e45738b6f8d1a136b445566a5401b8a42f481767b5942",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -321,11 +503,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/bundle-profile.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "b00fea6c942a54bfa3270f51ba2882daf2e37de4b92833ccacc1a9c382849b0f",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -336,11 +520,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/errors.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "cc8ac26699c17c2b0f03ec50fc954348ca9ed4cb88d3a47be94df165ececc709",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -351,11 +537,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/idempotency.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "9b7001b0e5f228150de12ce39a747fcd1d24a703e55502b858e81b4d94e4c4ce",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -366,11 +554,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/safe-integer-boundaries.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "23ddb69efdc450db790cfe8debba62ee0eca7cce1370646c2111955a8555fbd9",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -381,11 +571,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "443b142030c76bfaee679ccc45b3d040711041900a090e49169bb7cb0dbed1b6",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -396,11 +588,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-safe-integer-maximum.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "cea4d37b06ac68138f7e04cde5208ef697b57c747c8827e6bb299d89a2090e2c",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -411,11 +605,13 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/generated/provenance.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "b2147fa04782b3aabf8f4cbc61216770d940671e1d321b3f14e1e3c22b1f1d41",
+      "touch_commits": [
+        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -426,11 +622,14 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/pipeline.json",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "061706bbd5b25c868b13ca2c9fddcc0464027ac74b2f14b3870fe9d907039e7f",
+      "touch_commits": [
+        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101",
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -441,26 +640,16 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/testdata/harness/main.go",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
-      "artifact_ids": [
-        "phase-report-p11",
-        "publication-contract-fixtures"
+      "current_sha256": "2546acdf313a7db800e5d18f9894b1d199418d0721a28d29f6ca5d8e687910ba",
+      "touch_commits": [
+        "1118ecdb802a546365ff7f116d9d859c81d3e1c2",
+        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101",
+        "a829c8444ee59afaa8daef0493109b9cc65b1960",
+        "bb16025e8d8900c3ba3005f6cdba80c32710db55"
       ],
-      "owner_phases": [
-        "P11"
-      ]
-    },
-    {
-      "path": "conformance/fixtures/contracts/control-plane-publication/testdata/transitioncheck/check.go",
       "scope": "p11-production",
-      "change_type": "add",
-      "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -471,11 +660,17 @@
     },
     {
       "path": "conformance/fixtures/contracts/control-plane-publication/transition/p11-p07-codegen-transition.json",
-      "scope": "carrier",
       "change_type": "add",
       "baseline_sha256": null,
       "current_sha256": null,
-      "touch_commits": [],
+      "touch_commits": [
+        "1fdc3248f11545d31e056420a9b6cc53126e0d11",
+        "3198524fc677836351fd75ba57f418a63a11ff01",
+        "503f46fa042630caac1b0dfb68415ef66bac2bb4",
+        "ba0d0ebb6bb008ef55f717043deabf510b814e4c",
+        "ce2c3551bf2698a46a2bcf5c4523e0b2b70e09c4"
+      ],
+      "scope": "carrier",
       "artifact_ids": [
         "phase-report-p11",
         "publication-contract-fixtures"
@@ -486,11 +681,13 @@
     },
     {
       "path": "openapi/fragments/control-plane/publication-v1.yaml",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "e05e9616ad7a56497e1e3273bb0ccb03579f5a836947938cf5975532ccb5e3c0",
+      "touch_commits": [
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "openapi-control-plane-foundation",
         "phase-report-p11"
@@ -501,11 +698,13 @@
     },
     {
       "path": "schemas/manifest/agent-manifest-v1.schema.json",
-      "scope": "early-owned",
       "change_type": "modify",
-      "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "baseline_sha256": "5b8e3e0496a67d32cbf2b4b15bd073208c362b1e2f7ceb8eead34dffd599a167",
+      "current_sha256": "49f18485c28ffadcb2bf7f9235c0bf699f07fa4964c0b5a52c9f82e81a883717",
+      "touch_commits": [
+        "3198524fc677836351fd75ba57f418a63a11ff01"
+      ],
+      "scope": "early-owned",
       "artifact_ids": [
         "phase-report-p06",
         "phase-report-p07",
@@ -518,11 +717,15 @@
     },
     {
       "path": "scripts/generate.mjs",
-      "scope": "early-owned",
       "change_type": "modify",
-      "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "baseline_sha256": "0e8ed0375ed8efc8f74aef6e4860cac8dc26ed9688cb5fbc604a561638e3eeb0",
+      "current_sha256": "7df0fe38e88dce7918c952226ecee467570b02cc9caaed5703b46118030ecde6",
+      "touch_commits": [
+        "4654f743a833177f964957aa0c6ef27fb6d26e20",
+        "844039364d0de11981f4123f6fa8dee3ddde8d75",
+        "9a6ea23e242d8d0385591fdae3242a1ea4f93d59"
+      ],
+      "scope": "early-owned",
       "artifact_ids": [
         "codegen-pipeline",
         "phase-report-p07"
@@ -533,11 +736,13 @@
     },
     {
       "path": "sdk/go/generated/control-plane/publication.gen.go",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "fe6cff96bb1ad3e58c629d728238408e35647a8b72904a336ebf7c530a936e6f",
+      "touch_commits": [
+        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "generated-control-plane-go",
         "phase-report-p11"
@@ -548,11 +753,13 @@
     },
     {
       "path": "sdk/python/src/arop/generated/control-plane/publication_gen.py",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "225bc68af5f56177254c2edf83aefe082f85fac8d377882c9b2871dd06f19a5f",
+      "touch_commits": [
+        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "generated-control-plane-python",
         "phase-report-p11"
@@ -563,11 +770,13 @@
     },
     {
       "path": "sdk/typescript/src/generated/control-plane/publication.gen.ts",
-      "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
+      "current_sha256": "778e2ebb31766cc2d73b95185c01b4984ebc14b5f8afc9d2fd7497ca93da25a6",
+      "touch_commits": [
+        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101"
+      ],
+      "scope": "p11-production",
       "artifact_ids": [
         "generated-control-plane-typescript",
         "phase-report-p11"
@@ -582,9 +791,11 @@
       "path": "Makefile",
       "scope": "static-only",
       "change_type": "modify",
-      "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": []
+      "baseline_sha256": "170676003f9c167710724ae81dc65055665bd1f606accc260cdef00fedacf82e",
+      "current_sha256": "9f2e7668ff9baa78b617dcae4bf905f8f95d5ceba2d652b272c788f4148918e3",
+      "touch_commits": [
+        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101"
+      ]
     }
   ],
   "validation_requirements": {
