@@ -75,7 +75,82 @@
       ]
     },
     {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/duplicate-entry.zip",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/encrypted-entry.zip",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/hardlink-entry.zip",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/invalid-path-traversal.zip",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/multiple-manifests.zip",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/symlink-entry.zip",
       "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
@@ -120,7 +195,7 @@
       ]
     },
     {
-      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/publish-created-future-field.json",
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/http/publish-created.json",
       "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
@@ -165,21 +240,6 @@
       ]
     },
     {
-      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/publish-created-unknown-field.json",
-      "scope": "p11-production",
-      "change_type": "add",
-      "baseline_sha256": null,
-      "current_sha256": null,
-      "touch_commits": [],
-      "artifact_ids": [
-        "phase-report-p11",
-        "publication-contract-fixtures"
-      ],
-      "owner_phases": [
-        "P11"
-      ]
-    },
-    {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/aggregation.json",
       "scope": "p11-production",
       "change_type": "add",
@@ -210,7 +270,7 @@
       ]
     },
     {
-      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json",
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/bundle-profile.json",
       "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
@@ -225,7 +285,37 @@
       ]
     },
     {
-      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/publish-created.json",
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/errors.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/idempotency.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json",
       "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
@@ -400,6 +490,44 @@
       "touch_commits": []
     }
   ],
+  "validation_requirements": {
+    "declared_status_rule": "must-not-carry-final-digests-touch-commits-or-pass-validation",
+    "validated_status_rule": "requires-exact-independent-git-manifest-inventory-and-report-closure",
+    "omission_negative_collections": [
+      "acceptance",
+      "affected_artifacts",
+      "constraints",
+      "inventory.bundle_profile.forbidden",
+      "inventory.codegen.compile_probes",
+      "inventory.codegen.outputs",
+      "inventory.codegen.provenance_required_fields",
+      "inventory.codegen.roots",
+      "inventory.error_contract",
+      "inventory.fixtures.bundle_paths",
+      "inventory.fixtures.forward_paths",
+      "inventory.fixtures.http_paths",
+      "inventory.fixtures.invalid_paths",
+      "inventory.fixtures.matrix_paths",
+      "inventory.fixtures.ordered_case_ids",
+      "inventory.fixtures.valid_paths",
+      "inventory.operations",
+      "inventory.resources",
+      "source_closure",
+      "static_source_closure"
+    ],
+    "additional_negatives": [
+      "declared-promoted-to-validated-without-final-evidence",
+      "duplicate-entry",
+      "extra-entry",
+      "noncanonical-order",
+      "owner-phase-transfer",
+      "unknown-field",
+      "wrong-baseline-parent",
+      "wrong-digest",
+      "wrong-owner",
+      "wrong-phase"
+    ]
+  },
   "acceptance": [
     {
       "phase": "P07",
@@ -415,6 +543,7 @@
   "constraints": [
     "d-054-no-public-secret-value-api",
     "d-062-single-deterministic-three-language-pipeline",
+    "declared-status-cannot-satisfy-validation",
     "frozen-planning-inputs-remain-unchanged",
     "no-p12-or-later-contracts",
     "owner-phase-and-exposure-remain-unchanged",

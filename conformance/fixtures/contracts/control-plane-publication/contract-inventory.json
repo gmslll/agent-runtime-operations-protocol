@@ -19,29 +19,217 @@
       "operation_id": "getAgentVersionManifest",
       "method": "GET",
       "path": "/v1/agent-definitions/{agent_id}/versions/{version}",
-      "request_media_types": [],
-      "response_media_types": [
-        "application/json"
+      "required_headers": [
+        "Authorization"
       ],
+      "request_media_types": [],
+      "success": {
+        "status": 200,
+        "body_schema": "AgentManifest",
+        "response_media_type": "application/json",
+        "required_headers": [
+          "ETag"
+        ],
+        "etag_strength": "strong",
+        "etag_matches_publication": true
+      },
       "required_scopes": [
         "agent:read"
-      ]
+      ],
+      "scope_extension": "x-arop-required-scopes"
     },
     {
       "operation_id": "publishAgentVersion",
       "method": "POST",
       "path": "/v1/agent-definitions/{agent_id}/versions",
+      "required_headers": [
+        "Authorization",
+        "Content-Type",
+        "Idempotency-Key"
+      ],
       "request_media_types": [
         "application/vnd.arop.agent-version-bundle+zip"
       ],
-      "response_media_types": [
-        "application/json"
-      ],
+      "success": {
+        "status": 201,
+        "body_schema": null,
+        "response_media_type": null,
+        "required_headers": [
+          "ETag",
+          "Location"
+        ],
+        "etag_strength": "strong",
+        "location_template": "/v1/agent-definitions/{agent_id}/versions/{version}"
+      },
       "required_scopes": [
         "agent:publish"
+      ],
+      "scope_extension": "x-arop-required-scopes"
+    }
+  ],
+  "request_invariants": {
+    "agent_id_equals_manifest_identity_id": true,
+    "content_type_parameters_allowed": false,
+    "idempotency": {
+      "same_key_same_semantic_digest": "stable-201-same-location-and-etag",
+      "same_key_different_semantic_digest": "409"
+    },
+    "unknown_security_extension": "fail-closed"
+  },
+  "header_contract": {
+    "Authorization": {
+      "syntax": "Bearer SP credential",
+      "cardinality": "exactly-one",
+      "credential_egress_forbidden": true
+    },
+    "Content-Type": {
+      "exact_value": "application/vnd.arop.agent-version-bundle+zip",
+      "parameters_allowed": false
+    },
+    "ETag": {
+      "syntax": "quoted-sha256-lowercase-hex",
+      "weak_allowed": false
+    },
+    "Idempotency-Key": {
+      "syntax": "visible-ascii-no-whitespace",
+      "min_bytes": 8,
+      "max_bytes": 200
+    },
+    "Location": {
+      "syntax": "/v1/agent-definitions/{agent_id}/versions/{version}",
+      "absolute_uri_allowed": false
+    },
+    "Retry-After": {
+      "syntax": "delta-seconds",
+      "minimum": 1,
+      "maximum": 86400
+    },
+    "WWW-Authenticate": {
+      "scheme": "Bearer",
+      "credential_or_internal_detail_forbidden": true
+    }
+  },
+  "error_contract": [
+    {
+      "status": 400,
+      "body_schema": "AROPError",
+      "code": "INVALID_PUBLICATION_REQUEST",
+      "category": "validation",
+      "retryable": false,
+      "required_headers": []
+    },
+    {
+      "status": 401,
+      "body_schema": "AROPError",
+      "code": "AUTHENTICATION_REQUIRED",
+      "category": "authentication",
+      "retryable": false,
+      "required_headers": [
+        "WWW-Authenticate"
+      ]
+    },
+    {
+      "status": 403,
+      "body_schema": "AROPError",
+      "code": "PUBLICATION_FORBIDDEN",
+      "category": "authorization",
+      "retryable": false,
+      "required_headers": []
+    },
+    {
+      "status": 404,
+      "body_schema": "AROPError",
+      "code": "AGENT_VERSION_NOT_FOUND",
+      "category": "not_found",
+      "retryable": false,
+      "required_headers": []
+    },
+    {
+      "status": 409,
+      "body_schema": "AROPError",
+      "code": "AGENT_VERSION_CONFLICT",
+      "category": "conflict",
+      "retryable": false,
+      "required_headers": []
+    },
+    {
+      "status": 413,
+      "body_schema": "AROPError",
+      "code": "AGENT_VERSION_BUNDLE_TOO_LARGE",
+      "category": "validation",
+      "retryable": false,
+      "required_headers": []
+    },
+    {
+      "status": 415,
+      "body_schema": "AROPError",
+      "code": "UNSUPPORTED_PUBLICATION_MEDIA_TYPE",
+      "category": "validation",
+      "retryable": false,
+      "required_headers": []
+    },
+    {
+      "status": 429,
+      "body_schema": "AROPError",
+      "code": "PUBLICATION_RATE_LIMITED",
+      "category": "capacity",
+      "retryable": true,
+      "required_headers": [
+        "Retry-After"
+      ]
+    },
+    {
+      "status": 503,
+      "body_schema": "AROPError",
+      "code": "PUBLICATION_DEPENDENCY_UNAVAILABLE",
+      "category": "dependency",
+      "retryable": true,
+      "required_headers": [
+        "Retry-After"
       ]
     }
   ],
+  "bundle_profile": {
+    "media_type": "application/vnd.arop.agent-version-bundle+zip",
+    "manifest_path": "agent-manifest.json",
+    "manifest_count": 1,
+    "manifest_path_is_archive_root": true,
+    "entry_path_profile": "portable-ascii-relative-forward-slash",
+    "reference_base": "archive-root",
+    "references_must_resolve_within_archive_root": true,
+    "network_access": false,
+    "validation_before_digest": true,
+    "digest_target": "validated-semantic-manifest-document",
+    "digest_excludes": [
+      "manifest_digest",
+      "signature",
+      "signatures"
+    ],
+    "digest_algorithm": "sha256-rfc8785-jcs",
+    "limits": {
+      "max_archive_bytes": 10485760,
+      "max_entries": 256,
+      "max_entry_uncompressed_bytes": 4194304,
+      "max_total_uncompressed_bytes": 52428800,
+      "max_compression_ratio": 100,
+      "limit_error_status": 413
+    },
+    "forbidden": [
+      "absolute-path",
+      "backslash-path",
+      "case-collision",
+      "duplicate-entry",
+      "encrypted-entry",
+      "hardlink-entry",
+      "multiple-root-manifests",
+      "network-reference",
+      "parent-path-segment",
+      "percent-encoded-path-bypass",
+      "symlink-entry",
+      "unicode-normalization-collision"
+    ],
+    "zip_bytes_are_digest_input": false
+  },
   "resources": [
     {
       "path": "openapi/fragments/control-plane/publication-v1.yaml",
@@ -75,16 +263,12 @@
     "configuration_path": "conformance/fixtures/contracts/control-plane-publication/pipeline.json",
     "roots": [
       {
-        "name": "AgentManifest",
-        "ref": "https://arop.invalid/schemas/v1/manifest/agent-manifest-v1.schema.json"
-      },
-      {
         "name": "AROPError",
         "ref": "https://arop.invalid/schemas/v1/common/error.schema.json"
       },
       {
-        "name": "PublishedAgentVersion",
-        "ref": "https://arop.invalid/openapi/control-plane/publication-v1.yaml#/components/schemas/PublishedAgentVersion"
+        "name": "AgentManifest",
+        "ref": "https://arop.invalid/schemas/v1/manifest/agent-manifest-v1.schema.json"
       }
     ],
     "outputs": [
@@ -105,30 +289,112 @@
       }
     ],
     "provenance_path": "conformance/fixtures/contracts/control-plane-publication/generated/provenance.json",
+    "provenance_required_fields": [
+      "checks",
+      "command",
+      "configuration",
+      "fixtures",
+      "generator",
+      "inputs_sha256",
+      "mapping_profile",
+      "outputs",
+      "outputs_sha256",
+      "pipeline_id",
+      "resources",
+      "schema_version"
+    ],
+    "compile_probes": [
+      {
+        "language": "go",
+        "mode": "isolated-temp-package-go-test",
+        "tracked_probe_path": null
+      },
+      {
+        "language": "python",
+        "mode": "isolated-python-compile-and-locked-pyright",
+        "tracked_probe_path": null
+      },
+      {
+        "language": "typescript",
+        "mode": "locked-tsc-strict-no-emit",
+        "tracked_probe_path": null
+      }
+    ],
     "tracked_probe_files": []
   },
   "fixtures": {
     "index_path": "conformance/fixtures/contracts/control-plane-publication/cases.json",
     "bundle_paths": [
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/duplicate-entry.zip",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/encrypted-entry.zip",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/hardlink-entry.zip",
       "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/invalid-path-traversal.zip",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/multiple-manifests.zip",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/symlink-entry.zip",
       "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/valid-agent-version.zip"
     ],
     "valid_paths": [
-      "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json",
-      "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/publish-created.json"
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json"
     ],
     "forward_paths": [
-      "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/manifest-read-future-field.json",
-      "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/publish-created-future-field.json"
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/manifest-read-future-field.json"
     ],
     "invalid_paths": [
       "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/error-secret-egress.json",
-      "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-secret-egress.json",
-      "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/publish-created-unknown-field.json"
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-secret-egress.json"
+    ],
+    "http_paths": [
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/http/publish-created.json"
     ],
     "matrix_paths": [
       "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/aggregation.json",
-      "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/authorization.json"
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/authorization.json",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/bundle-profile.json",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/errors.json",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/idempotency.json"
+    ],
+    "ordered_case_ids": [
+      "aggregate-component-conflict",
+      "aggregate-path-conflict",
+      "auth-get-agent-read",
+      "auth-missing-bearer",
+      "auth-post-agent-publish",
+      "auth-unknown-security-extension",
+      "bundle-absolute-path",
+      "bundle-backslash-path",
+      "bundle-case-collision",
+      "bundle-duplicate-entry",
+      "bundle-encrypted-entry",
+      "bundle-hardlink-entry",
+      "bundle-limit-archive-bytes",
+      "bundle-limit-compression-ratio",
+      "bundle-limit-entry-count",
+      "bundle-limit-entry-size",
+      "bundle-limit-total-size",
+      "bundle-multiple-manifests",
+      "bundle-network-ref",
+      "bundle-parent-path",
+      "bundle-percent-bypass",
+      "bundle-symlink-entry",
+      "bundle-unicode-collision",
+      "bundle-valid",
+      "error-400",
+      "error-401-www-authenticate",
+      "error-403",
+      "error-404",
+      "error-409",
+      "error-413",
+      "error-415",
+      "error-429-retry-after",
+      "error-503-retry-after",
+      "get-manifest-200-etag",
+      "get-manifest-forward-field",
+      "idempotency-different-digest-conflict",
+      "idempotency-same-digest-replay",
+      "manifest-agent-id-mismatch",
+      "no-public-secret-egress",
+      "post-content-type-exact",
+      "post-created-location-etag-no-body"
     ]
   },
   "constraints": [
