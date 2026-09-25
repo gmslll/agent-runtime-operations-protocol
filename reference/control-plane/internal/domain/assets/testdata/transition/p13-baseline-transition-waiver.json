@@ -50,6 +50,7 @@
     "reference/control-plane/internal/domain/assets/storage/sqlite/repository.go",
     "reference/control-plane/internal/domain/assets/storage/sqlite/repository_test.go",
     "reference/control-plane/internal/domain/assets/storage/sqlite/schema.go",
+    "reference/control-plane/internal/domain/assets/testdata/acceptance/production_migration_test.go",
     "reference/control-plane/internal/domain/assets/testdata/harness/main.go",
     "reference/control-plane/internal/domain/assets/testdata/transition/p13-baseline-transition-waiver.json",
     "reference/control-plane/internal/domain/assets/testdata/transition/p13-p05-transition.json",
