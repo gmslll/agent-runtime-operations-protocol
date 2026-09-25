@@ -1,0 +1,28 @@
+{
+  "protocol": "arop/v1",
+  "kind": "AgentManifest",
+  "identity": {
+    "id": "hello.agent",
+    "version": "1.2.3",
+    "name": "Hello Agent",
+    "summary": "Forward-compatible consumer fixture.",
+    "owner": {"team": "example-team"},
+    "future_identity_hint": {"preserve": true}
+  },
+  "skills": [{
+    "id": "default",
+    "name": "Greet",
+    "invoke_modes": ["params"],
+    "input_schema": {"type": "object"},
+    "output_schema": {"type": "object"},
+    "future_skill_hint": "ignored-by-compatible-consumer"
+  }],
+  "execution": {
+    "default_timeout_seconds": 30,
+    "max_timeout_seconds": 60,
+    "effects": {"level": "none", "idempotency": "supported", "human_confirmation": false},
+    "capabilities": {},
+    "future_execution_hint": [1, 2, 3]
+  },
+  "future_top_level": {"preserve": [true, null, "yes"]}
+}

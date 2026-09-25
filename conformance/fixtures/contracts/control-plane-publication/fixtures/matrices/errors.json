@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"error-400","status":400,"body":{"code":"INVALID_PUBLICATION_REQUEST","category":"validation","message":"The publication request is invalid.","retryable":false},"required_headers":[]},
+    {"id":"error-401-www-authenticate","status":401,"body":{"code":"AUTHENTICATION_REQUIRED","category":"authentication","message":"Authentication is required.","retryable":false},"required_headers":{"WWW-Authenticate":"Bearer"}},
+    {"id":"error-403","status":403,"body":{"code":"PUBLICATION_FORBIDDEN","category":"authorization","message":"Publication is not permitted.","retryable":false},"required_headers":[]},
+    {"id":"error-404","status":404,"body":{"code":"AGENT_VERSION_NOT_FOUND","category":"not_found","message":"The AgentVersion was not found.","retryable":false},"required_headers":[]},
+    {"id":"error-409","status":409,"body":{"code":"AGENT_VERSION_CONFLICT","category":"conflict","message":"The immutable AgentVersion conflicts with existing content.","retryable":false},"required_headers":[]},
+    {"id":"error-413","status":413,"body":{"code":"BUNDLE_TOO_LARGE","category":"capacity","message":"The publication bundle exceeds a configured limit.","retryable":false},"required_headers":[]},
+    {"id":"error-415","status":415,"body":{"code":"UNSUPPORTED_MEDIA_TYPE","category":"validation","message":"The publication media type is unsupported.","retryable":false},"required_headers":[]},
+    {"id":"error-429-retry-after","status":429,"body":{"code":"RATE_LIMITED","category":"capacity","message":"The request was rate limited.","retryable":true,"retry_after_seconds":30},"required_headers":{"Retry-After":"30"}},
+    {"id":"error-503-retry-after","status":503,"body":{"code":"DEPENDENCY_UNAVAILABLE","category":"dependency","message":"A required dependency is unavailable.","retryable":true,"retry_after_seconds":10},"required_headers":{"Retry-After":"10"}}
+  ]
+}

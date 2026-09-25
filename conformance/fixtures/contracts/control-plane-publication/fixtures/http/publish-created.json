@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/v1/agent-definitions/hello.agent/versions",
+    "headers": {
+      "Authorization": "Bearer AROP_EXAMPLE_NOT_A_REAL_CREDENTIAL",
+      "Content-Type": "application/vnd.arop.agent-version-bundle+zip",
+      "Idempotency-Key": "fixture-publish-0001"
+    },
+    "body_fixture": "../bundles/valid-agent-version.zip"
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "ETag": "\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"",
+      "Location": "/v1/agent-definitions/hello.agent/versions/1.2.3"
+    },
+    "body": null
+  },
+  "sensitive_values_are_examples_only": true
+}

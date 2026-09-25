@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"aggregate-component-conflict","input":{"existing_component":"ControlPlaneBearer","incoming_component":"different-definition"},"expected":{"accepted":false,"reason":"component-conflict"}},
+    {"id":"aggregate-path-conflict","input":{"existing_operation":"POST /v1/agent-definitions/{agent_id}/versions","incoming_operation":"different-operation"},"expected":{"accepted":false,"reason":"path-method-conflict"}}
+  ]
+}

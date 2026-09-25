@@ -1,0 +1,24 @@
+{
+  "protocol": "arop/v1",
+  "kind": "AgentManifest",
+  "identity": {
+    "id": "hello.agent",
+    "version": "1.2.3",
+    "name": "Hello Agent",
+    "summary": "Returns a deterministic greeting.",
+    "owner": {"team": "example-team"}
+  },
+  "skills": [{
+    "id": "default",
+    "name": "Greet",
+    "invoke_modes": ["params"],
+    "input_schema": {"type": "object"},
+    "output_schema": {"type": "object"}
+  }],
+  "execution": {
+    "default_timeout_seconds": 30,
+    "max_timeout_seconds": 60,
+    "effects": {"level": "none", "idempotency": "supported", "human_confirmation": false},
+    "capabilities": {"streaming": false, "cancellation": true}
+  }
+}

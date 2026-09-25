@@ -1,0 +1,250 @@
+openapi: 3.1.0
+info:
+  title: AROP Control Plane Publication v1 fragment
+  version: 1.0.0
+  description: >-
+    Incremental P11 publication binding. This fragment is aggregated into the
+    Control Plane OpenAPI document at P20; it is not a standalone deployment API.
+paths:
+  /v1/agent-definitions/{agent_id}/versions:
+    post:
+      operationId: publishAgentVersion
+      summary: Publish an immutable AgentVersion bundle
+      security:
+        - ControlPlaneBearer: []
+      x-arop-required-scopes:
+        - agent:publish
+      x-arop-agent-id-must-match-manifest: true
+      x-arop-content-type-parameters-allowed: false
+      x-arop-idempotency:
+        same-key-same-semantic-digest: stable-201-same-location-and-etag
+        same-key-different-semantic-digest: 409
+      x-arop-reject-unknown-security-extensions: true
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/vnd.arop.agent-version-bundle+zip:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '201':
+          description: The immutable AgentVersion was published.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ManifestETag'
+            Location:
+              $ref: '#/components/headers/AgentVersionLocation'
+        '400':
+          $ref: '#/components/responses/InvalidPublicationRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/PublicationForbidden'
+        '409':
+          $ref: '#/components/responses/AgentVersionConflict'
+        '413':
+          $ref: '#/components/responses/BundleTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /v1/agent-definitions/{agent_id}/versions/{version}:
+    get:
+      operationId: getAgentVersionManifest
+      summary: Read the validated manifest of an immutable AgentVersion
+      security:
+        - ControlPlaneBearer: []
+      x-arop-required-scopes:
+        - agent:read
+      x-arop-reject-unknown-security-extensions: true
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+        - $ref: '#/components/parameters/Version'
+      responses:
+        '200':
+          description: The validated AgentManifest.
+          headers:
+            ETag:
+              $ref: '#/components/headers/ManifestETag'
+          content:
+            application/json:
+              schema:
+                $ref: '../../../schemas/manifest/agent-manifest-v1.schema.json'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/PublicationForbidden'
+        '404':
+          $ref: '#/components/responses/AgentVersionNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+components:
+  securitySchemes:
+    ControlPlaneBearer:
+      type: http
+      scheme: bearer
+  parameters:
+    AgentId:
+      name: agent_id
+      in: path
+      required: true
+      schema:
+        $ref: '../../../schemas/common/identifiers.schema.json#/$defs/agentId'
+    Version:
+      name: version
+      in: path
+      required: true
+      schema:
+        $ref: '../../../schemas/common/identifiers.schema.json#/$defs/semanticVersion'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 200
+        pattern: '^[!-~]+$'
+  headers:
+    ManifestETag:
+      description: >-
+        Strong validator equal to the validated semantic AgentManifest digest.
+      required: true
+      schema:
+        type: string
+        pattern: '^"sha256:[0-9a-f]{64}"$'
+      x-arop-digest-source: validated-semantic-manifest-document
+      x-arop-strength: strong
+    AgentVersionLocation:
+      description: Relative path of the published immutable AgentVersion.
+      required: true
+      schema:
+        type: string
+        pattern: '^/v1/agent-definitions/[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*/versions/(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$'
+    RetryAfter:
+      description: Retry delay in whole seconds.
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 86400
+    WWWAuthenticate:
+      description: Bearer challenge without credential or internal detail.
+      required: true
+      schema:
+        type: string
+        pattern: '^Bearer(?: [A-Za-z][A-Za-z0-9_-]*="[ -!#-~]*")*$'
+  schemas:
+    AROPError:
+      $ref: '../../../schemas/common/error.schema.json'
+  responses:
+    InvalidPublicationRequest:
+      $ref: '#/components/responses/Error400'
+    AuthenticationRequired:
+      description: A valid Control Plane bearer credential is required.
+      x-arop-error-code: AUTHENTICATION_REQUIRED
+      x-arop-error-category: authentication
+      x-arop-retryable: false
+      headers:
+        WWW-Authenticate:
+          $ref: '#/components/headers/WWWAuthenticate'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AROPError'
+    PublicationForbidden:
+      $ref: '#/components/responses/Error403'
+    AgentVersionNotFound:
+      $ref: '#/components/responses/Error404'
+    AgentVersionConflict:
+      $ref: '#/components/responses/Error409'
+    BundleTooLarge:
+      $ref: '#/components/responses/Error413'
+    UnsupportedMediaType:
+      $ref: '#/components/responses/Error415'
+    RateLimited:
+      description: Publication or read rate limit exceeded.
+      x-arop-error-code: RATE_LIMITED
+      x-arop-error-category: capacity
+      x-arop-retryable: true
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AROPError'
+    DependencyUnavailable:
+      description: A required publication dependency is unavailable.
+      x-arop-error-code: DEPENDENCY_UNAVAILABLE
+      x-arop-error-category: dependency
+      x-arop-retryable: true
+      headers:
+        Retry-After:
+          $ref: '#/components/headers/RetryAfter'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AROPError'
+    Error400:
+      description: INVALID_PUBLICATION_REQUEST
+      x-arop-error-code: INVALID_PUBLICATION_REQUEST
+      x-arop-error-category: validation
+      x-arop-retryable: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AROPError'
+    Error403:
+      description: PUBLICATION_FORBIDDEN
+      x-arop-error-code: PUBLICATION_FORBIDDEN
+      x-arop-error-category: authorization
+      x-arop-retryable: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AROPError'
+    Error404:
+      description: AGENT_VERSION_NOT_FOUND
+      x-arop-error-code: AGENT_VERSION_NOT_FOUND
+      x-arop-error-category: not_found
+      x-arop-retryable: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AROPError'
+    Error409:
+      description: AGENT_VERSION_CONFLICT
+      x-arop-error-code: AGENT_VERSION_CONFLICT
+      x-arop-error-category: conflict
+      x-arop-retryable: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AROPError'
+    Error413:
+      description: BUNDLE_TOO_LARGE
+      x-arop-error-code: BUNDLE_TOO_LARGE
+      x-arop-error-category: capacity
+      x-arop-retryable: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AROPError'
+    Error415:
+      description: UNSUPPORTED_MEDIA_TYPE
+      x-arop-error-code: UNSUPPORTED_MEDIA_TYPE
+      x-arop-error-category: validation
+      x-arop-retryable: false
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AROPError'

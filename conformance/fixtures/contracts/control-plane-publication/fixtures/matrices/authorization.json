@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"auth-get-agent-read","operation_id":"getAgentVersionManifest","presented_scopes":["agent:read"],"expected":{"allowed":true}},
+    {"id":"auth-missing-bearer","operation_id":"publishAgentVersion","presented_scopes":[],"credential_present":false,"expected":{"allowed":false,"status":401,"code":"AUTHENTICATION_REQUIRED"}},
+    {"id":"auth-post-agent-publish","operation_id":"publishAgentVersion","presented_scopes":["agent:publish"],"expected":{"allowed":true}},
+    {"id":"auth-unknown-security-extension","operation_id":"publishAgentVersion","presented_scopes":["agent:publish"],"unknown_security_extension":true,"expected":{"allowed":false,"reason":"unknown-security-extension"}}
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "protocol": "arop/v1",
+  "kind": "AgentManifest",
+  "identity": {
+    "id": "safe.integer.agent",
+    "version": "1.0.0",
+    "name": "Safe Integer Agent",
+    "summary": "Exercises the maximum interoperable JSON integer.",
+    "owner": {"team": "example-team"}
+  },
+  "skills": [{
+    "id": "default",
+    "name": "Validate",
+    "invoke_modes": ["params"],
+    "input_schema": {"type": "object"},
+    "output_schema": {"type": "object"}
+  }],
+  "content": {"max_input_bytes": 9007199254740991},
+  "execution": {
+    "default_timeout_seconds": 30,
+    "max_timeout_seconds": 60,
+    "max_concurrency": 9007199254740991,
+    "effects": {"level": "none", "idempotency": "supported", "human_confirmation": false},
+    "capabilities": {}
+  },
+  "session": {"mode": "sticky", "idle_timeout_seconds": 9007199254740991}
+}

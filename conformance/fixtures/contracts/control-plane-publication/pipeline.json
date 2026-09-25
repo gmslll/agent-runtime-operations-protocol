@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "resources": [
+    {"path": "schemas/common/error.schema.json", "uri": "https://arop.invalid/schemas/v1/common/error.schema.json"},
+    {"path": "schemas/common/identifiers.schema.json", "uri": "https://arop.invalid/schemas/v1/common/identifiers.schema.json"},
+    {"path": "schemas/manifest/agent-manifest-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/manifest/agent-manifest-v1.schema.json"},
+    {"path": "schemas/resources/asset-ref-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json"},
+    {"path": "schemas/resources/secret-ref-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/resources/secret-ref-v1.schema.json"}
+  ],
+  "roots": [
+    {"ref": "https://arop.invalid/schemas/v1/common/error.schema.json", "name": "AROPError"},
+    {"ref": "https://arop.invalid/schemas/v1/manifest/agent-manifest-v1.schema.json", "name": "AgentManifest"}
+  ],
+  "fixtures": {
+    "valid": [
+      {"id": "manifest-read", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json"},
+      {"id": "manifest-safe-integer-maximum", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-safe-integer-maximum.json"}
+    ],
+    "forward": [
+      {"id": "manifest-read-future-field", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/manifest-read-future-field.json"}
+    ],
+    "invalid": [
+      {"id": "error-secret-egress", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/error-secret-egress.json"},
+      {"id": "manifest-content-max-input-bytes-safe-maximum-plus-one", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-content-max-input-bytes-safe-maximum-plus-one.json"},
+      {"id": "manifest-execution-max-concurrency-safe-maximum-plus-one", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-execution-max-concurrency-safe-maximum-plus-one.json"},
+      {"id": "manifest-secret-egress", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-secret-egress.json"},
+      {"id": "manifest-session-idle-timeout-safe-maximum-plus-one", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-session-idle-timeout-safe-maximum-plus-one.json"}
+    ]
+  },
+  "outputs": {
+    "go": {"model": "sdk/go/generated/control-plane/publication.gen.go"},
+    "python": {"model": "sdk/python/src/arop/generated/control-plane/publication_gen.py"},
+    "typescript": {"model": "sdk/typescript/src/generated/control-plane/publication.gen.ts"}
+  }
+}
