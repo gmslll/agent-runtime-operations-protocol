@@ -31,7 +31,8 @@
           "ETag"
         ],
         "etag_strength": "strong",
-        "etag_matches_publication": true
+        "etag_matches_publication": true,
+        "etag_semantic_digest_source": "validated-semantic-manifest-document"
       },
       "required_scopes": [
         "agent:read"
@@ -59,6 +60,7 @@
           "Location"
         ],
         "etag_strength": "strong",
+        "etag_semantic_digest_source": "validated-semantic-manifest-document",
         "location_template": "/v1/agent-definitions/{agent_id}/versions/{version}"
       },
       "required_scopes": [
@@ -87,7 +89,8 @@
       "parameters_allowed": false
     },
     "ETag": {
-      "syntax": "quoted-sha256-lowercase-hex",
+      "exact_wire_pattern": "\"sha256:<64 lowercase hex>\"",
+      "semantic_digest_source": "validated-semantic-manifest-document",
       "weak_allowed": false
     },
     "Idempotency-Key": {
@@ -155,15 +158,15 @@
     {
       "status": 413,
       "body_schema": "AROPError",
-      "code": "AGENT_VERSION_BUNDLE_TOO_LARGE",
-      "category": "validation",
+      "code": "BUNDLE_TOO_LARGE",
+      "category": "capacity",
       "retryable": false,
       "required_headers": []
     },
     {
       "status": 415,
       "body_schema": "AROPError",
-      "code": "UNSUPPORTED_PUBLICATION_MEDIA_TYPE",
+      "code": "UNSUPPORTED_MEDIA_TYPE",
       "category": "validation",
       "retryable": false,
       "required_headers": []
@@ -171,7 +174,7 @@
     {
       "status": 429,
       "body_schema": "AROPError",
-      "code": "PUBLICATION_RATE_LIMITED",
+      "code": "RATE_LIMITED",
       "category": "capacity",
       "retryable": true,
       "required_headers": [
@@ -181,7 +184,7 @@
     {
       "status": 503,
       "body_schema": "AROPError",
-      "code": "PUBLICATION_DEPENDENCY_UNAVAILABLE",
+      "code": "DEPENDENCY_UNAVAILABLE",
       "category": "dependency",
       "retryable": true,
       "required_headers": [
@@ -305,18 +308,188 @@
     ],
     "compile_probes": [
       {
+        "argv": [
+          "go",
+          "test",
+          "-count=1",
+          "-json",
+          "-mod=readonly",
+          "."
+        ],
+        "commands": [
+          "go-test"
+        ],
+        "cwd": "<isolated-temp>/go-probe",
+        "environment": {
+          "CGO_ENABLED": "0",
+          "GOENV": "off",
+          "GOFLAGS": "-mod=readonly",
+          "GONOSUMDB": "*",
+          "GOPROXY": "off",
+          "GOSUMDB": "off",
+          "GOTOOLCHAIN": "local",
+          "GOWORK": "off"
+        },
+        "environment_mode": "exact-allowlist-no-inheritance",
+        "forbidden": [
+          "cache-reuse",
+          "global-codegen-or-language-package",
+          "network-access",
+          "npx",
+          "skip"
+        ],
+        "inputs": [
+          "go.mod",
+          "publication_gen.go",
+          "publication_gen_test.go"
+        ],
         "language": "go",
         "mode": "isolated-temp-package-go-test",
+        "outputs": [
+          "go-test-json-terminal"
+        ],
+        "package": ".",
+        "success_terminal": "package-pass-with-every-test-pass-and-zero-skip",
+        "temp_files": [
+          "go.mod",
+          "publication_gen.go",
+          "publication_gen_test.go"
+        ],
         "tracked_probe_path": null
       },
       {
+        "commands": [
+          {
+            "argv": [
+              "python3",
+              "-I",
+              "-B",
+              "-m",
+              "py_compile",
+              "publication_gen.py",
+              "probe.py"
+            ],
+            "executable": "python3",
+            "id": "python-py-compile"
+          },
+          {
+            "argv": [
+              "node",
+              "--disable-proto=throw",
+              "--no-addons",
+              "<repo>/node_modules/pyright/index.js",
+              "--level",
+              "error",
+              "--pythonversion",
+              "3.11",
+              "publication_gen.py",
+              "probe.py"
+            ],
+            "executable": "node",
+            "id": "python-pyright"
+          }
+        ],
+        "cwd": "<isolated-temp>/python-probe",
+        "environment": {
+          "LANG": "C",
+          "LC_ALL": "C",
+          "PYTHONDONTWRITEBYTECODE": "1",
+          "PYTHONHASHSEED": "0",
+          "PYTHONNOUSERSITE": "1",
+          "PYTHONSAFEPATH": "1",
+          "TZ": "UTC"
+        },
+        "environment_mode": "exact-allowlist-no-inheritance",
+        "forbidden": [
+          "cache-reuse",
+          "global-codegen-or-language-package",
+          "network-access",
+          "npx",
+          "skip"
+        ],
+        "inputs": [
+          "<repo>/node_modules/pyright/index.js",
+          "probe.py",
+          "publication_gen.py"
+        ],
         "language": "python",
         "mode": "isolated-python-compile-and-locked-pyright",
+        "outputs": [
+          "py-compile-exit-zero",
+          "pyright-exit-zero"
+        ],
+        "success_terminal": "both-commands-exit-zero-with-no-warning-or-skip-terminal",
+        "temp_files": [
+          "probe.py",
+          "publication_gen.py"
+        ],
         "tracked_probe_path": null
       },
       {
+        "argv": [
+          "node",
+          "<repo>/node_modules/typescript/bin/tsc",
+          "--project",
+          "tsconfig.json",
+          "--noEmit"
+        ],
+        "commands": [
+          "typescript-tsc-no-emit"
+        ],
+        "cwd": "<isolated-temp>/typescript-probe",
+        "environment": {
+          "LANG": "C",
+          "LC_ALL": "C",
+          "NODE_PATH": "",
+          "SOURCE_DATE_EPOCH": "0",
+          "TZ": "UTC"
+        },
+        "environment_mode": "exact-allowlist-no-inheritance",
+        "forbidden": [
+          "cache-reuse",
+          "global-codegen-or-language-package",
+          "network-access",
+          "npx",
+          "skip"
+        ],
+        "inputs": [
+          "<repo>/node_modules/typescript/bin/tsc",
+          "probe.ts",
+          "publication.gen.ts",
+          "tsconfig.json"
+        ],
         "language": "typescript",
         "mode": "locked-tsc-strict-no-emit",
+        "outputs": [
+          "tsc-exit-zero-no-emit"
+        ],
+        "success_terminal": "exit-zero-with-no-emitted-files-and-no-skip-terminal",
+        "temp_files": [
+          "probe.ts",
+          "publication.gen.ts",
+          "tsconfig.json"
+        ],
+        "tsconfig": {
+          "canonical_encoding": "RFC8785-JCS-UTF8-no-trailing-newline",
+          "content": {
+            "compilerOptions": {
+              "exactOptionalPropertyTypes": true,
+              "module": "NodeNext",
+              "moduleResolution": "NodeNext",
+              "noEmit": true,
+              "noUncheckedIndexedAccess": true,
+              "skipLibCheck": false,
+              "strict": true,
+              "target": "ES2022",
+              "useUnknownInCatchVariables": true
+            },
+            "files": [
+              "probe.ts",
+              "publication.gen.ts"
+            ]
+          },
+          "sha256": "fdb9a03a99d132102fa3c278688de5cef2c87c2109afaecef46e8c5c24bd1290"
+        },
         "tracked_probe_path": null
       }
     ],
