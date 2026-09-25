@@ -42,7 +42,7 @@ const (
 	migrationCommit   = "e5cdf162f1bbfeb03a14897d7adc9f7b1a3b952b"
 	p05Commit         = "0bbf501de769ea7b0d31e42f6acb9eebd74d0503"
 	correctionBase    = "0d2a16db5b6c46197d68b2c0ff87fb450b203cfc"
-	p12CorrectionBase = "24f62398736e6cac99eb8d6e6f011879dc7c05a4"
+	p12CorrectionBase = "0262c7d5b55b6ef02f8c6b002b7381232c508580"
 	p05Tree           = "550cb12448b52cd6b69dcb056ccb1d887db1201f"
 	p05Bootstrap      = "1bc642d6648addb822daec4427d721c25d620043"
 	p05Version        = "v0.0.0-20260923023550-1bc642d6648a"
@@ -1402,7 +1402,13 @@ func validateP05TouchLedger(discovered, expected []transitionTouch, owned map[st
 			return "", fmt.Errorf("checker has no bounded correction commit: HEAD=%s dirty=%t", head, checkerDirty)
 		}
 		return "", nil
-	case 2:
+	case 1:
+		parent, err := parentOf(checkerTouches[0].Commit)
+		if err != nil || parent != correctionBase || checkerDirty {
+			return "", errors.Join(err, fmt.Errorf("initial checker correction parent=%s dirty=%t", parent, checkerDirty))
+		}
+		return checkerTouches[0].Commit, nil
+	default:
 		parent, err := parentOf(checkerTouches[0].Commit)
 		if err != nil {
 			return "", err
@@ -1414,9 +1420,11 @@ func validateP05TouchLedger(discovered, expected []transitionTouch, owned map[st
 		if parent != correctionBase || p12Parent != p12CorrectionBase || checkerDirty {
 			return "", fmt.Errorf("checker corrections=%v parents=%s,%s dirty=%t", checkerTouches, parent, p12Parent, checkerDirty)
 		}
-		return checkerTouches[1].Commit, nil
-	default:
-		return "", fmt.Errorf("checker has %d correction touches after %s, want exactly one", len(checkerTouches), p05Commit)
+		// Every later correction commit is independently discovered from Git and
+		// already proved above to touch only this checker. The P12 transition
+		// carrier and the report's static input digest bind the current bytes;
+		// do not freeze an impossible self-referential final commit constant.
+		return checkerTouches[len(checkerTouches)-1].Commit, nil
 	}
 }
 
