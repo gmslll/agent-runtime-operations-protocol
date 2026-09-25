@@ -1704,7 +1704,7 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 	if err != nil {
 		return replay, err
 	}
-	p08, err := expectedTransition(root, "P08-P05-MODULE-TRANSITION-001", "P08", currentPin, p08Commit,
+	p08, err := expectedTransition(root, "P08-P05-MODULE-TRANSITION-001", "P08", activePinBeforeP12().Commit, p08Commit,
 		[]string{nestedDirectory + "/cmd/aropd/main.go", nestedDirectory + "/cmd/aropd/main_test.go", nestedDirectory + "/go.mod", nestedDirectory + "/go.sum"}, []string{p08Commit}, []string{"nested-control-plane-go-module", "reference-control-plane-server"}, &pinTransition{p05Pin, activePin},
 		"P08 extends the migrated P05 server baseline and repins the nested module to the exact root snapshot consumed by the platform foundation.", "make test-control-plane-platform", "build/reports/P08/report.json")
 	if err != nil {
