@@ -6,6 +6,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
+	platformports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/ports"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/ports/observability"
 )
 
 const (
@@ -39,7 +43,9 @@ func TestGrantLifecycleQuarantineReadyAndNetwork(t *testing.T) {
 		"objects.example": {[]net.IP{net.ParseIP("203.0.113.10")}, []net.IP{net.ParseIP("10.1.2.3")}},
 		"cdn.example":     {[]net.IP{net.ParseIP("203.0.113.20")}},
 	}}
-	service, err := New(Dependencies{Clock: clock, Authorizer: allowAll{}, Assets: store, Grants: store, Resolver: resolver})
+	deps := testDeps(t, allowAll{})
+	deps.Clock, deps.Assets, deps.Grants, deps.Resolver = clock, store, store, resolver
+	service, err := New(deps)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +58,7 @@ func TestGrantLifecycleQuarantineReadyAndNetwork(t *testing.T) {
 		t.Fatalf("issue: %v token empty=%v", err, issued.Token == "")
 	}
 	replay, err := service.IssueGrant(context.Background(), request)
-	if err != nil || !replay.Replay || replay.Token != "" || replay.Grant.GrantID != issued.Grant.GrantID {
+	if err != nil || !replay.Replay || replay.Token != issued.Token || replay.Grant.GrantID != issued.Grant.GrantID {
 		t.Fatalf("replay: %+v %v", replay, err)
 	}
 	conflict := request
@@ -61,7 +67,8 @@ func TestGrantLifecycleQuarantineReadyAndNetwork(t *testing.T) {
 	requireReason(t, err, ReasonIdempotencyConflict)
 
 	receipt := UploadReceipt{
-		Caller: request.Caller, GrantToken: issued.Token, MediaType: request.MediaType,
+		Metadata: testMetadata(),
+		Caller:   request.Caller, GrantToken: issued.Token, MediaType: request.MediaType,
 		SizeBytes: request.SizeBytes, Digest: request.Digest, IdempotencyKey: "upload-key",
 	}
 	quarantine, err := service.ReceiveUpload(context.Background(), receipt)
@@ -75,18 +82,18 @@ func TestGrantLifecycleQuarantineReadyAndNetwork(t *testing.T) {
 	_, err = service.IssueGrant(context.Background(), download)
 	requireReason(t, err, ReasonNotReady)
 
-	_, err = service.Connect(context.Background(), ConnectRequest{Caller: request.Caller, GrantToken: issued.Token, URL: "https://objects.example/put"}, nil)
+	_, err = service.Connect(context.Background(), ConnectRequest{Metadata: testMetadata(), Caller: request.Caller, GrantToken: issued.Token, URL: "https://objects.example/put"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Connect(context.Background(), ConnectRequest{Caller: request.Caller, GrantToken: issued.Token, URL: "https://objects.example/put"}, nil)
+	_, err = service.Connect(context.Background(), ConnectRequest{Metadata: testMetadata(), Caller: request.Caller, GrantToken: issued.Token, URL: "https://objects.example/put"}, nil)
 	requireReason(t, err, ReasonNetworkDenied)
 
-	promoted, err := service.PromoteReady(context.Background(), PromoteRequest{Caller: request.Caller, AssetID: testAsset, Digest: testDigest})
+	promoted, err := service.PromoteReady(context.Background(), PromoteRequest{Metadata: testMetadata(), Caller: request.Caller, AssetID: testAsset, Digest: testDigest})
 	if err != nil || promoted.State != StateReady {
 		t.Fatalf("promote: %+v %v", promoted, err)
 	}
-	_, err = service.PromoteReady(context.Background(), PromoteRequest{Caller: request.Caller, AssetID: testAsset, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
+	_, err = service.PromoteReady(context.Background(), PromoteRequest{Metadata: testMetadata(), Caller: request.Caller, AssetID: testAsset, Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"})
 	requireReason(t, err, ReasonDigestMismatch)
 
 	issuedDownload, err := service.IssueGrant(context.Background(), download)
@@ -94,20 +101,20 @@ func TestGrantLifecycleQuarantineReadyAndNetwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	chain, err := service.Connect(context.Background(), ConnectRequest{
-		Caller: request.Caller, GrantToken: issuedDownload.Token, URL: "https://cdn.example/get",
+		Metadata: testMetadata(), Caller: request.Caller, GrantToken: issuedDownload.Token, URL: "https://cdn.example/get",
 	}, []string{"https://cdn.example/redirected"})
 	if err != nil || len(chain) != 2 {
 		t.Fatalf("download connect: %v hops=%d", err, len(chain))
 	}
 	_, err = service.Connect(context.Background(), ConnectRequest{
-		Caller: request.Caller, GrantToken: issuedDownload.Token, URL: "https://cdn.example/get",
+		Metadata: testMetadata(), Caller: request.Caller, GrantToken: issuedDownload.Token, URL: "https://cdn.example/get",
 	}, []string{"http://cdn.example/insecure"})
 	requireReason(t, err, ReasonNetworkDenied)
 
-	if err := service.RevokeGrant(context.Background(), RevokeRequest{Caller: request.Caller, GrantID: issuedDownload.Grant.GrantID}); err != nil {
+	if err := service.RevokeGrant(context.Background(), RevokeRequest{Metadata: testMetadata(), Caller: request.Caller, GrantID: issuedDownload.Grant.GrantID}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Connect(context.Background(), ConnectRequest{Caller: request.Caller, GrantToken: issuedDownload.Token, URL: "https://cdn.example/get"}, nil)
+	_, err = service.Connect(context.Background(), ConnectRequest{Metadata: testMetadata(), Caller: request.Caller, GrantToken: issuedDownload.Token, URL: "https://cdn.example/get"}, nil)
 	requireReason(t, err, ReasonGrantRevoked)
 }
 
@@ -115,7 +122,9 @@ func TestGrantWindowAndUses(t *testing.T) {
 	now := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
 	clock := &frozenClock{now: now}
 	store := newMemStore()
-	service, err := New(Dependencies{Clock: clock, Authorizer: allowAll{}, Assets: store, Grants: store, Resolver: staticResolver{net.ParseIP("203.0.113.9")}})
+	deps := testDeps(t, allowAll{})
+	deps.Clock, deps.Assets, deps.Grants, deps.Resolver = clock, store, store, staticResolver{net.ParseIP("203.0.113.9")}
+	service, err := New(deps)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,25 +137,25 @@ func TestGrantWindowAndUses(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = service.ReceiveUpload(context.Background(), UploadReceipt{
-		Caller: request.Caller, GrantToken: issued.Token, MediaType: request.MediaType,
+		Metadata: testMetadata(), Caller: request.Caller, GrantToken: issued.Token, MediaType: request.MediaType,
 		SizeBytes: request.SizeBytes, Digest: request.Digest, IdempotencyKey: "early-key",
 	})
 	requireReason(t, err, ReasonGrantNotYetValid)
 	clock.now = now.Add(3 * time.Minute)
 	_, err = service.ReceiveUpload(context.Background(), UploadReceipt{
-		Caller: request.Caller, GrantToken: issued.Token, MediaType: request.MediaType,
+		Metadata: testMetadata(), Caller: request.Caller, GrantToken: issued.Token, MediaType: request.MediaType,
 		SizeBytes: request.SizeBytes, Digest: request.Digest, IdempotencyKey: "late-key",
 	})
 	requireReason(t, err, ReasonGrantExpired)
 
 	clock.now = now.Add(90 * time.Second)
 	if _, err := service.ReceiveUpload(context.Background(), UploadReceipt{
-		Caller: request.Caller, GrantToken: issued.Token, MediaType: request.MediaType,
+		Metadata: testMetadata(), Caller: request.Caller, GrantToken: issued.Token, MediaType: request.MediaType,
 		SizeBytes: request.SizeBytes, Digest: request.Digest, IdempotencyKey: "once-key",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = service.Connect(context.Background(), ConnectRequest{Caller: request.Caller, GrantToken: issued.Token, URL: "https://objects.example/put"}, nil)
+	_, err = service.Connect(context.Background(), ConnectRequest{Metadata: testMetadata(), Caller: request.Caller, GrantToken: issued.Token, URL: "https://objects.example/put"}, nil)
 	requireReason(t, err, ReasonGrantUsesExhausted)
 
 	long := request
@@ -285,6 +294,16 @@ func (store *memStore) Save(_ context.Context, grant Grant) error {
 	return nil
 }
 
+func (store *memStore) GetGrant(_ context.Context, tenantID, grantID string) (Grant, error) {
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	grant, ok := store.grants[tenantID+"/"+grantID]
+	if !ok {
+		return Grant{}, NewError(CategoryNotFound, ReasonNotFound)
+	}
+	return grant, nil
+}
+
 func (store *memStore) FindByOpaqueDigest(_ context.Context, tenantID, digest string) (Grant, error) {
 	store.mu.Lock()
 	defer store.mu.Unlock()
@@ -320,7 +339,7 @@ func (store *memStore) Consume(_ context.Context, tenantID, grantID string, now 
 	return grant, nil
 }
 
-func (store *memStore) Revoke(_ context.Context, tenantID, grantID string) error {
+func (store *memStore) Revoke(_ context.Context, tenantID, grantID string, _ time.Time) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
 	grant, ok := store.grants[tenantID+"/"+grantID]
@@ -336,11 +355,25 @@ func testDeps(t *testing.T, authorizer RunGrantAuthorizer) Dependencies {
 	t.Helper()
 	return Dependencies{
 		Clock:      &frozenClock{now: time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)},
+		IDs:        testIDs{},
+		Faults:     noFaults{},
+		UoW:        directUoW{},
+		Audit:      validatingAudit{},
 		Authorizer: authorizer,
 		Assets:     newMemStore(),
 		Grants:     newMemStore(),
 		Resolver:   staticResolver{net.ParseIP("203.0.113.10")},
+		Tokens:     testTokenIssuer(t),
 	}
+}
+
+func testTokenIssuer(t *testing.T) TokenIssuer {
+	t.Helper()
+	issuer, err := NewHMACTokenIssuer("atk_test", []byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return issuer
 }
 
 func testService(t *testing.T, authorizer RunGrantAuthorizer) *Service {
@@ -355,10 +388,12 @@ func testService(t *testing.T, authorizer RunGrantAuthorizer) *Service {
 func testIssue(operation Operation) IssueRequest {
 	now := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
 	return IssueRequest{
+		Metadata:       testMetadata(),
 		Caller:         Caller{TenantID: testTenant, PrincipalID: testPrn, CredentialID: testCred},
 		RunID:          testRun,
 		AssetID:        testAsset,
 		Operation:      operation,
+		Name:           "asset.pdf",
 		MediaType:      "application/pdf",
 		SizeBytes:      128,
 		Digest:         testDigest,
@@ -367,6 +402,40 @@ func testIssue(operation Operation) IssueRequest {
 		ExpiresAt:      now.Add(time.Minute),
 		MaxUses:        2,
 	}
+}
+
+func testMetadata() platform.RequestMetadata {
+	return platform.RequestMetadata{
+		RequestID:  "req_018f3b2a-7c31-7a11-8abc-1234567890ab",
+		TraceID:    "0123456789abcdef0123456789abcdef",
+		SpanID:     "0123456789abcdef",
+		TraceFlags: "00",
+	}
+}
+
+type testIDs struct{}
+
+func (testIDs) NewID(_ context.Context, kind platformports.IDKind) (string, error) {
+	if kind != platformports.IDAudit {
+		return "", NewError(CategoryDependency, ReasonDependencyUnavailable)
+	}
+	return "aud_018f3b2a-7c31-7a11-8abc-1234567890ab", nil
+}
+
+type noFaults struct{}
+
+func (noFaults) Check(context.Context, platformports.Checkpoint) error { return nil }
+
+type directUoW struct{}
+
+func (directUoW) Within(ctx context.Context, callback func(context.Context) error) error {
+	return callback(ctx)
+}
+
+type validatingAudit struct{}
+
+func (validatingAudit) AppendObservation(_ context.Context, audit observability.AuditEntry, span observability.SpanRecord) error {
+	return observability.ValidateObservationPair(audit, span)
 }
 
 func requireReason(t *testing.T, err error, reason ErrorReason) {

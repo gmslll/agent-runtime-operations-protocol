@@ -45,9 +45,9 @@ func (repository *Repository) CreateAsset(ctx context.Context, asset assets.Asse
 		return assets.AssetRecord{}, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO arop_assets(
-tenant_id,asset_id,name,media_type,size_bytes,content_digest,object_key,status,revision,
+tenant_id,principal_id,credential_id,run_id,asset_id,name,media_type,size_bytes,content_digest,object_key,status,revision,
 created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest
-) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, asset.TenantID, asset.AssetID, asset.Name, asset.MediaType, asset.SizeBytes,
+) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`, asset.TenantID, asset.PrincipalID, asset.CredentialID, asset.RunID, asset.AssetID, asset.Name, asset.MediaType, asset.SizeBytes,
 		asset.ContentDigest, asset.ObjectKey, string(asset.Status), asset.Revision, asset.CreatedAtNs, asset.UpdatedAtNs,
 		asset.IdempotencyKeyDigest, asset.IdempotencyRequestDigest)
 	if err == nil {
@@ -114,10 +114,10 @@ func (repository *Repository) CreateGrant(ctx context.Context, grant assets.Gran
 		return assets.GrantRecord{}, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO arop_asset_grants(
-tenant_id,grant_id,asset_id,run_id,operation,token_digest,use_limit,use_count,expires_at_ns,status,revision,
+tenant_id,principal_id,credential_id,grant_id,asset_id,run_id,operation,name,media_type,size_bytes,content_digest,audience,token_key_id,token_digest,use_limit,use_count,not_before_ns,expires_at_ns,status,revision,
 created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest
-) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, grant.TenantID, grant.GrantID, grant.AssetID, grant.RunID, string(grant.Operation),
-		grant.TokenDigest, grant.UseLimit, grant.UseCount, grant.ExpiresAtNs, string(grant.Status), grant.Revision,
+) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`, grant.TenantID, grant.PrincipalID, grant.CredentialID, grant.GrantID, grant.AssetID, grant.RunID, string(grant.Operation),
+		grant.Name, grant.MediaType, grant.SizeBytes, grant.ContentDigest, grant.Audience, grant.TokenKeyID, grant.TokenDigest, grant.UseLimit, grant.UseCount, grant.NotBeforeNs, grant.ExpiresAtNs, string(grant.Status), grant.Revision,
 		grant.CreatedAtNs, grant.UpdatedAtNs, grant.IdempotencyKeyDigest, grant.IdempotencyRequestDigest)
 	if err == nil {
 		return grant, nil
@@ -127,6 +127,14 @@ created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest
 
 func (repository *Repository) GetGrant(ctx context.Context, tenantID, grantID string) (assets.GrantRecord, error) {
 	return scanGrant(ctx, repository.queryer(ctx), `tenant_id=$1 AND grant_id=$2`, tenantID, grantID)
+}
+
+func (repository *Repository) GetGrantByTokenDigest(ctx context.Context, tenantID, tokenDigest string) (assets.GrantRecord, error) {
+	return scanGrant(ctx, repository.queryer(ctx), `tenant_id=$1 AND token_digest=$2`, tenantID, tokenDigest)
+}
+
+func (repository *Repository) GetGrantByIdempotencyDigest(ctx context.Context, tenantID, keyDigest string) (assets.GrantRecord, error) {
+	return scanGrant(ctx, repository.queryer(ctx), `tenant_id=$1 AND idempotency_key_digest=$2`, tenantID, keyDigest)
 }
 
 func (repository *Repository) ConsumeGrant(ctx context.Context, tenantID, grantID string, expectedRevision, nowNs int64) (assets.GrantRecord, error) {
@@ -253,8 +261,8 @@ func constraintViolation(err error) bool {
 func scanAsset(ctx context.Context, queryer migrate.Queryer, predicate string, args ...any) (assets.AssetRecord, error) {
 	var asset assets.AssetRecord
 	var status string
-	err := queryer.QueryRowContext(ctx, `SELECT tenant_id,asset_id,name,media_type,size_bytes,content_digest,object_key,status,revision,created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest FROM arop_assets WHERE `+predicate, args...).Scan(
-		&asset.TenantID, &asset.AssetID, &asset.Name, &asset.MediaType, &asset.SizeBytes, &asset.ContentDigest, &asset.ObjectKey, &status, &asset.Revision, &asset.CreatedAtNs, &asset.UpdatedAtNs, &asset.IdempotencyKeyDigest, &asset.IdempotencyRequestDigest)
+	err := queryer.QueryRowContext(ctx, `SELECT tenant_id,principal_id,credential_id,run_id,asset_id,name,media_type,size_bytes,content_digest,object_key,status,revision,created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest FROM arop_assets WHERE `+predicate, args...).Scan(
+		&asset.TenantID, &asset.PrincipalID, &asset.CredentialID, &asset.RunID, &asset.AssetID, &asset.Name, &asset.MediaType, &asset.SizeBytes, &asset.ContentDigest, &asset.ObjectKey, &status, &asset.Revision, &asset.CreatedAtNs, &asset.UpdatedAtNs, &asset.IdempotencyKeyDigest, &asset.IdempotencyRequestDigest)
 	if errors.Is(err, sql.ErrNoRows) {
 		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonNotFound)
 	}
@@ -271,8 +279,8 @@ func scanAsset(ctx context.Context, queryer migrate.Queryer, predicate string, a
 func scanGrant(ctx context.Context, queryer migrate.Queryer, predicate string, args ...any) (assets.GrantRecord, error) {
 	var grant assets.GrantRecord
 	var operation, status string
-	err := queryer.QueryRowContext(ctx, `SELECT tenant_id,grant_id,asset_id,run_id,operation,token_digest,use_limit,use_count,expires_at_ns,status,revision,created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest FROM arop_asset_grants WHERE `+predicate, args...).Scan(
-		&grant.TenantID, &grant.GrantID, &grant.AssetID, &grant.RunID, &operation, &grant.TokenDigest, &grant.UseLimit, &grant.UseCount, &grant.ExpiresAtNs, &status, &grant.Revision, &grant.CreatedAtNs, &grant.UpdatedAtNs, &grant.IdempotencyKeyDigest, &grant.IdempotencyRequestDigest)
+	err := queryer.QueryRowContext(ctx, `SELECT tenant_id,principal_id,credential_id,grant_id,asset_id,run_id,operation,name,media_type,size_bytes,content_digest,audience,token_key_id,token_digest,use_limit,use_count,not_before_ns,expires_at_ns,status,revision,created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest FROM arop_asset_grants WHERE `+predicate, args...).Scan(
+		&grant.TenantID, &grant.PrincipalID, &grant.CredentialID, &grant.GrantID, &grant.AssetID, &grant.RunID, &operation, &grant.Name, &grant.MediaType, &grant.SizeBytes, &grant.ContentDigest, &grant.Audience, &grant.TokenKeyID, &grant.TokenDigest, &grant.UseLimit, &grant.UseCount, &grant.NotBeforeNs, &grant.ExpiresAtNs, &status, &grant.Revision, &grant.CreatedAtNs, &grant.UpdatedAtNs, &grant.IdempotencyKeyDigest, &grant.IdempotencyRequestDigest)
 	if errors.Is(err, sql.ErrNoRows) {
 		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonNotFound)
 	}

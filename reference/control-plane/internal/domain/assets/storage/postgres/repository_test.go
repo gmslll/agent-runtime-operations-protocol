@@ -13,9 +13,11 @@ import (
 )
 
 const (
-	assetID = "asset_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c"
-	grantID = "grnt_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c"
-	runID   = "run_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c"
+	assetID      = "asset_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c"
+	grantID      = "grant_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c"
+	runID        = "run_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c"
+	principalID  = "prn_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c"
+	credentialID = "cred_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c"
 )
 
 func TestPostgresAssetRepository(t *testing.T) {
@@ -99,7 +101,7 @@ func TestPostgresAssetRepository(t *testing.T) {
 		t.Fatalf("grant idempotency conflict = %v", err)
 	}
 	missing := grant
-	missing.GrantID = "grnt_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5d"
+	missing.GrantID = "grant_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5d"
 	missing.AssetID = "asset_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5d"
 	missing.IdempotencyKeyDigest = strings.Repeat("e", 64)
 	missing.TokenDigest = strings.Repeat("7", 64)
@@ -136,7 +138,7 @@ func TestNewRejectsMissingDependencies(t *testing.T) {
 
 func sampleAsset(tenant, key string) assets.AssetRecord {
 	return assets.AssetRecord{
-		TenantID: tenant, AssetID: assetID, Name: "product.png", MediaType: "image/png", SizeBytes: 32,
+		TenantID: tenant, PrincipalID: principalID, CredentialID: credentialID, RunID: runID, AssetID: assetID, Name: "product.png", MediaType: "image/png", SizeBytes: 32,
 		ContentDigest: "sha256:" + strings.Repeat("ab", 32), ObjectKey: "objects/product.png", Status: assets.AssetPending,
 		Revision: 1, CreatedAtNs: 1_700_000_000_000_000_000, UpdatedAtNs: 1_700_000_000_000_000_000,
 		IdempotencyKeyDigest: key, IdempotencyRequestDigest: strings.Repeat("1", 64),
@@ -145,8 +147,9 @@ func sampleAsset(tenant, key string) assets.AssetRecord {
 
 func sampleGrant(tenant, key string, limit int64) assets.GrantRecord {
 	return assets.GrantRecord{
-		TenantID: tenant, GrantID: grantID, AssetID: assetID, RunID: runID, Operation: assets.StorageOperationUpload,
-		TokenDigest: strings.Repeat("f", 64), UseLimit: limit, UseCount: 0, ExpiresAtNs: 1_700_000_000_000_000_100,
+		TenantID: tenant, PrincipalID: principalID, CredentialID: credentialID, GrantID: grantID, AssetID: assetID, RunID: runID, Operation: assets.StorageOperationUpload,
+		Name: "product.png", MediaType: "image/png", SizeBytes: 32, ContentDigest: "sha256:" + strings.Repeat("ab", 32), Audience: "asset-broker", TokenKeyID: "atk_v1",
+		TokenDigest: strings.Repeat("f", 64), UseLimit: limit, UseCount: 0, NotBeforeNs: 1_700_000_000_000_000_000, ExpiresAtNs: 1_700_000_000_000_000_100,
 		Status: assets.GrantActive, Revision: 1, CreatedAtNs: 1_700_000_000_000_000_000, UpdatedAtNs: 1_700_000_000_000_000_000,
 		IdempotencyKeyDigest: key, IdempotencyRequestDigest: strings.Repeat("2", 64),
 	}

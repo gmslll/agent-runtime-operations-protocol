@@ -1,9 +1,15 @@
 package assets
 
 import (
+	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
+	"errors"
+	"strings"
 	"time"
 )
 
@@ -15,13 +21,80 @@ type OpaqueToken struct {
 	Digest string
 }
 
-func newOpaqueToken() (OpaqueToken, error) {
-	raw := make([]byte, opaqueTokenBytes)
-	if _, err := rand.Read(raw); err != nil {
-		return OpaqueToken{}, NewError(CategoryDependency, ReasonDependencyUnavailable, err)
+// HMACTokenIssuer derives stable, non-reversible opaque tokens. The key comes
+// from deployment secret configuration; it is copied on construction and is
+// never exposed by this package.
+type HMACTokenIssuer struct {
+	keyID string
+	key   [32]byte
+}
+
+func NewHMACTokenIssuer(keyID string, key []byte) (*HMACTokenIssuer, error) {
+	if !tokenKeyPattern.MatchString(keyID) || len(key) != sha256.Size {
+		return nil, errors.New("asset token key must be exactly 32 bytes")
 	}
-	encoded := hex.EncodeToString(raw)
-	return OpaqueToken{Value: encoded, Digest: digestOpaque(encoded)}, nil
+	issuer := &HMACTokenIssuer{keyID: keyID}
+	copy(issuer.key[:], key)
+	return issuer, nil
+}
+
+func (issuer *HMACTokenIssuer) KeyID() string {
+	if issuer == nil {
+		return ""
+	}
+	return issuer.keyID
+}
+
+func (issuer *HMACTokenIssuer) IssueToken(ctx context.Context, grant Grant) (OpaqueToken, error) {
+	if issuer == nil || ctx.Err() != nil || validateTokenSubject(grant) != nil {
+		return OpaqueToken{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
+	}
+	mac := hmac.New(sha256.New, issuer.key[:])
+	writeMACField(mac, grant.GrantID)
+	writeMACField(mac, grant.Binding.TenantID)
+	writeMACField(mac, grant.Binding.PrincipalID)
+	writeMACField(mac, grant.Binding.CredentialID)
+	writeMACField(mac, grant.Binding.RunID)
+	writeMACField(mac, grant.Binding.AssetID)
+	writeMACField(mac, string(grant.Binding.Operation))
+	writeMACField(mac, grant.Binding.Name)
+	writeMACField(mac, grant.Binding.MediaType)
+	writeMACField(mac, grant.Binding.Digest)
+	writeMACInt64(mac, grant.Binding.SizeBytes)
+	writeMACInt64(mac, grant.NotBefore.UnixNano())
+	writeMACInt64(mac, grant.ExpiresAt.UnixNano())
+	writeMACInt64(mac, int64(grant.MaxUses))
+	writeMACField(mac, grant.Audience)
+	writeMACField(mac, grant.TokenKeyID)
+	value := "agt_" + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return OpaqueToken{Value: value, Digest: digestOpaque(value)}, nil
+}
+
+func validateTokenSubject(grant Grant) error {
+	if err := grant.Binding.Validate(); err != nil {
+		return err
+	}
+	if !grantPattern.MatchString(grant.GrantID) ||
+		grant.NotBefore.IsZero() || grant.ExpiresAt.IsZero() ||
+		grant.NotBefore.Location() != time.UTC || grant.ExpiresAt.Location() != time.UTC ||
+		!grant.ExpiresAt.After(grant.NotBefore) || grant.ExpiresAt.Sub(grant.NotBefore) > MaxGrantTTL ||
+		grant.MaxUses < 1 || grant.MaxUses > MaxGrantUses ||
+		grant.Audience != AssetTokenAudience || !tokenKeyPattern.MatchString(grant.TokenKeyID) ||
+		len(grant.IdempotencyKeyDigest) != 64 || strings.Trim(grant.IdempotencyKeyDigest, "0123456789abcdef") != "" {
+		return NewError(CategoryValidation, ReasonInvalidRequest)
+	}
+	return nil
+}
+
+func writeMACField(mac interface{ Write([]byte) (int, error) }, value string) {
+	writeMACInt64(mac, int64(len(value)))
+	_, _ = mac.Write([]byte(value))
+}
+
+func writeMACInt64(mac interface{ Write([]byte) (int, error) }, value int64) {
+	var encoded [8]byte
+	binary.BigEndian.PutUint64(encoded[:], uint64(value))
+	_, _ = mac.Write(encoded[:])
 }
 
 func digestOpaque(token string) string {
@@ -56,7 +129,7 @@ func newGrantID(now time.Time) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return "agnt_" + id, nil
+	return "grant_" + id, nil
 }
 
 func newAssetID(now time.Time) (string, error) {

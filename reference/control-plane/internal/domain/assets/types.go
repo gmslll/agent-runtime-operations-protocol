@@ -8,13 +8,16 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
 )
 
 const (
-	MaxAssetBytes   int64 = 100 * 1024 * 1024
-	MaxGrantTTL           = 15 * time.Minute
-	MaxGrantUses          = 8
-	MaxRedirectHops       = 3
+	MaxAssetBytes      int64 = 100 * 1024 * 1024
+	MaxGrantTTL              = 15 * time.Minute
+	MaxGrantUses             = 8
+	MaxRedirectHops          = 3
+	AssetTokenAudience       = "asset-broker"
 )
 
 var (
@@ -23,7 +26,9 @@ var (
 	credentialPattern  = regexp.MustCompile(`^cred_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 	runPattern         = regexp.MustCompile(`^run_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
 	assetPattern       = regexp.MustCompile(`^asset_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-	grantPattern       = regexp.MustCompile(`^agnt_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	grantPattern       = regexp.MustCompile(`^grant_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	opaqueTokenPattern = regexp.MustCompile(`^agt_[A-Za-z0-9_-]{43}$`)
+	tokenKeyPattern    = regexp.MustCompile(`^atk_[A-Za-z0-9._-]{1,60}$`)
 	digestPattern      = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 	mediaPattern       = regexp.MustCompile(`^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$`)
 	idempotencyPattern = regexp.MustCompile(`^[A-Za-z0-9._:-]{8,200}$`)
@@ -60,7 +65,7 @@ type Caller struct {
 }
 
 func (caller Caller) Validate() error {
-	if !tenantPattern.MatchString(caller.TenantID) || !principalPattern.MatchString(caller.PrincipalID) || !credentialPattern.MatchString(caller.CredentialID) {
+	if len(caller.TenantID) > 128 || !tenantPattern.MatchString(caller.TenantID) || !principalPattern.MatchString(caller.PrincipalID) || !credentialPattern.MatchString(caller.CredentialID) {
 		return NewError(CategoryAuthentication, ReasonAuthenticationRequired)
 	}
 	return nil
@@ -74,19 +79,20 @@ type Binding struct {
 	RunID        string
 	AssetID      string
 	Operation    Operation
+	Name         string
 	MediaType    string
 	SizeBytes    int64
 	Digest       string
 }
 
 func (binding Binding) Validate() error {
-	if !tenantPattern.MatchString(binding.TenantID) || !principalPattern.MatchString(binding.PrincipalID) || !credentialPattern.MatchString(binding.CredentialID) {
+	if len(binding.TenantID) > 128 || !tenantPattern.MatchString(binding.TenantID) || !principalPattern.MatchString(binding.PrincipalID) || !credentialPattern.MatchString(binding.CredentialID) {
 		return NewError(CategoryAuthentication, ReasonAuthenticationRequired)
 	}
 	if !runPattern.MatchString(binding.RunID) || !assetPattern.MatchString(binding.AssetID) || !binding.Operation.valid() {
 		return NewError(CategoryValidation, ReasonBindingMismatch)
 	}
-	if !mediaPattern.MatchString(binding.MediaType) || binding.SizeBytes < 0 || binding.SizeBytes > MaxAssetBytes || !digestPattern.MatchString(binding.Digest) {
+	if !validAssetName(binding.Name) || !mediaPattern.MatchString(binding.MediaType) || len(binding.MediaType) > 127 || binding.SizeBytes < 0 || binding.SizeBytes > MaxAssetBytes || !digestPattern.MatchString(binding.Digest) {
 		if binding.SizeBytes > MaxAssetBytes {
 			return NewError(CategoryCapacity, ReasonAssetTooLarge)
 		}
@@ -102,6 +108,7 @@ func (binding Binding) SameIdentity(other Binding) bool {
 		binding.RunID == other.RunID &&
 		binding.AssetID == other.AssetID &&
 		binding.Operation == other.Operation &&
+		binding.Name == other.Name &&
 		binding.MediaType == other.MediaType &&
 		binding.SizeBytes == other.SizeBytes &&
 		binding.Digest == other.Digest
@@ -139,6 +146,8 @@ type Grant struct {
 	MaxUses              int
 	Uses                 int
 	Revoked              bool
+	Audience             string
+	TokenKeyID           string
 	IdempotencyKeyDigest string
 	OpaqueDigest         string
 }
@@ -157,6 +166,9 @@ func (grant Grant) Validate() error {
 		return NewError(CategoryValidation, ReasonInvalidRequest)
 	}
 	if grant.MaxUses < 1 || grant.MaxUses > MaxGrantUses || grant.Uses < 0 || grant.Uses > grant.MaxUses {
+		return NewError(CategoryValidation, ReasonInvalidRequest)
+	}
+	if grant.Audience != AssetTokenAudience || !tokenKeyPattern.MatchString(grant.TokenKeyID) {
 		return NewError(CategoryValidation, ReasonInvalidRequest)
 	}
 	if len(grant.IdempotencyKeyDigest) != 64 {
@@ -182,10 +194,12 @@ func (grant Grant) UsableAt(now time.Time) error {
 }
 
 type IssueRequest struct {
+	Metadata       platform.RequestMetadata
 	Caller         Caller
 	RunID          string
 	AssetID        string
 	Operation      Operation
+	Name           string
 	MediaType      string
 	SizeBytes      int64
 	Digest         string
@@ -203,10 +217,15 @@ func (request IssueRequest) Binding() Binding {
 		RunID:        request.RunID,
 		AssetID:      request.AssetID,
 		Operation:    request.Operation,
+		Name:         request.Name,
 		MediaType:    request.MediaType,
 		SizeBytes:    request.SizeBytes,
 		Digest:       request.Digest,
 	}
+}
+
+func validAssetName(name string) bool {
+	return len(name) >= 1 && len(name) <= 512 && !strings.Contains(name, "..") && !strings.ContainsAny(name, "\\/\x00\r\n")
 }
 
 func (request IssueRequest) Validate() error {
@@ -224,13 +243,15 @@ func (request IssueRequest) Validate() error {
 
 type IssuedGrant struct {
 	Grant Grant
-	// Token is the one-time opaque secret returned to the caller. Empty on
-	// idempotent replay; the caller must retain the original token.
+	// Token is the opaque secret returned to the caller. The issuer must be
+	// deterministic for an identical durable Grant so idempotent replay can
+	// return the exact same public response without storing plaintext.
 	Token  string
 	Replay bool
 }
 
 type UploadReceipt struct {
+	Metadata       platform.RequestMetadata
 	Caller         Caller
 	GrantToken     string
 	MediaType      string
@@ -240,17 +261,20 @@ type UploadReceipt struct {
 }
 
 type PromoteRequest struct {
-	Caller  Caller
-	AssetID string
-	Digest  string
+	Metadata platform.RequestMetadata
+	Caller   Caller
+	AssetID  string
+	Digest   string
 }
 
 type RevokeRequest struct {
-	Caller  Caller
-	GrantID string
+	Metadata platform.RequestMetadata
+	Caller   Caller
+	GrantID  string
 }
 
 type ConnectRequest struct {
+	Metadata   platform.RequestMetadata
 	Caller     Caller
 	GrantToken string
 	URL        string

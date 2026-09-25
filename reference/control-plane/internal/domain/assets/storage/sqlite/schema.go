@@ -16,23 +16,25 @@ type column struct {
 }
 
 var assetColumns = []column{
-	{"tenant_id", "TEXT", 1}, {"asset_id", "TEXT", 2}, {"name", "TEXT", 0}, {"media_type", "TEXT", 0},
+	{"tenant_id", "TEXT", 1}, {"principal_id", "TEXT", 0}, {"credential_id", "TEXT", 0}, {"run_id", "TEXT", 0},
+	{"asset_id", "TEXT", 2}, {"name", "TEXT", 0}, {"media_type", "TEXT", 0},
 	{"size_bytes", "INTEGER", 0}, {"content_digest", "TEXT", 0}, {"object_key", "TEXT", 0}, {"status", "TEXT", 0},
 	{"revision", "INTEGER", 0}, {"created_at_ns", "INTEGER", 0}, {"updated_at_ns", "INTEGER", 0},
 	{"idempotency_key_digest", "TEXT", 0}, {"idempotency_request_digest", "TEXT", 0},
 }
 
 var grantColumns = []column{
-	{"tenant_id", "TEXT", 1}, {"grant_id", "TEXT", 2}, {"asset_id", "TEXT", 0}, {"run_id", "TEXT", 0},
-	{"operation", "TEXT", 0}, {"token_digest", "TEXT", 0}, {"use_limit", "INTEGER", 0}, {"use_count", "INTEGER", 0},
-	{"expires_at_ns", "INTEGER", 0}, {"status", "TEXT", 0}, {"revision", "INTEGER", 0},
+	{"tenant_id", "TEXT", 1}, {"principal_id", "TEXT", 0}, {"credential_id", "TEXT", 0}, {"grant_id", "TEXT", 2}, {"asset_id", "TEXT", 0}, {"run_id", "TEXT", 0},
+	{"operation", "TEXT", 0}, {"name", "TEXT", 0}, {"media_type", "TEXT", 0}, {"size_bytes", "INTEGER", 0}, {"content_digest", "TEXT", 0},
+	{"audience", "TEXT", 0}, {"token_key_id", "TEXT", 0}, {"token_digest", "TEXT", 0}, {"use_limit", "INTEGER", 0}, {"use_count", "INTEGER", 0},
+	{"not_before_ns", "INTEGER", 0}, {"expires_at_ns", "INTEGER", 0}, {"status", "TEXT", 0}, {"revision", "INTEGER", 0},
 	{"created_at_ns", "INTEGER", 0}, {"updated_at_ns", "INTEGER", 0},
 	{"idempotency_key_digest", "TEXT", 0}, {"idempotency_request_digest", "TEXT", 0},
 }
 
 func VerifySchema() migrate.Verifier {
 	return func(ctx context.Context, queryer migrate.Queryer) error {
-		if err := verifyTable(ctx, queryer, "arop_assets", assetColumns, 13, 1, map[string]int{
+		if err := verifyTable(ctx, queryer, "arop_assets", assetColumns, 16, 1, map[string]int{
 			"pk|1|0|tenant_id,asset_id":                                     1,
 			"u|1|0|tenant_id,idempotency_key_digest":                        1,
 			"c|0|0|arop_assets_tenant_status_idx|tenant_id,status,asset_id": 1,
@@ -40,7 +42,7 @@ func VerifySchema() migrate.Verifier {
 		}); err != nil {
 			return err
 		}
-		if err := verifyTable(ctx, queryer, "arop_asset_grants", grantColumns, 17, 2, map[string]int{
+		if err := verifyTable(ctx, queryer, "arop_asset_grants", grantColumns, 26, 2, map[string]int{
 			"pk|1|0|tenant_id,grant_id":                                          1,
 			"u|1|0|tenant_id,idempotency_key_digest":                             1,
 			"u|1|0|tenant_id,token_digest":                                       1,
