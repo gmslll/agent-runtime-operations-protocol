@@ -45,7 +45,7 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 			t.Fatal(err)
 		}
 		migrationRoot := filepath.Join(root, "migrations")
-		for _, relative := range []string{"sqlite/0001_base.sql", "sqlite/0005_identity.sql", "postgres/0001_base.sql", "postgres/0005_identity.sql"} {
+		for _, relative := range []string{"sqlite/0001_base.sql", "sqlite/0005_identity.sql", "sqlite/0010_publication.sql", "postgres/0001_base.sql", "postgres/0005_identity.sql", "postgres/0010_publication.sql"} {
 			source := filepath.Join("..", "..", "migrations", filepath.FromSlash(relative))
 			contents, err := os.ReadFile(source)
 			if err != nil {
@@ -72,14 +72,17 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 		}
 		defer cleanup()
 		snapshot := application.Readiness(context.Background())
-		foundIdentity := false
+		foundIdentity, foundPublication := false, false
 		for _, check := range snapshot.Checks {
 			if check.Name == "identity-cache" && check.Ready {
 				foundIdentity = true
 			}
+			if check.Name == "publication-service" && check.Ready {
+				foundPublication = true
+			}
 		}
-		if !snapshot.Ready || !foundIdentity {
-			t.Fatalf("identity readiness missing: %+v", snapshot)
+		if !snapshot.Ready || !foundIdentity || !foundPublication || application.Config().MaxBodyBytes != 10<<20 {
+			t.Fatalf("P12 durable readiness/config missing: %+v config=%+v", snapshot, application.Config())
 		}
 		for _, path := range []string{"/v1/secrets", "/v1/secret-values", "/v1/credentials/cred_test/value"} {
 			response := httptest.NewRecorder()
