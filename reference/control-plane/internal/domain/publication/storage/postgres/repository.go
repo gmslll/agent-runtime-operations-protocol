@@ -35,6 +35,25 @@ func (repository *Repository) Create(ctx context.Context, record *publication.Re
 	if !ok {
 		return publication.NewError(publication.CategoryDependency, publication.ReasonDependencyUnavailable)
 	}
+	// Fail closed before establishing a stale serializable snapshot. The
+	// transaction-scoped try-locks make concurrent losers deterministic and
+	// disappear automatically on commit/rollback.
+	locks := []struct {
+		key    string
+		reason publication.ErrorReason
+	}{
+		{"publication/version/" + record.TenantID + "/" + record.AgentID + "/" + record.Version, publication.ReasonImmutableConflict},
+		{"publication/idempotency/" + record.TenantID + "/" + record.IdempotencyKeyDigest, publication.ReasonIdempotencyConflict},
+	}
+	for _, lock := range locks {
+		var acquired bool
+		if err := tx.QueryRowContext(ctx, `SELECT pg_try_advisory_xact_lock(hashtextextended($1,0))`, lock.key).Scan(&acquired); err != nil {
+			return publication.NewError(publication.CategoryDependency, publication.ReasonDependencyUnavailable)
+		}
+		if !acquired {
+			return publication.NewError(publication.CategoryConflict, lock.reason)
+		}
+	}
 	var exists int
 	if err := tx.QueryRowContext(ctx, `SELECT 1 FROM arop_publications WHERE tenant_id=$1 AND agent_id=$2 AND version=$3`, record.TenantID, record.AgentID, record.Version).Scan(&exists); err == nil {
 		return publication.NewError(publication.CategoryConflict, publication.ReasonImmutableConflict)

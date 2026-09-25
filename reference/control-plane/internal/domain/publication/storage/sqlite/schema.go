@@ -38,6 +38,8 @@ var constraintFragments = []string{
 	"constraintarop_publications_revision_checkcheck(revision=1)",
 }
 
+const expectedTableDDL = `createtablearop_publications(tenant_idtextnotnull,agent_idtextnotnull,versiontextnotnull,manifest_digesttextnotnull,bundle_semantic_digesttextnotnull,canonical_manifestblobnotnull,publisher_principal_idtextnotnull,idempotency_key_digesttextnotnull,idempotency_request_digesttextnotnull,published_at_nsintegernotnull,revisionintegernotnull,constraintarop_publications_pkeyprimarykey(tenant_id,agent_id,version),constraintarop_publications_idempotency_uniqueunique(tenant_id,idempotency_key_digest),constraintarop_publications_tenant_checkcheck(length(tenant_id)between1and128andtenant_idnotglob'*[^a-z0-9._-]*'andsubstr(tenant_id,1,1)glob'[a-z]'andsubstr(tenant_id,-1,1)glob'[a-z0-9]'andtenant_idnotglob'*[._-][._-]*'),constraintarop_publications_agent_checkcheck(length(agent_id)between1and200andagent_idnotglob'*[^a-z0-9._-]*'andsubstr(agent_id,1,1)glob'[a-z]'andsubstr(agent_id,-1,1)glob'[a-z0-9]'andagent_idnotglob'*[._-][._-]*'),constraintarop_publications_version_checkcheck(length(version)between5and200),constraintarop_publications_manifest_digest_checkcheck(length(manifest_digest)=71andsubstr(manifest_digest,1,7)='sha256:'andsubstr(manifest_digest,8)notglob'*[^0-9a-f]*'),constraintarop_publications_bundle_digest_checkcheck(length(bundle_semantic_digest)=71andsubstr(bundle_semantic_digest,1,7)='sha256:'andsubstr(bundle_semantic_digest,8)notglob'*[^0-9a-f]*'),constraintarop_publications_manifest_checkcheck(typeof(canonical_manifest)='blob'andlength(canonical_manifest)between2and10485760),constraintarop_publications_publisher_checkcheck(length(publisher_principal_id)between1and200),constraintarop_publications_idempotency_key_checkcheck(length(idempotency_key_digest)=64andidempotency_key_digestnotglob'*[^0-9a-f]*'),constraintarop_publications_idempotency_request_checkcheck(length(idempotency_request_digest)=64andidempotency_request_digestnotglob'*[^0-9a-f]*'),constraintarop_publications_published_checkcheck(published_at_ns>0),constraintarop_publications_revision_checkcheck(revision=1))`
+
 func VerifySchema() migrate.Verifier {
 	return func(ctx context.Context, queryer migrate.Queryer) error {
 		rows, err := queryer.QueryContext(ctx, `PRAGMA table_info('arop_publications')`)
@@ -67,6 +69,9 @@ func VerifySchema() migrate.Verifier {
 			return errors.New("SQLite publication table is missing")
 		}
 		compact := compact(ddl)
+		if compact != expectedTableDDL {
+			return errors.New("SQLite publication table definition is not exact")
+		}
 		for _, fragment := range constraintFragments {
 			if !strings.Contains(compact, fragment) {
 				return errors.New("SQLite publication constraints are not exact")
@@ -80,18 +85,19 @@ func VerifySchema() migrate.Verifier {
 }
 
 func verifyIndexes(ctx context.Context, queryer migrate.Queryer) error {
-	expected := map[string]string{
-		"arop_publications_tenant_published_idx": "tenant_id,published_at_ns,agent_id,version",
-		"arop_publications_manifest_digest_idx":  "tenant_id,manifest_digest",
+	expected := map[string]int{
+		"pk|1|0|tenant_id,agent_id,version":                                                       1,
+		"u|1|0|tenant_id,idempotency_key_digest":                                                  1,
+		"c|0|0|arop_publications_tenant_published_idx|tenant_id,published_at_ns,agent_id,version": 1,
+		"c|0|0|arop_publications_manifest_digest_idx|tenant_id,manifest_digest":                   1,
 	}
 	rows, err := queryer.QueryContext(ctx, `PRAGMA index_list('arop_publications')`)
 	if err != nil {
 		return errors.New("inspect SQLite publication indexes")
 	}
 	type metadata struct {
-		name    string
-		unique  int
-		partial int
+		name, origin    string
+		unique, partial int
 	}
 	var indexes []metadata
 	for rows.Next() {
@@ -100,19 +106,16 @@ func verifyIndexes(ctx context.Context, queryer migrate.Queryer) error {
 		if rows.Scan(&sequence, &name, &unique, &origin, &partial) != nil {
 			return errors.New("scan SQLite publication indexes")
 		}
-		if origin != "c" {
-			continue
-		}
-		indexes = append(indexes, metadata{name: name, unique: unique, partial: partial})
+		indexes = append(indexes, metadata{name: name, unique: unique, partial: partial, origin: origin})
 	}
 	iterationErr := rows.Err()
 	closeErr := rows.Close()
 	if iterationErr != nil || closeErr != nil {
 		return errors.New("scan SQLite publication indexes")
 	}
-	found := map[string]string{}
+	found := map[string]int{}
 	for _, index := range indexes {
-		if index.unique != 0 || index.partial != 0 {
+		if index.partial != 0 || index.origin != "c" && index.origin != "u" && index.origin != "pk" {
 			return errors.New("SQLite publication indexes are not exact")
 		}
 		columnRows, err := queryer.QueryContext(ctx, `SELECT name FROM pragma_index_info(?) ORDER BY seqno`, index.name)
@@ -133,13 +136,18 @@ func verifyIndexes(ctx context.Context, queryer migrate.Queryer) error {
 		if iterationErr != nil || closeErr != nil {
 			return errors.New("scan SQLite publication index columns")
 		}
-		found[index.name] = strings.Join(names, ",")
+		signature := index.origin + "|" + string(rune('0'+index.unique)) + "|" + string(rune('0'+index.partial)) + "|"
+		if index.origin == "c" {
+			signature += index.name + "|"
+		}
+		signature += strings.Join(names, ",")
+		found[signature]++
 	}
 	if len(found) != len(expected) {
 		return errors.New("SQLite publication indexes are not exact")
 	}
-	for name, value := range expected {
-		if found[name] != value {
+	for signature, count := range expected {
+		if found[signature] != count {
 			return errors.New("SQLite publication indexes are not exact")
 		}
 	}

@@ -64,7 +64,7 @@ FROM information_schema.columns WHERE table_schema=current_schema() AND table_na
 		}
 		constraintRows, err := queryer.QueryContext(ctx, `SELECT c.conname,c.contype,c.condeferrable,c.condeferred,pg_get_constraintdef(c.oid,false)
 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
-WHERE n.nspname=current_schema() AND t.relname='arop_publications' AND c.conname LIKE 'arop_publications_%' ORDER BY c.conname`)
+WHERE n.nspname=current_schema() AND t.relname='arop_publications' ORDER BY c.conname`)
 		if err != nil {
 			return errors.New("inspect PostgreSQL publication constraints")
 		}

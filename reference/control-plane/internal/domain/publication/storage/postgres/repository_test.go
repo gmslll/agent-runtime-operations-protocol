@@ -3,10 +3,12 @@ package postgres_test
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -66,6 +68,14 @@ func TestPostgresRepositoryAndSchema(t *testing.T) {
 		IdempotencyKeyDigest: strings.Repeat("a", 64), IdempotencyRequestDigest: strings.Repeat("d", 64),
 		PublishedAt: time.Date(2026, 9, 25, 1, 2, 3, 0, time.UTC), Revision: 1,
 	}
+	if err := repository.Create(context.Background(), &record); !hasReason(err, publication.ReasonDependencyUnavailable) {
+		t.Fatalf("Create outside unit of work error = %v", err)
+	}
+	invalid := record
+	invalid.ManifestDigest = "sha256:" + strings.Repeat("0", 64)
+	if err := unit.Within(context.Background(), func(ctx context.Context) error { return repository.Create(ctx, &invalid) }); !hasReason(err, publication.ReasonBundleInvalid) {
+		t.Fatalf("invalid digest Create error = %v", err)
+	}
 	if err := unit.Within(context.Background(), func(ctx context.Context) error { return repository.Create(ctx, &record) }); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
@@ -81,18 +91,158 @@ func TestPostgresRepositoryAndSchema(t *testing.T) {
 	if err != nil || got.ManifestDigest != record.ManifestDigest || string(got.CanonicalManifest) != string(record.CanonicalManifest) {
 		t.Fatalf("Get() = %#v, %v", got, err)
 	}
+	byIdempotency, err := repository.GetByIdempotencyDigest(context.Background(), record.TenantID, record.IdempotencyKeyDigest)
+	if err != nil || byIdempotency.Version != record.Version {
+		t.Fatalf("GetByIdempotencyDigest() = %#v, %v", byIdempotency, err)
+	}
+	if _, err := repository.Get(context.Background(), "tenant-b", record.AgentID, record.Version); !hasReason(err, publication.ReasonNotFound) {
+		t.Fatalf("cross-tenant Get error = %v", err)
+	}
+	if _, err := repository.GetByIdempotencyDigest(context.Background(), "tenant-b", record.IdempotencyKeyDigest); !hasReason(err, publication.ReasonNotFound) {
+		t.Fatalf("cross-tenant idempotency error = %v", err)
+	}
+	rolledBack := record
+	rolledBack.AgentID = "agent.rollback"
+	rolledBack.IdempotencyKeyDigest = strings.Repeat("e", 64)
+	if err := unit.Within(context.Background(), func(ctx context.Context) error {
+		if err := repository.Create(ctx, &rolledBack); err != nil {
+			return err
+		}
+		return context.Canceled
+	}); err == nil {
+		t.Fatal("unit of work accepted forced rollback")
+	}
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM arop_publications`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("publication count = %d, %v", count, err)
+	}
 	if err := publicationstore.VerifySchema()(context.Background(), db); err != nil {
 		t.Fatalf("VerifySchema() error = %v", err)
 	}
-	if _, err := db.Exec(`DROP INDEX arop_publications_manifest_digest_idx`); err != nil {
+	for _, constraint := range []string{
+		"arop_publications_pkey", "arop_publications_idempotency_unique", "arop_publications_tenant_check",
+		"arop_publications_agent_check", "arop_publications_version_check", "arop_publications_manifest_digest_check",
+		"arop_publications_bundle_digest_check", "arop_publications_manifest_check", "arop_publications_publisher_check",
+		"arop_publications_idempotency_key_check", "arop_publications_idempotency_request_check",
+		"arop_publications_published_check", "arop_publications_revision_check",
+	} {
+		t.Run("missing-"+constraint, func(t *testing.T) {
+			tx, err := db.BeginTx(context.Background(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+			if _, err := tx.Exec(`ALTER TABLE arop_publications DROP CONSTRAINT ` + constraint); err != nil {
+				t.Fatal(err)
+			}
+			if err := publicationstore.VerifySchema()(context.Background(), tx); err == nil {
+				t.Fatal("VerifySchema accepted missing PostgreSQL constraint")
+			}
+		})
+	}
+	for name, mutations := range map[string][2]string{
+		"extra-constraint":     {`ALTER TABLE arop_publications ADD CONSTRAINT unexpected_publication_constraint CHECK (revision = 1)`, `ALTER TABLE arop_publications DROP CONSTRAINT unexpected_publication_constraint`},
+		"missing-constraint":   {`ALTER TABLE arop_publications DROP CONSTRAINT arop_publications_publisher_check`, `ALTER TABLE arop_publications ADD CONSTRAINT arop_publications_publisher_check CHECK(length(publisher_principal_id) BETWEEN 1 AND 200)`},
+		"rewritten-constraint": {`ALTER TABLE arop_publications DROP CONSTRAINT arop_publications_revision_check; ALTER TABLE arop_publications ADD CONSTRAINT arop_publications_revision_check CHECK(revision >= 1)`, `ALTER TABLE arop_publications DROP CONSTRAINT arop_publications_revision_check; ALTER TABLE arop_publications ADD CONSTRAINT arop_publications_revision_check CHECK(revision = 1)`},
+		"extra-index":          {`CREATE INDEX unexpected_publication_index ON arop_publications(version)`, `DROP INDEX unexpected_publication_index`},
+		"missing-index":        {`DROP INDEX arop_publications_manifest_digest_idx`, `CREATE INDEX arop_publications_manifest_digest_idx ON arop_publications(tenant_id, manifest_digest)`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := db.Exec(mutations[0]); err != nil {
+				t.Fatal(err)
+			}
+			if err := publicationstore.VerifySchema()(context.Background(), db); err == nil {
+				t.Fatal("VerifySchema accepted tampered PostgreSQL schema")
+			}
+			if _, err := db.Exec(mutations[1]); err != nil {
+				t.Fatal(err)
+			}
+			if err := publicationstore.VerifySchema()(context.Background(), db); err != nil {
+				t.Fatalf("restored schema rejected: %v", err)
+			}
+		})
+	}
+	if _, err := db.Exec(`CREATE TABLE publication_tenants(tenant_id TEXT PRIMARY KEY); INSERT INTO publication_tenants VALUES('tenant-a'); ALTER TABLE arop_publications ADD CONSTRAINT unexpected_publication_fk FOREIGN KEY(tenant_id) REFERENCES publication_tenants(tenant_id)`); err != nil {
 		t.Fatal(err)
 	}
 	if err := publicationstore.VerifySchema()(context.Background(), db); err == nil {
-		t.Fatal("VerifySchema accepted missing index")
+		t.Fatal("VerifySchema accepted extra foreign key")
 	}
+	if _, err := db.Exec(`ALTER TABLE arop_publications DROP CONSTRAINT unexpected_publication_fk; DROP TABLE publication_tenants`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`UPDATE arop_publications SET manifest_digest=$1`, "sha256:"+strings.Repeat("f", 64)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repository.Get(context.Background(), record.TenantID, record.AgentID, record.Version); !hasReason(err, publication.ReasonDependencyUnavailable) {
+		t.Fatalf("tampered hydration error = %v", err)
+	}
+	if _, err := db.Exec(`UPDATE arop_publications SET manifest_digest=$1`, record.ManifestDigest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`DELETE FROM arop_publications`); err != nil {
+		t.Fatal(err)
+	}
+	testPostgresCreateRaces(t, db, unit, repository, record)
 }
 
 func hasReason(err error, reason publication.ErrorReason) bool {
 	failure, ok := publication.AsError(err)
 	return ok && failure.Reason == reason
+}
+
+func testPostgresCreateRaces(t *testing.T, db interface {
+	Exec(string, ...any) (sql.Result, error)
+	QueryRow(string, ...any) *sql.Row
+}, unit interface {
+	Within(context.Context, func(context.Context) error) error
+}, repository *publicationstore.Repository, base publication.Record) {
+	t.Helper()
+	for _, test := range []struct {
+		name       string
+		second     func(publication.Record) publication.Record
+		wantReason publication.ErrorReason
+	}{
+		{"immutable-version", func(record publication.Record) publication.Record {
+			record.IdempotencyKeyDigest = strings.Repeat("e", 64)
+			return record
+		}, publication.ReasonImmutableConflict},
+		{"tenant-idempotency", func(record publication.Record) publication.Record { record.Version = "1.0.1"; return record }, publication.ReasonIdempotencyConflict},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := db.Exec(`DELETE FROM arop_publications`); err != nil {
+				t.Fatal(err)
+			}
+			first, second := base, test.second(base)
+			start := make(chan struct{})
+			results := make(chan error, 2)
+			var ready sync.WaitGroup
+			ready.Add(2)
+			for _, record := range []publication.Record{first, second} {
+				record := record
+				go func() {
+					ready.Done()
+					<-start
+					results <- unit.Within(context.Background(), func(ctx context.Context) error { return repository.Create(ctx, &record) })
+				}()
+			}
+			ready.Wait()
+			close(start)
+			one, two := <-results, <-results
+			if (one == nil) == (two == nil) {
+				t.Fatalf("race results = %v, %v", one, two)
+			}
+			loser := one
+			if loser == nil {
+				loser = two
+			}
+			if !hasReason(loser, test.wantReason) {
+				t.Fatalf("loser error = %v, want %s", loser, test.wantReason)
+			}
+			var count int
+			if err := db.QueryRow(`SELECT count(*) FROM arop_publications`).Scan(&count); err != nil || count != 1 {
+				t.Fatalf("publication count = %d, %v", count, err)
+			}
+		})
+	}
 }
