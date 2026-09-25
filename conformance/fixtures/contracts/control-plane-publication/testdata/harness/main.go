@@ -388,10 +388,16 @@ func verifyCase(root string, c caseDef, openapi any) error {
 	}
 	switch c.ID {
 	case "get-manifest-200-etag":
-		if c.Expected["etag"] != "strong-semantic-manifest-digest" { return errors.New("GET ETag expectation is not semantic digest") }
+		if c.Expected["etag"] != "strong-semantic-manifest-digest" {
+			return errors.New("GET ETag expectation is not semantic digest")
+		}
 		var manifest map[string]any
-		if err := load(root, rootDir+"/"+c.Source, &manifest); err != nil { return err }
-		if manifest["kind"] != "AgentManifest" { return errors.New("GET fixture is not AgentManifest") }
+		if err := load(root, rootDir+"/"+c.Source, &manifest); err != nil {
+			return err
+		}
+		if manifest["kind"] != "AgentManifest" {
+			return errors.New("GET fixture is not AgentManifest")
+		}
 	case "get-manifest-forward-field":
 		b, err := os.ReadFile(filepath.Join(root, rootDir, c.Source))
 		if err != nil {
