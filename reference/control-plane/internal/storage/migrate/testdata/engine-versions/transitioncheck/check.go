@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	Path             = "reference/control-plane/internal/identity/testdata/transition/p10-baseline-transition-waiver.json"
-	OldP09WaiverPath = "reference/control-plane/internal/storage/migrate/testdata/engine-versions/baseline-transition-waiver.json"
+	Path              = "reference/control-plane/internal/identity/testdata/transition/p10-baseline-transition-waiver.json"
+	OldP09WaiverPath  = "reference/control-plane/internal/storage/migrate/testdata/engine-versions/baseline-transition-waiver.json"
+	NextP11WaiverPath = "conformance/fixtures/contracts/control-plane-publication/transition/p11-p07-codegen-transition.json"
 )
 
 func main() {
@@ -381,7 +382,11 @@ func synthesizedValidated(root string) (Waiver, error) {
 	if err != nil {
 		return Waiver{}, err
 	}
-	discovered, staticOnly, err := discoverSources(root, strings.TrimSpace(string(baseBytes)), m)
+	endpoint, err := p10Endpoint(root)
+	if err != nil {
+		return Waiver{}, err
+	}
+	discovered, staticOnly, err := discoverSources(root, strings.TrimSpace(string(baseBytes)), endpoint, m)
 	if err != nil {
 		return Waiver{}, err
 	}
@@ -448,6 +453,41 @@ func allowedPackages(root, nestedModule string) ([]string, error) {
 	return keys(set), nil
 }
 
+func p10Endpoint(root string) (string, error) {
+	p10Intro, err := uniqueIntroduction(root, Path)
+	if err != nil {
+		return "", fmt.Errorf("discover P10 transition anchor: %w", err)
+	}
+	p11Intro, err := uniqueIntroduction(root, NextP11WaiverPath)
+	if err != nil {
+		return "", fmt.Errorf("discover P11 transition boundary: %w", err)
+	}
+	planningBytes, err := git(root, "log", "--reverse", "--format=%H", p10Intro+".."+p11Intro, "--", "spec/artifact-manifest.yaml")
+	if err != nil {
+		return "", err
+	}
+	planningCommits := strings.Fields(string(planningBytes))
+	if len(planningCommits) != 1 {
+		return "", fmt.Errorf("P10-to-P11 planning boundary commits=%d want=1", len(planningCommits))
+	}
+	parentBytes, err := git(root, "rev-parse", planningCommits[0]+"^")
+	if err != nil {
+		return "", err
+	}
+	endpoint := strings.TrimSpace(string(parentBytes))
+	if len(endpoint) != 40 {
+		return "", errors.New("invalid P10 historical endpoint")
+	}
+	later, err := git(root, "log", "--format=%H", endpoint+"..HEAD", "--", Path)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(string(later)) != "" {
+		return "", errors.New("P10 waiver changed after its accepted endpoint")
+	}
+	return endpoint, nil
+}
+
 func P09Boundary(root string) (string, string, error) {
 	intro, err := uniqueIntroduction(root, Path)
 	if err != nil {
@@ -486,7 +526,11 @@ func validateGit(root string, w Waiver, m manifest) error {
 		return err
 	}
 	baseline := strings.TrimSpace(string(baseBytes))
-	discovered, staticOnly, err := discoverSources(root, baseline, m)
+	endpoint, err := p10Endpoint(root)
+	if err != nil {
+		return err
+	}
+	discovered, staticOnly, err := discoverSources(root, baseline, endpoint, m)
 	if err != nil {
 		return err
 	}
@@ -531,8 +575,8 @@ func validateGit(root string, w Waiver, m manifest) error {
 	return nil
 }
 
-func discoverSources(root, baseline string, m manifest) (map[string]Source, map[string]StaticSource, error) {
-	commitsBytes, err := git(root, "rev-list", "--reverse", baseline+"..HEAD")
+func discoverSources(root, baseline, endpoint string, m manifest) (map[string]Source, map[string]StaticSource, error) {
+	commitsBytes, err := git(root, "rev-list", "--reverse", baseline+".."+endpoint)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -576,7 +620,7 @@ func discoverSources(root, baseline string, m manifest) (map[string]Source, map[
 		if err != nil {
 			return nil, nil, err
 		}
-		current, currentOK, err := worktreeBlob(root, path)
+		current, currentOK, err := gitBlob(root, endpoint, path)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -615,7 +659,7 @@ func discoverSources(root, baseline string, m manifest) (map[string]Source, map[
 		if err != nil {
 			return nil, nil, err
 		}
-		current, currentOK, err := worktreeBlob(root, path)
+		current, currentOK, err := gitBlob(root, endpoint, path)
 		if err != nil {
 			return nil, nil, err
 		}
