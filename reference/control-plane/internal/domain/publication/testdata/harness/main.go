@@ -192,14 +192,43 @@ type discoveredTransition struct {
 	sources   []string
 }
 
+var requiredTransitionArtifacts = []string{
+	"spec-index-report-orchestrator",
+	"spec-index-check-reports",
+	"go-module-proxy-bootstrap",
+	"nested-control-plane-go-module",
+	"phase-report-p05",
+	"conformance-harness-base",
+	"phase-report-p06",
+	"codegen-representative-spike",
+	"phase-report-p07",
+	"control-plane-platform-foundation",
+	"reference-control-plane-server",
+	"phase-report-p08",
+	"migration-engine",
+	"migration-engine-fixture-versions",
+	"phase-report-p09",
+	"identity-service",
+	"credential-store",
+	"p10-baseline-transition-waiver",
+	"phase-report-p10",
+	"publication-contract-fixtures",
+	"phase-report-p11",
+	"publication-fixtures",
+	"publication-service",
+	"sqlite-migration-publication",
+	"postgres-migration-publication",
+	"arop-cli-publication-command",
+	"phase-report-p12",
+}
+
 type listedPackage struct {
-	Dir            string
-	GoFiles        []string
-	CgoFiles       []string
-	IgnoredGoFiles []string
-	TestGoFiles    []string
-	XTestGoFiles   []string
-	EmbedFiles     []string
+	Dir          string
+	GoFiles      []string
+	CgoFiles     []string
+	TestGoFiles  []string
+	XTestGoFiles []string
+	EmbedFiles   []string
 }
 
 func discoverTransition(root string) (discoveredTransition, error) {
@@ -242,7 +271,12 @@ func discoverTransition(root string) (discoveredTransition, error) {
 }
 
 func discoverCompiledClosure(root string) (map[string]bool, error) {
-	closure := map[string]bool{}
+	closure := map[string]bool{
+		"go.mod":                         true,
+		"go.sum":                         true,
+		"reference/control-plane/go.mod": true,
+		"reference/control-plane/go.sum": true,
+	}
 	decode := func(output []byte) error {
 		decoder := json.NewDecoder(bytes.NewReader(output))
 		for {
@@ -256,7 +290,7 @@ func discoverCompiledClosure(root string) (map[string]bool, error) {
 			if err != nil || absolute != root && !strings.HasPrefix(absolute, root+string(filepath.Separator)) {
 				continue
 			}
-			for _, name := range append(append(append(append(append(append([]string{}, item.GoFiles...), item.CgoFiles...), item.IgnoredGoFiles...), item.TestGoFiles...), item.XTestGoFiles...), item.EmbedFiles...) {
+			for _, name := range append(append(append(append(append([]string{}, item.GoFiles...), item.CgoFiles...), item.TestGoFiles...), item.XTestGoFiles...), item.EmbedFiles...) {
 				relative, err := filepath.Rel(root, filepath.Join(absolute, name))
 				if err == nil {
 					closure[filepath.ToSlash(relative)] = true
@@ -285,7 +319,7 @@ func discoverCompiledClosure(root string) (map[string]bool, error) {
 	if err := os.WriteFile(work, workBody, 0o600); err != nil {
 		return nil, err
 	}
-	nestedList := run(filepath.Join(root, "reference/control-plane"), map[string]string{"GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": work, "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "TMPDIR": temporary}, "go", "list", "-deps", "-test", "-json", "./cmd/aropd", "./internal/app/platform/httpadapter", "./internal/domain/publication/...", "./internal/identity/...", "./internal/storage/migrate/...")
+	nestedList := run(filepath.Join(root, "reference/control-plane"), map[string]string{"GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": work, "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "TMPDIR": temporary}, "go", "list", "-deps", "-test", "-json", "./cmd/aropd", "./internal/app/platform/httpadapter", "./internal/app/platform/testdata/harness", "./internal/domain/publication/...", "./internal/domain/publication/testdata/harness", "./internal/identity/...", "./internal/identity/testdata/acceptance", "./internal/identity/testdata/harness", "./internal/storage/migrate/...", "./internal/storage/migrate/testdata/engine-versions/harness")
 	if nestedList.err != nil {
 		return nil, nestedList.err
 	}
@@ -350,8 +384,55 @@ func discoverAffectedArtifacts(root string, manifest blueprint.Manifest, sources
 	for _, artifact := range manifest.Artifacts {
 		byID[artifact.ID] = artifact
 	}
+	found, err := mapSourceArtifacts(root, manifest, sources, compiled, read)
+	if err != nil {
+		return nil, err
+	}
+	propagateAffectedArtifacts(found, manifest, byID)
+	if err := requireArtifactLowerBound(found, requiredTransitionArtifacts); err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(found))
+	for id := range found {
+		if _, exists := byID[id]; !exists {
+			return nil, fmt.Errorf("discovered artifact %s is absent from manifest", id)
+		}
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+func requireArtifactLowerBound(found map[string]bool, required []string) error {
+	for _, id := range required {
+		if !found[id] {
+			return fmt.Errorf("independent artifact discovery omitted required %s", id)
+		}
+	}
+	return nil
+}
+
+func mapSourceArtifacts(root string, manifest blueprint.Manifest, sources []string, compiled, read map[string]bool) (map[string]bool, error) {
 	found := map[string]bool{}
+	byID := map[string]blueprint.Artifact{}
+	for _, artifact := range manifest.Artifacts {
+		byID[artifact.ID] = artifact
+	}
 	for _, source := range sources {
+		if source == "Makefile" && read[source] {
+			acceptance := strings.ReplaceAll(command, " ", "-")
+			matched := false
+			for _, artifact := range manifest.Artifacts {
+				if artifact.PathRole == "concrete" && artifact.AcceptanceTest == acceptance && phaseNumber(artifact.OwnerPhase) <= 12 {
+					found[artifact.ID] = true
+					matched = true
+				}
+			}
+			if !matched {
+				return nil, fmt.Errorf("changed Makefile has no manifest artifact bound to acceptance %s", acceptance)
+			}
+			continue
+		}
 		bestScore := -1
 		var matches []blueprint.Artifact
 		for _, artifact := range manifest.Artifacts {
@@ -365,38 +446,63 @@ func discoverAffectedArtifacts(root string, manifest blueprint.Manifest, sources
 				matches = append(matches, artifact)
 			}
 		}
+		if bestScore < 0 || len(matches) == 0 {
+			futureOwners := aggregateFutureOwners(manifest, byID, source, compiled[source] || read[source])
+			if len(futureOwners) == 0 {
+				return nil, fmt.Errorf("changed source %s has no independently discovered concrete artifact owner (compiled=%t read=%t)", source, compiled[source], read[source])
+			}
+			for _, id := range futureOwners {
+				found[id] = true
+			}
+			continue
+		}
 		for _, artifact := range matches {
 			found[artifact.ID] = true
 		}
 	}
-	for _, id := range []string{"publication-fixtures", "publication-service", "sqlite-migration-publication", "postgres-migration-publication", "arop-cli-publication-command"} {
-		found[id] = true
+	return found, nil
+}
+
+func aggregateFutureOwners(manifest blueprint.Manifest, byID map[string]blueprint.Artifact, source string, consumed bool) []string {
+	if !consumed {
+		return nil
 	}
-	propagateAffectedArtifacts(found, manifest, byID)
-	found["phase-report-p12"] = true
-	lowerBound := []string{"spec-index-report-orchestrator", "spec-index-check-reports", "go-module-proxy-bootstrap", "nested-control-plane-go-module", "phase-report-p05", "conformance-harness-base", "phase-report-p06", "codegen-representative-spike", "phase-report-p07", "control-plane-platform-foundation", "reference-control-plane-server", "phase-report-p08", "migration-engine", "migration-engine-fixture-versions", "phase-report-p09", "identity-service", "credential-store", "p10-baseline-transition-waiver", "phase-report-p10", "publication-contract-fixtures", "phase-report-p11", "publication-fixtures", "publication-service", "sqlite-migration-publication", "postgres-migration-publication", "arop-cli-publication-command", "phase-report-p12"}
-	for _, id := range lowerBound {
-		if !found[id] {
-			return nil, fmt.Errorf("independent artifact discovery omitted required %s", id)
+	bestLength := -1
+	owners := map[string]bool{}
+	for _, aggregate := range manifest.Artifacts {
+		if aggregate.Path == "" || (aggregate.PathRole != "aggregate" && aggregate.PathRole != "container") || source != aggregate.Path && !strings.HasPrefix(source, aggregate.Path+"/") {
+			continue
+		}
+		if len(aggregate.Path) < bestLength {
+			continue
+		}
+		if len(aggregate.Path) > bestLength {
+			bestLength = len(aggregate.Path)
+			owners = map[string]bool{}
+		}
+		for _, futureID := range aggregate.FutureArtifacts {
+			future := byID[futureID]
+			if future.ID != "" && future.PathRole == "concrete" && phaseNumber(future.OwnerPhase) <= 12 {
+				owners[future.ID] = true
+			}
 		}
 	}
-	out := make([]string, 0, len(found))
-	for id := range found {
-		if _, exists := byID[id]; !exists {
-			return nil, fmt.Errorf("discovered artifact %s is absent from manifest", id)
-		}
+	out := make([]string, 0, len(owners))
+	for id := range owners {
 		out = append(out, id)
 	}
 	sort.Strings(out)
-	return out, nil
+	return out
 }
 
 func artifactPathScore(root, artifactPath, source string, compiled, read map[string]bool) int {
 	if artifactPath == source {
 		return 3*len(artifactPath) + 2
 	}
-	if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(artifactPath))); err == nil && info.IsDir() && strings.HasPrefix(source, artifactPath+"/") && (compiled[source] || read[source]) {
-		return 3*len(artifactPath) + 1
+	if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(artifactPath))); err == nil && info.IsDir() && (compiled[source] || read[source]) {
+		if strings.HasPrefix(source, artifactPath+"/") {
+			return 3*len(artifactPath) + 1
+		}
 	}
 	directory := filepath.ToSlash(filepath.Dir(filepath.FromSlash(artifactPath)))
 	if directory != "." && (compiled[source] || read[source]) && (filepath.ToSlash(filepath.Dir(filepath.FromSlash(source))) == directory || strings.HasPrefix(source, directory+"/")) {
@@ -551,14 +657,34 @@ func validateTransitionNegatives(valid transition, discovered discoveredTransiti
 		name   string
 		mutate func(*transition)
 	}{
+		{"artifact-substitution", func(candidate *transition) { candidate.AffectedArtifacts[0] = "schema-manifest" }},
 		{"artifact-addition", func(candidate *transition) {
 			candidate.AffectedArtifacts = append(candidate.AffectedArtifacts, "schema-manifest")
 		}},
-		{"source-substitution", func(candidate *transition) { candidate.SourceClosure[0] = "README.md" }},
-		{"acceptance-substitution", func(candidate *transition) { candidate.Acceptance[0].Command = "make validate" }},
-		{"constraint-substitution", func(candidate *transition) { candidate.Constraints[0] = "invented" }},
 		{"artifact-duplicate", func(candidate *transition) {
 			candidate.AffectedArtifacts = append(candidate.AffectedArtifacts, candidate.AffectedArtifacts[0])
+		}},
+		{"source-substitution", func(candidate *transition) { candidate.SourceClosure[0] = "README.md" }},
+		{"source-addition", func(candidate *transition) {
+			candidate.SourceClosure = append(candidate.SourceClosure, "README.md")
+		}},
+		{"source-duplicate", func(candidate *transition) {
+			candidate.SourceClosure = append(candidate.SourceClosure, candidate.SourceClosure[0])
+		}},
+		{"acceptance-substitution", func(candidate *transition) { candidate.Acceptance[0].Command = "make validate" }},
+		{"acceptance-addition", func(candidate *transition) {
+			candidate.Acceptance = append(candidate.Acceptance, candidate.Acceptance[0])
+			candidate.Acceptance[len(candidate.Acceptance)-1].Phase = "P01"
+		}},
+		{"acceptance-duplicate", func(candidate *transition) {
+			candidate.Acceptance = append(candidate.Acceptance, candidate.Acceptance[0])
+		}},
+		{"constraint-substitution", func(candidate *transition) { candidate.Constraints[0] = "invented" }},
+		{"constraint-addition", func(candidate *transition) {
+			candidate.Constraints = append(candidate.Constraints, "invented")
+		}},
+		{"constraint-duplicate", func(candidate *transition) {
+			candidate.Constraints = append(candidate.Constraints, candidate.Constraints[0])
 		}},
 		{"source-order", func(candidate *transition) {
 			candidate.SourceClosure[0], candidate.SourceClosure[1] = candidate.SourceClosure[1], candidate.SourceClosure[0]
