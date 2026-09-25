@@ -1,0 +1,8 @@
+{
+  "kind": "upload_request",
+  "run_id": "run_018f1b5a-7c3d-7a11-8b22-6d4e5f708192",
+  "name": "product.png",
+  "media_type": "image/png",
+  "size_bytes": 238291,
+  "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

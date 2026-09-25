@@ -1,0 +1,206 @@
+openapi: 3.1.0
+info:
+  title: AROP Control Plane Asset v1 fragment
+  version: 1.0.0
+  description: >-
+    Incremental P13 asset exchange binding. This fragment is aggregated into the
+    Control Plane OpenAPI document at P20; it is not a standalone deployment API.
+    Exchange returns a full AssetRef, grant_id, method, a relative broker_path,
+    an opaque bearer_token, expires_at and max_uses. Responses do not carry a
+    long URL, an Endpoint, or a Secret.
+paths:
+  /v1/runs/{run_id}/assets:exchange:
+    post:
+      operationId: exchangeAssetGrant
+      summary: Exchange a short-lived upload or download grant
+      security:
+        - ControlPlaneBearer: []
+      x-arop-required-scopes:
+        - asset:exchange
+      x-arop-run-id-must-match-body: true
+      x-arop-idempotency:
+        same-key-same-semantic-digest: stable-200-same-grant
+        same-key-different-semantic-digest: 409
+      x-arop-reject-unknown-security-extensions: true
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: '../../../schemas/resources/asset-exchange-v1.schema.json#/$defs/uploadRequest'
+                - $ref: '../../../schemas/resources/asset-exchange-v1.schema.json#/$defs/downloadRequest'
+      responses:
+        '200':
+          description: A revocable grant for the relative content route.
+          content:
+            application/json:
+              schema:
+                $ref: '../../../schemas/resources/asset-exchange-v1.schema.json#/$defs/grantResponse'
+        '400':
+          $ref: '#/components/responses/InvalidAssetRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AssetForbidden'
+        '404':
+          $ref: '#/components/responses/AssetNotFound'
+        '409':
+          $ref: '#/components/responses/AssetConflict'
+        '413':
+          $ref: '#/components/responses/AssetTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /v1/asset-content/{grant_id}:
+    put:
+      operationId: uploadAssetContent
+      summary: Write asset bytes through the relative broker path
+      security:
+        - AssetGrantBearer: []
+      x-arop-grant-method: upload
+      x-arop-reject-unknown-security-extensions: true
+      parameters:
+        - $ref: '#/components/parameters/GrantId'
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '204':
+          description: The upload was accepted within the grant limits.
+        '400':
+          $ref: '#/components/responses/InvalidAssetRequest'
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AssetForbidden'
+        '404':
+          $ref: '#/components/responses/AssetNotFound'
+        '409':
+          $ref: '#/components/responses/AssetConflict'
+        '413':
+          $ref: '#/components/responses/AssetTooLarge'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+    get:
+      operationId: downloadAssetContent
+      summary: Read asset bytes through the relative broker path
+      security:
+        - AssetGrantBearer: []
+      x-arop-grant-method: download
+      x-arop-reject-unknown-security-extensions: true
+      parameters:
+        - $ref: '#/components/parameters/GrantId'
+      responses:
+        '200':
+          description: The asset bytes.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/AuthenticationRequired'
+        '403':
+          $ref: '#/components/responses/AssetForbidden'
+        '404':
+          $ref: '#/components/responses/AssetNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+components:
+  securitySchemes:
+    ControlPlaneBearer:
+      type: http
+      scheme: bearer
+    AssetGrantBearer:
+      type: http
+      scheme: bearer
+      description: Opaque asset grant bearer. It is not a Control Plane credential or a SecretRef.
+  parameters:
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      schema:
+        $ref: '../../../schemas/common/identifiers.schema.json#/$defs/runId'
+    GrantId:
+      name: grant_id
+      in: path
+      required: true
+      schema:
+        $ref: '../../../schemas/resources/asset-exchange-v1.schema.json#/$defs/grantId'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 200
+        pattern: '^[!-~]+$'
+  responses:
+    InvalidAssetRequest:
+      description: The asset exchange or content request is invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '../../../schemas/common/error.schema.json'
+    AuthenticationRequired:
+      description: Authentication is required.
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            pattern: '^Bearer(?: [A-Za-z][A-Za-z0-9_-]*="[ -!#-~]*")*$'
+      content:
+        application/json:
+          schema:
+            $ref: '../../../schemas/common/error.schema.json'
+    AssetForbidden:
+      description: The caller is not allowed to use this asset grant.
+      content:
+        application/json:
+          schema:
+            $ref: '../../../schemas/common/error.schema.json'
+    AssetNotFound:
+      description: The run, asset, or grant was not found.
+      content:
+        application/json:
+          schema:
+            $ref: '../../../schemas/common/error.schema.json'
+    AssetConflict:
+      description: The idempotency key or grant use conflicts.
+      content:
+        application/json:
+          schema:
+            $ref: '../../../schemas/common/error.schema.json'
+    AssetTooLarge:
+      description: The asset exceeds the granted size.
+      content:
+        application/json:
+          schema:
+            $ref: '../../../schemas/common/error.schema.json'
+    RateLimited:
+      description: The caller is rate limited.
+      content:
+        application/json:
+          schema:
+            $ref: '../../../schemas/common/error.schema.json'
+    DependencyUnavailable:
+      description: A required dependency is unavailable.
+      content:
+        application/json:
+          schema:
+            $ref: '../../../schemas/common/error.schema.json'

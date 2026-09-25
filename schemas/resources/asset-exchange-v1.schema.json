@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/resources/asset-exchange-v1.schema.json",
+  "title": "AROP v1 asset exchange",
+  "$comment": "arop.invalid is a reserved provisional base URI and will be replaced before the first stable public release. A grant binds run_id, asset_id and method, expires, and is revocable by grant_id. The public response carries a full AssetRef and a relative broker path with an opaque bearer token. It is not a SecretRef, an Endpoint, a cookie, or an object-storage credential, and it does not contain a long URL.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/uploadRequest"
+    },
+    {
+      "$ref": "#/$defs/downloadRequest"
+    },
+    {
+      "$ref": "#/$defs/grantResponse"
+    }
+  ],
+  "$defs": {
+    "mediaType": {
+      "type": "string",
+      "pattern": "^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$"
+    },
+    "assetName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "not": {
+        "pattern": "(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)"
+      }
+    },
+    "grantId": {
+      "type": "string",
+      "pattern": "^grant_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "bearerToken": {
+      "type": "string",
+      "minLength": 12,
+      "maxLength": 132,
+      "pattern": "^agt_[A-Za-z0-9_-]{8,128}$"
+    },
+    "brokerPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^/v1/asset-content/grant_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "maxUses": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "byteCount": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "uploadRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "run_id", "name", "media_type", "size_bytes"],
+      "properties": {
+        "kind": {
+          "const": "upload_request"
+        },
+        "run_id": {
+          "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/runId"
+        },
+        "name": {
+          "$ref": "#/$defs/assetName"
+        },
+        "media_type": {
+          "$ref": "#/$defs/mediaType"
+        },
+        "size_bytes": {
+          "$ref": "#/$defs/byteCount"
+        },
+        "digest": {
+          "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/sha256Digest"
+        }
+      }
+    },
+    "downloadRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "run_id", "asset_id"],
+      "properties": {
+        "kind": {
+          "const": "download_request"
+        },
+        "run_id": {
+          "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/runId"
+        },
+        "asset_id": {
+          "$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/assetId"
+        }
+      }
+    },
+    "grantResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "asset", "grant_id", "method", "broker_path", "bearer_token", "expires_at", "max_uses"],
+      "properties": {
+        "kind": {
+          "const": "grant"
+        },
+        "asset": {
+          "$ref": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json"
+        },
+        "grant_id": {
+          "$ref": "#/$defs/grantId"
+        },
+        "method": {
+          "enum": ["upload", "download"]
+        },
+        "broker_path": {
+          "$ref": "#/$defs/brokerPath"
+        },
+        "bearer_token": {
+          "$ref": "#/$defs/bearerToken"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "max_uses": {
+          "$ref": "#/$defs/maxUses"
+        }
+      }
+    }
+  }
+}
