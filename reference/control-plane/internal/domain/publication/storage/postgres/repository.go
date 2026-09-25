@@ -35,9 +35,10 @@ func (repository *Repository) Create(ctx context.Context, record *publication.Re
 	if !ok {
 		return publication.NewError(publication.CategoryDependency, publication.ReasonDependencyUnavailable)
 	}
-	// Fail closed before establishing a stale serializable snapshot. The
-	// transaction-scoped try-locks make concurrent losers deterministic and
-	// disappear automatically on commit/rollback.
+	// Serialize both conflict axes in one fixed order. A failed try is only an
+	// internal indication that this transaction must wait; it is never exposed
+	// as a conflict. The blocking transaction-scoped lock is context-cancellable
+	// and disappears automatically on commit/rollback.
 	locks := []struct {
 		key    string
 		reason publication.ErrorReason
@@ -45,13 +46,19 @@ func (repository *Repository) Create(ctx context.Context, record *publication.Re
 		{"publication/version/" + record.TenantID + "/" + record.AgentID + "/" + record.Version, publication.ReasonImmutableConflict},
 		{"publication/idempotency/" + record.TenantID + "/" + record.IdempotencyKeyDigest, publication.ReasonIdempotencyConflict},
 	}
+	var waitedReason publication.ErrorReason
 	for _, lock := range locks {
 		var acquired bool
 		if err := tx.QueryRowContext(ctx, `SELECT pg_try_advisory_xact_lock(hashtextextended($1,0))`, lock.key).Scan(&acquired); err != nil {
 			return publication.NewError(publication.CategoryDependency, publication.ReasonDependencyUnavailable)
 		}
 		if !acquired {
-			return publication.NewError(publication.CategoryConflict, lock.reason)
+			if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, lock.key); err != nil {
+				return publication.NewError(publication.CategoryDependency, publication.ReasonDependencyUnavailable)
+			}
+			if waitedReason == "" {
+				waitedReason = lock.reason
+			}
 		}
 	}
 	var exists int
@@ -75,6 +82,9 @@ publisher_principal_id,idempotency_key_digest,idempotency_request_digest,publish
 		return nil
 	}
 	var databaseError *pgconn.PgError
+	if errors.As(err, &databaseError) && databaseError.Code == "40001" && waitedReason != "" {
+		return publication.NewError(publication.CategoryConflict, waitedReason)
+	}
 	if errors.As(err, &databaseError) && databaseError.Code == "23505" {
 		if databaseError.ConstraintName == "arop_publications_idempotency_unique" {
 			return publication.NewError(publication.CategoryConflict, publication.ReasonIdempotencyConflict)

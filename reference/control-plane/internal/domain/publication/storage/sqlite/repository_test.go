@@ -203,6 +203,58 @@ func TestConcurrentCreateReturnsTypedConflict(t *testing.T) {
 	}
 }
 
+func TestConcurrentCreateContinuesAfterWinnerRollback(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		second func(publication.Record) publication.Record
+	}{
+		{"version-key", func(record publication.Record) publication.Record {
+			record.IdempotencyKeyDigest = strings.Repeat("e", 64)
+			return record
+		}},
+		{"idempotency-key", func(record publication.Record) publication.Record { record.Version = "1.0.1"; return record }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			db, unit, repository := newRepository(t)
+			winner := validRecord(t, "tenant-a", "agent.echo", "1.0.0", strings.Repeat("a", 64))
+			follower := test.second(winner)
+			inserted, release := make(chan struct{}), make(chan struct{})
+			winnerDone := make(chan error, 1)
+			go func() {
+				winnerDone <- unit.Within(context.Background(), func(ctx context.Context) error {
+					if err := repository.Create(ctx, &winner); err != nil {
+						return err
+					}
+					close(inserted)
+					<-release
+					return errors.New("rollback winner")
+				})
+			}()
+			<-inserted
+			followerStarted, followerDone := make(chan struct{}), make(chan error, 1)
+			go func() {
+				close(followerStarted)
+				followerDone <- unit.Within(context.Background(), func(ctx context.Context) error { return repository.Create(ctx, &follower) })
+			}()
+			<-followerStarted
+			close(release)
+			if err := <-winnerDone; err == nil {
+				t.Fatal("winner unexpectedly committed")
+			}
+			if err := <-followerDone; err != nil {
+				t.Fatalf("follower after rollback error = %v", err)
+			}
+			var count int
+			if err := db.QueryRow(`SELECT count(*) FROM arop_publications`).Scan(&count); err != nil || count != 1 {
+				t.Fatalf("publication count = %d, %v", count, err)
+			}
+			if _, err := repository.Get(context.Background(), follower.TenantID, follower.AgentID, follower.Version); err != nil {
+				t.Fatalf("follower record missing: %v", err)
+			}
+		})
+	}
+}
+
 func mustExec(t *testing.T, db *sql.DB, statement string) {
 	t.Helper()
 	if _, err := db.Exec(statement); err != nil {

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -184,6 +185,8 @@ func TestPostgresRepositoryAndSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	testPostgresCreateRaces(t, db, unit, repository, record)
+	testPostgresRollbackRaces(t, db, unit, repository, record)
+	testPostgresLockCancellation(t, db, unit, repository, record)
 }
 
 func hasReason(err error, reason publication.ErrorReason) bool {
@@ -191,12 +194,7 @@ func hasReason(err error, reason publication.ErrorReason) bool {
 	return ok && failure.Reason == reason
 }
 
-func testPostgresCreateRaces(t *testing.T, db interface {
-	Exec(string, ...any) (sql.Result, error)
-	QueryRow(string, ...any) *sql.Row
-}, unit interface {
-	Within(context.Context, func(context.Context) error) error
-}, repository *publicationstore.Repository, base publication.Record) {
+func testPostgresCreateRaces(t *testing.T, db *sql.DB, unit *postgresadapter.UnitOfWork, repository *publicationstore.Repository, base publication.Record) {
 	t.Helper()
 	for _, test := range []struct {
 		name       string
@@ -245,4 +243,109 @@ func testPostgresCreateRaces(t *testing.T, db interface {
 			}
 		})
 	}
+}
+
+func testPostgresRollbackRaces(t *testing.T, db *sql.DB, unit *postgresadapter.UnitOfWork, repository *publicationstore.Repository, base publication.Record) {
+	t.Helper()
+	for _, test := range []struct {
+		name   string
+		second func(publication.Record) publication.Record
+	}{
+		{"version-key-rollback", func(record publication.Record) publication.Record {
+			record.IdempotencyKeyDigest = strings.Repeat("e", 64)
+			return record
+		}},
+		{"idempotency-key-rollback", func(record publication.Record) publication.Record { record.Version = "1.0.1"; return record }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := db.Exec(`DELETE FROM arop_publications`); err != nil {
+				t.Fatal(err)
+			}
+			winner, follower := base, test.second(base)
+			inserted, release := make(chan struct{}), make(chan struct{})
+			winnerDone := make(chan error, 1)
+			go func() {
+				winnerDone <- unit.Within(context.Background(), func(ctx context.Context) error {
+					if err := repository.Create(ctx, &winner); err != nil {
+						return err
+					}
+					close(inserted)
+					<-release
+					return errors.New("rollback winner")
+				})
+			}()
+			<-inserted
+			followerDone := make(chan error, 1)
+			go func() {
+				followerDone <- unit.Within(context.Background(), func(ctx context.Context) error { return repository.Create(ctx, &follower) })
+			}()
+			waitForAdvisoryWaiter(t, db)
+			close(release)
+			if err := <-winnerDone; err == nil {
+				t.Fatal("winner unexpectedly committed")
+			}
+			if err := <-followerDone; err != nil {
+				t.Fatalf("follower after rollback error = %v", err)
+			}
+			var count int
+			if err := db.QueryRow(`SELECT count(*) FROM arop_publications`).Scan(&count); err != nil || count != 1 {
+				t.Fatalf("publication count = %d, %v", count, err)
+			}
+		})
+	}
+}
+
+func testPostgresLockCancellation(t *testing.T, db *sql.DB, unit *postgresadapter.UnitOfWork, repository *publicationstore.Repository, base publication.Record) {
+	t.Helper()
+	t.Run("blocked-lock-context-cancel", func(t *testing.T) {
+		if _, err := db.Exec(`DELETE FROM arop_publications`); err != nil {
+			t.Fatal(err)
+		}
+		winner := base
+		follower := base
+		follower.IdempotencyKeyDigest = strings.Repeat("e", 64)
+		inserted, release := make(chan struct{}), make(chan struct{})
+		winnerDone := make(chan error, 1)
+		go func() {
+			winnerDone <- unit.Within(context.Background(), func(ctx context.Context) error {
+				if err := repository.Create(ctx, &winner); err != nil {
+					return err
+				}
+				close(inserted)
+				<-release
+				return errors.New("rollback winner")
+			})
+		}()
+		<-inserted
+		ctx, cancel := context.WithCancel(context.Background())
+		followerDone := make(chan error, 1)
+		go func() {
+			followerDone <- unit.Within(ctx, func(txContext context.Context) error { return repository.Create(txContext, &follower) })
+		}()
+		waitForAdvisoryWaiter(t, db)
+		cancel()
+		if err := <-followerDone; !hasReason(err, publication.ReasonDependencyUnavailable) {
+			t.Fatalf("cancelled lock error = %v", err)
+		}
+		close(release)
+		if err := <-winnerDone; err == nil {
+			t.Fatal("winner unexpectedly committed")
+		}
+	})
+}
+
+func waitForAdvisoryWaiter(t *testing.T, db *sql.DB) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		var count int
+		if err := db.QueryRow(`SELECT count(*) FROM pg_locks WHERE locktype='advisory' AND NOT granted`).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		if count > 0 {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("concurrent publication transaction did not block on advisory lock")
 }
