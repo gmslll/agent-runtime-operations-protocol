@@ -243,10 +243,25 @@ func runP10Tests(root, scratch string, cluster *postgresCluster) commandResult {
 	if err := os.WriteFile(work, contents, 0o600); err != nil {
 		return commandResult{Err: err}
 	}
+	migrationRoot := filepath.Join(scratch, "p10-migrations")
+	for _, dialect := range []string{"sqlite", "postgres"} {
+		if err := os.MkdirAll(filepath.Join(migrationRoot, "migrations", dialect), 0o700); err != nil {
+			return commandResult{Err: err}
+		}
+		for _, name := range []string{"0001_base.sql", "0005_identity.sql"} {
+			data, err := os.ReadFile(filepath.Join(root, "reference/control-plane/migrations", dialect, name))
+			if err != nil {
+				return commandResult{Err: err}
+			}
+			if err := os.WriteFile(filepath.Join(migrationRoot, "migrations", dialect, name), data, 0o600); err != nil {
+				return commandResult{Err: err}
+			}
+		}
+	}
 	env := map[string]string{
 		"GOWORK": work, "GOENV": "off", "GOFLAGS": "-mod=readonly", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0",
 		"TMPDIR":                scratch,
-		"AROP_P10_POSTGRES_URL": cluster.url(), "AROP_P10_MIGRATION_ROOT": filepath.Join(root, "reference/control-plane/migrations"),
+		"AROP_P10_POSTGRES_URL": cluster.url(), "AROP_P10_MIGRATION_ROOT": filepath.Join(migrationRoot, "migrations"),
 	}
 	args := append([]string{"test", "-count=1", "-json"}, testPackages...)
 	return run(filepath.Join(root, "reference/control-plane"), env, "go", args...)
@@ -350,6 +365,11 @@ func evaluateTestEvents(expected, required []string, result commandResult) ([]re
 	}
 	if result.Err != nil {
 		problems = append(problems, result.Err.Error())
+		tail := result.Output
+		if len(tail) > 4000 {
+			tail = tail[len(tail)-4000:]
+		}
+		problems = append(problems, "go-test-tail="+safeError(errors.New(string(tail))))
 	}
 	if len(problems) != 0 {
 		sort.Strings(problems)
