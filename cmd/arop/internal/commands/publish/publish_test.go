@@ -494,6 +494,21 @@ func TestLoadAndValidateBundleRejectsGrowthAfterOpen(t *testing.T) {
 	}
 }
 
+func TestLoadAndValidateBundleRejectsAtomicPathReplacement(t *testing.T) {
+	t.Parallel()
+	path := writeBundle(t)
+	replacement := filepath.Join(filepath.Dir(path), "replacement.zip")
+	if err := os.WriteFile(replacement, bundleBytes(t, map[string]string{"agent-manifest.json": validManifestJSON}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := loadAndValidateBundleWithHook(context.Background(), path, func() error {
+		return os.Rename(replacement, path)
+	})
+	if !errors.Is(err, errBundleUnavailable) || strings.Contains(err.Error(), path) {
+		t.Fatalf("atomic replacement error=%v", err)
+	}
+}
+
 type zeroReader struct{}
 
 func (zeroReader) Read(buffer []byte) (int, error) {
@@ -580,8 +595,15 @@ func TestValidateToDigestCancellationBarrier(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "agent-manifest.json"), []byte(validManifestJSON), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := validateAndDigestManifest(alwaysCancelledContext{}, root); !errors.Is(err, context.Canceled) {
+	var digestCalls atomic.Int32
+	if _, err := validateAndDigestManifestWith(alwaysCancelledContext{}, root, func(string, string) (string, error) {
+		digestCalls.Add(1)
+		return "must-not-run", nil
+	}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("validate-to-digest barrier error=%v", err)
+	}
+	if digestCalls.Load() != 0 {
+		t.Fatalf("digest called %d times after cancellation", digestCalls.Load())
 	}
 }
 

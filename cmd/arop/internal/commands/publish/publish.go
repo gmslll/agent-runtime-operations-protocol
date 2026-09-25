@@ -352,6 +352,10 @@ func loadAndValidateBundleWithHook(ctx context.Context, path string, afterOpen f
 	if final, statErr := file.Stat(); statErr != nil || !os.SameFile(opened, final) || final.Size() != int64(len(data)) || final.Size() > maxArchiveBytes {
 		return nil, bundleIdentity{}, errBundleUnavailable
 	}
+	pathAfterRead, pathErr := os.Lstat(path)
+	if pathErr != nil || !pathAfterRead.Mode().IsRegular() || pathAfterRead.Mode()&os.ModeSymlink != 0 || !os.SameFile(opened, pathAfterRead) || pathAfterRead.Mode() != opened.Mode() || pathAfterRead.Size() != int64(len(data)) {
+		return nil, bundleIdentity{}, errBundleUnavailable
+	}
 	identity, err := validateBundleArchive(ctx, data)
 	if err != nil {
 		if ctxErr := contextError(ctx); ctxErr != nil {
@@ -459,20 +463,24 @@ func validateBundleArchive(ctx context.Context, archive []byte) (bundleIdentity,
 }
 
 func validateAndDigestManifest(ctx context.Context, root string) (string, error) {
+	return validateAndDigestManifestWith(ctx, root, manifest.DigestPackageFile)
+}
+
+func validateAndDigestManifestWith(ctx context.Context, root string, digest func(string, string) (string, error)) (string, error) {
 	if err := manifest.ValidatePackageFile(root, "agent-manifest.json"); err != nil {
 		return "", errors.New("manifest validation")
 	}
 	if err := contextError(ctx); err != nil {
 		return "", err
 	}
-	digest, err := manifest.DigestPackageFile(root, "agent-manifest.json")
+	value, err := digest(root, "agent-manifest.json")
 	if err != nil {
 		return "", errors.New("manifest digest")
 	}
 	if err := contextError(ctx); err != nil {
 		return "", err
 	}
-	return digest, nil
+	return value, nil
 }
 
 type zipInterval struct{ start, end int }
