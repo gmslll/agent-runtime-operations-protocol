@@ -44,6 +44,8 @@
     "phase-report-p11",
     "publication-contract-fixtures",
     "reference-control-plane-server",
+    "schema-asset-ref",
+    "schema-bundle",
     "schema-manifest"
   ],
   "source_closure": [
@@ -207,9 +209,10 @@
       "path": "conformance/fixtures/contracts/control-plane-publication/cases.json",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "9b8f4959e85156b675f9547a21c6612ed63dbe7b0c351443112fca236a1c7399",
+      "current_sha256": "b25198fa876fbcf6e8923437aa885dcfd9c7b83f8bede23333332a890ef71410",
       "touch_commits": [
-        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3",
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
       ],
       "scope": "p11-production",
       "artifact_ids": [
@@ -224,13 +227,14 @@
       "path": "conformance/fixtures/contracts/control-plane-publication/contract-inventory.json",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "063a7cbb728f98d874c91d0b9cf705d7f45a376123bd0f3273308ba144886607",
+      "current_sha256": "56d200c22f1c7412f3ea47a0ec1f7e7ce956f0d492bc1840fa561cdbbf10b4b4",
       "touch_commits": [
         "1fdc3248f11545d31e056420a9b6cc53126e0d11",
         "3198524fc677836351fd75ba57f418a63a11ff01",
         "503f46fa042630caac1b0dfb68415ef66bac2bb4",
         "ba0d0ebb6bb008ef55f717043deabf510b814e4c",
-        "ce2c3551bf2698a46a2bcf5c4523e0b2b70e09c4"
+        "ce2c3551bf2698a46a2bcf5c4523e0b2b70e09c4",
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
       ],
       "scope": "p11-production",
       "artifact_ids": [
@@ -396,6 +400,23 @@
       ]
     },
     {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/asset-ref-size-bytes-safe-maximum-plus-one.json",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": "e59c95b73d44a2069a6667f39f2b063e034c39d412758b1b07fca8b006edf5a0",
+      "touch_commits": [
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
+      ],
+      "scope": "p11-production",
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/error-secret-egress.json",
       "change_type": "add",
       "baseline_sha256": null,
@@ -518,9 +539,10 @@
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/bundle-profile.json",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "b00fea6c942a54bfa3270f51ba2882daf2e37de4b92833ccacc1a9c382849b0f",
+      "current_sha256": "d99a9543b8de6ac6bd8173a271780c049048ff71b238b9832d34583fb8761c43",
       "touch_commits": [
-        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3",
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
       ],
       "scope": "p11-production",
       "artifact_ids": [
@@ -569,9 +591,27 @@
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/safe-integer-boundaries.json",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "23ddb69efdc450db790cfe8debba62ee0eca7cce1370646c2111955a8555fbd9",
+      "current_sha256": "fe67e2650148cd8deb577ee7618a253cc32e8d27a66e8bb5f225b17d2cb5436a",
       "touch_commits": [
-        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3",
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
+      ],
+      "scope": "p11-production",
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/asset-ref-safe-integer-maximum.json",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": "dff527aab864b89767e42d86a7d60838d4b3565cc90a93ecc7af242f0799ff3e",
+      "touch_commits": [
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
       ],
       "scope": "p11-production",
       "artifact_ids": [
@@ -620,9 +660,10 @@
       "path": "conformance/fixtures/contracts/control-plane-publication/generated/provenance.json",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "b2147fa04782b3aabf8f4cbc61216770d940671e1d321b3f14e1e3c22b1f1d41",
+      "current_sha256": "ceb0891ea95df28527ceb3cea692539cef2450951fc092a34e38c5b5c21dd22a",
       "touch_commits": [
-        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101"
+        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101",
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
       ],
       "scope": "p11-production",
       "artifact_ids": [
@@ -637,10 +678,11 @@
       "path": "conformance/fixtures/contracts/control-plane-publication/pipeline.json",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "061706bbd5b25c868b13ca2c9fddcc0464027ac74b2f14b3870fe9d907039e7f",
+      "current_sha256": "9b688191e51d038b8bb3ad3ca2d8f54863762347d8380947809a00bd10bfe974",
       "touch_commits": [
         "51cd85cc5b5fb37ef3cd2825979c1cda79d37101",
-        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3"
+        "63808eb89d1fbb50302334b4e9d7f4ffa431b1a3",
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
       ],
       "scope": "p11-production",
       "artifact_ids": [
@@ -655,14 +697,15 @@
       "path": "conformance/fixtures/contracts/control-plane-publication/testdata/harness/main.go",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "ffa39d1d6dd9556fbaca67e116409374aefaead509220083a96a9ce84b1d0ae2",
+      "current_sha256": "caab99ccad8901bcf9fe6873d2a09415f889e1468db835b46d149eecb1b1cc1d",
       "touch_commits": [
         "1118ecdb802a546365ff7f116d9d859c81d3e1c2",
         "51cd85cc5b5fb37ef3cd2825979c1cda79d37101",
         "a829c8444ee59afaa8daef0493109b9cc65b1960",
         "b19d977389a4c2e72424652decd286737a512eca",
         "b92e8bc9e680857876d59af4ef16f388cc7e684b",
-        "bb16025e8d8900c3ba3005f6cdba80c32710db55"
+        "bb16025e8d8900c3ba3005f6cdba80c32710db55",
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
       ],
       "scope": "p11-production",
       "artifact_ids": [
@@ -802,6 +845,26 @@
       ]
     },
     {
+      "path": "schemas/resources/asset-ref-v1.schema.json",
+      "change_type": "modify",
+      "baseline_sha256": "20e58d65d8a0903fe39367fb99ebfefd88ce1681caaa7a9eb7572ab098cc84ee",
+      "current_sha256": "3fcd98064f555252a27d80af1bf951619dff2ae3c68680d6fd6215e83ca18433",
+      "touch_commits": [
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
+      ],
+      "scope": "early-owned",
+      "artifact_ids": [
+        "phase-report-p06",
+        "phase-report-p07",
+        "phase-report-p11",
+        "schema-asset-ref",
+        "schema-bundle"
+      ],
+      "owner_phases": [
+        "P06"
+      ]
+    },
+    {
       "path": "scripts/generate.mjs",
       "change_type": "modify",
       "baseline_sha256": "0e8ed0375ed8efc8f74aef6e4860cac8dc26ed9688cb5fbc604a561638e3eeb0",
@@ -824,9 +887,10 @@
       "path": "sdk/go/generated/control-plane/publication.gen.go",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "fe6cff96bb1ad3e58c629d728238408e35647a8b72904a336ebf7c530a936e6f",
+      "current_sha256": "8254fdb9f6032329c1b055c95683fcc0939b7e385471e6a05092e94c9e8f0486",
       "touch_commits": [
-        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101"
+        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101",
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
       ],
       "scope": "p11-production",
       "artifact_ids": [
@@ -858,9 +922,10 @@
       "path": "sdk/python/src/arop/generated/control-plane/publication_gen.py",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "225bc68af5f56177254c2edf83aefe082f85fac8d377882c9b2871dd06f19a5f",
+      "current_sha256": "7b4c73a0e57f5f73845be03209a0e18e8acd2a4cc05c0466286b1c4078a09cda",
       "touch_commits": [
-        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101"
+        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101",
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
       ],
       "scope": "p11-production",
       "artifact_ids": [
@@ -875,9 +940,10 @@
       "path": "sdk/typescript/src/generated/control-plane/publication.gen.ts",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "778e2ebb31766cc2d73b95185c01b4984ebc14b5f8afc9d2fd7497ca93da25a6",
+      "current_sha256": "bf9ec63d87f7320d4a6700c323529963de4146dd6d16ff0305c0867a2963ecd1",
       "touch_commits": [
-        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101"
+        "51cd85cc5b5fb37ef3cd2825979c1cda79d37101",
+        "e9fda19e39def1f6d90975b7ffa5867dd2790fd8"
       ],
       "scope": "p11-production",
       "artifact_ids": [

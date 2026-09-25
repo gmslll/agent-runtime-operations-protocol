@@ -1740,7 +1740,7 @@ func validateWaiver(root string, w waiver) error {
 	if w.Policy.OwnershipTransferred {
 		return errors.New("ownership transfer")
 	}
-	wantArtifacts := []string{"blueprint-check-reports", "blueprint-validation-library", "blueprint-validation-tests", "codegen-pipeline", "codegen-representative-spike", "generated-control-plane-go", "generated-control-plane-python", "generated-control-plane-typescript", "go-manifest-library-baseline", "migration-engine-fixture-versions", "openapi-control-plane-foundation", "phase-report-p01", "phase-report-p06", "phase-report-p07", "phase-report-p08", "phase-report-p09", "phase-report-p10", "phase-report-p11", "publication-contract-fixtures", "reference-control-plane-server", "schema-manifest"}
+	wantArtifacts := []string{"blueprint-check-reports", "blueprint-validation-library", "blueprint-validation-tests", "codegen-pipeline", "codegen-representative-spike", "generated-control-plane-go", "generated-control-plane-python", "generated-control-plane-typescript", "go-manifest-library-baseline", "migration-engine-fixture-versions", "openapi-control-plane-foundation", "phase-report-p01", "phase-report-p06", "phase-report-p07", "phase-report-p08", "phase-report-p09", "phase-report-p10", "phase-report-p11", "publication-contract-fixtures", "reference-control-plane-server", "schema-asset-ref", "schema-bundle", "schema-manifest"}
 	if !reflect.DeepEqual(w.AffectedArtifacts, wantArtifacts) {
 		return errors.New("affected artifacts not exact")
 	}
