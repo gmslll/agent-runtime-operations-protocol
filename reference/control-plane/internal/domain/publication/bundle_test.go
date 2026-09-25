@@ -136,21 +136,21 @@ func TestOfflineBundleAuthorityAloneDecidesSchemaReferenceSemantics(t *testing.T
 			"agent-manifest.json":       []byte(minimalManifestWithSchema(`{"$id":"schemas/root.schema.json","$ref":"child.schema.json"}`)),
 			"schemas/child.schema.json": []byte(`{"type":"object"}`),
 		}},
-		{name: "cycle", entries: map[string][]byte{
+		{name: "cycle", valid: true, entries: map[string][]byte{
 			"agent-manifest.json": []byte(minimalManifestWithSchema(`{"$ref":"./schemas/a.json"}`)),
 			"schemas/a.json":      []byte(`{"$ref":"b.json"}`), "schemas/b.json": []byte(`{"$ref":"a.json"}`),
 		}},
-		{name: "missing", entries: map[string][]byte{
+		{name: "missing", valid: false, entries: map[string][]byte{
 			"agent-manifest.json": []byte(minimalManifestWithSchema(`{"$ref":"./schemas/missing.json"}`)),
 		}},
-		{name: "fragment", entries: map[string][]byte{
+		{name: "invalid-fragment", valid: false, entries: map[string][]byte{
 			"agent-manifest.json": []byte(minimalManifestWithSchema(`{"$ref":"./schemas/a.json#missing"}`)),
 			"schemas/a.json":      []byte(`{"type":"object"}`),
 		}},
-		{name: "dialect", entries: map[string][]byte{
+		{name: "old-dialect", valid: false, entries: map[string][]byte{
 			"agent-manifest.json": []byte(minimalManifestWithSchema(`{"$schema":"http://json-schema.org/draft-07/schema#","type":"object"}`)),
 		}},
-		{name: "unsupported", entries: map[string][]byte{
+		{name: "unsupported-keyword", valid: false, entries: map[string][]byte{
 			"agent-manifest.json": []byte(minimalManifestWithSchema(`{"frobnicate":true}`)),
 		}},
 	}
@@ -159,12 +159,12 @@ func TestOfflineBundleAuthorityAloneDecidesSchemaReferenceSemantics(t *testing.T
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			authorityAccepted := authorityAccepts(t, test.entries)
+			if authorityAccepted != test.valid {
+				t.Fatalf("authoritative policy changed: accepted=%v want=%v", authorityAccepted, test.valid)
+			}
 			_, validationErr := validator.ValidateBundle(context.Background(), zipBundle(t, test.entries))
 			if (validationErr == nil) != authorityAccepted {
 				t.Fatalf("validator acceptance drifted from authority: authority=%v err=%v", authorityAccepted, validationErr)
-			}
-			if test.name == "id-base" && (!authorityAccepted || validationErr != nil) {
-				t.Fatalf("valid $id base rejected: authority=%v err=%v", authorityAccepted, validationErr)
 			}
 		})
 	}
