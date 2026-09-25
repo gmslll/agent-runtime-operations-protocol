@@ -181,7 +181,11 @@ func newSQLiteIdentityRunner(t *testing.T, startAtOne bool) (*sql.DB, *migrate.R
 		_, err = runner.Migrate(context.Background())
 		requireMigrationNoError(t, err)
 	}
-	catalog, err := migrate.LoadCatalog(os.DirFS(migrationControlPlaneRoot(t)), "migrations/sqlite", migrate.DialectSQLite)
+	base, err := migrate.NewMigration(1, "base", []byte(readIdentityMigration(t, migrate.DialectSQLite, "0001_base.sql")))
+	requireMigrationNoError(t, err)
+	identityMigration, err := migrate.NewMigration(5, "identity", []byte(readIdentityMigration(t, migrate.DialectSQLite, "0005_identity.sql")))
+	requireMigrationNoError(t, err)
+	catalog, err := migrate.NewCatalog(migrate.DialectSQLite, []migrate.Migration{base, identityMigration})
 	requireMigrationNoError(t, err)
 	runner, err := migrate.NewRunner(db, catalog, migrationTestLocker{}, migrate.WithVerifier(identitySQLiteVerifier), migrate.WithBackupRestore(migrationTestBackup{}))
 	requireMigrationNoError(t, err)

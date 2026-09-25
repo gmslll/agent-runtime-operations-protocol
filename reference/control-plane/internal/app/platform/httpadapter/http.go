@@ -269,7 +269,11 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 		case healthBodyErr != nil || !emptyHealthBody:
 			writeJSON(capture, http.StatusBadRequest, errorResponse{Status: "rejected"})
 		case request.ContentLength > config.MaxBodyBytes:
-			writeJSON(capture, http.StatusRequestEntityTooLarge, errorResponse{Status: "rejected"})
+			if operation == "publication.publish" {
+				writePublicationError(capture, http.StatusRequestEntityTooLarge, "BUNDLE_TOO_LARGE", "capacity", false)
+			} else {
+				writeJSON(capture, http.StatusRequestEntityTooLarge, errorResponse{Status: "rejected"})
+			}
 		default:
 			if authenticate != nil && operation != "health.live" && operation != "health.ready" {
 				requiredScopes := scopesForOperation(operation)
