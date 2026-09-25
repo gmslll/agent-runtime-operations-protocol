@@ -221,14 +221,17 @@
       "absolute-path",
       "backslash-path",
       "case-collision",
+      "central-directory-mismatch",
       "duplicate-entry",
       "encrypted-entry",
       "hardlink-entry",
       "multiple-root-manifests",
       "network-reference",
+      "non-regular-type",
       "parent-path-segment",
       "percent-encoded-path-bypass",
       "symlink-entry",
+      "unsupported-compression",
       "unicode-normalization-collision"
     ],
     "zip_bytes_are_digest_input": false
@@ -272,6 +275,10 @@
       {
         "name": "AgentManifest",
         "ref": "https://arop.invalid/schemas/v1/manifest/agent-manifest-v1.schema.json"
+      },
+      {
+        "name": "AssetRef",
+        "ref": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json"
       }
     ],
     "outputs": [
@@ -328,16 +335,24 @@
       "maximum": 9007199254740991,
       "properties": [
         {
+          "json_pointer": "/size_bytes",
+          "minimum": 0,
+          "root": "AssetRef"
+        },
+        {
           "json_pointer": "/content/max_input_bytes",
-          "minimum": 1
+          "minimum": 1,
+          "root": "AgentManifest"
         },
         {
           "json_pointer": "/execution/max_concurrency",
-          "minimum": 1
+          "minimum": 1,
+          "root": "AgentManifest"
         },
         {
           "json_pointer": "/session/idle_timeout_seconds",
-          "minimum": 1
+          "minimum": 1,
+          "root": "AgentManifest"
         }
       ],
       "required_probes": [
@@ -567,6 +582,7 @@
       "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/valid-agent-version.zip"
     ],
     "valid_paths": [
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/asset-ref-safe-integer-maximum.json",
       "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json",
       "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-safe-integer-maximum.json"
     ],
@@ -574,6 +590,7 @@
       "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/manifest-read-future-field.json"
     ],
     "invalid_paths": [
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/asset-ref-size-bytes-safe-maximum-plus-one.json",
       "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/error-secret-egress.json",
       "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-content-max-input-bytes-safe-maximum-plus-one.json",
       "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-execution-max-concurrency-safe-maximum-plus-one.json",
@@ -594,6 +611,8 @@
     "ordered_case_ids": [
       "aggregate-component-conflict",
       "aggregate-path-conflict",
+      "asset-ref-size-bytes-safe-maximum",
+      "asset-ref-size-bytes-safe-maximum-plus-one",
       "auth-get-agent-read",
       "auth-missing-bearer",
       "auth-post-agent-publish",
@@ -601,6 +620,7 @@
       "bundle-absolute-path",
       "bundle-backslash-path",
       "bundle-case-collision",
+      "bundle-central-directory-mismatch",
       "bundle-duplicate-entry",
       "bundle-encrypted-entry",
       "bundle-hardlink-entry",
@@ -611,10 +631,12 @@
       "bundle-limit-total-size",
       "bundle-multiple-manifests",
       "bundle-network-ref",
+      "bundle-non-regular-type",
       "bundle-parent-path",
       "bundle-percent-bypass",
       "bundle-symlink-entry",
       "bundle-unicode-collision",
+      "bundle-unsupported-compression",
       "bundle-valid",
       "error-400",
       "error-401-www-authenticate",

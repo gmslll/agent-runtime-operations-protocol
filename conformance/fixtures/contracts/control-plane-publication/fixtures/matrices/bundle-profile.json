@@ -4,6 +4,7 @@
     {"id":"bundle-absolute-path","entries":["/agent-manifest.json"],"expected":{"accepted":false,"reason":"absolute-path"}},
     {"id":"bundle-backslash-path","entries":["schemas\\input.json"],"expected":{"accepted":false,"reason":"backslash-path"}},
     {"id":"bundle-case-collision","entries":["schemas/input.json","SCHEMAS/INPUT.JSON"],"expected":{"accepted":false,"reason":"case-collision"}},
+    {"id":"bundle-central-directory-mismatch","generated_archive":"central-local-name-mismatch","expected":{"accepted":false,"reason":"central-directory-mismatch"}},
     {"id":"bundle-duplicate-entry","fixture":"../bundles/duplicate-entry.zip","expected":{"accepted":false,"reason":"duplicate-entry"}},
     {"id":"bundle-encrypted-entry","fixture":"../bundles/encrypted-entry.zip","archive_representation":"general-purpose-bit-0-set","expected":{"accepted":false,"reason":"encrypted-entry"}},
     {"id":"bundle-hardlink-entry","fixture":"../bundles/hardlink-entry.zip","archive_representation":"arop-adversarial-extra-field-0x4152-HARDLINK-NUL-target","expected":{"accepted":false,"reason":"hardlink-entry"}},
@@ -14,10 +15,12 @@
     {"id":"bundle-limit-total-size","limits":{"total_uncompressed_bytes":52428801},"expected":{"accepted":false,"status":413,"reason":"total-size"}},
     {"id":"bundle-multiple-manifests","fixture":"../bundles/multiple-manifests.zip","expected":{"accepted":false,"reason":"multiple-root-manifests"}},
     {"id":"bundle-network-ref","manifest_ref":"https://example.invalid/schema.json","expected":{"accepted":false,"reason":"network-reference"}},
+    {"id":"bundle-non-regular-type","generated_archive":"named-pipe-entry","expected":{"accepted":false,"reason":"non-regular-type"}},
     {"id":"bundle-parent-path","fixture":"../bundles/invalid-path-traversal.zip","expected":{"accepted":false,"reason":"parent-path-segment"}},
     {"id":"bundle-percent-bypass","entries":["%2e%2e/agent-manifest.json"],"expected":{"accepted":false,"reason":"percent-encoded-path-bypass"}},
     {"id":"bundle-symlink-entry","fixture":"../bundles/symlink-entry.zip","archive_representation":"unix-external-mode-0120777","expected":{"accepted":false,"reason":"symlink-entry"}},
     {"id":"bundle-unicode-collision","entries":["schemas/café.json","schemas/café.json"],"expected":{"accepted":false,"reason":"unicode-normalization-collision"}},
+    {"id":"bundle-unsupported-compression","generated_archive":"unsupported-method-99","expected":{"accepted":false,"reason":"unsupported-compression"}},
     {"id":"bundle-valid","fixture":"../bundles/valid-agent-version.zip","expected":{"accepted":true,"manifest_path":"agent-manifest.json"}}
   ]
 }

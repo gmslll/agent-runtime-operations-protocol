@@ -3,6 +3,8 @@
   "maximum": 9007199254740991,
   "maximum_plus_one_lexeme": "9007199254740992",
   "cases": [
+    {"id":"asset-ref-size-bytes-safe-maximum","json_pointer":"/size_bytes","fixture":"../valid/asset-ref-safe-integer-maximum.json","root":"AssetRef","expected":{"schema_valid":true,"generated_validators_accept":true}},
+    {"id":"asset-ref-size-bytes-safe-maximum-plus-one","json_pointer":"/size_bytes","fixture":"../invalid/asset-ref-size-bytes-safe-maximum-plus-one.json","root":"AssetRef","expected":{"schema_valid":false,"generated_validators_accept":false}},
     {"id":"manifest-content-max-input-bytes-safe-maximum","json_pointer":"/content/max_input_bytes","fixture":"../valid/manifest-safe-integer-maximum.json","expected":{"schema_valid":true,"generated_validators_accept":true}},
     {"id":"manifest-content-max-input-bytes-safe-maximum-plus-one","json_pointer":"/content/max_input_bytes","fixture":"../invalid/manifest-content-max-input-bytes-safe-maximum-plus-one.json","expected":{"schema_valid":false,"generated_validators_accept":false}},
     {"id":"manifest-execution-max-concurrency-safe-maximum","json_pointer":"/execution/max_concurrency","fixture":"../valid/manifest-safe-integer-maximum.json","expected":{"schema_valid":true,"generated_validators_accept":true}},

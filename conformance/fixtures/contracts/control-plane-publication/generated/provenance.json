@@ -40,8 +40,8 @@
   },
   "configuration": {
     "path": "conformance/fixtures/contracts/control-plane-publication/pipeline.json",
-    "sha256": "061706bbd5b25c868b13ca2c9fddcc0464027ac74b2f14b3870fe9d907039e7f",
-    "bytes": 2985,
+    "sha256": "9b688191e51d038b8bb3ad3ca2d8f54863762347d8380947809a00bd10bfe974",
+    "bytes": 3488,
     "mode": "100644"
   },
   "resources": [
@@ -69,8 +69,8 @@
     {
       "path": "schemas/resources/asset-ref-v1.schema.json",
       "uri": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json",
-      "sha256": "20e58d65d8a0903fe39367fb99ebfefd88ce1681caaa7a9eb7572ab098cc84ee",
-      "bytes": 1208,
+      "sha256": "3fcd98064f555252a27d80af1bf951619dff2ae3c68680d6fd6215e83ca18433",
+      "bytes": 1243,
       "mode": "100644"
     },
     {
@@ -82,6 +82,15 @@
     }
   ],
   "fixtures": [
+    {
+      "id": "asset-ref-safe-integer-maximum",
+      "class": "valid",
+      "root": "AssetRef",
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/asset-ref-safe-integer-maximum.json",
+      "sha256": "dff527aab864b89767e42d86a7d60838d4b3565cc90a93ecc7af242f0799ff3e",
+      "bytes": 350,
+      "mode": "100644"
+    },
     {
       "id": "manifest-read",
       "class": "valid",
@@ -107,6 +116,15 @@
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/manifest-read-future-field.json",
       "sha256": "cdd891ce3ae88bd99a438b76b423ced9f6d4c4bd18f3bf374c53f0c8ff1adff8",
       "bytes": 826,
+      "mode": "100644"
+    },
+    {
+      "id": "asset-ref-size-bytes-safe-maximum-plus-one",
+      "class": "invalid",
+      "root": "AssetRef",
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/asset-ref-size-bytes-safe-maximum-plus-one.json",
+      "sha256": "e59c95b73d44a2069a6667f39f2b063e034c39d412758b1b07fca8b006edf5a0",
+      "bytes": 215,
       "mode": "100644"
     },
     {
@@ -155,32 +173,37 @@
       "mode": "100644"
     }
   ],
-  "inputs_sha256": "aa9e5d1e87d6d74ffdde969c8c84643dad75e09b533e01a1d6025e018e614938",
+  "inputs_sha256": "d7b5e27ff2b9429f0b068daff672a7dff594692fb58284ebd64c2ad68d5013f6",
   "outputs": [
     {
       "language": "go",
       "path": "sdk/go/generated/control-plane/publication.gen.go",
-      "sha256": "fe6cff96bb1ad3e58c629d728238408e35647a8b72904a336ebf7c530a936e6f",
-      "bytes": 87432,
+      "sha256": "8254fdb9f6032329c1b055c95683fcc0939b7e385471e6a05092e94c9e8f0486",
+      "bytes": 94535,
       "mode": "100644"
     },
     {
       "language": "python",
       "path": "sdk/python/src/arop/generated/control-plane/publication_gen.py",
-      "sha256": "225bc68af5f56177254c2edf83aefe082f85fac8d377882c9b2871dd06f19a5f",
-      "bytes": 37793,
+      "sha256": "7b4c73a0e57f5f73845be03209a0e18e8acd2a4cc05c0466286b1c4078a09cda",
+      "bytes": 40757,
       "mode": "100644"
     },
     {
       "language": "typescript",
       "path": "sdk/typescript/src/generated/control-plane/publication.gen.ts",
-      "sha256": "778e2ebb31766cc2d73b95185c01b4984ebc14b5f8afc9d2fd7497ca93da25a6",
-      "bytes": 35671,
+      "sha256": "bf9ec63d87f7320d4a6700c323529963de4146dd6d16ff0305c0867a2963ecd1",
+      "bytes": 38172,
       "mode": "100644"
     }
   ],
-  "outputs_sha256": "e45b89ca3e9b7c945e2e76a8cae0ffb5b7a3179f7795ef6bc5ae816d005d0905",
+  "outputs_sha256": "7f93710254184f0e36322e1f409eb49283d227dae2cd87f1411974f1113a07ba",
   "checks": [
+    {
+      "id": "schema-valid-asset-ref-safe-integer-maximum",
+      "passed": true,
+      "detail": "accepted"
+    },
     {
       "id": "schema-valid-manifest-read",
       "passed": true,
@@ -195,6 +218,11 @@
       "id": "schema-forward-manifest-read-future-field",
       "passed": true,
       "detail": "data must NOT have additional properties, data/identity must NOT have additional properties, data/skills/0 must NOT have additional properties, data/execution must NOT have additional properties"
+    },
+    {
+      "id": "schema-invalid-asset-ref-size-bytes-safe-maximum-plus-one",
+      "passed": true,
+      "detail": "unsafe JSON number at /size_bytes"
     },
     {
       "id": "schema-invalid-error-secret-egress",
@@ -229,7 +257,7 @@
     {
       "id": "mapping-profile",
       "passed": true,
-      "detail": "28 named types"
+      "detail": "31 named types"
     },
     {
       "id": "deterministic-output-set",

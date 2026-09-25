@@ -1,0 +1,11 @@
+{
+  "asset_id": "asset_018f7f8a-7b6c-7d5e-8f90-123456789abc",
+  "name": "maximum-safe-integer.bin",
+  "media_type": "application/octet-stream",
+  "size_bytes": 9007199254740991,
+  "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "access": {
+    "mode": "brokered",
+    "expires_at": "2026-09-25T00:00:00Z"
+  }
+}

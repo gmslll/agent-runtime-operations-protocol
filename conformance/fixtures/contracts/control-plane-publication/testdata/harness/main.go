@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -26,24 +27,30 @@ import (
 )
 
 const (
-	commandWant    = "make test-publication-contracts"
-	rootDir        = "conformance/fixtures/contracts/control-plane-publication"
-	checkerPath    = rootDir + "/testdata/harness/main.go"
-	configPath     = rootDir + "/pipeline.json"
-	casesPath      = rootDir + "/cases.json"
-	inventoryPath  = rootDir + "/contract-inventory.json"
-	waiverPath     = rootDir + "/transition/p11-p07-codegen-transition.json"
-	provenancePath = rootDir + "/generated/provenance.json"
-	baselineCommit = "a7b357dfd6a102622e7767539732d3cbbf184dbc"
+	commandWant         = "make test-publication-contracts"
+	rootDir             = "conformance/fixtures/contracts/control-plane-publication"
+	checkerPath         = rootDir + "/testdata/harness/main.go"
+	configPath          = rootDir + "/pipeline.json"
+	casesPath           = rootDir + "/cases.json"
+	inventoryPath       = rootDir + "/contract-inventory.json"
+	waiverPath          = rootDir + "/transition/p11-p07-codegen-transition.json"
+	provenancePath      = rootDir + "/generated/provenance.json"
+	baselineCommit      = "a7b357dfd6a102622e7767539732d3cbbf184dbc"
+	maxArchiveBytes     = int64(10485760)
+	maxArchiveEntries   = int64(256)
+	maxEntryBytes       = int64(4194304)
+	maxTotalBytes       = int64(52428800)
+	maxCompressionRatio = int64(100)
 )
 
 var orderedCaseIDs = []string{
-	"aggregate-component-conflict", "aggregate-path-conflict", "auth-get-agent-read", "auth-missing-bearer",
+	"aggregate-component-conflict", "aggregate-path-conflict", "asset-ref-size-bytes-safe-maximum", "asset-ref-size-bytes-safe-maximum-plus-one",
+	"auth-get-agent-read", "auth-missing-bearer",
 	"auth-post-agent-publish", "auth-unknown-security-extension", "bundle-absolute-path", "bundle-backslash-path",
-	"bundle-case-collision", "bundle-duplicate-entry", "bundle-encrypted-entry", "bundle-hardlink-entry",
+	"bundle-case-collision", "bundle-central-directory-mismatch", "bundle-duplicate-entry", "bundle-encrypted-entry", "bundle-hardlink-entry",
 	"bundle-limit-archive-bytes", "bundle-limit-compression-ratio", "bundle-limit-entry-count", "bundle-limit-entry-size",
-	"bundle-limit-total-size", "bundle-multiple-manifests", "bundle-network-ref", "bundle-parent-path",
-	"bundle-percent-bypass", "bundle-symlink-entry", "bundle-unicode-collision", "bundle-valid",
+	"bundle-limit-total-size", "bundle-multiple-manifests", "bundle-network-ref", "bundle-non-regular-type", "bundle-parent-path",
+	"bundle-percent-bypass", "bundle-symlink-entry", "bundle-unicode-collision", "bundle-unsupported-compression", "bundle-valid",
 	"error-400", "error-401-www-authenticate", "error-403", "error-404", "error-409", "error-413",
 	"error-415", "error-429-retry-after", "error-503-retry-after", "get-manifest-200-etag",
 	"get-manifest-forward-field", "idempotency-different-digest-conflict", "idempotency-same-digest-replay",
@@ -183,11 +190,12 @@ func main() {
 	add("strict-pipeline", load(root, configPath, &pipeline), "strict pipeline loaded")
 	var inventory map[string]any
 	add("strict-contract-inventory", load(root, inventoryPath, &inventory), "strict inventory loaded")
-	add("ordered-case-inventory", verifyCaseInventory(cases), "47 ordered unique cases")
-	add("pipeline-contract", verifyPipeline(pipeline), "two roots, explicit fixture roots and exact outputs")
+	add("ordered-case-inventory", verifyCaseInventory(cases), "52 ordered unique cases")
+	add("pipeline-contract", verifyPipeline(pipeline), "three roots, explicit fixture roots and exact outputs")
 	openapi, _, openapiErr := structuredfile.LoadAny(filepath.Join(root, "openapi/fragments/control-plane/publication-v1.yaml"))
 	add("openapi-strict-yaml", openapiErr, "single strict YAML document")
 	add("openapi-exact-contract", verifyOpenAPI(openapi), "exact Publication operations/auth/scopes/headers/status/media")
+	add("inventory-openapi-exact-binding", verifyInventoryContract(openapi, inventory), "inventory operations, headers, errors, idempotency, aggregate and bundle policy match parsed OpenAPI")
 	add("offline-reference-closure", verifyOfflineRefs(root, openapi, pipeline), "all references resolve inside declared offline resources")
 
 	for index, c := range cases.Cases {
@@ -242,7 +250,7 @@ func main() {
 		evidence = append(evidence, report.RuntimeEvidence{Kind: kind, SHA256: report.Hash(logs[kind]), Bytes: int64(len(logs[kind]))})
 	}
 	evidence = append(evidence, report.RuntimeEvidence{Kind: "p11-codegen-provenance", SHA256: report.Hash(pab), Bytes: int64(len(pab))})
-	result, err := report.Write(report.WriteOptions{Root: root, Directory: "build/reports/P11", Suite: "arop-publication-contracts", Class: "arop.publication", Command: command, CheckerPath: checkerPath, InputPaths: inputs, RuntimeInputPaths: []string{}, RuntimeEvidence: evidence, Checks: checks, Summary: map[string]any{"ordered_cases": 47, "logical_derives_from": []string{"openapi-control-plane-foundation", "publication-contract-fixtures", "generated-control-plane-go", "generated-control-plane-python", "generated-control-plane-typescript"}, "runtime_input_count": 0}, AuditNote: "P11 executes every ordered Publication case, independently regenerates and verifies three-language models/provenance, compiles isolated probes, validates the P01/P06/P07 transition and keeps runtime_inputs empty."})
+	result, err := report.Write(report.WriteOptions{Root: root, Directory: "build/reports/P11", Suite: "arop-publication-contracts", Class: "arop.publication", Command: command, CheckerPath: checkerPath, InputPaths: inputs, RuntimeInputPaths: []string{}, RuntimeEvidence: evidence, Checks: checks, Summary: map[string]any{"ordered_cases": 52, "logical_derives_from": []string{"openapi-control-plane-foundation", "publication-contract-fixtures", "generated-control-plane-go", "generated-control-plane-python", "generated-control-plane-typescript"}, "runtime_input_count": 0}, AuditNote: "P11 executes every ordered Publication case, independently regenerates and verifies three-language models/provenance, compiles isolated probes, validates the P01/P06/P07 transition and keeps runtime_inputs empty."})
 	fatal(err)
 	verified, mode, err := report.Verify(report.VerifyOptions{Root: root, ReportPath: "build/reports/P11/report.json"})
 	fatal(err)
@@ -276,7 +284,7 @@ func verifyPipeline(p pipelineDoc) error {
 	for _, r := range p.Roots {
 		roots[r.Name] = true
 	}
-	if !reflect.DeepEqual(roots, map[string]bool{"AROPError": true, "AgentManifest": true}) {
+	if !reflect.DeepEqual(roots, map[string]bool{"AROPError": true, "AgentManifest": true, "AssetRef": true}) {
 		return fmt.Errorf("roots=%v", roots)
 	}
 	all := append(append(append([]fixture{}, p.Fixtures.Valid...), p.Fixtures.Forward...), p.Fixtures.Invalid...)
@@ -306,9 +314,11 @@ func verifyOpenAPI(value any) error {
 		return errors.New("exactly two paths required")
 	}
 	want := map[string]map[string]string{"/v1/agent-definitions/{agent_id}/versions": {"post": "publishAgentVersion"}, "/v1/agent-definitions/{agent_id}/versions/{version}": {"get": "getAgentVersionManifest"}}
+	wantScopes := map[string][]string{"publishAgentVersion": {"agent:publish"}, "getAgentVersionManifest": {"agent:read"}}
+	wantStatuses := map[string][]string{"publishAgentVersion": {"201", "400", "401", "403", "409", "413", "415", "429", "503"}, "getAgentVersionManifest": {"200", "401", "403", "404", "429", "503"}}
 	for path, methods := range want {
 		item, ok := paths[path].(map[string]any)
-		if !ok {
+		if !ok || len(item) != len(methods) {
 			return fmt.Errorf("missing path %s", path)
 		}
 		for method, id := range methods {
@@ -317,12 +327,19 @@ func verifyOpenAPI(value any) error {
 				return fmt.Errorf("%s %s operation", method, path)
 			}
 			sec, _ := op["security"].([]any)
-			if len(sec) != 1 {
+			if len(sec) != 1 || !reflect.DeepEqual(sec[0], map[string]any{"ControlPlaneBearer": []any{}}) {
 				return fmt.Errorf("%s security", id)
 			}
-			scopes, _ := op["x-arop-required-scopes"].([]any)
-			if len(scopes) != 1 {
+			scopes, err := stringsFromAny(op["x-arop-required-scopes"])
+			if err != nil || !reflect.DeepEqual(scopes, wantScopes[id]) {
 				return fmt.Errorf("%s scope", id)
+			}
+			if op["x-arop-reject-unknown-security-extensions"] != true {
+				return fmt.Errorf("%s unknown security extension policy", id)
+			}
+			responses, _ := op["responses"].(map[string]any)
+			if !reflect.DeepEqual(sortedMapKeys(responses), wantStatuses[id]) {
+				return fmt.Errorf("%s response statuses=%v", id, sortedMapKeys(responses))
 			}
 		}
 	}
@@ -334,6 +351,328 @@ func verifyOpenAPI(value any) error {
 	}
 	if _, exists := bearer["bearerFormat"]; exists {
 		return errors.New("bearerFormat forbidden")
+	}
+	post, _ := operationByID(doc, "publishAgentVersion")
+	if post["x-arop-agent-id-must-match-manifest"] != true || post["x-arop-content-type-parameters-allowed"] != false {
+		return errors.New("publication request invariants")
+	}
+	idempotency, _ := post["x-arop-idempotency"].(map[string]any)
+	if idempotency["same-key-same-semantic-digest"] != "stable-201-same-location-and-etag" || integer(idempotency["same-key-different-semantic-digest"]) != 409 || len(idempotency) != 2 {
+		return errors.New("publication idempotency contract")
+	}
+	requestBody, _ := post["requestBody"].(map[string]any)
+	requestContent, _ := requestBody["content"].(map[string]any)
+	if requestBody["required"] != true || !reflect.DeepEqual(sortedMapKeys(requestContent), []string{"application/vnd.arop.agent-version-bundle+zip"}) {
+		return errors.New("publication request media type")
+	}
+	postResponses, _ := post["responses"].(map[string]any)
+	created, err := resolveLocal(doc, postResponses["201"])
+	if err != nil {
+		return err
+	}
+	if _, exists := created["content"]; exists || !reflect.DeepEqual(sortedMapKeys(asMap(created["headers"])), []string{"ETag", "Location"}) {
+		return errors.New("201 response body/header contract")
+	}
+	get, _ := operationByID(doc, "getAgentVersionManifest")
+	getResponses, _ := get["responses"].(map[string]any)
+	okResponse, err := resolveLocal(doc, getResponses["200"])
+	if err != nil {
+		return err
+	}
+	content := asMap(okResponse["content"])
+	jsonMedia := asMap(content["application/json"])
+	schema := asMap(jsonMedia["schema"])
+	if schema["$ref"] != "../../../schemas/manifest/agent-manifest-v1.schema.json" || !reflect.DeepEqual(sortedMapKeys(asMap(okResponse["headers"])), []string{"ETag"}) {
+		return errors.New("200 manifest response contract")
+	}
+	components := asMap(doc["components"])
+	headers := asMap(components["headers"])
+	if err := verifyHeaderComponent(doc, headers, "ManifestETag", `^"sha256:[0-9a-f]{64}"$`, 0, 0); err != nil {
+		return err
+	}
+	if err := verifyHeaderComponent(doc, headers, "AgentVersionLocation", `^/v1/agent-definitions/`, 0, 0); err != nil {
+		return err
+	}
+	if err := verifyHeaderComponent(doc, headers, "RetryAfter", "", 1, 86400); err != nil {
+		return err
+	}
+	if err := verifyHeaderComponent(doc, headers, "WWWAuthenticate", `^Bearer`, 0, 0); err != nil {
+		return err
+	}
+	for _, row := range expectedErrors() {
+		if err := verifyOpenAPIError(doc, row); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type errorContract struct {
+	Status          string
+	Code            string
+	Category        string
+	Retryable       bool
+	RequiredHeaders []string
+}
+
+func expectedErrors() []errorContract {
+	return []errorContract{
+		{"400", "INVALID_PUBLICATION_REQUEST", "validation", false, nil},
+		{"401", "AUTHENTICATION_REQUIRED", "authentication", false, []string{"WWW-Authenticate"}},
+		{"403", "PUBLICATION_FORBIDDEN", "authorization", false, nil},
+		{"404", "AGENT_VERSION_NOT_FOUND", "not_found", false, nil},
+		{"409", "AGENT_VERSION_CONFLICT", "conflict", false, nil},
+		{"413", "BUNDLE_TOO_LARGE", "capacity", false, nil},
+		{"415", "UNSUPPORTED_MEDIA_TYPE", "validation", false, nil},
+		{"429", "RATE_LIMITED", "capacity", true, []string{"Retry-After"}},
+		{"503", "DEPENDENCY_UNAVAILABLE", "dependency", true, []string{"Retry-After"}},
+	}
+}
+
+func operationByID(doc map[string]any, id string) (map[string]any, bool) {
+	for _, rawPath := range asMap(doc["paths"]) {
+		for _, rawOperation := range asMap(rawPath) {
+			op := asMap(rawOperation)
+			if op["operationId"] == id {
+				return op, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func resolveLocal(doc map[string]any, raw any) (map[string]any, error) {
+	value := asMap(raw)
+	for depth := 0; depth < 8; depth++ {
+		ref, _ := value["$ref"].(string)
+		if ref == "" {
+			return value, nil
+		}
+		if !strings.HasPrefix(ref, "#/") {
+			return nil, fmt.Errorf("non-local OpenAPI component ref %s", ref)
+		}
+		var current any = doc
+		for _, part := range strings.Split(strings.TrimPrefix(ref, "#/"), "/") {
+			part = strings.ReplaceAll(strings.ReplaceAll(part, "~1", "/"), "~0", "~")
+			object, ok := current.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("ref %s traverses non-object", ref)
+			}
+			current, ok = object[part]
+			if !ok {
+				return nil, fmt.Errorf("ref %s missing %s", ref, part)
+			}
+		}
+		value = asMap(current)
+	}
+	return nil, errors.New("OpenAPI local ref depth exceeded")
+}
+
+func verifyHeaderComponent(doc map[string]any, headers map[string]any, name, patternPrefix string, minimum, maximum int64) error {
+	header, err := resolveLocal(doc, headers[name])
+	if err != nil {
+		return fmt.Errorf("header %s: %w", name, err)
+	}
+	if header["required"] != true {
+		return fmt.Errorf("header %s not required", name)
+	}
+	schema := asMap(header["schema"])
+	if patternPrefix != "" && !strings.HasPrefix(fmt.Sprint(schema["pattern"]), patternPrefix) {
+		return fmt.Errorf("header %s pattern", name)
+	}
+	if minimum != 0 && (integer(schema["minimum"]) != minimum || integer(schema["maximum"]) != maximum) {
+		return fmt.Errorf("header %s bounds", name)
+	}
+	return nil
+}
+
+func verifyOpenAPIError(doc map[string]any, want errorContract) error {
+	found := false
+	for _, operationID := range []string{"publishAgentVersion", "getAgentVersionManifest"} {
+		op, _ := operationByID(doc, operationID)
+		responses := asMap(op["responses"])
+		raw, exists := responses[want.Status]
+		if !exists {
+			continue
+		}
+		found = true
+		response, err := resolveLocal(doc, raw)
+		if err != nil {
+			return err
+		}
+		if response["x-arop-error-code"] != want.Code || response["x-arop-error-category"] != want.Category || response["x-arop-retryable"] != want.Retryable {
+			return fmt.Errorf("%s status %s error semantics", operationID, want.Status)
+		}
+		headers := sortedMapKeys(asMap(response["headers"]))
+		if !reflect.DeepEqual(headers, want.RequiredHeaders) && !(len(headers) == 0 && len(want.RequiredHeaders) == 0) {
+			return fmt.Errorf("%s status %s headers=%v", operationID, want.Status, headers)
+		}
+		content := asMap(response["content"])
+		if !reflect.DeepEqual(sortedMapKeys(content), []string{"application/json"}) {
+			return fmt.Errorf("%s status %s media", operationID, want.Status)
+		}
+		schema := asMap(asMap(content["application/json"])["schema"])
+		if schema["$ref"] != "#/components/schemas/AROPError" {
+			return fmt.Errorf("%s status %s body schema", operationID, want.Status)
+		}
+	}
+	if !found {
+		return fmt.Errorf("error status %s absent", want.Status)
+	}
+	return nil
+}
+
+func asMap(value any) map[string]any {
+	result, _ := value.(map[string]any)
+	return result
+}
+
+func stringsFromAny(value any) ([]string, error) {
+	items, ok := value.([]any)
+	if !ok {
+		return nil, errors.New("expected string array")
+	}
+	result := make([]string, len(items))
+	for index, item := range items {
+		var ok bool
+		result[index], ok = item.(string)
+		if !ok {
+			return nil, errors.New("expected string array item")
+		}
+	}
+	return result, nil
+}
+
+func sortedMapKeys(value map[string]any) []string {
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func integer(value any) int64 {
+	switch number := value.(type) {
+	case int:
+		return int64(number)
+	case int64:
+		return number
+	case float64:
+		return int64(number)
+	case json.Number:
+		parsed, _ := number.Int64()
+		return parsed
+	default:
+		return -1
+	}
+}
+
+func verifyInventoryContract(openapi any, inventory map[string]any) error {
+	doc := asMap(openapi)
+	if inventory["schema_version"] != float64(1) && integer(inventory["schema_version"]) != 1 {
+		return errors.New("inventory schema version")
+	}
+	if inventory["contract_id"] != "arop-control-plane-publication-v1" || inventory["phase"] != "P11" || inventory["exposure"] != "public-contract" {
+		return errors.New("inventory identity")
+	}
+	aggregate := asMap(inventory["aggregate_policy"])
+	if aggregate["aggregate_path"] != "openapi/control-plane-v1.yaml" || aggregate["completion_phase"] != "P20" || aggregate["p11_rule"] != "tracked-aggregate-forbidden-synthetic-bundle-only" {
+		return errors.New("aggregate policy")
+	}
+	security := asMap(inventory["security"])
+	if security["scheme_name"] != "ControlPlaneBearer" || security["type"] != "http" || security["scheme"] != "bearer" || security["bearer_format_declared"] != false {
+		return errors.New("inventory security")
+	}
+	operations, ok := inventory["operations"].([]any)
+	if !ok || len(operations) != 2 {
+		return errors.New("inventory operations")
+	}
+	wantPaths := map[string]string{"publishAgentVersion": "/v1/agent-definitions/{agent_id}/versions", "getAgentVersionManifest": "/v1/agent-definitions/{agent_id}/versions/{version}"}
+	wantMethods := map[string]string{"publishAgentVersion": "POST", "getAgentVersionManifest": "GET"}
+	wantScopes := map[string][]string{"publishAgentVersion": {"agent:publish"}, "getAgentVersionManifest": {"agent:read"}}
+	seen := map[string]bool{}
+	for _, raw := range operations {
+		entry := asMap(raw)
+		id := fmt.Sprint(entry["operation_id"])
+		if seen[id] || wantPaths[id] == "" || entry["path"] != wantPaths[id] || entry["method"] != wantMethods[id] {
+			return fmt.Errorf("inventory operation %s identity", id)
+		}
+		seen[id] = true
+		scopes, err := stringsFromAny(entry["required_scopes"])
+		if err != nil || !reflect.DeepEqual(scopes, wantScopes[id]) || entry["scope_extension"] != "x-arop-required-scopes" {
+			return fmt.Errorf("inventory operation %s scopes", id)
+		}
+		op, exists := operationByID(doc, id)
+		if !exists {
+			return fmt.Errorf("OpenAPI operation %s absent", id)
+		}
+		openScopes, _ := stringsFromAny(op["x-arop-required-scopes"])
+		if !reflect.DeepEqual(openScopes, scopes) {
+			return fmt.Errorf("inventory operation %s scope drift", id)
+		}
+		success := asMap(entry["success"])
+		responses := asMap(op["responses"])
+		status := fmt.Sprint(integer(success["status"]))
+		response, err := resolveLocal(doc, responses[status])
+		if err != nil {
+			return err
+		}
+		responseHeaders := sortedMapKeys(asMap(response["headers"]))
+		declaredHeaders, err := stringsFromAny(success["required_headers"])
+		if err != nil || !reflect.DeepEqual(responseHeaders, declaredHeaders) {
+			return fmt.Errorf("inventory operation %s success headers", id)
+		}
+		requestMedia, err := stringsFromAny(entry["request_media_types"])
+		if err != nil {
+			return err
+		}
+		if id == "publishAgentVersion" {
+			if !reflect.DeepEqual(requestMedia, []string{"application/vnd.arop.agent-version-bundle+zip"}) || success["body_schema"] != nil || success["response_media_type"] != nil || status != "201" {
+				return errors.New("publish inventory success/media")
+			}
+		} else if len(requestMedia) != 0 || success["body_schema"] != "AgentManifest" || success["response_media_type"] != "application/json" || status != "200" {
+			return errors.New("read inventory success/media")
+		}
+	}
+	request := asMap(inventory["request_invariants"])
+	idempotency := asMap(request["idempotency"])
+	post, _ := operationByID(doc, "publishAgentVersion")
+	postIdempotency := asMap(post["x-arop-idempotency"])
+	if request["agent_id_equals_manifest_identity_id"] != true || request["content_type_parameters_allowed"] != false || request["unknown_security_extension"] != "fail-closed" || idempotency["same_key_same_semantic_digest"] != postIdempotency["same-key-same-semantic-digest"] || fmt.Sprint(idempotency["same_key_different_semantic_digest"]) != fmt.Sprint(integer(postIdempotency["same-key-different-semantic-digest"])) {
+		return errors.New("inventory request invariants")
+	}
+	headerContract := asMap(inventory["header_contract"])
+	if asMap(headerContract["ETag"])["exact_wire_pattern"] != `"sha256:<64 lowercase hex>"` || asMap(headerContract["ETag"])["weak_allowed"] != false || asMap(headerContract["Content-Type"])["exact_value"] != "application/vnd.arop.agent-version-bundle+zip" || asMap(headerContract["Content-Type"])["parameters_allowed"] != false || integer(asMap(headerContract["Idempotency-Key"])["min_bytes"]) != 8 || integer(asMap(headerContract["Idempotency-Key"])["max_bytes"]) != 200 || integer(asMap(headerContract["Retry-After"])["minimum"]) != 1 || integer(asMap(headerContract["Retry-After"])["maximum"]) != 86400 {
+		return errors.New("inventory header contract")
+	}
+	errorRows, ok := inventory["error_contract"].([]any)
+	if !ok || len(errorRows) != len(expectedErrors()) {
+		return errors.New("inventory error contract count")
+	}
+	for index, want := range expectedErrors() {
+		row := asMap(errorRows[index])
+		headers, err := stringsFromAny(row["required_headers"])
+		if err != nil || fmt.Sprint(integer(row["status"])) != want.Status || row["body_schema"] != "AROPError" || row["code"] != want.Code || row["category"] != want.Category || row["retryable"] != want.Retryable || !reflect.DeepEqual(headers, want.RequiredHeaders) && !(len(headers) == 0 && len(want.RequiredHeaders) == 0) {
+			return fmt.Errorf("inventory error row %d", index)
+		}
+	}
+	bundle := asMap(inventory["bundle_profile"])
+	limits := asMap(bundle["limits"])
+	if bundle["media_type"] != "application/vnd.arop.agent-version-bundle+zip" || bundle["manifest_path"] != "agent-manifest.json" || integer(bundle["manifest_count"]) != 1 || bundle["network_access"] != false || integer(limits["max_archive_bytes"]) != maxArchiveBytes || integer(limits["max_entries"]) != maxArchiveEntries || integer(limits["max_entry_uncompressed_bytes"]) != maxEntryBytes || integer(limits["max_total_uncompressed_bytes"]) != maxTotalBytes || integer(limits["max_compression_ratio"]) != maxCompressionRatio {
+		return errors.New("inventory bundle limits/profile")
+	}
+	codegen := asMap(inventory["codegen"])
+	roots, ok := codegen["roots"].([]any)
+	if !ok || len(roots) != 3 {
+		return errors.New("inventory codegen roots")
+	}
+	rootNames := []string{}
+	for _, raw := range roots {
+		rootNames = append(rootNames, fmt.Sprint(asMap(raw)["name"]))
+	}
+	if !reflect.DeepEqual(rootNames, []string{"AROPError", "AgentManifest", "AssetRef"}) {
+		return fmt.Errorf("inventory codegen roots=%v", rootNames)
 	}
 	return nil
 }
@@ -387,6 +726,19 @@ func verifyCase(root string, c caseDef, openapi any) error {
 	if strings.Contains(c.ID, "safe-maximum") {
 		return verifySafeIntegerCase(root, c)
 	}
+	doc := asMap(openapi)
+	if strings.HasPrefix(c.ID, "aggregate-") {
+		return verifyAggregationCase(root, c, doc)
+	}
+	if strings.HasPrefix(c.ID, "auth-") {
+		return verifyAuthorizationCase(root, c, doc)
+	}
+	if strings.HasPrefix(c.ID, "error-") {
+		return verifyErrorCase(root, c, doc)
+	}
+	if strings.HasPrefix(c.ID, "idempotency-") {
+		return verifyIdempotencyCase(root, c, doc)
+	}
 	switch c.ID {
 	case "get-manifest-200-etag":
 		if c.Expected["etag"] != "strong-semantic-manifest-digest" {
@@ -398,6 +750,15 @@ func verifyCase(root string, c caseDef, openapi any) error {
 		}
 		if manifest["kind"] != "AgentManifest" {
 			return errors.New("GET fixture is not AgentManifest")
+		}
+		get, _ := operationByID(doc, "getAgentVersionManifest")
+		response, err := resolveLocal(doc, asMap(get["responses"])["200"])
+		if err != nil {
+			return err
+		}
+		etag, err := resolveLocal(doc, asMap(response["headers"])["ETag"])
+		if err != nil || asMap(etag["schema"])["pattern"] != `^"sha256:[0-9a-f]{64}"$` || etag["x-arop-digest-source"] != "validated-semantic-manifest-document" || etag["x-arop-strength"] != "strong" {
+			return errors.New("GET ETag is not exact strong semantic digest")
 		}
 	case "get-manifest-forward-field":
 		b, err := os.ReadFile(filepath.Join(root, rootDir, c.Source))
@@ -419,8 +780,13 @@ func verifyCase(root string, c caseDef, openapi any) error {
 		}
 		return nil
 	case "post-content-type-exact":
-		if fmt.Sprint(c.Input["content_type"]) == "application/vnd.arop.agent-version-bundle+zip" {
+		post, _ := operationByID(doc, "publishAgentVersion")
+		declared := sortedMapKeys(asMap(asMap(post["requestBody"])["content"]))
+		if !reflect.DeepEqual(declared, []string{"application/vnd.arop.agent-version-bundle+zip"}) || post["x-arop-content-type-parameters-allowed"] != false || fmt.Sprint(c.Input["content_type"]) == declared[0] {
 			return errors.New("negative content type did not vary")
+		}
+		if c.Expected["status"] != float64(415) && integer(c.Expected["status"]) != 415 || c.Expected["code"] != "UNSUPPORTED_MEDIA_TYPE" {
+			return errors.New("content type expected response")
 		}
 	case "post-created-location-etag-no-body":
 		var v map[string]any
@@ -431,26 +797,173 @@ func verifyCase(root string, c caseDef, openapi any) error {
 		if response["body"] != nil {
 			return errors.New("201 body must be null")
 		}
+		post, _ := operationByID(doc, "publishAgentVersion")
+		created, err := resolveLocal(doc, asMap(post["responses"])["201"])
+		if err != nil {
+			return err
+		}
+		headers := asMap(response["headers"])
+		if integer(response["status"]) != 201 || len(headers) != 2 || !strings.HasPrefix(fmt.Sprint(headers["ETag"]), `"sha256:`) || !strings.HasPrefix(fmt.Sprint(headers["Location"]), "/v1/agent-definitions/") || !reflect.DeepEqual(sortedMapKeys(asMap(created["headers"])), []string{"ETag", "Location"}) {
+			return errors.New("201 fixture/OpenAPI header contract")
+		}
+	case "manifest-agent-id-mismatch":
+		post, _ := operationByID(doc, "publishAgentVersion")
+		if post["x-arop-agent-id-must-match-manifest"] != true || c.Input["path_agent_id"] == c.Input["manifest_agent_id"] || integer(c.Expected["status"]) != 400 || c.Expected["code"] != "INVALID_PUBLICATION_REQUEST" {
+			return errors.New("agent identity mismatch contract")
+		}
 	default:
-		if c.Source != "" {
-			var matrix map[string]any
-			if err := load(root, rootDir+"/"+c.Source, &matrix); err != nil {
-				return err
-			}
-			rows, _ := matrix["cases"].([]any)
-			found := false
-			for _, row := range rows {
-				m, _ := row.(map[string]any)
-				if m["id"] == c.ID {
-					found = true
-				}
-			}
-			if !found {
-				return fmt.Errorf("case absent from matrix %s", c.Source)
-			}
+		return fmt.Errorf("case %s has no executable verifier", c.ID)
+	}
+	return nil
+}
+
+func matrixCase(root string, c caseDef) (map[string]any, error) {
+	if c.Source == "" {
+		return nil, errors.New("matrix source missing")
+	}
+	var matrix map[string]any
+	if err := load(root, rootDir+"/"+c.Source, &matrix); err != nil {
+		return nil, err
+	}
+	rows, ok := matrix["cases"].([]any)
+	if !ok {
+		return nil, errors.New("matrix cases missing")
+	}
+	for _, raw := range rows {
+		row := asMap(raw)
+		if row["id"] == c.ID {
+			return row, nil
 		}
 	}
-	_ = openapi
+	return nil, fmt.Errorf("case %s absent from matrix %s", c.ID, c.Source)
+}
+
+func verifyAggregationCase(root string, c caseDef, doc map[string]any) error {
+	row, err := matrixCase(root, c)
+	if err != nil {
+		return err
+	}
+	expected := asMap(row["expected"])
+	if expected["accepted"] != false {
+		return errors.New("aggregation conflict must be rejected")
+	}
+	input := asMap(row["input"])
+	switch c.ID {
+	case "aggregate-component-conflict":
+		components := asMap(asMap(doc["components"])["securitySchemes"])
+		name := fmt.Sprint(input["existing_component"])
+		if _, exists := components[name]; !exists || input["incoming_component"] == components[name] || expected["reason"] != "component-conflict" {
+			return errors.New("component conflict fixture does not conflict with parsed OpenAPI")
+		}
+	case "aggregate-path-conflict":
+		existing := fmt.Sprint(input["existing_operation"])
+		parts := strings.SplitN(existing, " ", 2)
+		if len(parts) != 2 {
+			return errors.New("invalid aggregate operation fixture")
+		}
+		pathItem := asMap(asMap(doc["paths"])[parts[1]])
+		if _, exists := pathItem[strings.ToLower(parts[0])]; !exists || input["incoming_operation"] == pathItem[strings.ToLower(parts[0])] || expected["reason"] != "path-method-conflict" {
+			return errors.New("path conflict fixture does not conflict with parsed OpenAPI")
+		}
+	default:
+		return errors.New("unknown aggregation case")
+	}
+	return nil
+}
+
+func verifyAuthorizationCase(root string, c caseDef, doc map[string]any) error {
+	row, err := matrixCase(root, c)
+	if err != nil {
+		return err
+	}
+	opID := fmt.Sprint(row["operation_id"])
+	op, exists := operationByID(doc, opID)
+	if !exists {
+		return fmt.Errorf("operation %s absent", opID)
+	}
+	required, err := stringsFromAny(op["x-arop-required-scopes"])
+	if err != nil {
+		return err
+	}
+	presented, err := stringsFromAny(row["presented_scopes"])
+	if err != nil {
+		return err
+	}
+	credentialPresent := true
+	if raw, exists := row["credential_present"]; exists {
+		credentialPresent, _ = raw.(bool)
+	}
+	allowed := credentialPresent && row["unknown_security_extension"] != true
+	for _, requiredScope := range required {
+		found := false
+		for _, scope := range presented {
+			found = found || scope == requiredScope
+		}
+		allowed = allowed && found
+	}
+	expected := asMap(row["expected"])
+	if expected["allowed"] != allowed {
+		return fmt.Errorf("authorization result allowed=%t", allowed)
+	}
+	if !credentialPresent && (integer(expected["status"]) != 401 || expected["code"] != "AUTHENTICATION_REQUIRED") {
+		return errors.New("missing credential result")
+	}
+	if row["unknown_security_extension"] == true && (op["x-arop-reject-unknown-security-extensions"] != true || expected["reason"] != "unknown-security-extension") {
+		return errors.New("unknown security extension result")
+	}
+	return nil
+}
+
+func verifyErrorCase(root string, c caseDef, doc map[string]any) error {
+	row, err := matrixCase(root, c)
+	if err != nil {
+		return err
+	}
+	want := errorContract{Status: fmt.Sprint(integer(row["status"])), Code: fmt.Sprint(asMap(row["body"])["code"]), Category: fmt.Sprint(asMap(row["body"])["category"])}
+	want.Retryable, _ = asMap(row["body"])["retryable"].(bool)
+	if headers, ok := row["required_headers"].([]any); ok {
+		for _, raw := range headers {
+			want.RequiredHeaders = append(want.RequiredHeaders, fmt.Sprint(raw))
+		}
+	} else {
+		want.RequiredHeaders = sortedMapKeys(asMap(row["required_headers"]))
+	}
+	if err := verifyOpenAPIError(doc, want); err != nil {
+		return err
+	}
+	headers := asMap(row["required_headers"])
+	if value, exists := headers["Retry-After"]; exists {
+		number := integer(json.Number(fmt.Sprint(value)))
+		if number < 1 || number > 86400 || integer(asMap(row["body"])["retry_after_seconds"]) != number {
+			return errors.New("Retry-After fixture/header mismatch")
+		}
+	}
+	if value, exists := headers["WWW-Authenticate"]; exists && value != "Bearer" {
+		return errors.New("WWW-Authenticate fixture")
+	}
+	return nil
+}
+
+func verifyIdempotencyCase(root string, c caseDef, doc map[string]any) error {
+	row, err := matrixCase(root, c)
+	if err != nil {
+		return err
+	}
+	post, _ := operationByID(doc, "publishAgentVersion")
+	contract := asMap(post["x-arop-idempotency"])
+	same := row["first_digest"] == row["replay_digest"]
+	expected := asMap(row["expected"])
+	if same {
+		if contract["same-key-same-semantic-digest"] != "stable-201-same-location-and-etag" || integer(expected["status"]) != 201 || expected["etag"] != fmt.Sprintf(`"%s"`, row["first_digest"]) || !strings.HasPrefix(fmt.Sprint(expected["location"]), "/v1/agent-definitions/") {
+			return errors.New("same digest replay contract")
+		}
+	} else if integer(contract["same-key-different-semantic-digest"]) != 409 || integer(expected["status"]) != 409 || expected["code"] != "AGENT_VERSION_CONFLICT" {
+		return errors.New("different digest replay contract")
+	}
+	key := fmt.Sprint(row["key"])
+	if len(key) < 8 || len(key) > 200 || strings.IndexFunc(key, func(r rune) bool { return r < '!' || r > '~' }) >= 0 {
+		return errors.New("idempotency key fixture outside header contract")
+	}
 	return nil
 }
 
@@ -464,11 +977,17 @@ func verifyBundleCase(root string, c caseDef) error {
 		if err != nil {
 			return err
 		}
-		r, err := zip.OpenReader(path)
+		archive, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
-		defer r.Close()
+		if err := validateBundleArchive(archive); err != nil {
+			return fmt.Errorf("valid archive rejected: %w", err)
+		}
+		r, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+		if err != nil {
+			return err
+		}
 		if len(r.File) != 1 || r.File[0].Name != "agent-manifest.json" {
 			return errors.New("valid archive inventory")
 		}
@@ -497,21 +1016,21 @@ func verifyBundleCase(root string, c caseDef) error {
 		if err != nil {
 			return err
 		}
-		r, err := zip.OpenReader(path)
+		archive, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
-		defer r.Close()
-		if fixture == "" || !bundleArchiveRejects(c.ID, r.File) {
-			return fmt.Errorf("adversarial archive did not exhibit %s", c.ID)
+		if fixture == "" {
+			return errors.New("empty bundle fixture")
 		}
-		return nil
+		return expectBundleReason(archive, fmt.Sprint(asMap(row["expected"])["reason"]))
 	}
 	if entries, ok := stringSlice(row["entries"]); ok {
-		if !bundleEntrySetRejects(c.ID, entries) {
-			return fmt.Errorf("adversarial entry set did not exhibit %s", c.ID)
+		archive, err := archiveWithEntries(entries, zip.Deflate, 0)
+		if err != nil {
+			return err
 		}
-		return nil
+		return expectBundleReason(archive, fmt.Sprint(asMap(row["expected"])["reason"]))
 	}
 	if ref, ok := row["manifest_ref"].(string); ok {
 		u, err := url.Parse(ref)
@@ -521,18 +1040,29 @@ func verifyBundleCase(root string, c caseDef) error {
 		return nil
 	}
 	if limits, ok := row["limits"].(map[string]any); ok {
-		maximums := map[string]float64{"archive_bytes": 10485760, "compression_ratio": 100, "entries": 256, "entry_uncompressed_bytes": 4194304, "total_uncompressed_bytes": 52428800}
+		maximums := map[string]int64{"archive_bytes": maxArchiveBytes, "compression_ratio": maxCompressionRatio, "entries": maxArchiveEntries, "entry_uncompressed_bytes": maxEntryBytes, "total_uncompressed_bytes": maxTotalBytes}
 		if len(limits) != 1 {
 			return errors.New("limit fixture must isolate exactly one limit")
 		}
 		for name, raw := range limits {
-			value, vok := raw.(float64)
+			value := integer(raw)
 			maximum, mok := maximums[name]
-			if !vok || !mok || value != maximum+1 {
+			if !mok || value != maximum+1 {
 				return fmt.Errorf("limit fixture %s is not exact maximum+1", name)
 			}
+			archive, err := archiveForLimit(name)
+			if err != nil {
+				return err
+			}
+			return expectBundleReason(archive, fmt.Sprint(asMap(row["expected"])["reason"]))
 		}
-		return nil
+	}
+	if profile, ok := row["generated_archive"].(string); ok {
+		archive, err := generatedAdversarialArchive(profile)
+		if err != nil {
+			return err
+		}
+		return expectBundleReason(archive, fmt.Sprint(asMap(row["expected"])["reason"]))
 	}
 	return fmt.Errorf("bundle case %s has no executable fixture", c.ID)
 }
@@ -570,52 +1100,6 @@ func bundleFixturePath(root string, row map[string]any) (string, error) {
 	return path, nil
 }
 
-func bundleArchiveRejects(id string, files []*zip.File) bool {
-	switch id {
-	case "bundle-duplicate-entry":
-		seen := map[string]bool{}
-		for _, f := range files {
-			if seen[f.Name] {
-				return true
-			}
-			seen[f.Name] = true
-		}
-	case "bundle-encrypted-entry":
-		for _, f := range files {
-			if f.Flags&1 != 0 {
-				return true
-			}
-		}
-	case "bundle-hardlink-entry":
-		for _, f := range files {
-			if bytes.Contains(f.Extra, []byte("HARDLINK\x00")) {
-				return true
-			}
-		}
-	case "bundle-multiple-manifests":
-		count := 0
-		for _, f := range files {
-			if strings.TrimPrefix(filepath.ToSlash(f.Name), "./") == "agent-manifest.json" {
-				count++
-			}
-		}
-		return count > 1
-	case "bundle-parent-path":
-		for _, f := range files {
-			if strings.Contains(filepath.ToSlash(f.Name), "../") {
-				return true
-			}
-		}
-	case "bundle-symlink-entry":
-		for _, f := range files {
-			if f.Mode()&os.ModeSymlink != 0 {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func stringSlice(raw any) ([]string, bool) {
 	values, ok := raw.([]any)
 	if !ok {
@@ -632,61 +1116,387 @@ func stringSlice(raw any) ([]string, bool) {
 	return out, true
 }
 
-func bundleEntrySetRejects(id string, entries []string) bool {
-	switch id {
-	case "bundle-absolute-path":
-		return len(entries) == 1 && strings.HasPrefix(entries[0], "/")
-	case "bundle-backslash-path":
-		return len(entries) == 1 && strings.Contains(entries[0], "\\")
-	case "bundle-percent-bypass":
-		decoded, err := url.PathUnescape(entries[0])
-		return err == nil && decoded != entries[0] && strings.Contains(decoded, "../")
-	case "bundle-case-collision":
-		return len(entries) == 2 && strings.EqualFold(entries[0], entries[1]) && entries[0] != entries[1]
-	case "bundle-unicode-collision":
-		normalize := func(s string) string { return strings.ReplaceAll(s, "e\u0301", "é") }
-		return len(entries) == 2 && normalize(entries[0]) == normalize(entries[1]) && entries[0] != entries[1]
+type bundleValidationError struct{ reason string }
+
+func (e bundleValidationError) Error() string { return e.reason }
+
+func rejectBundle(reason string) error { return bundleValidationError{reason: reason} }
+
+func expectBundleReason(archive []byte, want string) error {
+	err := validateBundleArchive(archive)
+	var rejected bundleValidationError
+	if !errors.As(err, &rejected) {
+		if err == nil {
+			return fmt.Errorf("adversarial archive accepted; want %s", want)
+		}
+		return fmt.Errorf("archive failed outside policy reason: %w", err)
 	}
-	return false
+	if rejected.reason != want {
+		return fmt.Errorf("archive reason=%s want=%s", rejected.reason, want)
+	}
+	return nil
 }
-func verifySafeIntegerCase(root string, c caseDef) error {
-	var matrix map[string]any
-	if err := load(root, rootDir+"/"+c.Source, &matrix); err != nil {
-		return err
+
+func validateBundleArchive(archive []byte) error {
+	if int64(len(archive)) > maxArchiveBytes {
+		return rejectBundle("archive-bytes")
 	}
-	rows, _ := matrix["cases"].([]any)
-	var fixturePath string
-	for _, row := range rows {
-		m := row.(map[string]any)
-		if m["id"] == c.ID {
-			fixturePath = fmt.Sprint(m["fixture"])
+	if err := verifyCentralDirectory(archive); err != nil {
+		return rejectBundle("central-directory-mismatch")
+	}
+	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		return rejectBundle("central-directory-mismatch")
+	}
+	if int64(len(reader.File)) > maxArchiveEntries {
+		return rejectBundle("entry-count")
+	}
+	seen, folded, normalized := map[string]bool{}, map[string]string{}, map[string]string{}
+	manifestCount := 0
+	for _, file := range reader.File {
+		name := file.Name
+		if seen[name] {
+			return rejectBundle("duplicate-entry")
+		}
+		seen[name] = true
+		if prior, exists := folded[strings.ToLower(name)]; exists && prior != name {
+			return rejectBundle("case-collision")
+		}
+		folded[strings.ToLower(name)] = name
+		normal := strings.ReplaceAll(name, "e\u0301", "é")
+		if prior, exists := normalized[normal]; exists && prior != name {
+			return rejectBundle("unicode-normalization-collision")
+		}
+		normalized[normal] = name
+		if strings.TrimPrefix(file.Name, "./") == "agent-manifest.json" {
+			manifestCount++
 		}
 	}
+	if manifestCount > 1 {
+		return rejectBundle("multiple-root-manifests")
+	}
+	seen, folded, normalized = map[string]bool{}, map[string]string{}, map[string]string{}
+	var total uint64
+	highCompressionRatio := false
+	for _, file := range reader.File {
+		name := file.Name
+		if seen[name] {
+			return rejectBundle("duplicate-entry")
+		}
+		seen[name] = true
+		if prior, exists := folded[strings.ToLower(name)]; exists && prior != name {
+			return rejectBundle("case-collision")
+		}
+		folded[strings.ToLower(name)] = name
+		normal := strings.ReplaceAll(name, "e\u0301", "é")
+		if prior, exists := normalized[normal]; exists && prior != name {
+			return rejectBundle("unicode-normalization-collision")
+		}
+		normalized[normal] = name
+		if strings.HasPrefix(name, "/") || filepath.IsAbs(name) || len(name) >= 3 && name[1] == ':' {
+			return rejectBundle("absolute-path")
+		}
+		if strings.Contains(name, "\\") {
+			return rejectBundle("backslash-path")
+		}
+		decoded, decodeErr := url.PathUnescape(name)
+		if decodeErr != nil || decoded != name {
+			return rejectBundle("percent-encoded-path-bypass")
+		}
+		for _, segment := range strings.Split(name, "/") {
+			if segment == ".." {
+				return rejectBundle("parent-path-segment")
+			}
+			if segment == "" || segment == "." {
+				return rejectBundle("non-portable-path")
+			}
+		}
+		if file.Flags&1 != 0 {
+			return rejectBundle("encrypted-entry")
+		}
+		if bytes.Contains(file.Extra, []byte("HARDLINK\x00")) {
+			return rejectBundle("hardlink-entry")
+		}
+		if file.Mode()&os.ModeSymlink != 0 {
+			return rejectBundle("symlink-entry")
+		}
+		if file.Mode()&os.ModeType != 0 {
+			return rejectBundle("non-regular-type")
+		}
+		if file.Method != zip.Store && file.Method != zip.Deflate {
+			return rejectBundle("unsupported-compression")
+		}
+		if file.UncompressedSize64 > uint64(maxEntryBytes) {
+			return rejectBundle("entry-size")
+		}
+		if ^uint64(0)-total < file.UncompressedSize64 {
+			return rejectBundle("total-size")
+		}
+		total += file.UncompressedSize64
+		if total > uint64(maxTotalBytes) {
+			return rejectBundle("total-size")
+		}
+		if file.UncompressedSize64 > 0 && (file.CompressedSize64 == 0 || file.CompressedSize64 <= ^uint64(0)/uint64(maxCompressionRatio) && file.UncompressedSize64 > file.CompressedSize64*uint64(maxCompressionRatio)) {
+			highCompressionRatio = true
+		}
+	}
+	if highCompressionRatio {
+		return rejectBundle("compression-ratio")
+	}
+	return nil
+}
+
+func verifyCentralDirectory(archive []byte) error {
+	eocd := -1
+	start := len(archive) - 22 - 65535
+	if start < 0 {
+		start = 0
+	}
+	for index := len(archive) - 22; index >= start; index-- {
+		if index >= 0 && binary.LittleEndian.Uint32(archive[index:index+4]) == 0x06054b50 {
+			eocd = index
+			break
+		}
+	}
+	if eocd < 0 || eocd+22 > len(archive) {
+		return errors.New("end record absent")
+	}
+	commentLength := int(binary.LittleEndian.Uint16(archive[eocd+20 : eocd+22]))
+	if eocd+22+commentLength != len(archive) || binary.LittleEndian.Uint16(archive[eocd+4:eocd+6]) != 0 || binary.LittleEndian.Uint16(archive[eocd+6:eocd+8]) != 0 {
+		return errors.New("end record inconsistent")
+	}
+	countDisk := int(binary.LittleEndian.Uint16(archive[eocd+8 : eocd+10]))
+	countTotal := int(binary.LittleEndian.Uint16(archive[eocd+10 : eocd+12]))
+	centralSize := int(binary.LittleEndian.Uint32(archive[eocd+12 : eocd+16]))
+	centralOffset := int(binary.LittleEndian.Uint32(archive[eocd+16 : eocd+20]))
+	if countDisk != countTotal || countTotal == 0xffff || centralOffset < 0 || centralSize < 0 || centralOffset+centralSize != eocd {
+		return errors.New("central directory bounds")
+	}
+	position := centralOffset
+	localOffsets := map[int]bool{}
+	for index := 0; index < countTotal; index++ {
+		if position+46 > eocd || binary.LittleEndian.Uint32(archive[position:position+4]) != 0x02014b50 {
+			return errors.New("central entry absent")
+		}
+		flags := binary.LittleEndian.Uint16(archive[position+8 : position+10])
+		method := binary.LittleEndian.Uint16(archive[position+10 : position+12])
+		crc := binary.LittleEndian.Uint32(archive[position+16 : position+20])
+		compressed := binary.LittleEndian.Uint32(archive[position+20 : position+24])
+		uncompressed := binary.LittleEndian.Uint32(archive[position+24 : position+28])
+		nameLength := int(binary.LittleEndian.Uint16(archive[position+28 : position+30]))
+		extraLength := int(binary.LittleEndian.Uint16(archive[position+30 : position+32]))
+		entryCommentLength := int(binary.LittleEndian.Uint16(archive[position+32 : position+34]))
+		localOffset := int(binary.LittleEndian.Uint32(archive[position+42 : position+46]))
+		end := position + 46 + nameLength + extraLength + entryCommentLength
+		if end > eocd || localOffset < 0 || localOffset+30 > centralOffset || localOffsets[localOffset] || binary.LittleEndian.Uint32(archive[localOffset:localOffset+4]) != 0x04034b50 {
+			return errors.New("local entry bounds")
+		}
+		localOffsets[localOffset] = true
+		localFlags := binary.LittleEndian.Uint16(archive[localOffset+6 : localOffset+8])
+		localMethod := binary.LittleEndian.Uint16(archive[localOffset+8 : localOffset+10])
+		localNameLength := int(binary.LittleEndian.Uint16(archive[localOffset+26 : localOffset+28]))
+		localExtraLength := int(binary.LittleEndian.Uint16(archive[localOffset+28 : localOffset+30]))
+		localEnd := localOffset + 30 + localNameLength + localExtraLength
+		if localEnd > centralOffset || flags != localFlags || method != localMethod || !bytes.Equal(archive[position+46:position+46+nameLength], archive[localOffset+30:localOffset+30+localNameLength]) {
+			return errors.New("central/local metadata mismatch")
+		}
+		if flags&8 == 0 && (crc != binary.LittleEndian.Uint32(archive[localOffset+14:localOffset+18]) || compressed != binary.LittleEndian.Uint32(archive[localOffset+18:localOffset+22]) || uncompressed != binary.LittleEndian.Uint32(archive[localOffset+22:localOffset+26])) {
+			return errors.New("central/local digest-size mismatch")
+		}
+		position = end
+	}
+	if position != eocd {
+		return errors.New("central directory trailing bytes")
+	}
+	return nil
+}
+
+func archiveWithEntries(names []string, method uint16, payloadBytes int64) ([]byte, error) {
+	var buffer bytes.Buffer
+	writer := zip.NewWriter(&buffer)
+	for _, name := range names {
+		header := &zip.FileHeader{Name: name, Method: method}
+		header.SetMode(0o600)
+		entry, err := writer.CreateHeader(header)
+		if err != nil {
+			return nil, err
+		}
+		remaining := payloadBytes
+		chunk := make([]byte, 64<<10)
+		for remaining > 0 {
+			count := int64(len(chunk))
+			if count > remaining {
+				count = remaining
+			}
+			if _, err := entry.Write(chunk[:int(count)]); err != nil {
+				return nil, err
+			}
+			remaining -= count
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	return buffer.Bytes(), nil
+}
+
+func archiveForLimit(name string) ([]byte, error) {
+	switch name {
+	case "archive_bytes":
+		return archiveWithEntries([]string{"agent-manifest.json"}, zip.Store, maxArchiveBytes+1)
+	case "entries":
+		names := make([]string, int(maxArchiveEntries+1))
+		for index := range names {
+			names[index] = fmt.Sprintf("entry-%03d.json", index)
+		}
+		names[0] = "agent-manifest.json"
+		return archiveWithEntries(names, zip.Store, 0)
+	case "entry_uncompressed_bytes":
+		return archiveWithEntries([]string{"agent-manifest.json"}, zip.Deflate, maxEntryBytes+1)
+	case "total_uncompressed_bytes":
+		names := make([]string, 13)
+		for index := range names {
+			names[index] = fmt.Sprintf("entry-%02d.bin", index)
+		}
+		names[0] = "agent-manifest.json"
+		return archiveWithEntries(names, zip.Deflate, maxEntryBytes)
+	case "compression_ratio":
+		return archiveWithEntries([]string{"agent-manifest.json"}, zip.Deflate, 1<<20)
+	default:
+		return nil, fmt.Errorf("unknown limit %s", name)
+	}
+}
+
+func generatedAdversarialArchive(profile string) ([]byte, error) {
+	switch profile {
+	case "named-pipe-entry":
+		var buffer bytes.Buffer
+		writer := zip.NewWriter(&buffer)
+		header := &zip.FileHeader{Name: "agent-manifest.json", Method: zip.Store}
+		header.SetMode(os.ModeNamedPipe | 0o600)
+		if _, err := writer.CreateHeader(header); err != nil {
+			return nil, err
+		}
+		if err := writer.Close(); err != nil {
+			return nil, err
+		}
+		return buffer.Bytes(), nil
+	case "central-local-name-mismatch":
+		archive, err := archiveWithEntries([]string{"agent-manifest.json"}, zip.Store, 0)
+		if err != nil {
+			return nil, err
+		}
+		archive = append([]byte(nil), archive...)
+		archive[30] = 'b'
+		return archive, nil
+	case "unsupported-method-99":
+		archive, err := archiveWithEntries([]string{"agent-manifest.json"}, zip.Store, 0)
+		if err != nil {
+			return nil, err
+		}
+		archive = append([]byte(nil), archive...)
+		eocd := len(archive) - 22
+		central := int(binary.LittleEndian.Uint32(archive[eocd+16 : eocd+20]))
+		binary.LittleEndian.PutUint16(archive[8:10], 99)
+		binary.LittleEndian.PutUint16(archive[central+10:central+12], 99)
+		return archive, nil
+	default:
+		return nil, fmt.Errorf("unknown generated archive %s", profile)
+	}
+}
+
+func verifySafeIntegerCase(root string, c caseDef) error {
+	row, err := matrixCase(root, c)
+	if err != nil {
+		return err
+	}
+	fixturePath := fmt.Sprint(row["fixture"])
 	if fixturePath == "" {
 		return errors.New("safe integer matrix entry absent")
 	}
 	clean := filepath.ToSlash(filepath.Clean(filepath.Join(rootDir, "fixtures/matrices", fixturePath)))
-	v, _, err := structuredfile.LoadAny(filepath.Join(root, clean))
-	if err != nil {
-		return err
-	}
-	_ = v
 	data, err := os.ReadFile(filepath.Join(root, clean))
 	if err != nil {
 		return err
 	}
-	var validation error
-	if bytes.Contains(data, []byte("9007199254740992")) {
-		validation = errors.New("integer exceeds JavaScript safe maximum")
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var document any
+	if err := decoder.Decode(&document); err != nil {
+		return err
 	}
-	plusOne := strings.HasSuffix(c.ID, "plus-one")
-	if plusOne && validation == nil {
-		return errors.New("maximum+1 accepted")
+	pointer := fmt.Sprint(row["json_pointer"])
+	number, err := numberAtPointer(document, pointer)
+	if err != nil {
+		return err
 	}
-	if !plusOne && validation != nil {
-		return validation
+	expected := asMap(row["expected"])
+	valid, _ := expected["schema_valid"].(bool)
+	wantLexeme := "9007199254740991"
+	if !valid {
+		wantLexeme = "9007199254740992"
+	}
+	if number.String() != wantLexeme || expected["generated_validators_accept"] != valid {
+		return fmt.Errorf("safe integer fixture %s at %s=%s", c.ID, pointer, number.String())
+	}
+	rootName, _ := row["root"].(string)
+	if rootName == "" {
+		rootName = "AgentManifest"
+	}
+	var schemaPath string
+	var schemaPointer []string
+	switch rootName + ":" + pointer {
+	case "AssetRef:/size_bytes":
+		schemaPath = "schemas/resources/asset-ref-v1.schema.json"
+		schemaPointer = []string{"properties", "size_bytes"}
+	case "AgentManifest:/content/max_input_bytes":
+		schemaPath = "schemas/manifest/agent-manifest-v1.schema.json"
+		schemaPointer = []string{"$defs", "content", "properties", "max_input_bytes"}
+	case "AgentManifest:/execution/max_concurrency":
+		schemaPath = "schemas/manifest/agent-manifest-v1.schema.json"
+		schemaPointer = []string{"$defs", "execution", "properties", "max_concurrency"}
+	case "AgentManifest:/session/idle_timeout_seconds":
+		schemaPath = "schemas/manifest/agent-manifest-v1.schema.json"
+		schemaPointer = []string{"$defs", "session", "properties", "idle_timeout_seconds"}
+	default:
+		return fmt.Errorf("undeclared safe integer property %s:%s", rootName, pointer)
+	}
+	var schema map[string]any
+	if err := load(root, schemaPath, &schema); err != nil {
+		return err
+	}
+	var current any = schema
+	for _, segment := range schemaPointer {
+		current = asMap(current)[segment]
+	}
+	property := asMap(current)
+	if property["type"] != "integer" || integer(property["maximum"]) != 9007199254740991 {
+		return fmt.Errorf("schema maximum missing for %s", pointer)
 	}
 	return nil
+}
+
+func numberAtPointer(value any, pointer string) (json.Number, error) {
+	current := value
+	if pointer == "" || pointer == "/" {
+		return "", errors.New("safe integer pointer must name a property")
+	}
+	for _, segment := range strings.Split(strings.TrimPrefix(pointer, "/"), "/") {
+		segment = strings.ReplaceAll(strings.ReplaceAll(segment, "~1", "/"), "~0", "~")
+		object, ok := current.(map[string]any)
+		if !ok {
+			return "", fmt.Errorf("pointer %s traverses non-object", pointer)
+		}
+		current, ok = object[segment]
+		if !ok {
+			return "", fmt.Errorf("pointer %s missing %s", pointer, segment)
+		}
+	}
+	number, ok := current.(json.Number)
+	if !ok {
+		return "", fmt.Errorf("pointer %s is not JSON number", pointer)
+	}
+	return number, nil
 }
 
 func runGenerator(root, out string) cmdResult {
@@ -743,6 +1553,35 @@ func compareGenerated(root, out string) error {
 	return nil
 }
 
+type safeIntegerFixtureSet struct {
+	manifestValid, manifestContentInvalid, manifestExecutionInvalid, manifestSessionInvalid []byte
+	assetValid, assetInvalid                                                                []byte
+}
+
+func readSafeIntegerFixtures(root string) (safeIntegerFixtureSet, error) {
+	paths := map[string]string{
+		"manifestValid":            rootDir + "/fixtures/valid/manifest-safe-integer-maximum.json",
+		"manifestContentInvalid":   rootDir + "/fixtures/invalid/manifest-content-max-input-bytes-safe-maximum-plus-one.json",
+		"manifestExecutionInvalid": rootDir + "/fixtures/invalid/manifest-execution-max-concurrency-safe-maximum-plus-one.json",
+		"manifestSessionInvalid":   rootDir + "/fixtures/invalid/manifest-session-idle-timeout-safe-maximum-plus-one.json",
+		"assetValid":               rootDir + "/fixtures/valid/asset-ref-safe-integer-maximum.json",
+		"assetInvalid":             rootDir + "/fixtures/invalid/asset-ref-size-bytes-safe-maximum-plus-one.json",
+	}
+	values := map[string][]byte{}
+	for name, path := range paths {
+		value, err := os.ReadFile(filepath.Join(root, path))
+		if err != nil {
+			return safeIntegerFixtureSet{}, err
+		}
+		values[name] = value
+	}
+	return safeIntegerFixtureSet{
+		manifestValid: values["manifestValid"], manifestContentInvalid: values["manifestContentInvalid"],
+		manifestExecutionInvalid: values["manifestExecutionInvalid"], manifestSessionInvalid: values["manifestSessionInvalid"],
+		assetValid: values["assetValid"], assetInvalid: values["assetInvalid"],
+	}, nil
+}
+
 func runGoProbe(root, out string) cmdResult {
 	dir := filepath.Join(out, "go-probe")
 	if err := os.Mkdir(dir, 0o700); err != nil {
@@ -754,9 +1593,30 @@ func runGoProbe(root, out string) cmdResult {
 	}
 	mustWrite(filepath.Join(dir, "publication_gen.go"), model)
 	mustWrite(filepath.Join(dir, "go.mod"), []byte("module example.invalid/p11probe\n\ngo 1.24.0\n"))
-	valid, _ := os.ReadFile(filepath.Join(root, rootDir, "fixtures/valid/manifest-safe-integer-maximum.json"))
-	invalid, _ := os.ReadFile(filepath.Join(root, rootDir, "fixtures/invalid/manifest-content-max-input-bytes-safe-maximum-plus-one.json"))
-	test := fmt.Sprintf("package controlplane\nimport \"testing\"\nfunc TestSafeIntegerAndForward(t *testing.T){ if _,e:=DecodeAgentManifest([]byte(%q));e!=nil{t.Fatal(e)}; if _,e:=DecodeAgentManifest([]byte(%q));e==nil{t.Fatal(\"plus one accepted\")}; if _,e:=DecodeAgentManifestForward([]byte(%q));e!=nil{t.Fatal(e)} }\n", string(valid), string(invalid), string(valid))
+	fixtures, err := readSafeIntegerFixtures(root)
+	if err != nil {
+		return cmdResult{err: err}
+	}
+	test := fmt.Sprintf(`package controlplane
+import "testing"
+func TestEverySafeIntegerBoundary(t *testing.T) {
+	manifestValid := []byte(%q)
+	if _, err := DecodeAgentManifest(manifestValid); err != nil { t.Fatal(err) }
+	if _, err := DecodeAgentManifestForward(manifestValid); err != nil { t.Fatal(err) }
+	manifestInvalid := []struct{name string; data []byte}{
+		{"content.max_input_bytes", []byte(%q)},
+		{"execution.max_concurrency", []byte(%q)},
+		{"session.idle_timeout_seconds", []byte(%q)},
+	}
+	for _, item := range manifestInvalid { t.Run(item.name, func(t *testing.T) { if _, err := DecodeAgentManifest(item.data); err == nil { t.Fatal("maximum+1 accepted") } }) }
+	if _, err := DecodeAssetRef([]byte(%q)); err != nil { t.Fatal(err) }
+	if _, err := DecodeAssetRef([]byte(%q)); err == nil { t.Fatal("asset size maximum+1 accepted") }
+	var _ *SafeInteger = Content{}.MaxInputBytes
+	var _ *SafeInteger = Execution{}.MaxConcurrency
+	var _ *SafeInteger = Session{}.IDleTimeoutSeconds
+	var _ SafeInteger = AssetRef{}.SizeBytes
+}
+`, string(fixtures.manifestValid), string(fixtures.manifestContentInvalid), string(fixtures.manifestExecutionInvalid), string(fixtures.manifestSessionInvalid), string(fixtures.assetValid), string(fixtures.assetInvalid))
 	mustWrite(filepath.Join(dir, "publication_gen_test.go"), []byte(test))
 	scratch := filepath.Join(out, "go-cache")
 	os.Mkdir(scratch, 0o700)
@@ -775,9 +1635,34 @@ func runPythonProbe(root, out string) cmdResult {
 		return cmdResult{err: err}
 	}
 	mustWrite(filepath.Join(dir, "publication_gen.py"), model)
-	valid, _ := os.ReadFile(filepath.Join(root, rootDir, "fixtures/valid/manifest-safe-integer-maximum.json"))
-	invalid, _ := os.ReadFile(filepath.Join(root, rootDir, "fixtures/invalid/manifest-content-max-input-bytes-safe-maximum-plus-one.json"))
-	probe := fmt.Sprintf("import pathlib,sys\nsys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))\nimport publication_gen as p\np.decode_agent_manifest(%q)\ntry:\n p.decode_agent_manifest(%q)\n raise RuntimeError('plus one accepted')\nexcept ValueError: pass\np.decode_agent_manifest_forward(%q)\n", string(valid), string(invalid), string(valid))
+	fixtures, err := readSafeIntegerFixtures(root)
+	if err != nil {
+		return cmdResult{err: err}
+	}
+	probe := fmt.Sprintf(`import pathlib,sys,typing
+sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
+import publication_gen as p
+manifest_valid = %q
+p.decode_agent_manifest(manifest_valid)
+p.decode_agent_manifest_forward(manifest_valid)
+for name, invalid in [
+ ("content.max_input_bytes", %q),
+ ("execution.max_concurrency", %q),
+ ("session.idle_timeout_seconds", %q),
+]:
+ try:
+  p.decode_agent_manifest(invalid)
+  raise RuntimeError(name + " maximum+1 accepted")
+ except ValueError: pass
+p.decode_asset_ref(%q)
+try:
+ p.decode_asset_ref(%q)
+ raise RuntimeError("asset size maximum+1 accepted")
+except ValueError: pass
+if typing.get_type_hints(p.AssetRef)["size_bytes"] is not int: raise RuntimeError("asset size type")
+for owner, field in [(p.Content, "max_input_bytes"), (p.Execution, "max_concurrency"), (p.Session, "idle_timeout_seconds")]:
+ if int not in typing.get_args(typing.get_type_hints(owner)[field]): raise RuntimeError(field + " type")
+`, string(fixtures.manifestValid), string(fixtures.manifestContentInvalid), string(fixtures.manifestExecutionInvalid), string(fixtures.manifestSessionInvalid), string(fixtures.assetValid), string(fixtures.assetInvalid))
 	mustWrite(filepath.Join(dir, "probe.py"), []byte(probe))
 	a := run(dir, 60*time.Second, cleanEnv(map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONHASHSEED": "0", "PYTHONNOUSERSITE": "1", "PYTHONSAFEPATH": "1"}), "python3", "-I", "-B", "-m", "py_compile", "publication_gen.py", "probe.py")
 	if a.err != nil {
@@ -803,9 +1688,26 @@ func runTSProbe(root, out string) cmdResult {
 		return cmdResult{err: err}
 	}
 	mustWrite(filepath.Join(dir, "publication.gen.ts"), model)
-	valid, _ := os.ReadFile(filepath.Join(root, rootDir, "fixtures/valid/manifest-safe-integer-maximum.json"))
-	invalid, _ := os.ReadFile(filepath.Join(root, rootDir, "fixtures/invalid/manifest-content-max-input-bytes-safe-maximum-plus-one.json"))
-	probe := fmt.Sprintf("import {decodeAgentManifest,decodeAgentManifestForward} from './publication.gen.js'; decodeAgentManifest(%q); try { decodeAgentManifest(%q); throw new Error('plus one accepted') } catch(e) { if ((e as Error).message==='plus one accepted') throw e }; decodeAgentManifestForward(%q);\n", string(valid), string(invalid), string(valid))
+	fixtures, err := readSafeIntegerFixtures(root)
+	if err != nil {
+		return cmdResult{err: err}
+	}
+	probe := fmt.Sprintf(`import {decodeAgentManifest,decodeAgentManifestForward,decodeAssetRef,type AssetRef,type Content,type Execution,type Session} from './publication.gen.js';
+const manifestValid = %q;
+decodeAgentManifest(manifestValid); decodeAgentManifestForward(manifestValid);
+for (const [name, invalid] of [
+  ["content.max_input_bytes", %q],
+  ["execution.max_concurrency", %q],
+  ["session.idle_timeout_seconds", %q],
+] as const) { try { decodeAgentManifest(invalid); throw new Error(name + " maximum+1 accepted") } catch(e) { if ((e as Error).message.endsWith("maximum+1 accepted")) throw e } }
+decodeAssetRef(%q);
+try { decodeAssetRef(%q); throw new Error("asset size maximum+1 accepted") } catch(e) { if ((e as Error).message === "asset size maximum+1 accepted") throw e }
+const assetSize: number = ({} as AssetRef).size_bytes;
+const contentSize: number | undefined = ({} as Content).max_input_bytes;
+const executionSize: number | undefined = ({} as Execution).max_concurrency;
+const sessionSize: number | undefined = ({} as Session).idle_timeout_seconds;
+void [assetSize,contentSize,executionSize,sessionSize];
+`, string(fixtures.manifestValid), string(fixtures.manifestContentInvalid), string(fixtures.manifestExecutionInvalid), string(fixtures.manifestSessionInvalid), string(fixtures.assetValid), string(fixtures.assetInvalid))
 	mustWrite(filepath.Join(dir, "probe.ts"), []byte(probe))
 	cfg := `{"compilerOptions":{"strict":true,"target":"ES2022","module":"NodeNext","moduleResolution":"NodeNext","noEmit":false,"outDir":"out","exactOptionalPropertyTypes":true,"noUncheckedIndexedAccess":true,"skipLibCheck":false},"files":["publication.gen.ts","probe.ts"]}`
 	mustWrite(filepath.Join(dir, "tsconfig.json"), []byte(cfg))
