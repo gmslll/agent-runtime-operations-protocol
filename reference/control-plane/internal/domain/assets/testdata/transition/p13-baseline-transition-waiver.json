@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "waiver_id": "P13-ASSET-BROKER-TRANSITION-001",
+  "status": "declared",
+  "policy": {
+    "owner_phase_semantics": "first-introduction-and-accountability",
+    "ownership_transferred": false
+  },
+  "baseline": {
+    "rule": "parent-of-unique-waiver-introduction-commit",
+    "commit": "3db6ee93a693d62d47e2d2fd25c5de43749f2e7d"
+  },
+  "transition": {
+    "from_phases": ["P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12"],
+    "to_phase": "P13",
+    "reason": "P13 introduces the signed Asset exchange contract, generated clients, broker lifecycle, dual-database persistence, and connection-time network policy while preserving every earlier owner and historical acceptance boundary."
+  },
+  "affected_artifacts": [],
+  "source_closure": [
+    "reference/control-plane/internal/domain/assets/testdata/transition/p13-baseline-transition-waiver.json"
+  ],
+  "acceptance": [
+    {"phase":"P13","command":"make test-asset-broker","report":"build/reports/P13/report.json"}
+  ],
+  "constraints": [
+    "asset-tokens-are-short-lived-operation-scoped-and-revocable",
+    "every-connect-and-redirect-hop-rechecks-dns-and-ip-policy",
+    "asset-mutations-and-durable-audit-share-one-uow",
+    "run-grant-authorization-is-mandatory-and-fail-closed",
+    "production-catalog-ends-at-0020",
+    "owner-phase-accountability-does-not-transfer",
+    "p13-report-runtime-inputs-remain-empty"
+  ]
+}
