@@ -689,9 +689,10 @@
       "path": "internal/tooling/blueprint/check.go",
       "change_type": "modify",
       "baseline_sha256": "23c1cc09e003ad28c698f1afbf2ce2326b68388228ade874cf87c01425202fc8",
-      "current_sha256": "af2db3dab956688acd7dcaef390d3a343399eb3e94461681b5f70119f5d7b8f2",
+      "current_sha256": "3c83b3eb46da1d7eaf0bf01ac0c5f32bea99e76d701c07111628019390bbf087",
       "touch_commits": [
-        "40ead6f47be721109692658f0d4acefd09ddfad0"
+        "40ead6f47be721109692658f0d4acefd09ddfad0",
+        "78fc05eec429eb02e5dce35b81d7334c9e8a3bc1"
       ],
       "scope": "early-owned",
       "artifact_ids": [
@@ -707,9 +708,10 @@
       "path": "internal/tooling/blueprint/check_test.go",
       "change_type": "modify",
       "baseline_sha256": "25c99613cc407a88991a8772c8298d2e4015b8bf9b444d81e42874e139135aed",
-      "current_sha256": "2b042fb653c912addfb41d843aff361874655fda64b90d1771f977feaf2cec69",
+      "current_sha256": "57e2de62208ad915303f3924b5db938a028b0d356f76ee140bfc04bbf295ed11",
       "touch_commits": [
-        "40ead6f47be721109692658f0d4acefd09ddfad0"
+        "40ead6f47be721109692658f0d4acefd09ddfad0",
+        "78fc05eec429eb02e5dce35b81d7334c9e8a3bc1"
       ],
       "scope": "early-owned",
       "artifact_ids": [
