@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -27,9 +28,21 @@ func main() {
 	dir := filepath.Join(root, "build/reports/P01")
 	fatal(os.MkdirAll(dir, 0o755))
 	resultPath := filepath.Join(dir, "spec-index-results.json")
+	moduleRoot := filepath.Join(root, "node_modules")
+	if info, statErr := os.Stat(moduleRoot); statErr != nil || !info.IsDir() {
+		moduleRoot = filepath.Join(filepath.Dir(filepath.Dir(root)), "node_modules")
+		info, statErr = os.Stat(moduleRoot)
+		if statErr != nil {
+			fatal(fmt.Errorf("locate locked node_modules: %w", statErr))
+		}
+		if !info.IsDir() {
+			fatal(fmt.Errorf("locked node_modules path is not a directory: %s", moduleRoot))
+		}
+	}
 	node := exec.Command("node",
 		"--permission",
 		"--allow-fs-read="+root,
+		"--allow-fs-read="+moduleRoot,
 		"--allow-fs-write="+dir,
 		"--disable-proto=throw",
 		"--no-addons",
@@ -42,13 +55,13 @@ func main() {
 	nodeErr := node.Run()
 	var result nodeResult
 	nodeResultBytes, readErr := os.ReadFile(resultPath)
-	if readErr != nil {
-		result.Checks = append(result.Checks, report.Check{Name: "node-schema-spec-validation", Passed: false, Detail: readErr.Error()})
-	} else if err := structuredfile.Load(resultPath, &result); err != nil {
-		result.Checks = append(result.Checks, report.Check{Name: "node-schema-spec-validation", Passed: false, Detail: err.Error()})
+	var resultErr error
+	if readErr == nil {
+		resultErr = structuredfile.Load(resultPath, &result)
 	}
-	if nodeErr != nil {
-		result.Checks = append(result.Checks, report.Check{Name: "node-schema-spec-validation", Passed: false, Detail: nodeErr.Error()})
+	combinedNodeErr := errors.Join(nodeErr, readErr, resultErr)
+	if combinedNodeErr != nil {
+		result.Checks = append(result.Checks, report.Check{Name: "node-schema-spec-validation", Passed: false, Detail: combinedNodeErr.Error()})
 	} else {
 		result.Checks = append(result.Checks, report.Check{Name: "node-schema-spec-validation", Passed: true, Detail: "Node executed only structured-file/Schema/offline-ref validation"})
 	}

@@ -42,6 +42,7 @@
     "conformance/harness/base/main.go",
     "conformance/fixtures/contracts/control-plane-publication/testdata/harness/main.go",
     "examples/manifests/publication-v1.json",
+    "internal/tooling/cmd/arop-spec-index-check/main.go",
     "internal/tooling/cmd/arop-go-proxy-bootstrap/main.go",
     "reference/control-plane/cmd/aropd/main.go",
     "reference/control-plane/cmd/aropd/main_test.go",
