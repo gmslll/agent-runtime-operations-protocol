@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "command": {
+    "entry": "scripts/generate.mjs",
+    "config": "examples/assets/pipeline.json",
+    "output": "<output>",
+    "result": "<output>/provenance.json"
+  },
+  "generator": {
+    "path": "scripts/generate.mjs",
+    "sha256": "b82946a606b0967cd0b361b4528ffb5d15019d5c3091ec1cbfaf060480cf99cc",
+    "files": [
+      {
+        "path": "scripts/generate.mjs",
+        "sha256": "b82946a606b0967cd0b361b4528ffb5d15019d5c3091ec1cbfaf060480cf99cc",
+        "bytes": 136536,
+        "mode": "100644"
+      },
+      {
+        "path": "scripts/lib/repository.mjs",
+        "sha256": "4d87c901bbfeee969214d8620154acefb6b76d9a8084fa858db1917c726b2733",
+        "bytes": 44748,
+        "mode": "100644"
+      },
+      {
+        "path": "package.json",
+        "sha256": "a0480da8a20f9ba2c1355d58723295d22ca3a06235e3763aaf67742edc4e2661",
+        "bytes": 574,
+        "mode": "100644"
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "982e444493976055a5d34793bcdbc50751ec6f9d60148562a037f19a8d036b37",
+        "bytes": 5565,
+        "mode": "100644"
+      }
+    ]
+  },
+  "configuration": {
+    "path": "examples/assets/pipeline.json",
+    "sha256": "48aef9d40110f20a8b30fbde369c0331b607c581e08e86553499760ccc131a60",
+    "bytes": 2201,
+    "mode": "100644"
+  },
+  "resources": [
+    {
+      "path": "schemas/common/identifiers.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/identifiers.schema.json",
+      "sha256": "87503f773550083f8cb7f0213b6fd336bc21bf5c54575af49a21f447de209269",
+      "bytes": 2818,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/resources/asset-ref-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json",
+      "sha256": "3fcd98064f555252a27d80af1bf951619dff2ae3c68680d6fd6215e83ca18433",
+      "bytes": 1243,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/resources/asset-exchange-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/resources/asset-exchange-v1.schema.json",
+      "sha256": "c7cec1692c0d064e5dc9dfd2a0a2e11c95226d3c9b27f55327c27fd8a9a94eca",
+      "bytes": 3857,
+      "mode": "100644"
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "download-grant",
+      "class": "valid",
+      "root": "GrantResponse",
+      "path": "examples/assets/valid/download-grant.json",
+      "sha256": "047ed79bb6e25cab0b8666822fb79dd90e386d830c4bd8b873dcc50694e4f3fc",
+      "bytes": 524,
+      "mode": "100644"
+    },
+    {
+      "id": "download-request",
+      "class": "valid",
+      "root": "DownloadRequest",
+      "path": "examples/assets/valid/download-request.json",
+      "sha256": "2d588a3671156713992f927b9cb481f43eec54f7db3835fc55a35cc234d749f4",
+      "bytes": 149,
+      "mode": "100644"
+    },
+    {
+      "id": "upload-grant",
+      "class": "valid",
+      "root": "GrantResponse",
+      "path": "examples/assets/valid/upload-grant.json",
+      "sha256": "8555382956ae1cc5d1eadaef261c483e662b3fcc091d4d2e5bfc257295ef35de",
+      "bytes": 655,
+      "mode": "100644"
+    },
+    {
+      "id": "upload-request",
+      "class": "valid",
+      "root": "UploadRequest",
+      "path": "examples/assets/valid/upload-request.json",
+      "sha256": "38d0bd7a20bec2ea7dffad2d70595be8780b195f3c3f318cae733506859c126f",
+      "bytes": 252,
+      "mode": "100644"
+    },
+    {
+      "id": "grant-future-field",
+      "class": "forward",
+      "root": "GrantResponse",
+      "path": "examples/assets/forward/grant-future-field.json",
+      "sha256": "8e072ab73367b485bde6ef2419751c8301f862ac5db9526e5777008cfe10ee1f",
+      "bytes": 548,
+      "mode": "100644"
+    },
+    {
+      "id": "absolute-broker-url",
+      "class": "invalid",
+      "root": "GrantResponse",
+      "path": "examples/assets/invalid/absolute-broker-url.json",
+      "sha256": "a765b469a73bed2d7695a99eec99c74fbe9eee72a7fc535f2c706b260e7b1362",
+      "bytes": 501,
+      "mode": "100644"
+    },
+    {
+      "id": "partial-asset",
+      "class": "invalid",
+      "root": "GrantResponse",
+      "path": "examples/assets/invalid/partial-asset.json",
+      "sha256": "30d96664947d0724aaf3dd620dbac2cf0f1e7aa2b9ebf60894aefc0c32cbc445",
+      "bytes": 392,
+      "mode": "100644"
+    },
+    {
+      "id": "secret-and-endpoint",
+      "class": "invalid",
+      "root": "GrantResponse",
+      "path": "examples/assets/invalid/secret-and-endpoint.json",
+      "sha256": "26c5f9177f058bee21633d73d1bcee5202b11d36dd482630b634dc742f3b7795",
+      "bytes": 593,
+      "mode": "100644"
+    }
+  ],
+  "inputs_sha256": "e390ae1f59469bf89fda999ae4bcf1bfe2c4db9fdc4b8dfdb40ff97e55fe37a2",
+  "outputs": [
+    {
+      "language": "go",
+      "path": "sdk/go/generated/asset/asset.gen.go",
+      "sha256": "dc5d68cef18ad5b3451d25739fa631790bc7e83be4591e1cc53f19010adb392e",
+      "bytes": 30873,
+      "mode": "100644"
+    },
+    {
+      "language": "python",
+      "path": "sdk/python/src/arop/generated/asset/asset_gen.py",
+      "sha256": "91d91b293b62123dce5479fd840fbc5f62ecd29518429b39bdc8a99706103625",
+      "bytes": 19090,
+      "mode": "100644"
+    },
+    {
+      "language": "typescript",
+      "path": "sdk/typescript/src/generated/asset/asset.gen.ts",
+      "sha256": "bf7fc90a0642061a275bc85c83f7b9aeeacc1b74eaae1ecd84a3d13094ffe9eb",
+      "bytes": 20078,
+      "mode": "100644"
+    }
+  ],
+  "outputs_sha256": "cd46ba0be859e3da22b64048886f2a02b41b447773ce3fa60a86a3a1cb17aa6a",
+  "checks": [
+    {
+      "id": "schema-valid-download-grant",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-download-request",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-upload-grant",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-upload-request",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-forward-grant-future-field",
+      "passed": true,
+      "detail": "data must NOT have additional properties"
+    },
+    {
+      "id": "schema-invalid-absolute-broker-url",
+      "passed": true,
+      "detail": "data/broker_path must match pattern \"^/v1/asset-content/grant_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$\""
+    },
+    {
+      "id": "schema-invalid-partial-asset",
+      "passed": true,
+      "detail": "data/asset must have required property 'name', data/asset must have required property 'media_type', data/asset must have required property 'size_bytes', data/asset must have required property 'access'"
+    },
+    {
+      "id": "schema-invalid-secret-and-endpoint",
+      "passed": true,
+      "detail": "data must NOT have additional properties, data must NOT have additional properties"
+    },
+    {
+      "id": "offline-resource-closure",
+      "passed": true,
+      "detail": "3 explicit resources"
+    },
+    {
+      "id": "mapping-profile",
+      "passed": true,
+      "detail": "15 named types"
+    },
+    {
+      "id": "deterministic-output-set",
+      "passed": true,
+      "detail": "3 outputs"
+    }
+  ]
+}

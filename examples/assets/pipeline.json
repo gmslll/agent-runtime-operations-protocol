@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "resources": [
+    {"path": "schemas/common/identifiers.schema.json", "uri": "https://arop.invalid/schemas/v1/common/identifiers.schema.json"},
+    {"path": "schemas/resources/asset-ref-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json"},
+    {"path": "schemas/resources/asset-exchange-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/resources/asset-exchange-v1.schema.json"}
+  ],
+  "roots": [
+    {"ref": "https://arop.invalid/schemas/v1/resources/asset-exchange-v1.schema.json#/$defs/uploadRequest", "name": "UploadRequest"},
+    {"ref": "https://arop.invalid/schemas/v1/resources/asset-exchange-v1.schema.json#/$defs/downloadRequest", "name": "DownloadRequest"},
+    {"ref": "https://arop.invalid/schemas/v1/resources/asset-exchange-v1.schema.json#/$defs/grantResponse", "name": "GrantResponse"}
+  ],
+  "fixtures": {
+    "valid": [
+      {"id": "download-grant", "path": "examples/assets/valid/download-grant.json", "root": "GrantResponse"},
+      {"id": "download-request", "path": "examples/assets/valid/download-request.json", "root": "DownloadRequest"},
+      {"id": "upload-grant", "path": "examples/assets/valid/upload-grant.json", "root": "GrantResponse"},
+      {"id": "upload-request", "path": "examples/assets/valid/upload-request.json", "root": "UploadRequest"}
+    ],
+    "forward": [
+      {"id": "grant-future-field", "path": "examples/assets/forward/grant-future-field.json", "root": "GrantResponse"}
+    ],
+    "invalid": [
+      {"id": "absolute-broker-url", "path": "examples/assets/invalid/absolute-broker-url.json", "root": "GrantResponse"},
+      {"id": "partial-asset", "path": "examples/assets/invalid/partial-asset.json", "root": "GrantResponse"},
+      {"id": "secret-and-endpoint", "path": "examples/assets/invalid/secret-and-endpoint.json", "root": "GrantResponse"}
+    ]
+  },
+  "outputs": {
+    "go": {"model": "sdk/go/generated/asset/asset.gen.go"},
+    "python": {"model": "sdk/python/src/arop/generated/asset/asset_gen.py"},
+    "typescript": {"model": "sdk/typescript/src/generated/asset/asset.gen.ts"}
+  }
+}

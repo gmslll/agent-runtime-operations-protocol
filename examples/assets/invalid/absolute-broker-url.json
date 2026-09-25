@@ -12,7 +12,7 @@
   "grant_id": "grant_018f1b5a-7c3d-7a11-8b22-6d4e5f708194",
   "method": "download",
   "broker_path": "https://storage.example/bucket/object",
-  "bearer_token": "agt_exampleopaque00",
+  "bearer_token": "agt_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "expires_at": "2026-09-26T08:10:00Z",
   "max_uses": 1
 }

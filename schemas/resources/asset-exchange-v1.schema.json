@@ -33,9 +33,9 @@
     },
     "bearerToken": {
       "type": "string",
-      "minLength": 12,
-      "maxLength": 132,
-      "pattern": "^agt_[A-Za-z0-9_-]{8,128}$"
+	  "minLength": 47,
+	  "maxLength": 47,
+	  "pattern": "^agt_[A-Za-z0-9_-]{43}$"
     },
     "brokerPath": {
       "type": "string",
@@ -46,7 +46,7 @@
     "maxUses": {
       "type": "integer",
       "minimum": 1,
-      "maximum": 9007199254740991
+	  "maximum": 8
     },
     "byteCount": {
       "type": "integer",
@@ -56,7 +56,7 @@
     "uploadRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "run_id", "name", "media_type", "size_bytes"],
+	  "required": ["kind", "run_id", "name", "media_type", "size_bytes", "digest"],
       "properties": {
         "kind": {
           "const": "upload_request"
