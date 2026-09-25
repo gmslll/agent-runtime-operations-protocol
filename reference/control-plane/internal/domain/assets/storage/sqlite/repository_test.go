@@ -25,15 +25,15 @@ func TestSQLiteAssetRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	asset := sampleAsset("tenant-a", strings.Repeat("a", 64))
-	if _, err := repository.CreateAsset(context.Background(), asset); !assets.HasReason(err, assets.ReasonUnavailable) {
+	if _, err := repository.CreateAsset(context.Background(), asset); !assets.HasStorageReason(err, assets.StorageReasonUnavailable) {
 		t.Fatalf("write outside transaction = %v", err)
 	}
-	if _, err := within(t, unit, func(ctx context.Context) (assets.Asset, error) {
+	if _, err := within(t, unit, func(ctx context.Context) (assets.AssetRecord, error) {
 		return repository.CreateAsset(ctx, asset)
 	}); err != nil {
 		t.Fatal(err)
 	}
-	replay, err := within(t, unit, func(ctx context.Context) (assets.Asset, error) {
+	replay, err := within(t, unit, func(ctx context.Context) (assets.AssetRecord, error) {
 		return repository.CreateAsset(ctx, asset)
 	})
 	if err != nil || replay.AssetID != asset.AssetID || replay.Revision != 1 {
@@ -41,15 +41,15 @@ func TestSQLiteAssetRepository(t *testing.T) {
 	}
 	conflict := asset
 	conflict.IdempotencyRequestDigest = strings.Repeat("b", 64)
-	if _, err := within(t, unit, func(ctx context.Context) (assets.Asset, error) {
+	if _, err := within(t, unit, func(ctx context.Context) (assets.AssetRecord, error) {
 		return repository.CreateAsset(ctx, conflict)
-	}); !assets.HasReason(err, assets.ReasonIdempotencyConflict) {
+	}); !assets.HasStorageReason(err, assets.StorageReasonIdempotencyConflict) {
 		t.Fatalf("idempotency conflict = %v", err)
 	}
-	if _, err := repository.GetAsset(context.Background(), "tenant-b", asset.AssetID); !assets.HasReason(err, assets.ReasonNotFound) {
+	if _, err := repository.GetAsset(context.Background(), "tenant-b", asset.AssetID); !assets.HasStorageReason(err, assets.StorageReasonNotFound) {
 		t.Fatalf("cross-tenant read = %v", err)
 	}
-	updated, err := within(t, unit, func(ctx context.Context) (assets.Asset, error) {
+	updated, err := within(t, unit, func(ctx context.Context) (assets.AssetRecord, error) {
 		return repository.UpdateAsset(ctx, asset.TenantID, asset.AssetID, 1, assets.AssetUpdate{
 			Name: "photo.png", MediaType: "image/png", SizeBytes: 12, ContentDigest: asset.ContentDigest,
 			ObjectKey: "tenant-a/photo.png", Status: assets.AssetAvailable, UpdatedAtNs: asset.CreatedAtNs + 5,
@@ -58,20 +58,20 @@ func TestSQLiteAssetRepository(t *testing.T) {
 	if err != nil || updated.Revision != 2 || updated.Status != assets.AssetAvailable {
 		t.Fatalf("update = %+v, %v", updated, err)
 	}
-	if _, err := within(t, unit, func(ctx context.Context) (assets.Asset, error) {
+	if _, err := within(t, unit, func(ctx context.Context) (assets.AssetRecord, error) {
 		return repository.UpdateAsset(ctx, asset.TenantID, asset.AssetID, 1, assets.AssetUpdate{
 			Name: "photo.png", MediaType: "image/png", SizeBytes: 12, ContentDigest: asset.ContentDigest,
 			ObjectKey: "tenant-a/photo.png", Status: assets.AssetAvailable, UpdatedAtNs: asset.CreatedAtNs + 6,
 		})
-	}); !assets.HasReason(err, assets.ReasonConflict) {
+	}); !assets.HasStorageReason(err, assets.StorageReasonConflict) {
 		t.Fatalf("stale CAS = %v", err)
 	}
-	if _, err := within(t, unit, func(ctx context.Context) (assets.Asset, error) {
+	if _, err := within(t, unit, func(ctx context.Context) (assets.AssetRecord, error) {
 		return repository.UpdateAsset(ctx, "tenant-b", asset.AssetID, 2, assets.AssetUpdate{
 			Name: "photo.png", MediaType: "image/png", SizeBytes: 12, ContentDigest: asset.ContentDigest,
 			ObjectKey: "tenant-b/photo.png", Status: assets.AssetIsolated, UpdatedAtNs: asset.CreatedAtNs + 7,
 		})
-	}); !assets.HasReason(err, assets.ReasonNotFound) {
+	}); !assets.HasStorageReason(err, assets.StorageReasonNotFound) {
 		t.Fatalf("cross-tenant update = %v", err)
 	}
 	stored, err := repository.GetAsset(context.Background(), asset.TenantID, asset.AssetID)
@@ -80,13 +80,13 @@ func TestSQLiteAssetRepository(t *testing.T) {
 	}
 
 	grant := sampleGrant(asset.TenantID, strings.Repeat("c", 64), 2)
-	created, err := withinGrant(t, unit, func(ctx context.Context) (assets.Grant, error) {
+	created, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.CreateGrant(ctx, grant)
 	})
 	if err != nil || created.Status != assets.GrantActive {
 		t.Fatalf("create grant = %+v, %v", created, err)
 	}
-	replayed, err := withinGrant(t, unit, func(ctx context.Context) (assets.Grant, error) {
+	replayed, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.CreateGrant(ctx, grant)
 	})
 	if err != nil || replayed.GrantID != grant.GrantID {
@@ -94,9 +94,9 @@ func TestSQLiteAssetRepository(t *testing.T) {
 	}
 	otherRequest := grant
 	otherRequest.IdempotencyRequestDigest = strings.Repeat("d", 64)
-	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.Grant, error) {
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.CreateGrant(ctx, otherRequest)
-	}); !assets.HasReason(err, assets.ReasonIdempotencyConflict) {
+	}); !assets.HasStorageReason(err, assets.StorageReasonIdempotencyConflict) {
 		t.Fatalf("grant idempotency conflict = %v", err)
 	}
 	missingAsset := grant
@@ -104,36 +104,36 @@ func TestSQLiteAssetRepository(t *testing.T) {
 	missingAsset.AssetID = "asset_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5d"
 	missingAsset.IdempotencyKeyDigest = strings.Repeat("e", 64)
 	missingAsset.TokenDigest = strings.Repeat("7", 64)
-	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.Grant, error) {
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.CreateGrant(ctx, missingAsset)
-	}); !assets.HasReason(err, assets.ReasonValidation) {
+	}); !assets.HasStorageReason(err, assets.StorageReasonValidation) {
 		t.Fatalf("grant without asset = %v", err)
 	}
-	consumed, err := withinGrant(t, unit, func(ctx context.Context) (assets.Grant, error) {
+	consumed, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.ConsumeGrant(ctx, grant.TenantID, grant.GrantID, 1, grant.CreatedAtNs+1)
 	})
 	if err != nil || consumed.UseCount != 1 || consumed.Status != assets.GrantActive || consumed.Revision != 2 {
 		t.Fatalf("first consume = %+v, %v", consumed, err)
 	}
-	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.Grant, error) {
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.ConsumeGrant(ctx, grant.TenantID, grant.GrantID, 1, grant.CreatedAtNs+1)
-	}); !assets.HasReason(err, assets.ReasonConflict) {
+	}); !assets.HasStorageReason(err, assets.StorageReasonConflict) {
 		t.Fatalf("stale consume = %v", err)
 	}
-	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.Grant, error) {
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.ConsumeGrant(ctx, "tenant-b", grant.GrantID, 2, grant.CreatedAtNs+1)
-	}); !assets.HasReason(err, assets.ReasonNotFound) {
+	}); !assets.HasStorageReason(err, assets.StorageReasonNotFound) {
 		t.Fatalf("cross-tenant consume = %v", err)
 	}
-	finished, err := withinGrant(t, unit, func(ctx context.Context) (assets.Grant, error) {
+	finished, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.ConsumeGrant(ctx, grant.TenantID, grant.GrantID, 2, grant.CreatedAtNs+2)
 	})
 	if err != nil || finished.Status != assets.GrantConsumed || finished.UseCount != 2 || finished.Revision != 3 {
 		t.Fatalf("final consume = %+v, %v", finished, err)
 	}
-	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.Grant, error) {
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.RevokeGrant(ctx, grant.TenantID, grant.GrantID, 3, grant.CreatedAtNs+3)
-	}); !assets.HasReason(err, assets.ReasonConflict) {
+	}); !assets.HasStorageReason(err, assets.StorageReasonConflict) {
 		t.Fatalf("revoke consumed = %v", err)
 	}
 
@@ -141,25 +141,25 @@ func TestSQLiteAssetRepository(t *testing.T) {
 	expiring.GrantID = "grnt_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5e"
 	expiring.TokenDigest = strings.Repeat("8", 64)
 	expiring.ExpiresAtNs = expiring.CreatedAtNs + 10
-	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.Grant, error) {
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.CreateGrant(ctx, expiring)
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.Grant, error) {
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.ConsumeGrant(ctx, expiring.TenantID, expiring.GrantID, 1, expiring.ExpiresAtNs)
-	}); !assets.HasReason(err, assets.ReasonExpired) {
+	}); !assets.HasStorageReason(err, assets.StorageReasonExpired) {
 		t.Fatalf("expired consume = %v", err)
 	}
-	revoked, err := withinGrant(t, unit, func(ctx context.Context) (assets.Grant, error) {
+	revoked, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.RevokeGrant(ctx, expiring.TenantID, expiring.GrantID, 1, expiring.CreatedAtNs+1)
 	})
 	if err != nil || revoked.Status != assets.GrantRevoked || revoked.Revision != 2 {
 		t.Fatalf("revoke = %+v, %v", revoked, err)
 	}
-	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.Grant, error) {
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.ConsumeGrant(ctx, expiring.TenantID, expiring.GrantID, 2, expiring.CreatedAtNs+1)
-	}); !assets.HasReason(err, assets.ReasonConflict) {
+	}); !assets.HasStorageReason(err, assets.StorageReasonConflict) {
 		t.Fatalf("consume revoked = %v", err)
 	}
 	var references int
@@ -207,8 +207,8 @@ func newRepository(t *testing.T) (*sql.DB, *sqliteadapter.UnitOfWork, *assetstor
 	return db, unit, repository
 }
 
-func sampleAsset(tenant, key string) assets.Asset {
-	return assets.Asset{
+func sampleAsset(tenant, key string) assets.AssetRecord {
+	return assets.AssetRecord{
 		TenantID: tenant, AssetID: assetID, Name: "product.png", MediaType: "image/png", SizeBytes: 32,
 		ContentDigest: "sha256:" + strings.Repeat("ab", 32), ObjectKey: "objects/product.png", Status: assets.AssetPending,
 		Revision: 1, CreatedAtNs: 1_700_000_000_000_000_000, UpdatedAtNs: 1_700_000_000_000_000_000,
@@ -216,18 +216,18 @@ func sampleAsset(tenant, key string) assets.Asset {
 	}
 }
 
-func sampleGrant(tenant, key string, limit int64) assets.Grant {
-	return assets.Grant{
-		TenantID: tenant, GrantID: grantID, AssetID: assetID, RunID: runID, Operation: assets.OperationDownload,
+func sampleGrant(tenant, key string, limit int64) assets.GrantRecord {
+	return assets.GrantRecord{
+		TenantID: tenant, GrantID: grantID, AssetID: assetID, RunID: runID, Operation: assets.StorageOperationDownload,
 		TokenDigest: strings.Repeat("f", 64), UseLimit: limit, UseCount: 0, ExpiresAtNs: 1_700_000_000_000_000_100,
 		Status: assets.GrantActive, Revision: 1, CreatedAtNs: 1_700_000_000_000_000_000, UpdatedAtNs: 1_700_000_000_000_000_000,
 		IdempotencyKeyDigest: key, IdempotencyRequestDigest: strings.Repeat("2", 64),
 	}
 }
 
-func within(t *testing.T, unit *sqliteadapter.UnitOfWork, callback func(context.Context) (assets.Asset, error)) (assets.Asset, error) {
+func within(t *testing.T, unit *sqliteadapter.UnitOfWork, callback func(context.Context) (assets.AssetRecord, error)) (assets.AssetRecord, error) {
 	t.Helper()
-	var result assets.Asset
+	var result assets.AssetRecord
 	err := unit.Within(context.Background(), func(ctx context.Context) error {
 		var callErr error
 		result, callErr = callback(ctx)
@@ -236,9 +236,9 @@ func within(t *testing.T, unit *sqliteadapter.UnitOfWork, callback func(context.
 	return result, err
 }
 
-func withinGrant(t *testing.T, unit *sqliteadapter.UnitOfWork, callback func(context.Context) (assets.Grant, error)) (assets.Grant, error) {
+func withinGrant(t *testing.T, unit *sqliteadapter.UnitOfWork, callback func(context.Context) (assets.GrantRecord, error)) (assets.GrantRecord, error) {
 	t.Helper()
-	var result assets.Grant
+	var result assets.GrantRecord
 	err := unit.Within(context.Background(), func(ctx context.Context) error {
 		var callErr error
 		result, callErr = callback(ctx)

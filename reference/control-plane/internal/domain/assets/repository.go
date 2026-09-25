@@ -26,37 +26,37 @@ const (
 	GrantRevoked  GrantStatus = "revoked"
 )
 
-type Operation string
+type StorageOperation string
 
 const (
-	OperationUpload   Operation = "upload"
-	OperationDownload Operation = "download"
+	StorageOperationUpload   StorageOperation = "upload"
+	StorageOperationDownload StorageOperation = "download"
 )
 
-type Reason string
+type StorageReason string
 
 const (
-	ReasonValidation          Reason = "validation"
-	ReasonUnavailable         Reason = "unavailable"
-	ReasonNotFound            Reason = "not_found"
-	ReasonConflict            Reason = "conflict"
-	ReasonIdempotencyConflict Reason = "idempotency_conflict"
-	ReasonExpired             Reason = "expired"
+	StorageReasonValidation          StorageReason = "validation"
+	StorageReasonUnavailable         StorageReason = "unavailable"
+	StorageReasonNotFound            StorageReason = "not_found"
+	StorageReasonConflict            StorageReason = "conflict"
+	StorageReasonIdempotencyConflict StorageReason = "idempotency_conflict"
+	StorageReasonExpired             StorageReason = "expired"
 )
 
-type Error struct{ Reason Reason }
+type StorageError struct{ Reason StorageReason }
 
-func (err Error) Error() string { return "asset repository: " + string(err.Reason) }
+func (err StorageError) Error() string { return "asset repository: " + string(err.Reason) }
 
-func NewError(reason Reason) error { return Error{Reason: reason} }
+func NewStorageError(reason StorageReason) error { return StorageError{Reason: reason} }
 
-func HasReason(err error, reason Reason) bool {
-	var failure Error
+func HasStorageReason(err error, reason StorageReason) bool {
+	var failure StorageError
 	return errors.As(err, &failure) && failure.Reason == reason
 }
 
 // Asset is one tenant-owned object descriptor. The body stays outside the row.
-type Asset struct {
+type AssetRecord struct {
 	TenantID                 string
 	AssetID                  string
 	Name                     string
@@ -84,12 +84,12 @@ type AssetUpdate struct {
 }
 
 // Grant authorizes one operation. run_id is stored without a run-table foreign key.
-type Grant struct {
+type GrantRecord struct {
 	TenantID                 string
 	GrantID                  string
 	AssetID                  string
 	RunID                    string
-	Operation                Operation
+	Operation                StorageOperation
 	TokenDigest              string
 	UseLimit                 int64
 	UseCount                 int64
@@ -103,59 +103,59 @@ type Grant struct {
 }
 
 // Repository is the storage port both engines implement.
-type Repository interface {
-	CreateAsset(ctx context.Context, asset Asset) (Asset, error)
-	GetAsset(ctx context.Context, tenantID, assetID string) (Asset, error)
-	UpdateAsset(ctx context.Context, tenantID, assetID string, expectedRevision int64, update AssetUpdate) (Asset, error)
-	CreateGrant(ctx context.Context, grant Grant) (Grant, error)
-	GetGrant(ctx context.Context, tenantID, grantID string) (Grant, error)
-	ConsumeGrant(ctx context.Context, tenantID, grantID string, expectedRevision, nowNs int64) (Grant, error)
-	RevokeGrant(ctx context.Context, tenantID, grantID string, expectedRevision, nowNs int64) (Grant, error)
+type StorageRepository interface {
+	CreateAsset(ctx context.Context, asset AssetRecord) (AssetRecord, error)
+	GetAsset(ctx context.Context, tenantID, assetID string) (AssetRecord, error)
+	UpdateAsset(ctx context.Context, tenantID, assetID string, expectedRevision int64, update AssetUpdate) (AssetRecord, error)
+	CreateGrant(ctx context.Context, grant GrantRecord) (GrantRecord, error)
+	GetGrant(ctx context.Context, tenantID, grantID string) (GrantRecord, error)
+	ConsumeGrant(ctx context.Context, tenantID, grantID string, expectedRevision, nowNs int64) (GrantRecord, error)
+	RevokeGrant(ctx context.Context, tenantID, grantID string, expectedRevision, nowNs int64) (GrantRecord, error)
 }
 
 var (
-	tenantPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$`)
-	assetPattern  = regexp.MustCompile(`^asset_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-	grantPattern  = regexp.MustCompile(`^grnt_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-	runPattern    = regexp.MustCompile(`^run_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
-	digestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-	hexPattern    = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	mediaPattern  = regexp.MustCompile(`^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$`)
-	keyPattern    = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]{0,255}$`)
+	storageTenantPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$`)
+	storageAssetPattern  = regexp.MustCompile(`^asset_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	storageGrantPattern  = regexp.MustCompile(`^grnt_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	storageRunPattern    = regexp.MustCompile(`^run_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	storageDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	storageHexPattern    = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	storageMediaPattern  = regexp.MustCompile(`^[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+$`)
+	storageKeyPattern    = regexp.MustCompile(`^[a-z0-9][a-z0-9._/-]{0,255}$`)
 )
 
-func (asset Asset) Validate() error {
-	if !tenantPattern.MatchString(asset.TenantID) || len(asset.TenantID) > 128 ||
-		!assetPattern.MatchString(asset.AssetID) || !validName(asset.Name) ||
-		!mediaPattern.MatchString(asset.MediaType) || len(asset.MediaType) > 127 ||
-		asset.SizeBytes < 0 || asset.SizeBytes > 104857600 || !digestPattern.MatchString(asset.ContentDigest) ||
+func (asset AssetRecord) Validate() error {
+	if !storageTenantPattern.MatchString(asset.TenantID) || len(asset.TenantID) > 128 ||
+		!storageAssetPattern.MatchString(asset.AssetID) || !validName(asset.Name) ||
+		!storageMediaPattern.MatchString(asset.MediaType) || len(asset.MediaType) > 127 ||
+		asset.SizeBytes < 0 || asset.SizeBytes > 104857600 || !storageDigestPattern.MatchString(asset.ContentDigest) ||
 		!validObjectKey(asset.ObjectKey) || !validAssetStatus(asset.Status) || asset.Revision < 1 ||
 		asset.CreatedAtNs < 1 || asset.UpdatedAtNs < asset.CreatedAtNs ||
-		!hexPattern.MatchString(asset.IdempotencyKeyDigest) || !hexPattern.MatchString(asset.IdempotencyRequestDigest) {
-		return NewError(ReasonValidation)
+		!storageHexPattern.MatchString(asset.IdempotencyKeyDigest) || !storageHexPattern.MatchString(asset.IdempotencyRequestDigest) {
+		return NewStorageError(StorageReasonValidation)
 	}
 	return nil
 }
 
 func (update AssetUpdate) Validate(createdAtNs int64) error {
-	if !validName(update.Name) || !mediaPattern.MatchString(update.MediaType) || len(update.MediaType) > 127 ||
-		update.SizeBytes < 0 || update.SizeBytes > 104857600 || !digestPattern.MatchString(update.ContentDigest) ||
+	if !validName(update.Name) || !storageMediaPattern.MatchString(update.MediaType) || len(update.MediaType) > 127 ||
+		update.SizeBytes < 0 || update.SizeBytes > 104857600 || !storageDigestPattern.MatchString(update.ContentDigest) ||
 		!validObjectKey(update.ObjectKey) || !validAssetStatus(update.Status) || update.UpdatedAtNs < createdAtNs {
-		return NewError(ReasonValidation)
+		return NewStorageError(StorageReasonValidation)
 	}
 	return nil
 }
 
-func (grant Grant) Validate() error {
-	if !tenantPattern.MatchString(grant.TenantID) || len(grant.TenantID) > 128 ||
-		!grantPattern.MatchString(grant.GrantID) || !assetPattern.MatchString(grant.AssetID) ||
-		!runPattern.MatchString(grant.RunID) || (grant.Operation != OperationUpload && grant.Operation != OperationDownload) ||
-		!hexPattern.MatchString(grant.TokenDigest) || grant.UseLimit < 1 || grant.UseLimit > 1000 ||
+func (grant GrantRecord) Validate() error {
+	if !storageTenantPattern.MatchString(grant.TenantID) || len(grant.TenantID) > 128 ||
+		!storageGrantPattern.MatchString(grant.GrantID) || !storageAssetPattern.MatchString(grant.AssetID) ||
+		!storageRunPattern.MatchString(grant.RunID) || (grant.Operation != StorageOperationUpload && grant.Operation != StorageOperationDownload) ||
+		!storageHexPattern.MatchString(grant.TokenDigest) || grant.UseLimit < 1 || grant.UseLimit > 1000 ||
 		grant.UseCount < 0 || grant.UseCount > grant.UseLimit || grant.ExpiresAtNs < 1 ||
 		!validGrantStatus(grant.Status, grant.UseCount, grant.UseLimit) || grant.Revision < 1 ||
 		grant.CreatedAtNs < 1 || grant.UpdatedAtNs < grant.CreatedAtNs ||
-		!hexPattern.MatchString(grant.IdempotencyKeyDigest) || !hexPattern.MatchString(grant.IdempotencyRequestDigest) {
-		return NewError(ReasonValidation)
+		!storageHexPattern.MatchString(grant.IdempotencyKeyDigest) || !storageHexPattern.MatchString(grant.IdempotencyRequestDigest) {
+		return NewStorageError(StorageReasonValidation)
 	}
 	return nil
 }
@@ -165,7 +165,7 @@ func validName(name string) bool {
 }
 
 func validObjectKey(key string) bool {
-	return keyPattern.MatchString(key) && !containsDotDot(key)
+	return storageKeyPattern.MatchString(key) && !containsDotDot(key)
 }
 
 func containsDotDot(value string) bool { return strings.Contains(value, "..") }

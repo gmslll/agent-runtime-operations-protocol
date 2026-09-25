@@ -25,24 +25,24 @@ func New(db *sql.DB, lookup durable.TransactionLookup) (*Repository, error) {
 	return &Repository{db: db, lookup: lookup}, nil
 }
 
-func (repository *Repository) CreateAsset(ctx context.Context, asset assets.Asset) (assets.Asset, error) {
+func (repository *Repository) CreateAsset(ctx context.Context, asset assets.AssetRecord) (assets.AssetRecord, error) {
 	if err := asset.Validate(); err != nil {
-		return assets.Asset{}, err
+		return assets.AssetRecord{}, err
 	}
 	tx, err := repository.writeTx(ctx)
 	if err != nil {
-		return assets.Asset{}, err
+		return assets.AssetRecord{}, err
 	}
 	if err := lockKeys(ctx, tx, "asset/id/"+asset.TenantID+"/"+asset.AssetID, "asset/idempotency/"+asset.TenantID+"/"+asset.IdempotencyKeyDigest); err != nil {
-		return assets.Asset{}, err
+		return assets.AssetRecord{}, err
 	}
 	if stored, err := scanAsset(ctx, tx, `tenant_id=$1 AND idempotency_key_digest=$2`, asset.TenantID, asset.IdempotencyKeyDigest); err == nil {
 		if stored.IdempotencyRequestDigest == asset.IdempotencyRequestDigest {
 			return stored, nil
 		}
-		return assets.Asset{}, assets.NewError(assets.ReasonIdempotencyConflict)
-	} else if !assets.HasReason(err, assets.ReasonNotFound) {
-		return assets.Asset{}, err
+		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonIdempotencyConflict)
+	} else if !assets.HasStorageReason(err, assets.StorageReasonNotFound) {
+		return assets.AssetRecord{}, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO arop_assets(
 tenant_id,asset_id,name,media_type,size_bytes,content_digest,object_key,status,revision,
@@ -56,62 +56,62 @@ created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest
 	return resolveAssetInsert(ctx, tx, asset, err)
 }
 
-func (repository *Repository) GetAsset(ctx context.Context, tenantID, assetID string) (assets.Asset, error) {
+func (repository *Repository) GetAsset(ctx context.Context, tenantID, assetID string) (assets.AssetRecord, error) {
 	return scanAsset(ctx, repository.queryer(ctx), `tenant_id=$1 AND asset_id=$2`, tenantID, assetID)
 }
 
-func (repository *Repository) UpdateAsset(ctx context.Context, tenantID, assetID string, expectedRevision int64, update assets.AssetUpdate) (assets.Asset, error) {
+func (repository *Repository) UpdateAsset(ctx context.Context, tenantID, assetID string, expectedRevision int64, update assets.AssetUpdate) (assets.AssetRecord, error) {
 	tx, err := repository.writeTx(ctx)
 	if err != nil {
-		return assets.Asset{}, err
+		return assets.AssetRecord{}, err
 	}
 	if err := lockKeys(ctx, tx, "asset/id/"+tenantID+"/"+assetID); err != nil {
-		return assets.Asset{}, err
+		return assets.AssetRecord{}, err
 	}
 	current, err := scanAsset(ctx, tx, `tenant_id=$1 AND asset_id=$2`, tenantID, assetID)
 	if err != nil {
-		return assets.Asset{}, err
+		return assets.AssetRecord{}, err
 	}
 	if err := update.Validate(current.CreatedAtNs); err != nil {
-		return assets.Asset{}, err
+		return assets.AssetRecord{}, err
 	}
 	if expectedRevision != current.Revision {
-		return assets.Asset{}, assets.NewError(assets.ReasonConflict)
+		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonConflict)
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE arop_assets SET name=$1,media_type=$2,size_bytes=$3,content_digest=$4,object_key=$5,status=$6,revision=revision+1,updated_at_ns=$7
 WHERE tenant_id=$8 AND asset_id=$9 AND revision=$10`, update.Name, update.MediaType, update.SizeBytes, update.ContentDigest,
 		update.ObjectKey, string(update.Status), update.UpdatedAtNs, tenantID, assetID, expectedRevision)
 	if err != nil {
-		return assets.Asset{}, assets.NewError(assets.ReasonUnavailable)
+		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonUnavailable)
 	}
 	affected, err := result.RowsAffected()
 	if err != nil || affected != 1 {
-		return assets.Asset{}, assets.NewError(assets.ReasonConflict)
+		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonConflict)
 	}
 	return scanAsset(ctx, tx, `tenant_id=$1 AND asset_id=$2`, tenantID, assetID)
 }
 
-func (repository *Repository) CreateGrant(ctx context.Context, grant assets.Grant) (assets.Grant, error) {
+func (repository *Repository) CreateGrant(ctx context.Context, grant assets.GrantRecord) (assets.GrantRecord, error) {
 	if err := grant.Validate(); err != nil {
-		return assets.Grant{}, err
+		return assets.GrantRecord{}, err
 	}
 	tx, err := repository.writeTx(ctx)
 	if err != nil {
-		return assets.Grant{}, err
+		return assets.GrantRecord{}, err
 	}
 	if err := lockKeys(ctx, tx,
 		"grant/id/"+grant.TenantID+"/"+grant.GrantID,
 		"grant/idempotency/"+grant.TenantID+"/"+grant.IdempotencyKeyDigest,
 		"grant/token/"+grant.TenantID+"/"+grant.TokenDigest); err != nil {
-		return assets.Grant{}, err
+		return assets.GrantRecord{}, err
 	}
 	if stored, err := scanGrant(ctx, tx, `tenant_id=$1 AND idempotency_key_digest=$2`, grant.TenantID, grant.IdempotencyKeyDigest); err == nil {
 		if stored.IdempotencyRequestDigest == grant.IdempotencyRequestDigest {
 			return stored, nil
 		}
-		return assets.Grant{}, assets.NewError(assets.ReasonIdempotencyConflict)
-	} else if !assets.HasReason(err, assets.ReasonNotFound) {
-		return assets.Grant{}, err
+		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonIdempotencyConflict)
+	} else if !assets.HasStorageReason(err, assets.StorageReasonNotFound) {
+		return assets.GrantRecord{}, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO arop_asset_grants(
 tenant_id,grant_id,asset_id,run_id,operation,token_digest,use_limit,use_count,expires_at_ns,status,revision,
@@ -125,38 +125,38 @@ created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest
 	return resolveGrantInsert(ctx, tx, grant, err)
 }
 
-func (repository *Repository) GetGrant(ctx context.Context, tenantID, grantID string) (assets.Grant, error) {
+func (repository *Repository) GetGrant(ctx context.Context, tenantID, grantID string) (assets.GrantRecord, error) {
 	return scanGrant(ctx, repository.queryer(ctx), `tenant_id=$1 AND grant_id=$2`, tenantID, grantID)
 }
 
-func (repository *Repository) ConsumeGrant(ctx context.Context, tenantID, grantID string, expectedRevision, nowNs int64) (assets.Grant, error) {
+func (repository *Repository) ConsumeGrant(ctx context.Context, tenantID, grantID string, expectedRevision, nowNs int64) (assets.GrantRecord, error) {
 	return repository.transitionGrant(ctx, tenantID, grantID, expectedRevision, nowNs, true)
 }
 
-func (repository *Repository) RevokeGrant(ctx context.Context, tenantID, grantID string, expectedRevision, nowNs int64) (assets.Grant, error) {
+func (repository *Repository) RevokeGrant(ctx context.Context, tenantID, grantID string, expectedRevision, nowNs int64) (assets.GrantRecord, error) {
 	return repository.transitionGrant(ctx, tenantID, grantID, expectedRevision, nowNs, false)
 }
 
-func (repository *Repository) transitionGrant(ctx context.Context, tenantID, grantID string, expectedRevision, nowNs int64, consume bool) (assets.Grant, error) {
+func (repository *Repository) transitionGrant(ctx context.Context, tenantID, grantID string, expectedRevision, nowNs int64, consume bool) (assets.GrantRecord, error) {
 	if nowNs < 1 {
-		return assets.Grant{}, assets.NewError(assets.ReasonValidation)
+		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonValidation)
 	}
 	tx, err := repository.writeTx(ctx)
 	if err != nil {
-		return assets.Grant{}, err
+		return assets.GrantRecord{}, err
 	}
 	if err := lockKeys(ctx, tx, "grant/id/"+tenantID+"/"+grantID); err != nil {
-		return assets.Grant{}, err
+		return assets.GrantRecord{}, err
 	}
 	current, err := scanGrant(ctx, tx, `tenant_id=$1 AND grant_id=$2`, tenantID, grantID)
 	if err != nil {
-		return assets.Grant{}, err
+		return assets.GrantRecord{}, err
 	}
 	if current.Revision != expectedRevision || current.Status != assets.GrantActive {
-		return assets.Grant{}, assets.NewError(assets.ReasonConflict)
+		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonConflict)
 	}
 	if consume && current.ExpiresAtNs <= nowNs {
-		return assets.Grant{}, assets.NewError(assets.ReasonExpired)
+		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonExpired)
 	}
 	statement := `UPDATE arop_asset_grants SET status='revoked',revision=revision+1,updated_at_ns=$1 WHERE tenant_id=$2 AND grant_id=$3 AND revision=$4 AND status='active'`
 	args := []any{nowNs, tenantID, grantID, expectedRevision}
@@ -167,11 +167,11 @@ WHERE tenant_id=$2 AND grant_id=$3 AND revision=$4 AND status='active' AND use_c
 	}
 	result, err := tx.ExecContext(ctx, statement, args...)
 	if err != nil {
-		return assets.Grant{}, assets.NewError(assets.ReasonUnavailable)
+		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonUnavailable)
 	}
 	affected, err := result.RowsAffected()
 	if err != nil || affected != 1 {
-		return assets.Grant{}, assets.NewError(assets.ReasonConflict)
+		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonConflict)
 	}
 	return scanGrant(ctx, tx, `tenant_id=$1 AND grant_id=$2`, tenantID, grantID)
 }
@@ -179,7 +179,7 @@ WHERE tenant_id=$2 AND grant_id=$3 AND revision=$4 AND status='active' AND use_c
 func (repository *Repository) writeTx(ctx context.Context) (*sql.Tx, error) {
 	tx, ok := repository.lookup(ctx)
 	if !ok {
-		return nil, assets.NewError(assets.ReasonUnavailable)
+		return nil, assets.NewStorageError(assets.StorageReasonUnavailable)
 	}
 	return tx, nil
 }
@@ -194,50 +194,50 @@ func (repository *Repository) queryer(ctx context.Context) migrate.Queryer {
 func lockKeys(ctx context.Context, tx *sql.Tx, keys ...string) error {
 	for _, key := range keys {
 		if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, key); err != nil {
-			return assets.NewError(assets.ReasonUnavailable)
+			return assets.NewStorageError(assets.StorageReasonUnavailable)
 		}
 	}
 	return nil
 }
 
-func resolveAssetInsert(ctx context.Context, tx *sql.Tx, asset assets.Asset, insertErr error) (assets.Asset, error) {
+func resolveAssetInsert(ctx context.Context, tx *sql.Tx, asset assets.AssetRecord, insertErr error) (assets.AssetRecord, error) {
 	if !uniqueViolation(insertErr) {
 		if constraintViolation(insertErr) {
-			return assets.Asset{}, assets.NewError(assets.ReasonValidation)
+			return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonValidation)
 		}
-		return assets.Asset{}, assets.NewError(assets.ReasonUnavailable)
+		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonUnavailable)
 	}
 	stored, err := scanAsset(ctx, tx, `tenant_id=$1 AND idempotency_key_digest=$2`, asset.TenantID, asset.IdempotencyKeyDigest)
-	if assets.HasReason(err, assets.ReasonNotFound) {
-		return assets.Asset{}, assets.NewError(assets.ReasonConflict)
+	if assets.HasStorageReason(err, assets.StorageReasonNotFound) {
+		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonConflict)
 	}
 	if err != nil {
-		return assets.Asset{}, err
+		return assets.AssetRecord{}, err
 	}
 	if stored.IdempotencyRequestDigest == asset.IdempotencyRequestDigest {
 		return stored, nil
 	}
-	return assets.Asset{}, assets.NewError(assets.ReasonIdempotencyConflict)
+	return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonIdempotencyConflict)
 }
 
-func resolveGrantInsert(ctx context.Context, tx *sql.Tx, grant assets.Grant, insertErr error) (assets.Grant, error) {
+func resolveGrantInsert(ctx context.Context, tx *sql.Tx, grant assets.GrantRecord, insertErr error) (assets.GrantRecord, error) {
 	if constraintViolation(insertErr) && !uniqueViolation(insertErr) {
-		return assets.Grant{}, assets.NewError(assets.ReasonValidation)
+		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonValidation)
 	}
 	if !uniqueViolation(insertErr) {
-		return assets.Grant{}, assets.NewError(assets.ReasonUnavailable)
+		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonUnavailable)
 	}
 	stored, err := scanGrant(ctx, tx, `tenant_id=$1 AND idempotency_key_digest=$2`, grant.TenantID, grant.IdempotencyKeyDigest)
-	if assets.HasReason(err, assets.ReasonNotFound) {
-		return assets.Grant{}, assets.NewError(assets.ReasonConflict)
+	if assets.HasStorageReason(err, assets.StorageReasonNotFound) {
+		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonConflict)
 	}
 	if err != nil {
-		return assets.Grant{}, err
+		return assets.GrantRecord{}, err
 	}
 	if stored.IdempotencyRequestDigest == grant.IdempotencyRequestDigest {
 		return stored, nil
 	}
-	return assets.Grant{}, assets.NewError(assets.ReasonIdempotencyConflict)
+	return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonIdempotencyConflict)
 }
 
 func uniqueViolation(err error) bool {
@@ -250,41 +250,41 @@ func constraintViolation(err error) bool {
 	return errors.As(err, &databaseError) && (databaseError.Code == "23514" || databaseError.Code == "23503" || databaseError.Code == "23505")
 }
 
-func scanAsset(ctx context.Context, queryer migrate.Queryer, predicate string, args ...any) (assets.Asset, error) {
-	var asset assets.Asset
+func scanAsset(ctx context.Context, queryer migrate.Queryer, predicate string, args ...any) (assets.AssetRecord, error) {
+	var asset assets.AssetRecord
 	var status string
 	err := queryer.QueryRowContext(ctx, `SELECT tenant_id,asset_id,name,media_type,size_bytes,content_digest,object_key,status,revision,created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest FROM arop_assets WHERE `+predicate, args...).Scan(
 		&asset.TenantID, &asset.AssetID, &asset.Name, &asset.MediaType, &asset.SizeBytes, &asset.ContentDigest, &asset.ObjectKey, &status, &asset.Revision, &asset.CreatedAtNs, &asset.UpdatedAtNs, &asset.IdempotencyKeyDigest, &asset.IdempotencyRequestDigest)
 	if errors.Is(err, sql.ErrNoRows) {
-		return assets.Asset{}, assets.NewError(assets.ReasonNotFound)
+		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonNotFound)
 	}
 	if err != nil {
-		return assets.Asset{}, assets.NewError(assets.ReasonUnavailable)
+		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonUnavailable)
 	}
 	asset.Status = assets.AssetStatus(status)
 	if asset.Validate() != nil {
-		return assets.Asset{}, assets.NewError(assets.ReasonUnavailable)
+		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonUnavailable)
 	}
 	return asset, nil
 }
 
-func scanGrant(ctx context.Context, queryer migrate.Queryer, predicate string, args ...any) (assets.Grant, error) {
-	var grant assets.Grant
+func scanGrant(ctx context.Context, queryer migrate.Queryer, predicate string, args ...any) (assets.GrantRecord, error) {
+	var grant assets.GrantRecord
 	var operation, status string
 	err := queryer.QueryRowContext(ctx, `SELECT tenant_id,grant_id,asset_id,run_id,operation,token_digest,use_limit,use_count,expires_at_ns,status,revision,created_at_ns,updated_at_ns,idempotency_key_digest,idempotency_request_digest FROM arop_asset_grants WHERE `+predicate, args...).Scan(
 		&grant.TenantID, &grant.GrantID, &grant.AssetID, &grant.RunID, &operation, &grant.TokenDigest, &grant.UseLimit, &grant.UseCount, &grant.ExpiresAtNs, &status, &grant.Revision, &grant.CreatedAtNs, &grant.UpdatedAtNs, &grant.IdempotencyKeyDigest, &grant.IdempotencyRequestDigest)
 	if errors.Is(err, sql.ErrNoRows) {
-		return assets.Grant{}, assets.NewError(assets.ReasonNotFound)
+		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonNotFound)
 	}
 	if err != nil {
-		return assets.Grant{}, assets.NewError(assets.ReasonUnavailable)
+		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonUnavailable)
 	}
-	grant.Operation = assets.Operation(operation)
+	grant.Operation = assets.StorageOperation(operation)
 	grant.Status = assets.GrantStatus(status)
 	if grant.Validate() != nil {
-		return assets.Grant{}, assets.NewError(assets.ReasonUnavailable)
+		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonUnavailable)
 	}
 	return grant, nil
 }
 
-var _ assets.Repository = (*Repository)(nil)
+var _ assets.StorageRepository = (*Repository)(nil)

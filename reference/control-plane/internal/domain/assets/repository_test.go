@@ -3,12 +3,12 @@ package assets
 import "testing"
 
 func TestRowsRejectMalformedIdentity(t *testing.T) {
-	asset := Asset{TenantID: "Tenant", AssetID: "asset", Name: "a", MediaType: "image/png", ContentDigest: "sha256:" + repeat('a', 64), ObjectKey: "a", Status: AssetPending, Revision: 1, CreatedAtNs: 1, UpdatedAtNs: 1, IdempotencyKeyDigest: repeat('b', 64), IdempotencyRequestDigest: repeat('c', 64)}
-	if !HasReason(asset.Validate(), ReasonValidation) {
+	asset := AssetRecord{TenantID: "Tenant", AssetID: "asset", Name: "a", MediaType: "image/png", ContentDigest: "sha256:" + repeat('a', 64), ObjectKey: "a", Status: AssetPending, Revision: 1, CreatedAtNs: 1, UpdatedAtNs: 1, IdempotencyKeyDigest: repeat('b', 64), IdempotencyRequestDigest: repeat('c', 64)}
+	if !HasStorageReason(asset.Validate(), StorageReasonValidation) {
 		t.Fatal("malformed asset was accepted")
 	}
-	grant := Grant{TenantID: "tenant", GrantID: "grant", AssetID: assetID(), RunID: "run", Operation: OperationUpload, TokenDigest: repeat('d', 64), UseLimit: 1, Status: GrantActive, Revision: 1, CreatedAtNs: 1, UpdatedAtNs: 1, ExpiresAtNs: 2, IdempotencyKeyDigest: repeat('e', 64), IdempotencyRequestDigest: repeat('f', 64)}
-	if !HasReason(grant.Validate(), ReasonValidation) {
+	grant := GrantRecord{TenantID: "tenant", GrantID: "grant", AssetID: assetID(), RunID: "run", Operation: StorageOperationUpload, TokenDigest: repeat('d', 64), UseLimit: 1, Status: GrantActive, Revision: 1, CreatedAtNs: 1, UpdatedAtNs: 1, ExpiresAtNs: 2, IdempotencyKeyDigest: repeat('e', 64), IdempotencyRequestDigest: repeat('f', 64)}
+	if !HasStorageReason(grant.Validate(), StorageReasonValidation) {
 		t.Fatal("malformed grant was accepted")
 	}
 }
