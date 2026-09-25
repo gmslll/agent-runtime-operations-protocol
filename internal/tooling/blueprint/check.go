@@ -1123,6 +1123,10 @@ func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact
 			}
 			text := string(data)
 			isNode := ext == ".mjs" || ext == ".js" || ext == ".cjs" || ext == ".ts" || nodeShebang(text)
+			owner := artifactForPath(rel, artifacts)
+			if isGeneratedTypeScriptLibrary(ext, text, owner) {
+				isNode = false
+			}
 			if isNode {
 				owner := artifactForExactPath(rel, artifacts)
 				if owner.ID == "" || owner.ImplementationRuntime != "node" || !allowedNode[owner.ToolScope] {
@@ -1174,6 +1178,10 @@ func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact
 		}
 	}
 	return p
+}
+
+func isGeneratedTypeScriptLibrary(ext, source string, owner Artifact) bool {
+	return ext == ".ts" && !nodeShebang(source) && owner.Kind == "generated-code" && owner.Language == "typescript"
 }
 func boundaryNegativeProbes() []string {
 	p := []string{}
