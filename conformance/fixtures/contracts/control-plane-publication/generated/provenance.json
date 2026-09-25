@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "command": {
+    "entry": "scripts/generate.mjs",
+    "config": "conformance/fixtures/contracts/control-plane-publication/pipeline.json",
+    "output": "<output>",
+    "result": "<output>/provenance.json"
+  },
+  "generator": {
+    "path": "scripts/generate.mjs",
+    "sha256": "7df0fe38e88dce7918c952226ecee467570b02cc9caaed5703b46118030ecde6",
+    "files": [
+      {
+        "path": "scripts/generate.mjs",
+        "sha256": "7df0fe38e88dce7918c952226ecee467570b02cc9caaed5703b46118030ecde6",
+        "bytes": 136203,
+        "mode": "100644"
+      },
+      {
+        "path": "scripts/lib/repository.mjs",
+        "sha256": "4d87c901bbfeee969214d8620154acefb6b76d9a8084fa858db1917c726b2733",
+        "bytes": 44748,
+        "mode": "100644"
+      },
+      {
+        "path": "package.json",
+        "sha256": "a0480da8a20f9ba2c1355d58723295d22ca3a06235e3763aaf67742edc4e2661",
+        "bytes": 574,
+        "mode": "100644"
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "982e444493976055a5d34793bcdbc50751ec6f9d60148562a037f19a8d036b37",
+        "bytes": 5565,
+        "mode": "100644"
+      }
+    ]
+  },
+  "configuration": {
+    "path": "conformance/fixtures/contracts/control-plane-publication/pipeline.json",
+    "sha256": "061706bbd5b25c868b13ca2c9fddcc0464027ac74b2f14b3870fe9d907039e7f",
+    "bytes": 2985,
+    "mode": "100644"
+  },
+  "resources": [
+    {
+      "path": "schemas/common/error.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/error.schema.json",
+      "sha256": "26f53fa585547b4ed3d601b6d1773cc410d6ac8f78136df26e4fb98c2d5b7890",
+      "bytes": 1100,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/common/identifiers.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/identifiers.schema.json",
+      "sha256": "87503f773550083f8cb7f0213b6fd336bc21bf5c54575af49a21f447de209269",
+      "bytes": 2818,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/manifest/agent-manifest-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/manifest/agent-manifest-v1.schema.json",
+      "sha256": "49f18485c28ffadcb2bf7f9235c0bf699f07fa4964c0b5a52c9f82e81a883717",
+      "bytes": 12854,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/resources/asset-ref-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json",
+      "sha256": "20e58d65d8a0903fe39367fb99ebfefd88ce1681caaa7a9eb7572ab098cc84ee",
+      "bytes": 1208,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/resources/secret-ref-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/resources/secret-ref-v1.schema.json",
+      "sha256": "db5089440528f4a9bd65d5d0f65bac32699b8a80233f03f6620e2300ace5b84c",
+      "bytes": 778,
+      "mode": "100644"
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "manifest-read",
+      "class": "valid",
+      "root": "AgentManifest",
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json",
+      "sha256": "443b142030c76bfaee679ccc45b3d040711041900a090e49169bb7cb0dbed1b6",
+      "bytes": 659,
+      "mode": "100644"
+    },
+    {
+      "id": "manifest-safe-integer-maximum",
+      "class": "valid",
+      "root": "AgentManifest",
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-safe-integer-maximum.json",
+      "sha256": "cea4d37b06ac68138f7e04cde5208ef697b57c747c8827e6bb299d89a2090e2c",
+      "bytes": 820,
+      "mode": "100644"
+    },
+    {
+      "id": "manifest-read-future-field",
+      "class": "forward",
+      "root": "AgentManifest",
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/manifest-read-future-field.json",
+      "sha256": "cdd891ce3ae88bd99a438b76b423ced9f6d4c4bd18f3bf374c53f0c8ff1adff8",
+      "bytes": 826,
+      "mode": "100644"
+    },
+    {
+      "id": "error-secret-egress",
+      "class": "invalid",
+      "root": "AROPError",
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/error-secret-egress.json",
+      "sha256": "85a2dec1a57140280af8edfb4d4fa7966af7cbaf53f23f0d829ab01bdf23b6dc",
+      "bytes": 178,
+      "mode": "100644"
+    },
+    {
+      "id": "manifest-content-max-input-bytes-safe-maximum-plus-one",
+      "class": "invalid",
+      "root": "AgentManifest",
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-content-max-input-bytes-safe-maximum-plus-one.json",
+      "sha256": "3c81a796d88a471b36e8443c1a104918a08cb347ba9da19326300b8d8ce904d8",
+      "bytes": 553,
+      "mode": "100644"
+    },
+    {
+      "id": "manifest-execution-max-concurrency-safe-maximum-plus-one",
+      "class": "invalid",
+      "root": "AgentManifest",
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-execution-max-concurrency-safe-maximum-plus-one.json",
+      "sha256": "996264027401d763dc405226ff038257c6b91a37290ca8ccb1fe398296661927",
+      "bytes": 541,
+      "mode": "100644"
+    },
+    {
+      "id": "manifest-secret-egress",
+      "class": "invalid",
+      "root": "AgentManifest",
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-secret-egress.json",
+      "sha256": "31c6fc9ee84a560a801bdc7aafa4faa7836c57802b90e54802a1726a442e05e0",
+      "bytes": 708,
+      "mode": "100644"
+    },
+    {
+      "id": "manifest-session-idle-timeout-safe-maximum-plus-one",
+      "class": "invalid",
+      "root": "AgentManifest",
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-session-idle-timeout-safe-maximum-plus-one.json",
+      "sha256": "81158b87e6d58b7496583ecd85f9113e51e48ace2754be459df2c2827d600813",
+      "bytes": 574,
+      "mode": "100644"
+    }
+  ],
+  "inputs_sha256": "aa9e5d1e87d6d74ffdde969c8c84643dad75e09b533e01a1d6025e018e614938",
+  "outputs": [
+    {
+      "language": "go",
+      "path": "sdk/go/generated/control-plane/publication.gen.go",
+      "sha256": "fe6cff96bb1ad3e58c629d728238408e35647a8b72904a336ebf7c530a936e6f",
+      "bytes": 87432,
+      "mode": "100644"
+    },
+    {
+      "language": "python",
+      "path": "sdk/python/src/arop/generated/control-plane/publication_gen.py",
+      "sha256": "225bc68af5f56177254c2edf83aefe082f85fac8d377882c9b2871dd06f19a5f",
+      "bytes": 37793,
+      "mode": "100644"
+    },
+    {
+      "language": "typescript",
+      "path": "sdk/typescript/src/generated/control-plane/publication.gen.ts",
+      "sha256": "778e2ebb31766cc2d73b95185c01b4984ebc14b5f8afc9d2fd7497ca93da25a6",
+      "bytes": 35671,
+      "mode": "100644"
+    }
+  ],
+  "outputs_sha256": "e45b89ca3e9b7c945e2e76a8cae0ffb5b7a3179f7795ef6bc5ae816d005d0905",
+  "checks": [
+    {
+      "id": "schema-valid-manifest-read",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-manifest-safe-integer-maximum",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-forward-manifest-read-future-field",
+      "passed": true,
+      "detail": "data must NOT have additional properties, data/identity must NOT have additional properties, data/skills/0 must NOT have additional properties, data/execution must NOT have additional properties"
+    },
+    {
+      "id": "schema-invalid-error-secret-egress",
+      "passed": true,
+      "detail": "data must NOT have additional properties"
+    },
+    {
+      "id": "schema-invalid-manifest-content-max-input-bytes-safe-maximum-plus-one",
+      "passed": true,
+      "detail": "unsafe JSON number at /content/max_input_bytes"
+    },
+    {
+      "id": "schema-invalid-manifest-execution-max-concurrency-safe-maximum-plus-one",
+      "passed": true,
+      "detail": "unsafe JSON number at /execution/max_concurrency"
+    },
+    {
+      "id": "schema-invalid-manifest-secret-egress",
+      "passed": true,
+      "detail": "data/dependencies/secrets/0 must NOT have additional properties"
+    },
+    {
+      "id": "schema-invalid-manifest-session-idle-timeout-safe-maximum-plus-one",
+      "passed": true,
+      "detail": "unsafe JSON number at /session/idle_timeout_seconds"
+    },
+    {
+      "id": "offline-resource-closure",
+      "passed": true,
+      "detail": "5 explicit resources"
+    },
+    {
+      "id": "mapping-profile",
+      "passed": true,
+      "detail": "28 named types"
+    },
+    {
+      "id": "deterministic-output-set",
+      "passed": true,
+      "detail": "3 outputs"
+    }
+  ]
+}

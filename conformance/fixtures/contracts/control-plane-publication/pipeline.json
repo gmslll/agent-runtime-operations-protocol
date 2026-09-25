@@ -15,18 +15,18 @@
   ],
   "fixtures": {
     "valid": [
-      {"id": "manifest-read", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json"},
-      {"id": "manifest-safe-integer-maximum", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-safe-integer-maximum.json"}
+      {"id": "manifest-read", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json", "root": "AgentManifest"},
+      {"id": "manifest-safe-integer-maximum", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-safe-integer-maximum.json", "root": "AgentManifest"}
     ],
     "forward": [
-      {"id": "manifest-read-future-field", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/manifest-read-future-field.json"}
+      {"id": "manifest-read-future-field", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/manifest-read-future-field.json", "root": "AgentManifest"}
     ],
     "invalid": [
-      {"id": "error-secret-egress", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/error-secret-egress.json"},
-      {"id": "manifest-content-max-input-bytes-safe-maximum-plus-one", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-content-max-input-bytes-safe-maximum-plus-one.json"},
-      {"id": "manifest-execution-max-concurrency-safe-maximum-plus-one", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-execution-max-concurrency-safe-maximum-plus-one.json"},
-      {"id": "manifest-secret-egress", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-secret-egress.json"},
-      {"id": "manifest-session-idle-timeout-safe-maximum-plus-one", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-session-idle-timeout-safe-maximum-plus-one.json"}
+      {"id": "error-secret-egress", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/error-secret-egress.json", "root": "AROPError"},
+      {"id": "manifest-content-max-input-bytes-safe-maximum-plus-one", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-content-max-input-bytes-safe-maximum-plus-one.json", "root": "AgentManifest"},
+      {"id": "manifest-execution-max-concurrency-safe-maximum-plus-one", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-execution-max-concurrency-safe-maximum-plus-one.json", "root": "AgentManifest"},
+      {"id": "manifest-secret-egress", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-secret-egress.json", "root": "AgentManifest"},
+      {"id": "manifest-session-idle-timeout-safe-maximum-plus-one", "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-session-idle-timeout-safe-maximum-plus-one.json", "root": "AgentManifest"}
     ]
   },
   "outputs": {
