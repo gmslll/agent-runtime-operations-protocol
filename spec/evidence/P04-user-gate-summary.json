@@ -1,14 +1,14 @@
 {
   "approver_id": "project-owner-current-user",
-  "attested_at": "2026-09-24T02:30:47Z",
+  "attested_at": "2026-09-25T04:53:54Z",
   "authentication": {
-    "confirmation_sha256": "sha256:cf42c22243bbd70e42bb788153881add5eb85644105802484bde32a33578d006",
+    "confirmation_sha256": "sha256:93ddf26362680857696269cba2fe68100b83f07bfc0abef6fa877e8c009ab6b0",
     "limitation": "manual identity and independence verification is not cryptographically replayable",
     "mode": "manual-trusted-channel"
   },
   "gate": "P04",
   "kind": "arop-user-gate-summary",
-  "raw_evidence_sha256": "sha256:9f4e9bc28b93e5817677126a160dbb8e15595252b40d52f757437a15d00dc726",
+  "raw_evidence_sha256": "sha256:35ee0dbe6a28a45bb3216768d3f40f5f386b73ca70fa4afa72b7c31c958ad4f9",
   "result": {
     "must_fix": [],
     "must_fix_count": 0,
@@ -290,15 +290,15 @@
   },
   "schema_version": 1,
   "subject": {
-    "artifact_manifest_sha256": "689fe010cb8903570dc7f76c116b1ad2d496b42eb150b99232d2adfe7ac91f87",
+    "artifact_manifest_sha256": "f2d21c54fcc67870b0b601969546bf6498b890e3efd69a7349bf53bc91c64fdd",
     "blueprint_sha256": "2c8470f94220c4959c98e91f3909bd3d698c265841c5be9e53afaab84ced0a94",
-    "commit": "7498f8f9654d251cb2d8d8062d8d7c7f5d0373fc",
+    "commit": "ff401560339f8c52182e48f10f300f259432a3e6",
     "plan_last_phase": "P53",
     "plan_sha256": "127e29a4ea740db9a91e2720f9c3f08d1a04e0346d445b522b5957bb4dbbf4e5",
-    "planning_audit_promoted_file_sha256": "sha256:d000e6e724b9970a2b78f5c83cf5a17a1375bd7d967f163eb2d132b049942d38",
-    "planning_audit_promoted_jcs_sha256": "sha256:646462d0929a27b45ae8b0017847ff18720f54c98562f534bd03539e9da1ff74",
-    "planning_audit_summary_sha256": "sha256:b6decf940bb25a8eeac9c26077d042b9d8c120a567b0c6ad2da8d704605e0f4a",
+    "planning_audit_promoted_file_sha256": "sha256:37397a52857117662d2d6afcd3c1ecdfccbf6e3a75f4b9d636c72e68facdb510",
+    "planning_audit_promoted_jcs_sha256": "sha256:f302e20c0c7ced4afe93f140fb4a9234a3f4dc375e6152688785bffcb0f6d404",
+    "planning_audit_summary_sha256": "sha256:bd9feae0b2060932fbd990cdb0f340644101e1ca573941a3c3c5b6a572c05801",
     "requirements_sha256": "3154db5e7d9073967c67ec0669e442df9c225f39d79ea384a7c9da42bb8bb5e4"
   },
-  "summary_sha256": "sha256:7b7b4025fb0a389e1e4ebecc5e2d272190c11238ac0ac6ea476ff73a0a83b977"
+  "summary_sha256": "sha256:a378fc78920e99e6079feb2e4e2c16a248fa708a7649ba55aec42f9058cb8505"
 }
