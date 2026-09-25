@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -454,8 +455,15 @@ func verifyCase(root string, c caseDef, openapi any) error {
 }
 
 func verifyBundleCase(root string, c caseDef) error {
+	row, err := bundleMatrixRow(root, c)
+	if err != nil {
+		return err
+	}
 	if c.ID == "bundle-valid" {
-		path := filepath.Join(root, rootDir, "fixtures/bundles/valid-agent-version.zip")
+		path, err := bundleFixturePath(root, row)
+		if err != nil {
+			return err
+		}
 		r, err := zip.OpenReader(path)
 		if err != nil {
 			return err
@@ -472,7 +480,6 @@ func verifyBundleCase(root string, c caseDef) error {
 		if v, _, err = structuredfile.LoadAny(filepath.Join(root, rootDir, "fixtures/valid/manifest-read.json")); err != nil {
 			return err
 		}
-		_ = v
 		parsed, err := structuredfile.Parse(data, "json")
 		if err != nil {
 			return err
@@ -480,13 +487,167 @@ func verifyBundleCase(root string, c caseDef) error {
 		if _, ok := parsed.(map[string]any); !ok {
 			return errors.New("manifest is not an object")
 		}
+		if !reflect.DeepEqual(parsed, v) {
+			return errors.New("archive manifest differs from validated semantic fixture")
+		}
 		return nil
 	}
-	if c.Source != "" {
-		var matrix map[string]any
-		return load(root, rootDir+"/"+c.Source, &matrix)
+	if fixture, ok := row["fixture"].(string); ok {
+		path, err := bundleFixturePath(root, row)
+		if err != nil {
+			return err
+		}
+		r, err := zip.OpenReader(path)
+		if err != nil {
+			return err
+		}
+		defer r.Close()
+		if fixture == "" || !bundleArchiveRejects(c.ID, r.File) {
+			return fmt.Errorf("adversarial archive did not exhibit %s", c.ID)
+		}
+		return nil
 	}
-	return nil
+	if entries, ok := stringSlice(row["entries"]); ok {
+		if !bundleEntrySetRejects(c.ID, entries) {
+			return fmt.Errorf("adversarial entry set did not exhibit %s", c.ID)
+		}
+		return nil
+	}
+	if ref, ok := row["manifest_ref"].(string); ok {
+		u, err := url.Parse(ref)
+		if err != nil || u.Scheme != "https" || u.Host == "" {
+			return errors.New("network reference fixture is not an absolute HTTPS reference")
+		}
+		return nil
+	}
+	if limits, ok := row["limits"].(map[string]any); ok {
+		maximums := map[string]float64{"archive_bytes": 10485760, "compression_ratio": 100, "entries": 256, "entry_uncompressed_bytes": 4194304, "total_uncompressed_bytes": 52428800}
+		if len(limits) != 1 {
+			return errors.New("limit fixture must isolate exactly one limit")
+		}
+		for name, raw := range limits {
+			value, vok := raw.(float64)
+			maximum, mok := maximums[name]
+			if !vok || !mok || value != maximum+1 {
+				return fmt.Errorf("limit fixture %s is not exact maximum+1", name)
+			}
+		}
+		return nil
+	}
+	return fmt.Errorf("bundle case %s has no executable fixture", c.ID)
+}
+
+func bundleMatrixRow(root string, c caseDef) (map[string]any, error) {
+	var matrix map[string]any
+	if c.Source == "" {
+		return nil, errors.New("bundle case has no matrix source")
+	}
+	if err := load(root, rootDir+"/"+c.Source, &matrix); err != nil {
+		return nil, err
+	}
+	rows, _ := matrix["cases"].([]any)
+	for _, raw := range rows {
+		row, _ := raw.(map[string]any)
+		if row["id"] == c.ID {
+			expected, _ := row["expected"].(map[string]any)
+			if expected["accepted"] != (c.ID == "bundle-valid") {
+				return nil, errors.New("bundle acceptance expectation mismatch")
+			}
+			return row, nil
+		}
+	}
+	return nil, fmt.Errorf("bundle case %s absent from matrix", c.ID)
+}
+
+func bundleFixturePath(root string, row map[string]any) (string, error) {
+	fixture, _ := row["fixture"].(string)
+	base := filepath.Join(root, rootDir, "fixtures/matrices")
+	path := filepath.Clean(filepath.Join(base, fixture))
+	allowed := filepath.Join(root, rootDir, "fixtures", "bundles") + string(os.PathSeparator)
+	if fixture == "" || !strings.HasPrefix(path, allowed) {
+		return "", errors.New("bundle fixture escapes controlled bundle directory")
+	}
+	return path, nil
+}
+
+func bundleArchiveRejects(id string, files []*zip.File) bool {
+	switch id {
+	case "bundle-duplicate-entry":
+		seen := map[string]bool{}
+		for _, f := range files {
+			if seen[f.Name] {
+				return true
+			}
+			seen[f.Name] = true
+		}
+	case "bundle-encrypted-entry":
+		for _, f := range files {
+			if f.Flags&1 != 0 {
+				return true
+			}
+		}
+	case "bundle-hardlink-entry":
+		for _, f := range files {
+			if bytes.Contains(f.Extra, []byte("HARDLINK\x00")) {
+				return true
+			}
+		}
+	case "bundle-multiple-manifests":
+		count := 0
+		for _, f := range files {
+			if strings.TrimPrefix(filepath.ToSlash(f.Name), "./") == "agent-manifest.json" {
+				count++
+			}
+		}
+		return count > 1
+	case "bundle-parent-path":
+		for _, f := range files {
+			if strings.Contains(filepath.ToSlash(f.Name), "../") {
+				return true
+			}
+		}
+	case "bundle-symlink-entry":
+		for _, f := range files {
+			if f.Mode()&os.ModeSymlink != 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func stringSlice(raw any) ([]string, bool) {
+	values, ok := raw.([]any)
+	if !ok {
+		return nil, false
+	}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		s, ok := value.(string)
+		if !ok {
+			return nil, false
+		}
+		out = append(out, s)
+	}
+	return out, true
+}
+
+func bundleEntrySetRejects(id string, entries []string) bool {
+	switch id {
+	case "bundle-absolute-path":
+		return len(entries) == 1 && strings.HasPrefix(entries[0], "/")
+	case "bundle-backslash-path":
+		return len(entries) == 1 && strings.Contains(entries[0], "\\")
+	case "bundle-percent-bypass":
+		decoded, err := url.PathUnescape(entries[0])
+		return err == nil && decoded != entries[0] && strings.Contains(decoded, "../")
+	case "bundle-case-collision":
+		return len(entries) == 2 && strings.EqualFold(entries[0], entries[1]) && entries[0] != entries[1]
+	case "bundle-unicode-collision":
+		normalize := func(s string) string { return strings.ReplaceAll(s, "e\u0301", "é") }
+		return len(entries) == 2 && normalize(entries[0]) == normalize(entries[1]) && entries[0] != entries[1]
+	}
+	return false
 }
 func verifySafeIntegerCase(root string, c caseDef) error {
 	var matrix map[string]any
@@ -602,7 +763,7 @@ func runGoProbe(root, out string) cmdResult {
 	os.Mkdir(filepath.Join(scratch, "mod"), 0o700)
 	os.Mkdir(filepath.Join(scratch, "tmp"), 0o700)
 	os.Mkdir(filepath.Join(out, "empty-home"), 0o700)
-	return run(dir, 90*time.Second, cleanEnv(map[string]string{"CGO_ENABLED": "0", "GOCACHE": scratch, "GOMODCACHE": filepath.Join(scratch, "mod"), "GOTMPDIR": filepath.Join(scratch, "tmp"), "GOENV": "off", "GOFLAGS": "-mod=readonly", "GOPROXY": "off", "GOSUMDB": "off", "GOTOOLCHAIN": "local", "GOWORK": "off", "HOME": filepath.Join(out, "empty-home")}), "go", "test", "-count=1", "-json", "-mod=readonly", ".")
+	return run(dir, 90*time.Second, cleanEnv(map[string]string{"CGO_ENABLED": "0", "GOCACHE": scratch, "GOMODCACHE": filepath.Join(scratch, "mod"), "GONOSUMDB": "*", "GOTMPDIR": filepath.Join(scratch, "tmp"), "GOENV": "off", "GOFLAGS": "-mod=readonly", "GOPROXY": "off", "GOSUMDB": "off", "GOTOOLCHAIN": "local", "GOWORK": "off", "HOME": filepath.Join(out, "empty-home")}), "go", "test", "-count=1", "-json", "-mod=readonly", ".")
 }
 func runPythonProbe(root, out string) cmdResult {
 	dir := filepath.Join(out, "python-probe")
@@ -621,6 +782,14 @@ func runPythonProbe(root, out string) cmdResult {
 	a := run(dir, 60*time.Second, cleanEnv(map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONHASHSEED": "0", "PYTHONNOUSERSITE": "1", "PYTHONSAFEPATH": "1"}), "python3", "-I", "-B", "-m", "py_compile", "publication_gen.py", "probe.py")
 	if a.err != nil {
 		return a
+	}
+	nodeModules, err := findNodeModules(root)
+	if err != nil {
+		return cmdResult{err: err}
+	}
+	pyright := run(dir, 60*time.Second, cleanEnv(map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONHASHSEED": "0", "PYTHONNOUSERSITE": "1", "PYTHONSAFEPATH": "1"}), "node", "--disable-proto=throw", "--no-addons", filepath.Join(nodeModules, "pyright/index.js"), "--level", "error", "--pythonversion", "3.11", "publication_gen.py", "probe.py")
+	if pyright.err != nil {
+		return pyright
 	}
 	return run(dir, 60*time.Second, cleanEnv(map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONHASHSEED": "0", "PYTHONNOUSERSITE": "1", "PYTHONSAFEPATH": "1"}), "python3", "-I", "-B", "probe.py")
 }
