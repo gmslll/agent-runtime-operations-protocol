@@ -39,6 +39,7 @@ const (
 	p10WaiverPath   = "reference/control-plane/internal/identity/testdata/transition/p10-baseline-transition-waiver.json"
 	nestedModule    = "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane"
 	rootModule      = "github.com/gmslll/agent-runtime-operations-protocol"
+	p13WaiverPath   = "reference/control-plane/internal/domain/assets/testdata/transition/p13-baseline-transition-waiver.json"
 )
 
 var rootRequirementPattern = regexp.MustCompile(`(?m)^\s*(?:require\s+)?github\.com/gmslll/agent-runtime-operations-protocol\s+(v0\.0\.0-([0-9]{14})-([0-9a-f]{12}))\s*$`)
@@ -120,6 +121,7 @@ var expectedTests = map[string][]string{
 		"TestReadinessIsTruthful",
 	},
 	nestedModule + "/internal/app/platform/httpadapter": {
+		"TestAssetRoutesSeparateIdentityFromGrantAuthentication",
 		"TestHandlerChainPropagatesCorrelatesAndRedacts",
 		"TestPublicationRoutesEnforceScopeUoWBoundaryAndBodyLimit",
 	},
@@ -330,6 +332,14 @@ func p12AllowsPackage(root, importPath string) bool {
 		return false
 	}
 	return strings.HasPrefix(importPath, nestedModule+"/internal/domain/publication")
+}
+
+func p13AllowsPackage(root, importPath string) bool {
+	data, err := os.ReadFile(filepath.Join(root, p13WaiverPath))
+	if err != nil || !bytes.Contains(data, []byte(`"status": "validated"`)) || !bytes.Contains(data, []byte(`"commit": "3db6ee93a693d62d47e2d2fd25c5de43749f2e7d"`)) {
+		return false
+	}
+	return strings.HasPrefix(importPath, nestedModule+"/internal/domain/assets") || importPath == rootModule+"/sdk/go/generated/asset"
 }
 
 func runP10TransitionChecker(root, mode string) ([]byte, error) {
@@ -543,7 +553,7 @@ func verifyProductionImports(root string) error {
 					continue
 				}
 				if !allowedByDirectory[relativeRoot][value] {
-					if (relativeRoot == "reference/control-plane/cmd/aropd" && p10AllowsPackage(root, value)) || p12AllowsPackage(root, value) {
+					if (relativeRoot == "reference/control-plane/cmd/aropd" && p10AllowsPackage(root, value)) || p12AllowsPackage(root, value) || p13AllowsPackage(root, value) {
 						continue
 					}
 					relative, _ := filepath.Rel(root, path)
@@ -1404,6 +1414,12 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 		if p12AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" {
 			seen[item.ImportPath] = true
 			continue
+		}
+		if p13AllowsPackage(root, item.ImportPath) && item.Module != nil {
+			if item.Module.Path == nestedModule && item.Module.Version == "" || item.Module.Path == rootModule && item.Module.Version == rootVersion && pathWithin(moduleCache, item.Dir) && !pathWithin(root, item.Dir) {
+				seen[item.ImportPath] = true
+				continue
+			}
 		}
 		if item.Module != nil {
 			if wantVersion, ok := externalVersions[item.Module.Path]; ok && item.Module.Version == wantVersion && pathWithin(moduleCache, item.Dir) && !pathWithin(root, item.Dir) {
