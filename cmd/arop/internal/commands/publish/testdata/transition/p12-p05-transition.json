@@ -10,7 +10,7 @@
   "from_phase": "P05",
   "to_phase": "P12",
   "baseline_commit": "75ba8694c47f4500725113bbf5554dde4c901d03",
-  "result_commit": "0262c7d5b55b6ef02f8c6b002b7381232c508580",
+  "result_commit": "24f62398736e6cac99eb8d6e6f011879dc7c05a4",
   "reason": "P12 repins the nested Control Plane to the clean committed root snapshot that contains the accepted P11 generated publication model consumed by production composition.",
   "changed_paths": [
     "reference/control-plane/go.mod",
@@ -54,6 +54,28 @@
           "sha256": "71382a365a5edbd7a0887aa39a4b0c1155407afd284e56fc6dc66622be504d4b"
         }
       ]
+    },
+    {
+      "commit": "24f62398736e6cac99eb8d6e6f011879dc7c05a4",
+      "changed_paths": [
+        "reference/control-plane/go.sum"
+      ],
+      "before": [
+        {
+          "path": "reference/control-plane/go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "71382a365a5edbd7a0887aa39a4b0c1155407afd284e56fc6dc66622be504d4b"
+        }
+      ],
+      "after": [
+        {
+          "path": "reference/control-plane/go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "969f097d4185162deadeeeeb5b868e278b4139fd7505e93879d894784f6e8ff1"
+        }
+      ]
     }
   ],
   "root_pin": {
@@ -66,7 +88,7 @@
     "after": {
       "commit": "75ba8694c47f4500725113bbf5554dde4c901d03",
       "version": "v0.0.0-20260925112239-75ba8694c47f",
-      "zip_h1": "h1:+dcN7lxf/kKr+TPIy9O4GZiD+QUt5pyw/otTsI91nqI=",
+      "zip_h1": "h1:oS44RCL3Y1czZCdgnt3Cn+LOPFhYKSIxC4ox5C+V3Yc=",
       "go_mod_h1": "h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk="
     }
   },

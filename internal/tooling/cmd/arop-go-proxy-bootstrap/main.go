@@ -42,7 +42,7 @@ const (
 	migrationCommit   = "e5cdf162f1bbfeb03a14897d7adc9f7b1a3b952b"
 	p05Commit         = "0bbf501de769ea7b0d31e42f6acb9eebd74d0503"
 	correctionBase    = "0d2a16db5b6c46197d68b2c0ff87fb450b203cfc"
-	p12CorrectionBase = "0262c7d5b55b6ef02f8c6b002b7381232c508580"
+	p12CorrectionBase = "24f62398736e6cac99eb8d6e6f011879dc7c05a4"
 	p05Tree           = "550cb12448b52cd6b69dcb056ccb1d887db1201f"
 	p05Bootstrap      = "1bc642d6648addb822daec4427d721c25d620043"
 	p05Version        = "v0.0.0-20260923023550-1bc642d6648a"
@@ -52,7 +52,7 @@ const (
 	p09Commit         = "fcfa827482a5379c17c13edaefedc8a54a6f850c"
 	currentPin        = "75ba8694c47f4500725113bbf5554dde4c901d03"
 	currentVersion    = "v0.0.0-20260925112239-75ba8694c47f"
-	currentZipH1      = "h1:+dcN7lxf/kKr+TPIy9O4GZiD+QUt5pyw/otTsI91nqI="
+	currentZipH1      = "h1:oS44RCL3Y1czZCdgnt3Cn+LOPFhYKSIxC4ox5C+V3Yc="
 	currentGoModH1    = "h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk="
 )
 
@@ -1708,10 +1708,10 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 	if err != nil {
 		return replay, err
 	}
-	p12Result := "0262c7d5b55b6ef02f8c6b002b7381232c508580"
+	p12Result := "24f62398736e6cac99eb8d6e6f011879dc7c05a4"
 	p12Baseline := "75ba8694c47f4500725113bbf5554dde4c901d03"
 	p12, err := expectedTransition(root, "P12-P05-MODULE-TRANSITION-001", "P12", p12Baseline, p12Result,
-		[]string{nestedDirectory + "/go.mod", nestedDirectory + "/go.sum"}, []string{p12Result}, []string{"nested-control-plane-go-module"}, &pinTransition{activePinBeforeP12(), activePin},
+		[]string{nestedDirectory + "/go.mod", nestedDirectory + "/go.sum"}, []string{"0262c7d5b55b6ef02f8c6b002b7381232c508580", p12Result}, []string{"nested-control-plane-go-module"}, &pinTransition{activePinBeforeP12(), activePin},
 		"P12 repins the nested Control Plane to the clean committed root snapshot that contains the accepted P11 generated publication model consumed by production composition.", "make test-publication-service", "build/reports/P12/report.json")
 	if err != nil {
 		return replay, err
