@@ -911,7 +911,7 @@ function emitPythonTyped(types, inputDigest, validFixtures, forwardFixtures, inv
     "    if is_dataclass(value):\n        result = {(\"$ref\" if item.name == \"ref\" else item.name): _to_wire(getattr(value, item.name)) for item in fields(value) if not item.name.startswith(\"_\") and getattr(value, item.name) is not UNSET}\n        additional = getattr(value, \"_additional_properties\", UNSET)\n        if isinstance(additional, dict): result.update({key: _to_wire(item) for key, item in additional.items()})\n        elif additional is not UNSET: raise ValueError(\"invalid additional properties\")\n        return result\n",
   );
   hardenedPythonModel = hardenedPythonModel.replace(
-    `    if isinstance(value, ${rootName}) and value._forward_wire is not UNSET: return value._forward_wire`,
+    /^    if isinstance\(value, [A-Za-z_][A-Za-z0-9_]*\) and value\._forward_wire is not UNSET: return value\._forward_wire$/mu,
     `    if isinstance(value, (${rootNames.join(", ")})) and value._forward_wire is not UNSET: return value._forward_wire`,
   );
   hardenedPythonModel = hardenedPythonModel.replace("def _json_value(", "def _json_value_unchecked(").replace("def _uri_reference(", "def _uri_reference_unchecked(");
