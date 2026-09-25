@@ -235,7 +235,8 @@
         },
         "max_input_bytes": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 9007199254740991
         }
       },
       "additionalProperties": false
@@ -264,7 +265,8 @@
         },
         "max_concurrency": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 9007199254740991
         },
         "effects": {
           "$ref": "#/$defs/effects"
@@ -376,7 +378,8 @@
         },
         "idle_timeout_seconds": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 9007199254740991
         }
       },
       "additionalProperties": false

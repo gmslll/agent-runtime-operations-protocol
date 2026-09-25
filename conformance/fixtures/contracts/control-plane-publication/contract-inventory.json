@@ -306,6 +306,46 @@
       "resources",
       "schema_version"
     ],
+    "safe_integer_contract": {
+      "invalid_maximum_plus_one_lexeme": "9007199254740992",
+      "language_mappings": [
+        {
+          "language": "go",
+          "validation": "integer-and-declared-minimum-maximum-before-assignment",
+          "wire_type": "int64"
+        },
+        {
+          "language": "python",
+          "validation": "reject-bool-nonintegral-nonfinite-and-out-of-range-before-assignment",
+          "wire_type": "int"
+        },
+        {
+          "language": "typescript",
+          "validation": "Number.isSafeInteger-and-declared-minimum-maximum-before-assignment",
+          "wire_type": "number"
+        }
+      ],
+      "maximum": 9007199254740991,
+      "properties": [
+        {
+          "json_pointer": "/content/max_input_bytes",
+          "minimum": 1
+        },
+        {
+          "json_pointer": "/execution/max_concurrency",
+          "minimum": 1
+        },
+        {
+          "json_pointer": "/session/idle_timeout_seconds",
+          "minimum": 1
+        }
+      ],
+      "required_probes": [
+        "each-property-maximum-accepted-by-schema-and-generated-go-python-typescript-validators",
+        "each-property-maximum-plus-one-rejected-before-language-model-construction",
+        "generated-field-types-match-language-mappings"
+      ]
+    },
     "compile_probes": [
       {
         "argv": [
@@ -507,14 +547,18 @@
       "conformance/fixtures/contracts/control-plane-publication/fixtures/bundles/valid-agent-version.zip"
     ],
     "valid_paths": [
-      "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json"
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-safe-integer-maximum.json"
     ],
     "forward_paths": [
       "conformance/fixtures/contracts/control-plane-publication/fixtures/forward/manifest-read-future-field.json"
     ],
     "invalid_paths": [
       "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/error-secret-egress.json",
-      "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-secret-egress.json"
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-content-max-input-bytes-safe-maximum-plus-one.json",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-execution-max-concurrency-safe-maximum-plus-one.json",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-secret-egress.json",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-session-idle-timeout-safe-maximum-plus-one.json"
     ],
     "http_paths": [
       "conformance/fixtures/contracts/control-plane-publication/fixtures/http/publish-created.json"
@@ -524,7 +568,8 @@
       "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/authorization.json",
       "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/bundle-profile.json",
       "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/errors.json",
-      "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/idempotency.json"
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/idempotency.json",
+      "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/safe-integer-boundaries.json"
     ],
     "ordered_case_ids": [
       "aggregate-component-conflict",
@@ -565,6 +610,12 @@
       "idempotency-different-digest-conflict",
       "idempotency-same-digest-replay",
       "manifest-agent-id-mismatch",
+      "manifest-content-max-input-bytes-safe-maximum",
+      "manifest-content-max-input-bytes-safe-maximum-plus-one",
+      "manifest-execution-max-concurrency-safe-maximum",
+      "manifest-execution-max-concurrency-safe-maximum-plus-one",
+      "manifest-session-idle-timeout-safe-maximum",
+      "manifest-session-idle-timeout-safe-maximum-plus-one",
       "no-public-secret-egress",
       "post-content-type-exact",
       "post-created-location-etag-no-body"

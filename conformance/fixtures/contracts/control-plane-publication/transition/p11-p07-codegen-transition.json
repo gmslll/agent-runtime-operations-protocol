@@ -24,9 +24,11 @@
     "generated-control-plane-python",
     "generated-control-plane-typescript",
     "openapi-control-plane-foundation",
+    "phase-report-p06",
     "phase-report-p07",
     "phase-report-p11",
-    "publication-contract-fixtures"
+    "publication-contract-fixtures",
+    "schema-manifest"
   ],
   "source_closure": [
     {
@@ -225,7 +227,52 @@
       ]
     },
     {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-content-max-input-bytes-safe-maximum-plus-one.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-execution-max-concurrency-safe-maximum-plus-one.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-secret-egress.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/invalid/manifest-session-idle-timeout-safe-maximum-plus-one.json",
       "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
@@ -315,7 +362,37 @@
       ]
     },
     {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/matrices/safe-integer-boundaries.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
       "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-read.json",
+      "scope": "p11-production",
+      "change_type": "add",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p11",
+        "publication-contract-fixtures"
+      ],
+      "owner_phases": [
+        "P11"
+      ]
+    },
+    {
+      "path": "conformance/fixtures/contracts/control-plane-publication/fixtures/valid/manifest-safe-integer-maximum.json",
       "scope": "p11-production",
       "change_type": "add",
       "baseline_sha256": null,
@@ -420,6 +497,25 @@
       ]
     },
     {
+      "path": "schemas/manifest/agent-manifest-v1.schema.json",
+      "scope": "early-owned",
+      "change_type": "modify",
+      "baseline_sha256": null,
+      "current_sha256": null,
+      "touch_commits": [],
+      "artifact_ids": [
+        "phase-report-p06",
+        "phase-report-p07",
+        "phase-report-p11",
+        "schema-manifest"
+      ],
+      "owner_phases": [
+        "P06",
+        "P07",
+        "P11"
+      ]
+    },
+    {
       "path": "scripts/generate.mjs",
       "scope": "early-owned",
       "change_type": "modify",
@@ -505,6 +601,9 @@
       "inventory.codegen.outputs",
       "inventory.codegen.provenance_required_fields",
       "inventory.codegen.roots",
+      "inventory.codegen.safe_integer_contract.language_mappings",
+      "inventory.codegen.safe_integer_contract.properties",
+      "inventory.codegen.safe_integer_contract.required_probes",
       "inventory.error_contract",
       "inventory.fixtures.bundle_paths",
       "inventory.fixtures.forward_paths",
@@ -533,6 +632,16 @@
   },
   "acceptance": [
     {
+      "phase": "P01",
+      "command": "make spec-index-check",
+      "report": "build/reports/P01/report.json"
+    },
+    {
+      "phase": "P06",
+      "command": "make test-protocol-foundation",
+      "report": "build/reports/P06/report.json"
+    },
+    {
       "phase": "P07",
       "command": "make test-codegen-pipeline",
       "report": "build/reports/P07/report.json"
@@ -550,7 +659,7 @@
     "frozen-planning-inputs-remain-unchanged",
     "no-p12-or-later-contracts",
     "owner-phase-and-exposure-remain-unchanged",
-    "p07-p11-regressions-must-pass-on-one-head",
+    "p01-p06-p07-p11-regressions-must-pass-on-one-head",
     "p11-report-runtime-inputs-remain-empty",
     "tracked-control-plane-aggregate-forbidden-before-p20",
     "validated-status-requires-exact-git-manifest-and-inventory-closure"
