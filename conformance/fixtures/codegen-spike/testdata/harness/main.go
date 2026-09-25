@@ -664,8 +664,12 @@ func runGenerator(root, output, config string) commandResult {
 	}
 	relativeOutput = filepath.ToSlash(relativeOutput)
 	result := relativeOutput + "/" + provenanceName
+	moduleRoot, err := lockedNodeModules(root)
+	if err != nil {
+		return commandResult{Err: err}
+	}
 	argv := []string{
-		"node", "--permission", "--allow-fs-read=.", "--allow-fs-write=" + buildRoot,
+		"node", "--permission", "--allow-fs-read=.", "--allow-fs-read=" + moduleRoot, "--allow-fs-write=" + buildRoot,
 		"--disable-proto=throw", "--no-addons", "scripts/generate.mjs",
 		"--config", config, "--output", relativeOutput, "--result", result,
 	}
@@ -1051,7 +1055,11 @@ func runPythonCandidate(root, output string, accepted, rejected []caseItem) (com
 }
 
 func runPyrightIfPresent(root, output string) commandResult {
-	entry := filepath.Join(root, "node_modules", "pyright", "index.js")
+	moduleRoot, moduleErr := lockedNodeModules(root)
+	if moduleErr != nil {
+		return commandResult{Argv: []string{"node", "node_modules/pyright/index.js"}, Err: moduleErr}
+	}
+	entry := filepath.Join(moduleRoot, "pyright", "index.js")
 	if err := requireRegularAbsolute(entry); err != nil {
 		return commandResult{Argv: []string{"node", "node_modules/pyright/index.js"}, Err: fmt.Errorf("locked Pyright is required: %w", err)}
 	}
@@ -1061,13 +1069,17 @@ func runPyrightIfPresent(root, output string) commandResult {
 	// experimental permission model. Keep this invocation pinned to the exact
 	// local lockfile installation and retain the other process hardening flags.
 	return run(root, 90*time.Second, cleanEnvironment(os.Environ(), map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC"}),
-		"node", "--disable-proto=throw", "--no-addons", "node_modules/pyright/index.js",
+		"node", "--disable-proto=throw", "--no-addons", entry,
 		"--level", "error", "--pythonversion", "3.11", filepath.ToSlash(models), filepath.ToSlash(probe))
 }
 
 func runTypeScriptCandidate(root, output string, accepted, rejected []caseItem) (commandResult, commandResult) {
-	tscPath := "node_modules/typescript/lib/tsc.js"
-	if err := requireRegularFilePath(root, tscPath); err != nil {
+	moduleRoot, moduleErr := lockedNodeModules(root)
+	if moduleErr != nil {
+		return commandResult{Err: moduleErr}, commandResult{Err: errors.New("TypeScript probe skipped because compiler is unavailable")}
+	}
+	tscPath := filepath.Join(moduleRoot, "typescript", "lib", "tsc.js")
+	if err := requireRegularAbsolute(tscPath); err != nil {
 		return commandResult{Err: fmt.Errorf("locked TypeScript compiler is required: %w", err)}, commandResult{Err: errors.New("TypeScript probe skipped because compiler is unavailable")}
 	}
 	jsDir, err := os.MkdirTemp(filepath.Join(root, filepath.FromSlash(buildRoot)), "typescript-emit-")
@@ -1079,7 +1091,7 @@ func runTypeScriptCandidate(root, output string, accepted, rejected []caseItem) 
 	relativeJS, _ := filepath.Rel(root, jsDir)
 	environment := cleanEnvironment(os.Environ(), map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "SOURCE_DATE_EPOCH": "0"})
 	compile := run(root, 90*time.Second, environment,
-		"node", "--permission", "--allow-fs-read=.", "--allow-fs-write="+buildRoot, "--disable-proto=throw", "--no-addons", tscPath,
+		"node", "--permission", "--allow-fs-read=.", "--allow-fs-read="+moduleRoot, "--allow-fs-write="+buildRoot, "--disable-proto=throw", "--no-addons", tscPath,
 		"--strict", "--exactOptionalPropertyTypes", "--noUncheckedIndexedAccess", "--useUnknownInCatchVariables", "--skipLibCheck", "false",
 		"--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--outDir", filepath.ToSlash(relativeJS),
 		filepath.ToSlash(filepath.Join(relativeOutput, "models.gen.ts")), filepath.ToSlash(filepath.Join(relativeOutput, "probe.ts")))
@@ -1092,6 +1104,20 @@ func runTypeScriptCandidate(root, output string, accepted, rejected []caseItem) 
 		probe.Err = verifyProbeOutput(probe.Stdout, "typescript", accepted, rejected)
 	}
 	return compile, probe
+}
+
+func lockedNodeModules(root string) (string, error) {
+	candidates := []string{
+		filepath.Join(root, "node_modules"),
+		filepath.Join(filepath.Dir(filepath.Dir(root)), "node_modules"),
+	}
+	for _, candidate := range candidates {
+		info, err := os.Stat(candidate)
+		if err == nil && info.IsDir() {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("locked node_modules directory is unavailable under %s or its worktree owner", root)
 }
 
 func verifyProbeOutput(data []byte, language string, accepted, rejected []caseItem) error {

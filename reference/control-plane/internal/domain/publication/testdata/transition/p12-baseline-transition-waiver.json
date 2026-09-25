@@ -37,6 +37,8 @@
     "cmd/arop/internal/commands/publish/publish_test.go",
     "cmd/arop/internal/commands/publish/testdata/transition/p12-p05-transition.json",
     "cmd/arop/main.go",
+    "conformance/fixtures/codegen-spike/testdata/harness/main.go",
+    "conformance/fixtures/codegen-spike/testdata/harness/main_test.go",
     "conformance/harness/base/main.go",
     "conformance/fixtures/contracts/control-plane-publication/testdata/harness/main.go",
     "examples/manifests/publication-v1.json",
