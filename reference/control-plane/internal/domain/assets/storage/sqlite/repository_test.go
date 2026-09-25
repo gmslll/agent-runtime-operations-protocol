@@ -61,6 +61,14 @@ func TestSQLiteAssetRepository(t *testing.T) {
 		t.Fatalf("update = %+v, %v", updated, err)
 	}
 	if _, err := within(t, unit, func(ctx context.Context) (assets.AssetRecord, error) {
+		return repository.UpdateAsset(ctx, asset.TenantID, asset.AssetID, 2, assets.AssetUpdate{
+			Name: "photo.png", MediaType: "image/png", SizeBytes: 0, ContentDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", ContentBytes: []byte{},
+			ObjectKey: "tenant-a/photo.png", Status: assets.AssetPending, UpdatedAtNs: asset.CreatedAtNs + 6,
+		})
+	}); !assets.HasStorageReason(err, assets.StorageReasonConflict) {
+		t.Fatalf("ready-to-pending downgrade = %v", err)
+	}
+	if _, err := within(t, unit, func(ctx context.Context) (assets.AssetRecord, error) {
 		return repository.UpdateAsset(ctx, asset.TenantID, asset.AssetID, 1, assets.AssetUpdate{
 			Name: "photo.png", MediaType: "image/png", SizeBytes: 12, ContentDigest: "sha256:a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447", ContentBytes: []byte("hello world\n"),
 			ObjectKey: "tenant-a/photo.png", Status: assets.AssetAvailable, UpdatedAtNs: asset.CreatedAtNs + 6,
@@ -87,6 +95,16 @@ func TestSQLiteAssetRepository(t *testing.T) {
 	})
 	if err != nil || created.Status != assets.GrantActive {
 		t.Fatalf("create grant = %+v, %v", created, err)
+	}
+	for name, statement := range map[string]string{
+		"malformed-principal": `UPDATE arop_assets SET principal_id='prn_-2345678-1234-7123-a123-123456789abc' WHERE asset_id='` + assetID + `'`,
+		"empty-media-subtype": `UPDATE arop_assets SET media_type='ab/' WHERE asset_id='` + assetID + `'`,
+		"malformed-audience":  `UPDATE arop_asset_grants SET audience='a..b' WHERE grant_id='` + grantID + `'`,
+		"grant-backslash":     `UPDATE arop_asset_grants SET name='a\b' WHERE grant_id='` + grantID + `'`,
+	} {
+		if _, err := db.Exec(statement); err == nil {
+			t.Fatalf("%s bypassed SQLite schema", name)
+		}
 	}
 	replayed, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.CreateGrant(ctx, grant)

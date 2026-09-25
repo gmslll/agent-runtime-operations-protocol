@@ -63,7 +63,7 @@ func CurrentProductionCatalog() CatalogClosure {
 			{Dialect: DialectSQLite, Path: "sqlite/0001_base.sql", OwnerPhase: "P09", SHA256: "e7873b3f504595272913eb66b4656cbcb157ce901b1fd823bf9967ea64c5b348"},
 			{Dialect: DialectSQLite, Path: "sqlite/0005_identity.sql", OwnerPhase: "P10", SHA256: "192ce590834794c68be040237a7611eed2631edf166d6c9fbd9930e63a1cf6ce"},
 			{Dialect: DialectSQLite, Path: "sqlite/0010_publication.sql", OwnerPhase: "P12", SHA256: "524364c706ca6e336f5de0dd42058772699b7255f53cf099e96bef10e4973df8"},
-			{Dialect: DialectSQLite, Path: "sqlite/0020_asset.sql", OwnerPhase: "P13", SHA256: "df73c99001ba32a6140dc67458b4033ce41bf797b7a08968d9ecf819e092747b"},
+			{Dialect: DialectSQLite, Path: "sqlite/0020_asset.sql", OwnerPhase: "P13", SHA256: "069fce12fa53bebd186c01be6adb6466348dfd0a387e4bf9c2ad253c78c828b2"},
 		},
 	}
 }

@@ -64,8 +64,11 @@ func (repository *Repository) UpdateAsset(ctx context.Context, tenantID, assetID
 	if expectedRevision != current.Revision {
 		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonConflict)
 	}
+	if current.Status != assets.AssetPending || update.Status != assets.AssetAvailable {
+		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonConflict)
+	}
 	result, err := tx.ExecContext(ctx, `UPDATE arop_assets SET name=?,media_type=?,size_bytes=?,content_digest=?,content_bytes=?,object_key=?,status=?,revision=revision+1,updated_at_ns=?
-WHERE tenant_id=? AND asset_id=? AND revision=?`, update.Name, update.MediaType, update.SizeBytes, update.ContentDigest,
+WHERE tenant_id=? AND asset_id=? AND revision=? AND status='pending'`, update.Name, update.MediaType, update.SizeBytes, update.ContentDigest,
 		nonNilBytes(update.ContentBytes), update.ObjectKey, string(update.Status), update.UpdatedAtNs, tenantID, assetID, expectedRevision)
 	if err != nil {
 		return assets.AssetRecord{}, assets.NewStorageError(assets.StorageReasonUnavailable)

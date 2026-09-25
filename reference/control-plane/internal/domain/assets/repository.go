@@ -182,7 +182,7 @@ func (grant GrantRecord) Validate() error {
 		!storagePrincipalPattern.MatchString(grant.PrincipalID) || !storageCredentialPattern.MatchString(grant.CredentialID) ||
 		!storageGrantPattern.MatchString(grant.GrantID) || !storageAssetPattern.MatchString(grant.AssetID) ||
 		!storageRunPattern.MatchString(grant.RunID) || (grant.Operation != StorageOperationUpload && grant.Operation != StorageOperationDownload) ||
-		!validName(grant.Name) || !storageMediaPattern.MatchString(grant.MediaType) || len(grant.MediaType) > 127 || grant.SizeBytes < 0 || grant.SizeBytes > 104857600 || !storageDigestPattern.MatchString(grant.ContentDigest) ||
+		!validGrantName(grant.Name) || !storageMediaPattern.MatchString(grant.MediaType) || len(grant.MediaType) > 127 || grant.SizeBytes < 0 || grant.SizeBytes > 104857600 || !storageDigestPattern.MatchString(grant.ContentDigest) ||
 		!storageAudiencePattern.MatchString(grant.Audience) || len(grant.Audience) > 100 || !storageTokenKeyPattern.MatchString(grant.TokenKeyID) ||
 		!storageHexPattern.MatchString(grant.TokenDigest) || grant.UseLimit < 1 || grant.UseLimit > 8 ||
 		grant.UseCount < 0 || grant.UseCount > grant.UseLimit || grant.ExpiresAtNs < 1 ||
@@ -197,6 +197,10 @@ func (grant GrantRecord) Validate() error {
 
 func validName(name string) bool {
 	return len(name) >= 1 && len(name) <= 512 && !containsDotDot(name)
+}
+
+func validGrantName(name string) bool {
+	return validName(name) && !strings.ContainsAny(name, `/\`)
 }
 
 func validObjectKey(key string) bool {

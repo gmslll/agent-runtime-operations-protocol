@@ -159,7 +159,7 @@ func main() {
 		Root: root, Directory: "build/reports/P13", Suite: "AROP P13 asset broker", Class: "p13.assets",
 		Command: command, CheckerPath: checker, InputPaths: inputs, RuntimeInputPaths: runtimeInputs, RuntimeEvidence: evidence, Checks: checks,
 		Summary:   map[string]any{"owned_artifacts": 9, "database_engines": 2, "runtime_inputs": len(runtimeInputs)},
-		AuditNote: "P13 binds its nine manifest-owned artifacts and an independently discovered Git/manifest transition closure. Asset grants are short-lived, operation/run/identity/content bound, revocable and persisted only by digest; mutations and durable audit share one UoW. SQLite and PostgreSQL 16 run the same 0020 schema and repository matrix. DNS and IP policy is freshly evaluated for every connect and redirect hop. P05-P12 regressions are rerun on the current Git head and enter only as digest-and-byte runtime evidence; runtime_inputs remains empty.",
+		AuditNote: "P13 binds its nine manifest-owned artifacts and an independently discovered Git/manifest transition closure. Asset grants are short-lived, operation/run/identity/content bound, revocable and persisted only by digest; mutations and durable audit share one UoW. SQLite and PostgreSQL 16 enforce equivalent 0020 contracts and run the same repository matrix. DNS and IP policy is freshly evaluated for every connect and redirect hop. P05-P12 regressions are rerun on the current Git head and enter only as digest-and-byte runtime evidence; runtime_inputs remains empty.",
 	})
 	fatal(err)
 	verified, mode, err := report.Verify(report.VerifyOptions{Root: root, ReportPath: "build/reports/P13/report.json"})

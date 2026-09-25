@@ -222,6 +222,44 @@ func TestIssueGrantNeverDowngradesReadyAssetAndReplayRequiresUsableGrant(t *test
 	}
 }
 
+func TestIssueGrantConflictReplayReauthorizes(t *testing.T) {
+	now := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
+	request := testIssue(OperationUpload)
+	request.NotBefore, request.ExpiresAt = now, now.Add(time.Minute)
+	store := newMemStore()
+	issuer := testTokenIssuer(t)
+	grant := Grant{
+		GrantID: "grant_018f3b2a-7c31-7a11-8abc-1234567890ab", Binding: request.Binding(),
+		NotBefore: request.NotBefore, ExpiresAt: request.ExpiresAt, MaxUses: request.MaxUses,
+		Audience: AssetTokenAudience, TokenKeyID: issuer.KeyID(), IdempotencyKeyDigest: digestIdempotency(request.IdempotencyKey),
+	}
+	token, err := issuer.IssueToken(context.Background(), grant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant.OpaqueDigest = token.Digest
+	store.assets[testTenant+"/"+testAsset] = Asset{Binding: request.Binding(), State: StateQuarantine, CreatedAt: now}
+	store.grants[testTenant+"/"+grant.GrantID] = grant
+	store.idem[testTenant+"/"+grant.IdempotencyKeyDigest] = grant.GrantID
+	store.opaque[grant.OpaqueDigest] = testTenant + "/" + grant.GrantID
+	racing := &raceReplayStore{memStore: store}
+	authorizer := &allowThenDeny{}
+	deps := testDeps(t, authorizer)
+	deps.Clock, deps.Assets, deps.Grants, deps.Tokens = &frozenClock{now: now}, store, racing, issuer
+	service, err := New(deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.IssueGrant(context.Background(), request); err == nil {
+		t.Fatal("conflict replay bypassed second authorization")
+	} else {
+		requireReason(t, err, ReasonGrantForbidden)
+	}
+	if authorizer.calls != 2 {
+		t.Fatalf("authorization calls=%d want=2", authorizer.calls)
+	}
+}
+
 func TestNetworkClassification(t *testing.T) {
 	cases := []struct {
 		ip      string
@@ -235,6 +273,9 @@ func TestNetworkClassification(t *testing.T) {
 		{"169.254.169.254", false},
 		{"169.254.1.1", false},
 		{"100.100.100.200", false},
+		{"100.64.0.1", false},
+		{"100.127.255.254", false},
+		{"100.128.0.1", true},
 		{"0.0.0.0", false},
 		{"::1", false},
 		{"fd00:ec2::254", false},
@@ -264,6 +305,16 @@ func (allowAll) Authorize(context.Context, RunGrantRequest) error { return nil }
 type denyAll struct{}
 
 func (denyAll) Authorize(context.Context, RunGrantRequest) error {
+	return NewError(CategoryAuthorization, ReasonGrantForbidden)
+}
+
+type allowThenDeny struct{ calls int }
+
+func (authorizer *allowThenDeny) Authorize(context.Context, RunGrantRequest) error {
+	authorizer.calls++
+	if authorizer.calls == 1 {
+		return nil
+	}
 	return NewError(CategoryAuthorization, ReasonGrantForbidden)
 }
 
@@ -309,6 +360,23 @@ type memStore struct {
 	grants map[string]Grant
 	opaque map[string]string
 	idem   map[string]string
+}
+
+type raceReplayStore struct {
+	*memStore
+	findCalls int
+}
+
+func (store *raceReplayStore) FindByIdempotency(ctx context.Context, tenantID, keyDigest string) (Grant, error) {
+	store.findCalls++
+	if store.findCalls == 1 {
+		return Grant{}, NewError(CategoryNotFound, ReasonNotFound)
+	}
+	return store.memStore.FindByIdempotency(ctx, tenantID, keyDigest)
+}
+
+func (store *raceReplayStore) Save(context.Context, Grant) error {
+	return NewError(CategoryConflict, ReasonIdempotencyConflict)
 }
 
 func newMemStore() *memStore {

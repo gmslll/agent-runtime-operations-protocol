@@ -141,6 +141,9 @@ func (service *Service) IssueGrant(ctx context.Context, request IssueRequest) (I
 			if !sameGrantRequest(existing, request) {
 				return IssuedGrant{}, NewError(CategoryConflict, ReasonIdempotencyConflict)
 			}
+			if authorizeErr := service.authorize(ctx, existing.Binding); authorizeErr != nil {
+				return IssuedGrant{}, authorizeErr
+			}
 			if usableErr := existing.UsableAt(service.now()); usableErr != nil {
 				return IssuedGrant{}, usableErr
 			}

@@ -42,6 +42,8 @@ const (
 	AddressDenied    AddressClass = "denied"
 )
 
+var carrierGradeNAT = &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}
+
 // ClassifyIP classifies one address. Metadata and non-global ranges are denied.
 func ClassifyIP(ip net.IP) AddressClass {
 	if ip == nil {
@@ -55,7 +57,7 @@ func ClassifyIP(ip net.IP) AddressClass {
 		return AddressLoopback
 	case ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast():
 		return AddressLinkLocal
-	case ip.IsPrivate() || ip.IsMulticast() || ip.IsUnspecified() || !ip.IsGlobalUnicast():
+	case ip.IsPrivate() || carrierGradeNAT.Contains(ip) || ip.IsMulticast() || ip.IsUnspecified() || !ip.IsGlobalUnicast():
 		return AddressPrivate
 	default:
 		return AddressPublic

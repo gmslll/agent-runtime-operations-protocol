@@ -81,6 +81,14 @@ func TestPostgresAssetRepository(t *testing.T) {
 		t.Fatalf("update = %+v, %v", updated, err)
 	}
 	if _, err := within(t, unit, func(ctx context.Context) (assets.AssetRecord, error) {
+		return repository.UpdateAsset(ctx, asset.TenantID, asset.AssetID, 2, assets.AssetUpdate{
+			Name: "photo.png", MediaType: "image/png", SizeBytes: 0, ContentDigest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", ContentBytes: []byte{},
+			ObjectKey: "tenant-a/photo.png", Status: assets.AssetPending, UpdatedAtNs: asset.CreatedAtNs + 6,
+		})
+	}); !assets.HasStorageReason(err, assets.StorageReasonConflict) {
+		t.Fatalf("ready-to-pending downgrade = %v", err)
+	}
+	if _, err := within(t, unit, func(ctx context.Context) (assets.AssetRecord, error) {
 		return repository.UpdateAsset(ctx, asset.TenantID, asset.AssetID, 1, assets.AssetUpdate{
 			Name: "photo.png", MediaType: "image/png", SizeBytes: 12, ContentDigest: "sha256:a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447", ContentBytes: []byte("hello world\n"),
 			ObjectKey: "tenant-a/photo.png", Status: assets.AssetAvailable, UpdatedAtNs: asset.CreatedAtNs + 6,
