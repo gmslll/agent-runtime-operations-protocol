@@ -12,7 +12,7 @@
   "response": {
     "status": 201,
     "headers": {
-      "ETag": "\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"",
+      "ETag": "\"sha256:5f9dac84ff2dc690cbd48ec6a14230d3da9468f50b477d22310a57a758a6237b\"",
       "Location": "/v1/agent-definitions/hello.agent/versions/1.2.3"
     },
     "body": null
