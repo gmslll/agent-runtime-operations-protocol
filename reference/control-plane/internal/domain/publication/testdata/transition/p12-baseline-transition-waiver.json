@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "waiver_id": "P12-PUBLICATION-SERVICE-TRANSITION-001",
+  "status": "declared",
+  "policy": {
+    "owner_phase_semantics": "first-introduction-and-accountability",
+    "ownership_transferred": false
+  },
+  "baseline": {
+    "rule": "parent-of-unique-waiver-introduction-commit",
+    "commit": "31da1c8353b61e5eceae97f90b5e633e29abf3e5"
+  },
+  "transition": {
+    "from_phases": [
+      "P05",
+      "P06",
+      "P08",
+      "P09",
+      "P10",
+      "P11"
+    ],
+    "to_phase": "P12",
+    "reason": "P12 composes the signed Publication contract with the reference Control Plane, advances the exact production migration catalog to 0010, and preserves every earlier phase owner and historical acceptance boundary."
+  },
+  "affected_artifacts": [],
+  "source_closure": [],
+  "acceptance": [],
+  "constraints": [
+    "manifest-endpoint-remains-forbidden",
+    "bundle-reference-validation-is-offline",
+    "no-dns-http-connect-or-redirect-policy-in-p12",
+    "owner-phase-accountability-does-not-transfer",
+    "p09-and-p10-catalog-snapshots-remain-immutable",
+    "publication-mutation-and-durable-audit-share-one-uow",
+    "durable-mode-never-falls-back-to-memory",
+    "p12-report-runtime-inputs-remain-empty"
+  ]
+}
