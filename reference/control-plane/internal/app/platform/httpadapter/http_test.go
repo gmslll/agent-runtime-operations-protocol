@@ -1,18 +1,126 @@
 package httpadapter
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/observability/memory"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication"
 )
+
+type publicationStub struct {
+	publish func(context.Context, publication.PublishRequest) (publication.PublishResult, error)
+	get     func(context.Context, publication.GetRequest) (publication.GetResult, error)
+}
+
+func (stub publicationStub) Publish(ctx context.Context, request publication.PublishRequest) (publication.PublishResult, error) {
+	return stub.publish(ctx, request)
+}
+func (stub publicationStub) Get(ctx context.Context, request publication.GetRequest) (publication.GetResult, error) {
+	return stub.get(ctx, request)
+}
+
+func TestPublicationRoutesEnforceScopeUoWBoundaryAndBodyLimit(t *testing.T) {
+	clock := platform.RealClock{}
+	store, err := memory.New(100, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := platform.DefaultConfig()
+	config.MaxBodyBytes = publication.MaxBundleBytes
+	application, err := platform.New(config, platform.Dependencies{Clock: clock, IDs: platform.SystemIDSource{Clock: clock}, Faults: platform.NoopFaultHook{}, UoW: &platform.SerialUnitOfWork{}, Observability: store}, "arop-reference-control-plane", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var requestedScopes []string
+	authenticate := func(ctx context.Context, credential string, _ platform.RequestMetadata) (AuthenticatedPrincipal, error) {
+		requestedScopes = RequiredScopesFromContext(ctx)
+		switch credential {
+		case "valid-token":
+			return AuthenticatedPrincipal{TenantID: "tenant-a", PrincipalID: "prn_01956e7b-9abc-7def-8abc-000000000001", CredentialID: "cred_01956e7b-9abc-7def-8abc-000000000002", Scopes: append([]string(nil), requestedScopes...)}, nil
+		case "dependency-down":
+			return AuthenticatedPrincipal{}, ErrAuthenticationUnavailable
+		default:
+			return AuthenticatedPrincipal{}, errors.New("rejected")
+		}
+	}
+	var publishRequest publication.PublishRequest
+	service := publicationStub{
+		publish: func(_ context.Context, request publication.PublishRequest) (publication.PublishResult, error) {
+			publishRequest = request
+			return publication.PublishResult{AgentID: request.AgentID, Version: "1.0.0", ManifestDigest: "sha256:" + strings.Repeat("a", 64), Location: "/v1/agent-definitions/hello.agent/versions/1.0.0", ETag: `"sha256:` + strings.Repeat("a", 64) + `"`}, nil
+		},
+		get: func(_ context.Context, _ publication.GetRequest) (publication.GetResult, error) {
+			return publication.GetResult{}, publication.NewError(publication.CategoryAuthorization, publication.ReasonPublicationForbidden)
+		},
+	}
+	handler, err := NewPublicationHandler(application, authenticate, service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/v1/agent-definitions/hello.agent/versions", bytes.NewReader([]byte("bundle")))
+	request.Header.Set("Authorization", "Bearer valid-token")
+	request.Header.Set("Content-Type", "application/vnd.arop.agent-version-bundle+zip")
+	request.Header.Set("Idempotency-Key", "request-0001")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusCreated || !slices.Equal(requestedScopes, []string{"agent:publish"}) || !slices.Equal(publishRequest.Caller.Scopes, []string{"agent:publish"}) || publishRequest.Metadata.ParentSpanID == "" || publishRequest.Metadata.SpanID == "" || publishRequest.Metadata.ParentSpanID == publishRequest.Metadata.SpanID {
+		t.Fatalf("publish route boundary failed: status=%d scopes=%v request=%+v", response.Code, requestedScopes, publishRequest)
+	}
+
+	get := httptest.NewRequest(http.MethodGet, "/v1/agent-definitions/hello.agent/versions/1.0.0", nil)
+	get.Header.Set("Authorization", "Bearer valid-token")
+	getResponse := httptest.NewRecorder()
+	handler.ServeHTTP(getResponse, get)
+	if getResponse.Code != http.StatusForbidden || !slices.Equal(requestedScopes, []string{"agent:read"}) || !strings.Contains(getResponse.Body.String(), `"code":"PUBLICATION_FORBIDDEN"`) {
+		t.Fatalf("get authorization mapping failed: status=%d scopes=%v body=%s", getResponse.Code, requestedScopes, getResponse.Body.String())
+	}
+	for credential, status := range map[string]int{"rejected": http.StatusUnauthorized, "dependency-down": http.StatusServiceUnavailable} {
+		probe := httptest.NewRequest(http.MethodGet, "/v1/agent-definitions/hello.agent/versions/1.0.0", nil)
+		probe.Header.Set("Authorization", "Bearer "+credential)
+		probeResponse := httptest.NewRecorder()
+		handler.ServeHTTP(probeResponse, probe)
+		if probeResponse.Code != status || strings.Contains(probeResponse.Body.String(), credential) {
+			t.Fatalf("authentication mapping status=%d want=%d body=%s", probeResponse.Code, status, probeResponse.Body.String())
+		}
+	}
+
+	for _, size := range []int{publication.MaxBundleBytes - 1, publication.MaxBundleBytes} {
+		probe := httptest.NewRequest(http.MethodPost, "/v1/agent-definitions/hello.agent/versions", bytes.NewReader(bytes.Repeat([]byte{'x'}, size)))
+		probe.Header.Set("Authorization", "Bearer valid-token")
+		probe.Header.Set("Content-Type", "application/vnd.arop.agent-version-bundle+zip")
+		probe.Header.Set("Idempotency-Key", "request-0001")
+		probeResponse := httptest.NewRecorder()
+		handler.ServeHTTP(probeResponse, probe)
+		if probeResponse.Code != http.StatusCreated {
+			t.Fatalf("body size %d rejected: %d", size, probeResponse.Code)
+		}
+	}
+	for _, chunked := range []bool{false, true} {
+		probe := httptest.NewRequest(http.MethodPost, "/v1/agent-definitions/hello.agent/versions", bytes.NewReader(bytes.Repeat([]byte{'x'}, publication.MaxBundleBytes+1)))
+		probe.Header.Set("Authorization", "Bearer valid-token")
+		probe.Header.Set("Content-Type", "application/vnd.arop.agent-version-bundle+zip")
+		probe.Header.Set("Idempotency-Key", "request-0001")
+		if chunked {
+			probe.ContentLength = -1
+			probe.TransferEncoding = []string{"chunked"}
+		}
+		probeResponse := httptest.NewRecorder()
+		handler.ServeHTTP(probeResponse, probe)
+		if probeResponse.Code != http.StatusRequestEntityTooLarge || !strings.Contains(probeResponse.Body.String(), `"code":"BUNDLE_TOO_LARGE"`) {
+			t.Fatalf("oversize chunked=%t status=%d body=%s", chunked, probeResponse.Code, probeResponse.Body.String())
+		}
+	}
+}
 
 func TestHandlerChainPropagatesCorrelatesAndRedacts(t *testing.T) {
 	t.Parallel()
