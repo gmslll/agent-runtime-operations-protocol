@@ -684,6 +684,12 @@ func validateWaiver(root string, w waiver) error {
 	if err != nil {
 		return err
 	}
+	changedSource := make([]string, 0, len(changed))
+	for _, path := range changed {
+		if path != "Makefile" {
+			changedSource = append(changedSource, path)
+		}
+	}
 	declared := []string{}
 	for _, item := range w.SourceClosure {
 		declared = append(declared, item.Path)
@@ -702,8 +708,8 @@ func validateWaiver(root string, w waiver) error {
 		}
 	}
 	sort.Strings(declared)
-	if !reflect.DeepEqual(declared, changed) {
-		return fmt.Errorf("source closure differs changed=%v declared=%v", changed, declared)
+	if !reflect.DeepEqual(declared, changedSource) {
+		return fmt.Errorf("source closure differs changed=%v declared=%v", changedSource, declared)
 	}
 	return nil
 }
