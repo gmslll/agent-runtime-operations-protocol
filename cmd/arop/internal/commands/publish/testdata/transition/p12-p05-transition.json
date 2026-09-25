@@ -10,7 +10,7 @@
   "from_phase": "P05",
   "to_phase": "P12",
   "baseline_commit": "75ba8694c47f4500725113bbf5554dde4c901d03",
-  "result_commit": "24f62398736e6cac99eb8d6e6f011879dc7c05a4",
+  "result_commit": "181587e573e6ff55df3809d662bd5a46074a1a9d",
   "reason": "P12 repins the nested Control Plane to the clean committed root snapshot that contains the accepted P11 generated publication model consumed by production composition.",
   "changed_paths": [
     "reference/control-plane/go.mod",
@@ -74,6 +74,28 @@
           "type": "blob",
           "mode": "100644",
           "sha256": "969f097d4185162deadeeeeb5b868e278b4139fd7505e93879d894784f6e8ff1"
+        }
+      ]
+    },
+    {
+      "commit": "181587e573e6ff55df3809d662bd5a46074a1a9d",
+      "changed_paths": [
+        "reference/control-plane/go.sum"
+      ],
+      "before": [
+        {
+          "path": "reference/control-plane/go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "969f097d4185162deadeeeeb5b868e278b4139fd7505e93879d894784f6e8ff1"
+        }
+      ],
+      "after": [
+        {
+          "path": "reference/control-plane/go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "3278fd08156fb1040219eb8103f0bf9e7bdf03fd5c575292febe03a205311dc2"
         }
       ]
     }
