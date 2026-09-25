@@ -24,10 +24,11 @@ import (
 )
 
 const (
-	command  = "make test-publication-service"
-	checker  = "reference/control-plane/internal/domain/publication/testdata/harness/main.go"
-	waiver   = "reference/control-plane/internal/domain/publication/testdata/transition/p12-baseline-transition-waiver.json"
-	baseline = "31da1c8353b61e5eceae97f90b5e633e29abf3e5"
+	command   = "make test-publication-service"
+	checker   = "reference/control-plane/internal/domain/publication/testdata/harness/main.go"
+	waiver    = "reference/control-plane/internal/domain/publication/testdata/transition/p12-baseline-transition-waiver.json"
+	p13Waiver = "reference/control-plane/internal/domain/assets/testdata/transition/p13-baseline-transition-waiver.json"
+	baseline  = "31da1c8353b61e5eceae97f90b5e633e29abf3e5"
 )
 
 type result struct {
@@ -245,7 +246,11 @@ func discoverTransition(root string) (discoveredTransition, error) {
 		return discoveredTransition{}, errors.New("carrier introduction parent is not the frozen P11 endpoint")
 	}
 
-	diff := run(root, nil, "git", "diff", "--no-renames", "-z", "--name-status", baseline+"..HEAD")
+	p12Endpoint, err := transitionEndpoint(root, p13Waiver)
+	if err != nil {
+		return discoveredTransition{}, err
+	}
+	diff := run(root, nil, "git", "diff", "--no-renames", "-z", "--name-status", baseline+".."+p12Endpoint)
 	if diff.err != nil {
 		return discoveredTransition{}, diff.err
 	}
@@ -268,6 +273,22 @@ func discoverTransition(root string) (discoveredTransition, error) {
 		return discoveredTransition{}, err
 	}
 	return discoveredTransition{artifacts: artifacts, sources: sources}, nil
+}
+
+func transitionEndpoint(root, carrier string) (string, error) {
+	intro := run(root, nil, "git", "log", "--format=%H", "--diff-filter=A", "--", carrier)
+	if intro.err != nil {
+		return "", intro.err
+	}
+	commits := nonemptyLines(intro.output)
+	if len(commits) != 1 {
+		return "", fmt.Errorf("next-phase carrier introduction commits=%d want 1", len(commits))
+	}
+	parent := run(root, nil, "git", "rev-parse", commits[0]+"^")
+	if parent.err != nil {
+		return "", parent.err
+	}
+	return strings.TrimSpace(string(parent.output)), nil
 }
 
 func discoverCompiledClosure(root string) (map[string]bool, error) {
@@ -713,7 +734,7 @@ func validateCatalog(root string) error {
 		return err
 	}
 	s := string(b)
-	for _, needle := range []string{"func P09ProductionCatalog()", `ReportPhase: "P09"`, "func P10ProductionCatalog()", `ReportPhase: "P10"`, "func CurrentProductionCatalog()", `ReportPhase: "P12"`, "0001_base.sql", "0005_identity.sql", "0010_publication.sql"} {
+	for _, needle := range []string{"func P09ProductionCatalog()", `ReportPhase: "P09"`, "func P10ProductionCatalog()", `ReportPhase: "P10"`, "func P12ProductionCatalog()", `ReportPhase: "P12"`, "func CurrentProductionCatalog()", `ReportPhase: "P13"`, "0001_base.sql", "0005_identity.sql", "0010_publication.sql"} {
 		if !strings.Contains(s, needle) {
 			return fmt.Errorf("catalog missing %s", needle)
 		}
@@ -721,11 +742,19 @@ func validateCatalog(root string) error {
 	return nil
 }
 func rejectProduction0020(root string) error {
-	for _, d := range []string{"sqlite", "postgres"} {
-		m, _ := filepath.Glob(filepath.Join(root, "reference/control-plane/migrations", d, "0020*"))
-		if len(m) > 0 {
-			return errors.New("production 0020 exists")
-		}
+	b, err := os.ReadFile(filepath.Join(root, "reference/control-plane/internal/storage/migrate/production_catalog.go"))
+	if err != nil {
+		return err
+	}
+	text := string(b)
+	start := strings.Index(text, "func P12ProductionCatalog()")
+	end := strings.Index(text, "func CurrentProductionCatalog()")
+	if start < 0 || end <= start {
+		return errors.New("P12 catalog snapshot is missing")
+	}
+	p12 := text[start:end]
+	if strings.Contains(p12, "0020_asset.sql") || strings.Count(p12, "0010_publication.sql") != 2 {
+		return errors.New("P12 catalog snapshot is not exactly 0001+0005+0010")
 	}
 	return nil
 }

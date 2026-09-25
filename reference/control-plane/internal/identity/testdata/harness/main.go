@@ -557,13 +557,13 @@ func verifyCatalogSource(root string) error {
 		return err
 	}
 	text := string(data)
-	for _, required := range []string{"func P09ProductionCatalog()", `ReportPhase: "P09"`, "func P10ProductionCatalog()", `ReportPhase: "P10"`, "func CurrentProductionCatalog()", `ReportPhase: "P12"`, "0005_identity.sql", "0010_publication.sql"} {
+	for _, required := range []string{"func P09ProductionCatalog()", `ReportPhase: "P09"`, "func P10ProductionCatalog()", `ReportPhase: "P10"`, "func P12ProductionCatalog()", `ReportPhase: "P12"`, "func CurrentProductionCatalog()", `ReportPhase: "P13"`, "0005_identity.sql", "0010_publication.sql", "0020_asset.sql"} {
 		if !strings.Contains(text, required) {
 			return errors.New("catalog source misses " + required)
 		}
 	}
-	p10Start, currentStart := strings.Index(text, "func P10ProductionCatalog()"), strings.Index(text, "func CurrentProductionCatalog()")
-	if p10Start < 0 || currentStart <= p10Start || strings.Contains(text[p10Start:currentStart], "0010_publication.sql") {
+	p10Start, p12Start := strings.Index(text, "func P10ProductionCatalog()"), strings.Index(text, "func P12ProductionCatalog()")
+	if p10Start < 0 || p12Start <= p10Start || strings.Contains(text[p10Start:p12Start], "0010_publication.sql") || strings.Contains(text[p10Start:p12Start], "0020_asset.sql") {
 		return errors.New("P10 historical catalog contains future 0010")
 	}
 	return nil
