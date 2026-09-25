@@ -13,6 +13,7 @@
   "transition": {
     "from_phases": [
       "P01",
+      "P02",
       "P06",
       "P07"
     ],
@@ -20,11 +21,15 @@
     "reason": "P11 applies the D-062 safe-integer requirement to the existing AgentManifest Schema, extends the accepted P07 generator and capability matrix, and produces the first public Control Plane Publication contract while retaining all earlier ownership and reproducibility guarantees."
   },
   "affected_artifacts": [
+    "blueprint-check-reports",
+    "blueprint-validation-library",
+    "blueprint-validation-tests",
     "codegen-pipeline",
     "codegen-representative-spike",
     "generated-control-plane-go",
     "generated-control-plane-python",
     "generated-control-plane-typescript",
+    "go-manifest-library-baseline",
     "openapi-control-plane-foundation",
     "phase-report-p01",
     "phase-report-p06",
@@ -642,11 +647,12 @@
       "path": "conformance/fixtures/contracts/control-plane-publication/testdata/harness/main.go",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "2546acdf313a7db800e5d18f9894b1d199418d0721a28d29f6ca5d8e687910ba",
+      "current_sha256": "b2229fa066091a3792c1266125aa9fd89673804f52fb44bb9017aebbd651ef8e",
       "touch_commits": [
         "1118ecdb802a546365ff7f116d9d859c81d3e1c2",
         "51cd85cc5b5fb37ef3cd2825979c1cda79d37101",
         "a829c8444ee59afaa8daef0493109b9cc65b1960",
+        "b19d977389a4c2e72424652decd286737a512eca",
         "bb16025e8d8900c3ba3005f6cdba80c32710db55"
       ],
       "scope": "p11-production",
@@ -677,6 +683,41 @@
       ],
       "owner_phases": [
         "P11"
+      ]
+    },
+    {
+      "path": "internal/tooling/blueprint/check.go",
+      "change_type": "modify",
+      "baseline_sha256": "23c1cc09e003ad28c698f1afbf2ce2326b68388228ade874cf87c01425202fc8",
+      "current_sha256": "af2db3dab956688acd7dcaef390d3a343399eb3e94461681b5f70119f5d7b8f2",
+      "touch_commits": [
+        "40ead6f47be721109692658f0d4acefd09ddfad0"
+      ],
+      "scope": "early-owned",
+      "artifact_ids": [
+        "blueprint-check-reports",
+        "blueprint-validation-library",
+        "blueprint-validation-tests"
+      ],
+      "owner_phases": [
+        "P02"
+      ]
+    },
+    {
+      "path": "internal/tooling/blueprint/check_test.go",
+      "change_type": "modify",
+      "baseline_sha256": "25c99613cc407a88991a8772c8298d2e4015b8bf9b444d81e42874e139135aed",
+      "current_sha256": "2b042fb653c912addfb41d843aff361874655fda64b90d1771f977feaf2cec69",
+      "touch_commits": [
+        "40ead6f47be721109692658f0d4acefd09ddfad0"
+      ],
+      "scope": "early-owned",
+      "artifact_ids": [
+        "blueprint-check-reports",
+        "blueprint-validation-tests"
+      ],
+      "owner_phases": [
+        "P02"
       ]
     },
     {
@@ -749,6 +790,23 @@
       ],
       "owner_phases": [
         "P11"
+      ]
+    },
+    {
+      "path": "sdk/go/protocol/manifest/schema_bundle.go",
+      "change_type": "modify",
+      "baseline_sha256": "b2cb11bb054639567abeedf1a96c68dcd40409502feb14e74101078218882462",
+      "current_sha256": "d547a3b1ee6c12aa6b8ff7ac43ff8458236e376f73117000fbee464193b7c223",
+      "touch_commits": [
+        "797d9c46ecb16201fa7a12dda0883e44cb1377a2"
+      ],
+      "scope": "early-owned",
+      "artifact_ids": [
+        "go-manifest-library-baseline",
+        "phase-report-p06"
+      ],
+      "owner_phases": [
+        "P06"
       ]
     },
     {
@@ -863,6 +921,11 @@
       "phase": "P01",
       "command": "make spec-index-check",
       "report": "build/reports/P01/report.json"
+    },
+    {
+      "phase": "P02",
+      "command": "make blueprint-check",
+      "report": "build/reports/P02/report.json"
     },
     {
       "phase": "P06",
