@@ -1716,7 +1716,7 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 	if err != nil {
 		return replay, err
 	}
-	p12Result := "181587e573e6ff55df3809d662bd5a46074a1a9d"
+	p12Result := "181587e6032ab5c996633fedc5a674403ea17377"
 	p12Baseline := "75ba8694c47f4500725113bbf5554dde4c901d03"
 	p12, err := expectedTransition(root, "P12-P05-MODULE-TRANSITION-001", "P12", p12Baseline, p12Result,
 		[]string{nestedDirectory + "/go.mod", nestedDirectory + "/go.sum"}, []string{"0262c7d5b55b6ef02f8c6b002b7381232c508580", "24f62398736e6cac99eb8d6e6f011879dc7c05a4", p12Result}, []string{"nested-control-plane-go-module"}, &pinTransition{activePinBeforeP12(), activePin},
