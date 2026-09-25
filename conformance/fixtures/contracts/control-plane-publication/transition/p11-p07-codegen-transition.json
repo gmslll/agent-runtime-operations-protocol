@@ -15,7 +15,10 @@
       "P01",
       "P02",
       "P06",
-      "P07"
+      "P07",
+      "P08",
+      "P09",
+      "P10"
     ],
     "to_phase": "P11",
     "reason": "P11 applies the D-062 safe-integer requirement to the existing AgentManifest Schema, extends the accepted P07 generator and capability matrix, and produces the first public Control Plane Publication contract while retaining all earlier ownership and reproducibility guarantees."
@@ -30,12 +33,17 @@
     "generated-control-plane-python",
     "generated-control-plane-typescript",
     "go-manifest-library-baseline",
+    "migration-engine-fixture-versions",
     "openapi-control-plane-foundation",
     "phase-report-p01",
     "phase-report-p06",
     "phase-report-p07",
+    "phase-report-p08",
+    "phase-report-p09",
+    "phase-report-p10",
     "phase-report-p11",
     "publication-contract-fixtures",
+    "reference-control-plane-server",
     "schema-manifest"
   ],
   "source_closure": [
@@ -647,12 +655,13 @@
       "path": "conformance/fixtures/contracts/control-plane-publication/testdata/harness/main.go",
       "change_type": "add",
       "baseline_sha256": null,
-      "current_sha256": "b2229fa066091a3792c1266125aa9fd89673804f52fb44bb9017aebbd651ef8e",
+      "current_sha256": "ffa39d1d6dd9556fbaca67e116409374aefaead509220083a96a9ce84b1d0ae2",
       "touch_commits": [
         "1118ecdb802a546365ff7f116d9d859c81d3e1c2",
         "51cd85cc5b5fb37ef3cd2825979c1cda79d37101",
         "a829c8444ee59afaa8daef0493109b9cc65b1960",
         "b19d977389a4c2e72424652decd286737a512eca",
+        "b92e8bc9e680857876d59af4ef16f388cc7e684b",
         "bb16025e8d8900c3ba3005f6cdba80c32710db55"
       ],
       "scope": "p11-production",
@@ -737,6 +746,40 @@
       ],
       "owner_phases": [
         "P11"
+      ]
+    },
+    {
+      "path": "reference/control-plane/cmd/aropd/main_test.go",
+      "change_type": "modify",
+      "baseline_sha256": "03d839ef056f748605f178b31595dd6f77c1e5a108bea9230fc05860b82886be",
+      "current_sha256": "7c402c21120eeafd6bb3c939f74d7cb0a915f7de38bf9eaee281d9a0e3722e48",
+      "touch_commits": [
+        "2efd58385eb0b173d4344b24157e2fcf286f0c68"
+      ],
+      "scope": "early-owned",
+      "artifact_ids": [
+        "phase-report-p08",
+        "reference-control-plane-server"
+      ],
+      "owner_phases": [
+        "P08"
+      ]
+    },
+    {
+      "path": "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go",
+      "change_type": "modify",
+      "baseline_sha256": "d7997f5f463fab63cd7528dd634feba685465c3f3eaa5623debb7809c2b5f32f",
+      "current_sha256": "d7051b0966d3d103899c9e1ddc27b446058f1e4186794fcaba61f2f58827c16d",
+      "touch_commits": [
+        "3fff0eed96e064f9500c2f652945466cec843c0f"
+      ],
+      "scope": "early-owned",
+      "artifact_ids": [
+        "migration-engine-fixture-versions",
+        "phase-report-p09"
+      ],
+      "owner_phases": [
+        "P09"
       ]
     },
     {
@@ -861,7 +904,7 @@
   "validation_requirements": {
     "declared_status_rule": "must-not-carry-final-digests-touch-commits-or-pass-validation",
     "exact_comparisons": [
-      "acceptance-four-phase-set-and-order",
+      "acceptance-eight-phase-set-and-order",
       "affected-artifacts",
       "source-closure-owner-mapping",
       "transition-from-phases"
@@ -940,6 +983,21 @@
       "report": "build/reports/P07/report.json"
     },
     {
+      "phase": "P08",
+      "command": "make test-control-plane-platform",
+      "report": "build/reports/P08/report.json"
+    },
+    {
+      "phase": "P09",
+      "command": "make test-storage-migrations",
+      "report": "build/reports/P09/report.json"
+    },
+    {
+      "phase": "P10",
+      "command": "make test-identity-secrets",
+      "report": "build/reports/P10/report.json"
+    },
+    {
       "phase": "P11",
       "command": "make test-publication-contracts",
       "report": "build/reports/P11/report.json"
@@ -952,7 +1010,7 @@
     "frozen-planning-inputs-remain-unchanged",
     "no-p12-or-later-contracts",
     "owner-phase-and-exposure-remain-unchanged",
-    "p01-p06-p07-p11-regressions-must-pass-on-one-head",
+    "p01-p02-p06-p07-p08-p09-p10-p11-regressions-must-pass-on-one-head",
     "p11-report-runtime-inputs-remain-empty",
     "tracked-control-plane-aggregate-forbidden-before-p20",
     "validated-status-requires-exact-git-manifest-and-inventory-closure"
