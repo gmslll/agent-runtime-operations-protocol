@@ -40,6 +40,8 @@ var (
 	idempotencyKeyPattern  = regexp.MustCompile(`^[!-~]{8,200}$`)
 	bearerChallengePattern = regexp.MustCompile(`^Bearer(?: [A-Za-z][A-Za-z0-9_-]*="[ -!#-~]*")*$`)
 	retryAfterPattern      = regexp.MustCompile(`^[1-9][0-9]{0,4}$`)
+	errBundleUnavailable   = errors.New("publication bundle is unavailable or invalid")
+	errBundleInvalid       = errors.New("publication bundle is invalid")
 )
 
 // CredentialSource supplies a Control Plane bearer credential at request time.
@@ -315,35 +317,47 @@ func doWithoutRedirects(client *http.Client, request *http.Request) (*http.Respo
 }
 
 func loadAndValidateBundle(ctx context.Context, path string) ([]byte, bundleIdentity, error) {
+	return loadAndValidateBundleWithHook(ctx, path, nil)
+}
+
+func loadAndValidateBundleWithHook(ctx context.Context, path string, afterOpen func() error) ([]byte, bundleIdentity, error) {
 	if err := contextError(ctx); err != nil {
 		return nil, bundleIdentity{}, err
 	}
 	info, err := os.Lstat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 || info.Size() < 0 || info.Size() > maxArchiveBytes {
-		return nil, bundleIdentity{}, errors.New("publication bundle is unavailable or invalid")
+		return nil, bundleIdentity{}, errBundleUnavailable
 	}
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, bundleIdentity{}, errors.New("publication bundle is unavailable or invalid")
+		return nil, bundleIdentity{}, errBundleUnavailable
 	}
 	defer file.Close()
 	opened, err := file.Stat()
 	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(info, opened) {
-		return nil, bundleIdentity{}, errors.New("publication bundle is unavailable or invalid")
+		return nil, bundleIdentity{}, errBundleUnavailable
+	}
+	if afterOpen != nil {
+		if err := afterOpen(); err != nil {
+			return nil, bundleIdentity{}, errBundleUnavailable
+		}
 	}
 	data, err := readBounded(ctx, file, maxArchiveBytes)
 	if err != nil {
 		if ctxErr := contextError(ctx); ctxErr != nil {
 			return nil, bundleIdentity{}, ctxErr
 		}
-		return nil, bundleIdentity{}, errors.New("publication bundle is unavailable or invalid")
+		return nil, bundleIdentity{}, errBundleUnavailable
+	}
+	if final, statErr := file.Stat(); statErr != nil || !os.SameFile(opened, final) || final.Size() != int64(len(data)) || final.Size() > maxArchiveBytes {
+		return nil, bundleIdentity{}, errBundleUnavailable
 	}
 	identity, err := validateBundleArchive(ctx, data)
 	if err != nil {
 		if ctxErr := contextError(ctx); ctxErr != nil {
 			return nil, bundleIdentity{}, ctxErr
 		}
-		return nil, bundleIdentity{}, errors.New("publication bundle is invalid")
+		return nil, bundleIdentity{}, errBundleInvalid
 	}
 	return data, identity, nil
 }
@@ -372,7 +386,10 @@ func readBounded(ctx context.Context, reader io.Reader, limit int64) ([]byte, er
 }
 
 func validateBundleArchive(ctx context.Context, archive []byte) (bundleIdentity, error) {
-	if err := verifyCentralDirectoryExact(archive); err != nil {
+	if err := verifyCentralDirectoryExact(ctx, archive); err != nil {
+		if ctxErr := contextError(ctx); ctxErr != nil {
+			return bundleIdentity{}, ctxErr
+		}
 		return bundleIdentity{}, errors.New("zip directory")
 	}
 	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
@@ -426,17 +443,8 @@ func validateBundleArchive(ctx context.Context, archive []byte) (bundleIdentity,
 	if manifestCount != 1 {
 		return bundleIdentity{}, errors.New("root manifest")
 	}
-	if err := manifest.ValidatePackageFile(root, "agent-manifest.json"); err != nil {
-		return bundleIdentity{}, errors.New("manifest validation")
-	}
-	if err := contextError(ctx); err != nil {
-		return bundleIdentity{}, err
-	}
-	digest, err := manifest.DigestPackageFile(root, "agent-manifest.json")
+	digest, err := validateAndDigestManifest(ctx, root)
 	if err != nil {
-		return bundleIdentity{}, errors.New("manifest digest")
-	}
-	if err := contextError(ctx); err != nil {
 		return bundleIdentity{}, err
 	}
 	document, err := os.ReadFile(filepath.Join(root, "agent-manifest.json"))
@@ -450,15 +458,40 @@ func validateBundleArchive(ctx context.Context, archive []byte) (bundleIdentity,
 	return bundleIdentity{agentID: string(decoded.IDentity.ID), version: string(decoded.IDentity.Version), digest: digest}, nil
 }
 
+func validateAndDigestManifest(ctx context.Context, root string) (string, error) {
+	if err := manifest.ValidatePackageFile(root, "agent-manifest.json"); err != nil {
+		return "", errors.New("manifest validation")
+	}
+	if err := contextError(ctx); err != nil {
+		return "", err
+	}
+	digest, err := manifest.DigestPackageFile(root, "agent-manifest.json")
+	if err != nil {
+		return "", errors.New("manifest digest")
+	}
+	if err := contextError(ctx); err != nil {
+		return "", err
+	}
+	return digest, nil
+}
+
 type zipInterval struct{ start, end int }
 
-func verifyCentralDirectoryExact(archive []byte) error {
+func verifyCentralDirectoryExact(ctx context.Context, archive []byte) error {
+	if err := contextError(ctx); err != nil {
+		return err
+	}
 	eocd := -1
 	start := len(archive) - 22 - 65535
 	if start < 0 {
 		start = 0
 	}
 	for index := len(archive) - 22; index >= start; index-- {
+		if index&1023 == 0 {
+			if err := contextError(ctx); err != nil {
+				return err
+			}
+		}
 		if index >= 0 && index+4 <= len(archive) && binary.LittleEndian.Uint32(archive[index:index+4]) == 0x06054b50 {
 			eocd = index
 			break
@@ -475,13 +508,16 @@ func verifyCentralDirectoryExact(archive []byte) error {
 	countTotal := int(binary.LittleEndian.Uint16(archive[eocd+10 : eocd+12]))
 	centralSize := int(binary.LittleEndian.Uint32(archive[eocd+12 : eocd+16]))
 	centralOffset := int(binary.LittleEndian.Uint32(archive[eocd+16 : eocd+20]))
-	if countTotal == 0 || countTotal == 0xffff || countDisk != countTotal || centralOffset < 0 || centralSize < 0 || centralOffset+centralSize != eocd {
+	if countTotal == 0 || countTotal > maxArchiveEntries || countTotal == 0xffff || countDisk != countTotal || centralOffset < 0 || centralSize < 0 || centralOffset+centralSize != eocd {
 		return errors.New("central bounds")
 	}
 	position := centralOffset
 	intervals := make([]zipInterval, 0, countTotal)
 	offsets := map[int]bool{}
 	for range countTotal {
+		if err := contextError(ctx); err != nil {
+			return err
+		}
 		if position+46 > eocd || binary.LittleEndian.Uint32(archive[position:position+4]) != 0x02014b50 {
 			return errors.New("central entry")
 		}
@@ -541,6 +577,9 @@ func verifyCentralDirectoryExact(archive []byte) error {
 	sort.Slice(intervals, func(i, j int) bool { return intervals[i].start < intervals[j].start })
 	cursor := 0
 	for _, interval := range intervals {
+		if err := contextError(ctx); err != nil {
+			return err
+		}
 		if interval.start != cursor || interval.end <= interval.start || interval.end > centralOffset {
 			return errors.New("overlap or gap")
 		}

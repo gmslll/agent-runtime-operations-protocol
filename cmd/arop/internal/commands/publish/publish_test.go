@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -305,6 +306,139 @@ func TestBundleCentralAndLocalMetadataMustMatch(t *testing.T) {
 	}
 }
 
+func TestBundleRejectsEveryCentralLocalCorruption(t *testing.T) {
+	t.Parallel()
+	one := bundleBytes(t, map[string]string{"agent-manifest.json": validManifestJSON})
+	two := bundleBytes(t, map[string]string{"agent-manifest.json": validManifestJSON, "schemas/unused.json": `{}`})
+	tests := []struct {
+		name   string
+		base   []byte
+		mutate func(*testing.T, []byte) []byte
+	}{
+		{"filename", one, func(t *testing.T, value []byte) []byte {
+			layout := firstZIPLayout(t, value)
+			value[layout.local+30] ^= 1
+			return value
+		}},
+		{"flags", one, func(t *testing.T, value []byte) []byte {
+			layout := firstZIPLayout(t, value)
+			binary.LittleEndian.PutUint16(value[layout.local+6:layout.local+8], layout.flags^1)
+			return value
+		}},
+		{"method", one, func(t *testing.T, value []byte) []byte {
+			layout := firstZIPLayout(t, value)
+			binary.LittleEndian.PutUint16(value[layout.local+8:layout.local+10], layout.method^1)
+			return value
+		}},
+		{"crc", one, func(t *testing.T, value []byte) []byte {
+			layout := firstZIPLayout(t, value)
+			binary.LittleEndian.PutUint32(value[layout.central+16:layout.central+20], layout.crc+1)
+			return value
+		}},
+		{"compressed-size", one, func(t *testing.T, value []byte) []byte {
+			layout := firstZIPLayout(t, value)
+			binary.LittleEndian.PutUint32(value[layout.central+20:layout.central+24], layout.compressed+1)
+			return value
+		}},
+		{"data-descriptor", one, func(t *testing.T, value []byte) []byte {
+			layout := firstZIPLayout(t, value)
+			descriptor := layout.localData + int(layout.compressed)
+			if binary.LittleEndian.Uint32(value[descriptor:descriptor+4]) == 0x08074b50 {
+				descriptor += 4
+			}
+			value[descriptor] ^= 1
+			return value
+		}},
+		{"overlap", two, forgeOverlap},
+		{"gap", one, addCentralGap},
+		{"prefix", one, addZIPPrefix},
+		{"trailing", one, func(_ *testing.T, value []byte) []byte { return append(value, 0) }},
+		{"central-range", one, func(t *testing.T, value []byte) []byte {
+			layout := firstZIPLayout(t, value)
+			size := binary.LittleEndian.Uint32(value[layout.eocd+12 : layout.eocd+16])
+			binary.LittleEndian.PutUint32(value[layout.eocd+12:layout.eocd+16], size+1)
+			return value
+		}},
+		{"entry-count", one, func(t *testing.T, value []byte) []byte {
+			layout := firstZIPLayout(t, value)
+			binary.LittleEndian.PutUint16(value[layout.eocd+8:layout.eocd+10], maxArchiveEntries+1)
+			binary.LittleEndian.PutUint16(value[layout.eocd+10:layout.eocd+12], maxArchiveEntries+1)
+			return value
+		}},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			candidate := test.mutate(t, append([]byte(nil), test.base...))
+			if _, err := validateBundleArchive(context.Background(), candidate); err == nil {
+				t.Fatalf("%s corruption accepted", test.name)
+			}
+		})
+	}
+}
+
+type zipLayout struct {
+	eocd, central, local, localData int
+	flags, method                   uint16
+	crc, compressed                 uint32
+}
+
+func firstZIPLayout(t *testing.T, archive []byte) zipLayout {
+	t.Helper()
+	eocd := bytes.LastIndex(archive, []byte{'P', 'K', 5, 6})
+	if eocd < 0 {
+		t.Fatal("EOCD absent")
+	}
+	central := int(binary.LittleEndian.Uint32(archive[eocd+16 : eocd+20]))
+	local := int(binary.LittleEndian.Uint32(archive[central+42 : central+46]))
+	nameLength := int(binary.LittleEndian.Uint16(archive[local+26 : local+28]))
+	extraLength := int(binary.LittleEndian.Uint16(archive[local+28 : local+30]))
+	return zipLayout{eocd: eocd, central: central, local: local, localData: local + 30 + nameLength + extraLength, flags: binary.LittleEndian.Uint16(archive[central+8 : central+10]), method: binary.LittleEndian.Uint16(archive[central+10 : central+12]), crc: binary.LittleEndian.Uint32(archive[central+16 : central+20]), compressed: binary.LittleEndian.Uint32(archive[central+20 : central+24])}
+}
+
+func forgeOverlap(t *testing.T, archive []byte) []byte {
+	t.Helper()
+	layout := firstZIPLayout(t, archive)
+	nameLength := int(binary.LittleEndian.Uint16(archive[layout.central+28 : layout.central+30]))
+	extraLength := int(binary.LittleEndian.Uint16(archive[layout.central+30 : layout.central+32]))
+	commentLength := int(binary.LittleEndian.Uint16(archive[layout.central+32 : layout.central+34]))
+	second := layout.central + 46 + nameLength + extraLength + commentLength
+	if second+46 > layout.eocd {
+		t.Fatal("second central entry absent")
+	}
+	binary.LittleEndian.PutUint32(archive[second+42:second+46], uint32(layout.local))
+	return archive
+}
+
+func addCentralGap(t *testing.T, archive []byte) []byte {
+	t.Helper()
+	layout := firstZIPLayout(t, archive)
+	result := make([]byte, 0, len(archive)+1)
+	result = append(result, archive[:layout.central]...)
+	result = append(result, 0)
+	result = append(result, archive[layout.central:]...)
+	newEOCD := layout.eocd + 1
+	binary.LittleEndian.PutUint32(result[newEOCD+16:newEOCD+20], uint32(layout.central+1))
+	return result
+}
+
+func addZIPPrefix(t *testing.T, archive []byte) []byte {
+	t.Helper()
+	result := append([]byte{0}, archive...)
+	old := firstZIPLayout(t, archive)
+	newEOCD := old.eocd + 1
+	newCentral := old.central + 1
+	binary.LittleEndian.PutUint32(result[newEOCD+16:newEOCD+20], uint32(newCentral))
+	position := newCentral
+	count := int(binary.LittleEndian.Uint16(result[newEOCD+10 : newEOCD+12]))
+	for range count {
+		local := binary.LittleEndian.Uint32(result[position+42 : position+46])
+		binary.LittleEndian.PutUint32(result[position+42:position+46], local+1)
+		position += 46 + int(binary.LittleEndian.Uint16(result[position+28:position+30])) + int(binary.LittleEndian.Uint16(result[position+30:position+32])) + int(binary.LittleEndian.Uint16(result[position+32:position+34]))
+	}
+	return result
+}
+
 func TestBoundedReadArchiveLimits(t *testing.T) {
 	t.Parallel()
 	for _, size := range []int64{maxArchiveBytes - 1, maxArchiveBytes} {
@@ -315,6 +449,48 @@ func TestBoundedReadArchiveLimits(t *testing.T) {
 	}
 	if _, err := readBounded(context.Background(), io.LimitReader(zeroReader{}, maxArchiveBytes+1), maxArchiveBytes); err == nil {
 		t.Fatal("archive limit+1 accepted")
+	}
+}
+
+func TestLoadAndValidateBundleFileSizeBoundaries(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name string
+		size int64
+		want error
+	}{
+		{"limit-minus-one", maxArchiveBytes - 1, errBundleInvalid},
+		{"limit", maxArchiveBytes, errBundleInvalid},
+		{"limit-plus-one", maxArchiveBytes + 1, errBundleUnavailable},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "bundle.zip")
+			file, err := os.Create(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := file.Truncate(test.size); err != nil {
+				t.Fatal(err)
+			}
+			if err := file.Close(); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err = loadAndValidateBundle(context.Background(), path)
+			if !errors.Is(err, test.want) {
+				t.Fatalf("size %d error=%v want=%v", test.size, err, test.want)
+			}
+		})
+	}
+}
+
+func TestLoadAndValidateBundleRejectsGrowthAfterOpen(t *testing.T) {
+	t.Parallel()
+	path := writeBundle(t)
+	_, _, err := loadAndValidateBundleWithHook(context.Background(), path, func() error {
+		return os.Truncate(path, maxArchiveBytes+1)
+	})
+	if !errors.Is(err, errBundleUnavailable) {
+		t.Fatalf("growing file error=%v", err)
 	}
 }
 
@@ -339,6 +515,86 @@ func TestBundleProcessingHonorsCancellation(t *testing.T) {
 		t.Fatalf("cancel error = %v", err)
 	}
 }
+
+func TestCentralDirectoryLoopHonorsCancellation(t *testing.T) {
+	t.Parallel()
+	archive := bundleBytes(t, map[string]string{"agent-manifest.json": validManifestJSON, "schemas/unused.json": `{}`})
+	ctx := &cancelOnSecondErrContext{}
+	if err := verifyCentralDirectoryExact(ctx, archive); !errors.Is(err, context.Canceled) {
+		t.Fatalf("directory loop cancellation error=%v", err)
+	}
+}
+
+type cancelOnSecondErrContext struct{ checks atomic.Int32 }
+
+func (*cancelOnSecondErrContext) Deadline() (time.Time, bool) { return time.Time{}, false }
+func (*cancelOnSecondErrContext) Done() <-chan struct{}       { return nil }
+func (ctx *cancelOnSecondErrContext) Err() error {
+	if ctx.checks.Add(1) >= 2 {
+		return context.Canceled
+	}
+	return nil
+}
+func (*cancelOnSecondErrContext) Value(any) any { return nil }
+
+func TestActualArchiveReadCancelsMidStream(t *testing.T) {
+	t.Parallel()
+	file, err := os.Open(writeBundle(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	reader := &cancelAfterFirstRead{Reader: file, cancel: cancel}
+	if _, err := readBounded(ctx, reader, maxArchiveBytes); !errors.Is(err, context.Canceled) {
+		t.Fatalf("mid-read cancel error=%v", err)
+	}
+}
+
+type cancelAfterFirstRead struct {
+	io.Reader
+	cancel context.CancelFunc
+	done   bool
+}
+
+func (reader *cancelAfterFirstRead) Read(buffer []byte) (int, error) {
+	count, err := reader.Reader.Read(buffer)
+	if !reader.done {
+		reader.done = true
+		reader.cancel()
+	}
+	return count, err
+}
+
+func TestValidateToDigestCancellationBarrier(t *testing.T) {
+	t.Parallel()
+	base, err := filepath.EvalSymlinks(os.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.MkdirTemp(base, "arop-publish-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	if err := os.WriteFile(filepath.Join(root, "agent-manifest.json"), []byte(validManifestJSON), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := validateAndDigestManifest(alwaysCancelledContext{}, root); !errors.Is(err, context.Canceled) {
+		t.Fatalf("validate-to-digest barrier error=%v", err)
+	}
+}
+
+type alwaysCancelledContext struct{}
+
+func (alwaysCancelledContext) Deadline() (time.Time, bool) { return time.Time{}, false }
+func (alwaysCancelledContext) Done() <-chan struct{} {
+	channel := make(chan struct{})
+	close(channel)
+	return channel
+}
+func (alwaysCancelledContext) Err() error    { return context.Canceled }
+func (alwaysCancelledContext) Value(any) any { return nil }
 
 func TestRunRejectsInvalidBundleInputsBeforeNetwork(t *testing.T) {
 	t.Parallel()
@@ -518,25 +774,36 @@ func testCommand(t *testing.T, rawURL string) (Command, Options) {
 func writeBundle(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "bundle.zip")
-	file, err := os.Create(path)
-	if err != nil {
+	if err := os.WriteFile(path, bundleBytes(t, map[string]string{"agent-manifest.json": validManifestJSON}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	archive := zip.NewWriter(file)
-	entry, err := archive.Create("agent-manifest.json")
-	if err != nil {
-		t.Fatal(err)
+	return path
+}
+
+func bundleBytes(t *testing.T, entries map[string]string) []byte {
+	t.Helper()
+	var output bytes.Buffer
+	archive := zip.NewWriter(&output)
+	names := make([]string, 0, len(entries))
+	for name := range entries {
+		names = append(names, name)
 	}
-	if _, err := io.WriteString(entry, validManifestJSON); err != nil {
-		t.Fatal(err)
+	sort.Strings(names)
+	for _, name := range names {
+		header := &zip.FileHeader{Name: name, Method: zip.Deflate}
+		header.SetMode(0o600)
+		entry, err := archive.CreateHeader(header)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := io.WriteString(entry, entries[name]); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := archive.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if err := file.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return path
+	return output.Bytes()
 }
 
 func successServer() *httptest.Server {
