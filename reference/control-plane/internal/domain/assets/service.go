@@ -51,6 +51,9 @@ func (service *Service) IssueGrant(ctx context.Context, request IssueRequest) (I
 		if err := service.authorize(ctx, existing.Binding); err != nil {
 			return IssuedGrant{}, err
 		}
+		if err := existing.UsableAt(now); err != nil {
+			return IssuedGrant{}, err
+		}
 		token, err := service.deps.Tokens.IssueToken(ctx, existing)
 		if err != nil || token.Digest != existing.OpaqueDigest {
 			return IssuedGrant{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
@@ -117,8 +120,18 @@ func (service *Service) IssueGrant(ctx context.Context, request IssueRequest) (I
 			if err := asset.Validate(); err != nil {
 				return err
 			}
-			if err := service.deps.Assets.Put(transactionContext, asset); err != nil {
-				return err
+			existing, loadErr := service.deps.Assets.Get(transactionContext, binding.TenantID, binding.AssetID)
+			switch {
+			case loadErr == nil:
+				if existing.State != StateQuarantine || !existing.Binding.SameIdentity(binding) {
+					return NewError(CategoryConflict, ReasonIdempotencyConflict)
+				}
+			case isNotFound(loadErr):
+				if err := service.deps.Assets.Put(transactionContext, asset); err != nil {
+					return err
+				}
+			default:
+				return loadErr
 			}
 		}
 		return service.deps.Grants.Save(transactionContext, grant)
@@ -127,6 +140,9 @@ func (service *Service) IssueGrant(ctx context.Context, request IssueRequest) (I
 		if existing, lookupErr := service.deps.Grants.FindByIdempotency(ctx, request.Caller.TenantID, keyDigest); lookupErr == nil {
 			if !sameGrantRequest(existing, request) {
 				return IssuedGrant{}, NewError(CategoryConflict, ReasonIdempotencyConflict)
+			}
+			if usableErr := existing.UsableAt(service.now()); usableErr != nil {
+				return IssuedGrant{}, usableErr
 			}
 			replayToken, issueErr := service.deps.Tokens.IssueToken(ctx, existing)
 			if issueErr != nil || replayToken.Digest != existing.OpaqueDigest {

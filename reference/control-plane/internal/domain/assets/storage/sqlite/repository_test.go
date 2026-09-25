@@ -111,6 +111,11 @@ func TestSQLiteAssetRepository(t *testing.T) {
 	}); !assets.HasStorageReason(err, assets.StorageReasonValidation) {
 		t.Fatalf("grant without asset = %v", err)
 	}
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
+		return repository.ConsumeGrant(ctx, grant.TenantID, grant.GrantID, 1, grant.NotBeforeNs-1)
+	}); !assets.HasStorageReason(err, assets.StorageReasonNotYetValid) {
+		t.Fatalf("not-yet-valid consume = %v", err)
+	}
 	consumed, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.ConsumeGrant(ctx, grant.TenantID, grant.GrantID, 1, grant.CreatedAtNs+1)
 	})

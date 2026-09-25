@@ -39,6 +39,9 @@ func (adapter *PersistenceAdapter) Put(ctx context.Context, asset Asset) error {
 	if stored.Status == statusForAsset(asset.State) {
 		return nil
 	}
+	if stored.Status != AssetPending || asset.State != StateReady {
+		return NewError(CategoryConflict, ReasonIdempotencyConflict)
+	}
 	_, err = adapter.repository.UpdateAsset(ctx, stored.TenantID, stored.AssetID, stored.Revision, AssetUpdate{
 		Name: asset.Binding.Name, MediaType: asset.Binding.MediaType, SizeBytes: asset.Binding.SizeBytes,
 		ContentDigest: asset.Binding.Digest, ContentBytes: append([]byte(nil), asset.Content...), ObjectKey: stored.ObjectKey, Status: statusForAsset(asset.State),
@@ -261,6 +264,8 @@ func translateStorageError(err error) error {
 		return NewError(CategoryConflict, ReasonIdempotencyConflict)
 	case HasStorageReason(err, StorageReasonExpired):
 		return NewError(CategoryAuthorization, ReasonGrantExpired)
+	case HasStorageReason(err, StorageReasonNotYetValid):
+		return NewError(CategoryAuthorization, ReasonGrantNotYetValid)
 	case HasStorageReason(err, StorageReasonValidation):
 		return NewError(CategoryValidation, ReasonInvalidRequest)
 	default:

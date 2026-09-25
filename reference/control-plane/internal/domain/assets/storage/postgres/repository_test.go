@@ -92,6 +92,11 @@ func TestPostgresAssetRepository(t *testing.T) {
 	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) { return repository.CreateGrant(ctx, grant) }); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
+		return repository.ConsumeGrant(ctx, grant.TenantID, grant.GrantID, 1, grant.NotBeforeNs-1)
+	}); !assets.HasStorageReason(err, assets.StorageReasonNotYetValid) {
+		t.Fatalf("not-yet-valid consume = %v", err)
+	}
 	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) { return repository.CreateGrant(ctx, grant) }); err != nil {
 		t.Fatal(err)
 	}

@@ -156,6 +156,72 @@ func TestGrantWindowAndUses(t *testing.T) {
 	requireReason(t, err, ReasonInvalidRequest)
 }
 
+func TestIssueGrantNeverDowngradesReadyAssetAndReplayRequiresUsableGrant(t *testing.T) {
+	now := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
+	clock := &frozenClock{now: now}
+	store := newMemStore()
+	deps := testDeps(t, allowAll{})
+	deps.Clock, deps.Assets, deps.Grants = clock, store, store
+	service, err := New(deps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := testIssue(OperationUpload)
+	request.NotBefore, request.ExpiresAt, request.MaxUses = now, now.Add(time.Minute), 1
+	issued, err := service.IssueGrant(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.ReceiveUpload(context.Background(), UploadReceipt{Metadata: testMetadata(), GrantID: issued.Grant.GrantID, GrantToken: issued.Token, Content: []byte("hello world\n")}); err != nil {
+		t.Fatal(err)
+	}
+	reissue := request
+	reissue.IdempotencyKey = "ready-reissue-key"
+	if _, err = service.IssueGrant(context.Background(), reissue); err == nil {
+		t.Fatal("ready asset was downgraded by a new upload grant")
+	}
+	ready, err := store.Get(context.Background(), request.Caller.TenantID, request.AssetID)
+	if err != nil || ready.State != StateReady || string(ready.Content) != "hello world\n" {
+		t.Fatalf("ready asset changed: %+v %v", ready, err)
+	}
+	if _, err = service.IssueGrant(context.Background(), request); err == nil {
+		t.Fatal("exhausted idempotent grant was replayed")
+	} else {
+		requireReason(t, err, ReasonGrantUsesExhausted)
+	}
+
+	revocable := request
+	revocable.AssetID = ""
+	revocable.IdempotencyKey = "revoked-replay-key"
+	revocable.MaxUses = 2
+	revokedGrant, err := service.IssueGrant(context.Background(), revocable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = service.RevokeGrant(context.Background(), RevokeRequest{Metadata: testMetadata(), Caller: request.Caller, GrantID: revokedGrant.Grant.GrantID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.IssueGrant(context.Background(), revocable); err == nil {
+		t.Fatal("revoked idempotent grant was replayed")
+	} else {
+		requireReason(t, err, ReasonGrantRevoked)
+	}
+
+	expiring := request
+	expiring.AssetID = ""
+	expiring.IdempotencyKey = "expired-replay-key"
+	expiredGrant, err := service.IssueGrant(context.Background(), expiring)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock.now = expiredGrant.Grant.ExpiresAt
+	if _, err = service.IssueGrant(context.Background(), expiring); err == nil {
+		t.Fatal("expired idempotent grant was replayed")
+	} else {
+		requireReason(t, err, ReasonGrantExpired)
+	}
+}
+
 func TestNetworkClassification(t *testing.T) {
 	cases := []struct {
 		ip      string

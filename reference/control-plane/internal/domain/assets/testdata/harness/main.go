@@ -78,7 +78,8 @@ func main() {
 	}
 	inputs, err := trackedInputs(root)
 	add("p13-static-input-closure", err, fmt.Sprintf("%d tracked inputs", len(inputs)))
-	add("p13-runtime-inputs-empty", nil, "runtime_inputs is empty")
+	runtimeInputs, runtimeInputsErr := declaredRuntimeInputs(root)
+	add("p13-runtime-inputs-empty", errors.Join(runtimeInputsErr, requireEmpty(runtimeInputs)), "manifest-declared runtime_inputs is empty")
 	transitionErr := validateTransition(root)
 	if os.Getenv("AROP_PRINT_P13_TRANSITION") == "1" {
 		fatal(transitionErr)
@@ -139,20 +140,25 @@ func main() {
 	if pg != nil {
 		err = pg.stop()
 	} else {
-		err = nil
+		err = errors.New("private PostgreSQL was not started")
 	}
 	add("p13-postgres-shutdown", err, "private PostgreSQL stopped")
 	if scratchErr == nil {
 		err = os.RemoveAll(scratch)
+		if err == nil {
+			if _, statErr := os.Lstat(scratch); !errors.Is(statErr, os.ErrNotExist) {
+				err = errors.New("private scratch still exists after cleanup")
+			}
+		}
 	} else {
-		err = nil
+		err = errors.New("private scratch was not created")
 	}
 	add("p13-scratch-cleanup", err, "scratch removed")
 
 	written, err := report.Write(report.WriteOptions{
 		Root: root, Directory: "build/reports/P13", Suite: "AROP P13 asset broker", Class: "p13.assets",
-		Command: command, CheckerPath: checker, InputPaths: inputs, RuntimeInputPaths: []string{}, RuntimeEvidence: evidence, Checks: checks,
-		Summary:   map[string]any{"owned_artifacts": 9, "database_engines": 2, "runtime_inputs": 0},
+		Command: command, CheckerPath: checker, InputPaths: inputs, RuntimeInputPaths: runtimeInputs, RuntimeEvidence: evidence, Checks: checks,
+		Summary:   map[string]any{"owned_artifacts": 9, "database_engines": 2, "runtime_inputs": len(runtimeInputs)},
 		AuditNote: "P13 binds its nine manifest-owned artifacts and an independently discovered Git/manifest transition closure. Asset grants are short-lived, operation/run/identity/content bound, revocable and persisted only by digest; mutations and durable audit share one UoW. SQLite and PostgreSQL 16 run the same 0020 schema and repository matrix. DNS and IP policy is freshly evaluated for every connect and redirect hop. P05-P12 regressions are rerun on the current Git head and enter only as digest-and-byte runtime evidence; runtime_inputs remains empty.",
 	})
 	fatal(err)
@@ -165,6 +171,33 @@ func main() {
 		fatal(errors.New("P13 checks failed; see build/reports/P13/report.json"))
 	}
 	fmt.Printf("AROP asset broker passed: %d checks.\n", len(checks))
+}
+
+func declaredRuntimeInputs(root string) ([]string, error) {
+	var manifest blueprint.Manifest
+	if err := structuredfile.Load(filepath.Join(root, "spec/artifact-manifest.yaml"), &manifest); err != nil {
+		return nil, err
+	}
+	var found []string
+	matches := 0
+	for _, artifact := range manifest.Artifacts {
+		if artifact.ID != "phase-report-p13" {
+			continue
+		}
+		matches++
+		found = append([]string(nil), artifact.RuntimeInputs...)
+	}
+	if matches != 1 {
+		return nil, fmt.Errorf("phase-report-p13 manifest entries=%d", matches)
+	}
+	return found, nil
+}
+
+func requireEmpty(items []string) error {
+	if len(items) != 0 {
+		return fmt.Errorf("runtime_inputs must be empty, got %q", items)
+	}
+	return nil
 }
 
 func trackedInputs(root string) ([]string, error) {
@@ -413,13 +446,17 @@ func validateGeneratedContracts(root string) error {
 }
 
 func runTests(root, scratch, dsn string) commandResult {
+	realScratch, err := filepath.EvalSymlinks(scratch)
+	if err != nil {
+		return commandResult{err: errors.New("resolve private scratch")}
+	}
 	work := filepath.Join(scratch, "go.work")
 	body := []byte("go 1.24.0\n\nuse " + filepath.Join(root, "reference/control-plane") + "\n\nreplace github.com/gmslll/agent-runtime-operations-protocol => " + root + "\n")
 	if err := os.WriteFile(work, body, 0o600); err != nil {
 		return commandResult{err: err}
 	}
-	environment := map[string]string{"GOWORK": work, "GOENV": "off", "GOFLAGS": "-mod=readonly", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "TMPDIR": scratch, "AROP_P13_POSTGRES_URL": dsn}
-	return run(filepath.Join(root, "reference/control-plane"), environment, "go", "test", "-count=1", "-race", "-json", "./cmd/aropd", "./internal/app/platform/httpadapter", "./internal/domain/assets", "./internal/domain/assets/storage/sqlite", "./internal/domain/assets/storage/postgres", "./internal/storage/migrate")
+	environment := map[string]string{"GOWORK": work, "GOENV": "off", "GOFLAGS": "-mod=readonly", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "TMPDIR": realScratch, "AROP_P13_SCRATCH": realScratch, "AROP_P13_MIGRATION_ROOT": filepath.Join(root, "reference/control-plane/migrations"), "AROP_P13_POSTGRES_URL": dsn}
+	return run(filepath.Join(root, "reference/control-plane"), environment, "go", "test", "-count=1", "-race", "-json", "./cmd/aropd", "./internal/app/platform/httpadapter", "./internal/domain/assets", "./internal/domain/assets/storage/sqlite", "./internal/domain/assets/storage/postgres", "./internal/domain/assets/testdata/acceptance", "./internal/storage/migrate")
 }
 
 func rejectIncompleteTests(output []byte) error {

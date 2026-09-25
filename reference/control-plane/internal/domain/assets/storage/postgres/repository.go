@@ -166,12 +166,15 @@ func (repository *Repository) transitionGrant(ctx context.Context, tenantID, gra
 	if consume && current.ExpiresAtNs <= nowNs {
 		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonExpired)
 	}
+	if consume && current.NotBeforeNs > nowNs {
+		return assets.GrantRecord{}, assets.NewStorageError(assets.StorageReasonNotYetValid)
+	}
 	statement := `UPDATE arop_asset_grants SET status='revoked',revision=revision+1,updated_at_ns=$1 WHERE tenant_id=$2 AND grant_id=$3 AND revision=$4 AND status='active'`
 	args := []any{nowNs, tenantID, grantID, expectedRevision}
 	if consume {
 		statement = `UPDATE arop_asset_grants SET use_count=use_count+1,status=CASE WHEN use_count+1=use_limit THEN 'consumed' ELSE 'active' END,revision=revision+1,updated_at_ns=$1
-WHERE tenant_id=$2 AND grant_id=$3 AND revision=$4 AND status='active' AND use_count<use_limit AND expires_at_ns>$5`
-		args = []any{nowNs, tenantID, grantID, expectedRevision, nowNs}
+WHERE tenant_id=$2 AND grant_id=$3 AND revision=$4 AND status='active' AND use_count<use_limit AND not_before_ns<=$5 AND expires_at_ns>$6`
+		args = []any{nowNs, tenantID, grantID, expectedRevision, nowNs, nowNs}
 	}
 	result, err := tx.ExecContext(ctx, statement, args...)
 	if err != nil {

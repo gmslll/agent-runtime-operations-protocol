@@ -2,8 +2,11 @@ package sqlite
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"unicode"
 
@@ -34,7 +37,7 @@ var grantColumns = []column{
 
 func VerifySchema() migrate.Verifier {
 	return func(ctx context.Context, queryer migrate.Queryer) error {
-		if err := verifyTable(ctx, queryer, "arop_assets", assetColumns, 17, 1, map[string]int{
+		if err := verifyTable(ctx, queryer, "arop_assets", assetColumns, "ec788f61b26a8c0b66aeba0f10b8a243c31894249c00238743549713b1484c42", 17, 1, map[string]int{
 			"pk|1|0|tenant_id,asset_id":                                     1,
 			"u|1|0|tenant_id,idempotency_key_digest":                        1,
 			"c|0|0|arop_assets_tenant_status_idx|tenant_id,status,asset_id": 1,
@@ -42,7 +45,7 @@ func VerifySchema() migrate.Verifier {
 		}); err != nil {
 			return err
 		}
-		if err := verifyTable(ctx, queryer, "arop_asset_grants", grantColumns, 26, 2, map[string]int{
+		if err := verifyTable(ctx, queryer, "arop_asset_grants", grantColumns, "ef17500b646069d80ace756023a875d1ab3d6676d1b6f57a1c3a2a0b633f1028", 26, 2, map[string]int{
 			"pk|1|0|tenant_id,grant_id":                                          1,
 			"u|1|0|tenant_id,idempotency_key_digest":                             1,
 			"u|1|0|token_digest":                                                 1,
@@ -67,7 +70,7 @@ func VerifySchema() migrate.Verifier {
 	}
 }
 
-func verifyTable(ctx context.Context, queryer migrate.Queryer, table string, columns []column, checks, uniques int, indexes map[string]int) error {
+func verifyTable(ctx context.Context, queryer migrate.Queryer, table string, columns []column, ddlSHA256 string, checks, uniques int, indexes map[string]int) error {
 	rows, err := queryer.QueryContext(ctx, `PRAGMA table_info('`+table+`')`)
 	if err != nil {
 		return errors.New("inspect SQLite asset columns")
@@ -98,6 +101,10 @@ func verifyTable(ctx context.Context, queryer migrate.Queryer, table string, col
 	compacted := compact(ddl)
 	if strings.Count(compacted, "check(") != checks || strings.Count(compacted, "unique(") != uniques || strings.Count(compacted, "primarykey(") != 1 {
 		return errors.New("SQLite asset constraints are not exact")
+	}
+	digest := sha256.Sum256([]byte(compacted))
+	if actual := hex.EncodeToString(digest[:]); actual != ddlSHA256 {
+		return fmt.Errorf("SQLite asset table %s definition digest=%s want=%s", table, actual, ddlSHA256)
 	}
 	return verifyIndexes(ctx, queryer, table, indexes)
 }

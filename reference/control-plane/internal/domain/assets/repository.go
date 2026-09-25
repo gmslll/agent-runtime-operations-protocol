@@ -44,6 +44,7 @@ const (
 	StorageReasonNotFound            StorageReason = "not_found"
 	StorageReasonConflict            StorageReason = "conflict"
 	StorageReasonIdempotencyConflict StorageReason = "idempotency_conflict"
+	StorageReasonNotYetValid         StorageReason = "not_yet_valid"
 	StorageReasonExpired             StorageReason = "expired"
 )
 
