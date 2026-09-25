@@ -100,6 +100,8 @@ type publicationPersistence struct {
 	failAudit    bool
 	failCreate   bool
 	failLookup   bool
+	auditErr     error
+	lookupErr    error
 }
 type publicationTransactionKey struct{}
 
@@ -137,6 +139,9 @@ func (persistence *publicationPersistence) Get(_ context.Context, tenant, agent,
 	persistence.mu.Lock()
 	defer persistence.mu.Unlock()
 	if persistence.failLookup {
+		if persistence.lookupErr != nil {
+			return Record{}, persistence.lookupErr
+		}
 		return Record{}, errors.New("repository unavailable")
 	}
 	for _, record := range persistence.records {
@@ -150,6 +155,9 @@ func (persistence *publicationPersistence) GetByIdempotencyDigest(_ context.Cont
 	persistence.mu.Lock()
 	defer persistence.mu.Unlock()
 	if persistence.failLookup {
+		if persistence.lookupErr != nil {
+			return Record{}, persistence.lookupErr
+		}
 		return Record{}, errors.New("repository unavailable")
 	}
 	for _, record := range persistence.records {
@@ -161,6 +169,9 @@ func (persistence *publicationPersistence) GetByIdempotencyDigest(_ context.Cont
 }
 func (persistence *publicationPersistence) AppendObservation(ctx context.Context, audit observability.AuditEntry, span observability.SpanRecord) error {
 	if persistence.failAudit {
+		if persistence.auditErr != nil {
+			return persistence.auditErr
+		}
 		return errors.New("audit unavailable")
 	}
 	if err := observability.ValidateObservationPair(audit, span); err != nil {
@@ -386,6 +397,38 @@ func TestPublicationAuthorizationAndValidationFailuresAreRedacted(t *testing.T) 
 	for _, observation := range persistence.observations {
 		if strings.Contains(observation.Operation, "sentinel") {
 			t.Fatal("audit leaked sentinel")
+		}
+	}
+}
+
+func TestPublicationReadinessNeverRetainsDependencySecrets(t *testing.T) {
+	t.Parallel()
+	const sentinel = "postgres://user:password@db.invalid?bearer=secret-token"
+	service, persistence := newPublicationService(t)
+	persistence.failLookup = true
+	persistence.lookupErr = errors.New(sentinel)
+	_, returned := service.Publish(context.Background(), validPublishRequest())
+	if returned == nil || strings.Contains(returned.Error(), sentinel) {
+		t.Fatalf("repository failure leaked to response: %v", returned)
+	}
+	if readiness := service.Check(context.Background()); readiness == nil || strings.Contains(readiness.Error(), sentinel) {
+		t.Fatalf("repository failure leaked to readiness: %v", readiness)
+	}
+	persistence.failLookup = false
+	persistence.failAudit = true
+	persistence.auditErr = errors.New(sentinel)
+	request := validPublishRequest()
+	request.AgentID = "different.agent"
+	_, returned = service.Publish(context.Background(), request)
+	if returned == nil || strings.Contains(returned.Error(), sentinel) {
+		t.Fatalf("audit failure leaked to response: %v", returned)
+	}
+	if readiness := service.Check(context.Background()); readiness == nil || strings.Contains(readiness.Error(), sentinel) {
+		t.Fatalf("audit failure leaked to readiness: %v", readiness)
+	}
+	for _, observation := range persistence.observations {
+		if strings.Contains(observation.Operation, sentinel) {
+			t.Fatal("audit output leaked dependency sentinel")
 		}
 	}
 }

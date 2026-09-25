@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -20,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf16"
-	"unicode/utf8"
 
 	protocolmanifest "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/protocol/manifest"
 	"go.yaml.in/yaml/v3"
@@ -65,42 +63,58 @@ func (OfflineBundleValidator) ValidateBundle(ctx context.Context, archive []byte
 		return ValidatedBundle{}, NewError(CategoryValidation, ReasonBundleInvalid)
 	}
 
-	temporaryRoot, err := os.MkdirTemp("", "arop-publication-bundle-")
+	var manifestDigest string
+	err = withPrivateArchive(entries, func(canonicalRoot string) error {
+		var digestErr error
+		manifestDigest, digestErr = protocolmanifest.DigestPackageFile(canonicalRoot, publicationManifestEntryName)
+		if digestErr != nil {
+			return authorityValidationFailure{}
+		}
+		return nil
+	})
 	if err != nil {
+		var validation authorityValidationFailure
+		if errors.As(err, &validation) {
+			return ValidatedBundle{}, NewError(CategoryValidation, ReasonBundleInvalid)
+		}
 		return ValidatedBundle{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
-	}
-	defer os.RemoveAll(temporaryRoot)
-	canonicalRoot, err := filepath.EvalSymlinks(temporaryRoot)
-	if err != nil {
-		return ValidatedBundle{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
-	}
-	if err := writePrivateArchive(canonicalRoot, entries); err != nil {
-		return ValidatedBundle{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
-	}
-	manifestDigest, err := protocolmanifest.DigestPackageFile(canonicalRoot, publicationManifestEntryName)
-	if err != nil {
-		return ValidatedBundle{}, NewError(CategoryValidation, ReasonBundleInvalid)
 	}
 	if got := digestBytes(canonical); got != manifestDigest {
 		return ValidatedBundle{}, NewError(CategoryValidation, ReasonBundleInvalid)
-	}
-	closure, err := buildOfflineClosure(entries)
-	if err != nil {
-		return ValidatedBundle{}, err
 	}
 	hosts, err := manifestAllowedHosts(manifestObject)
 	if err != nil {
 		return ValidatedBundle{}, err
 	}
-	bundleDigest, err := semanticBundleDigest(entries, closure.documents)
+	bundleDigest, err := semanticBundleDigest(entries)
 	if err != nil {
 		return ValidatedBundle{}, NewError(CategoryValidation, ReasonBundleInvalid)
 	}
-	bundle := ValidatedBundle{AgentID: agentID, Version: version, ManifestDigest: manifestDigest, BundleSemanticDigest: bundleDigest, CanonicalManifest: canonical, References: closure.references, AllowedHosts: hosts}
+	bundle := ValidatedBundle{AgentID: agentID, Version: version, ManifestDigest: manifestDigest, BundleSemanticDigest: bundleDigest, CanonicalManifest: canonical, AllowedHosts: hosts}
 	if err := bundle.Validate(); err != nil {
 		return ValidatedBundle{}, NewError(CategoryValidation, ReasonBundleInvalid)
 	}
 	return bundle, nil
+}
+
+type authorityValidationFailure struct{}
+
+func (authorityValidationFailure) Error() string { return "authoritative manifest validation failed" }
+
+func withPrivateArchive(entries map[string][]byte, operation func(string) error) error {
+	temporaryRoot, err := os.MkdirTemp("", "arop-publication-bundle-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(temporaryRoot)
+	canonicalRoot, err := filepath.EvalSymlinks(temporaryRoot)
+	if err != nil {
+		return err
+	}
+	if err := writePrivateArchive(canonicalRoot, entries); err != nil {
+		return err
+	}
+	return operation(canonicalRoot)
 }
 
 // RFC8785ManifestDigester is the pinned manifest digest implementation shared
@@ -427,11 +441,11 @@ func compareUTF16(left, right string) int {
 	return 0
 }
 
-// semanticBundleDigest covers every archive entry. Documents reached by the
-// authoritative offline reference closure are RFC8785-canonicalized. Extra
-// JSON-compatible JSON/YAML/schema documents receive the same treatment;
-// unreferenced opaque/binary extras remain allowed but are bound byte-for-byte.
-func semanticBundleDigest(entries map[string][]byte, closureDocuments map[string]any) (string, error) {
+// semanticBundleDigest covers every regular archive entry. The authoritative
+// manifest validator is the sole authority for reference acceptance. After it
+// succeeds, files with explicit JSON-compatible semantic extensions are
+// RFC8785-canonicalized; opaque extras remain allowed and are bound byte-for-byte.
+func semanticBundleDigest(entries map[string][]byte) (string, error) {
 	names := make([]string, 0, len(entries))
 	for name := range entries {
 		names = append(names, name)
@@ -444,16 +458,12 @@ func semanticBundleDigest(entries map[string][]byte, closureDocuments map[string
 		}
 		_, _ = hash.Write([]byte(name))
 		content := entries[name]
-		semantic, semanticDocument := closureDocuments[name]
-		if !semanticDocument && semanticDocumentExtension(name) {
+		if semanticDocumentExtension(name) {
 			parsed, err := parseSemanticDocument(name, content)
 			if err != nil {
 				return "", err
 			}
-			semantic, semanticDocument = parsed, true
-		}
-		if semanticDocument {
-			canonical, err := encodeCanonical(semantic)
+			canonical, err := encodeCanonical(parsed)
 			if err != nil {
 				return "", err
 			}
@@ -488,191 +498,6 @@ func manifestAllowedHosts(manifest map[string]any) ([]AllowedHost, error) {
 		values = append(values, value)
 	}
 	return classifyAllowedHosts(values)
-}
-
-type offlineBundleClosure struct {
-	entries    map[string][]byte
-	documents  map[string]any
-	references []BundleReference
-	visited    map[string]bool
-	seenRefs   map[string]bool
-}
-
-func buildOfflineClosure(entries map[string][]byte) (*offlineBundleClosure, error) {
-	manifest, err := parseSemanticDocument(publicationManifestEntryName, entries[publicationManifestEntryName])
-	if err != nil {
-		return nil, NewError(CategoryValidation, ReasonBundleInvalid)
-	}
-	closure := &offlineBundleClosure{entries: entries, documents: map[string]any{publicationManifestEntryName: manifest}, visited: map[string]bool{}, seenRefs: map[string]bool{}}
-	if err := closure.walkManifest(publicationManifestEntryName, manifest); err != nil {
-		return nil, err
-	}
-	sort.Slice(closure.references, func(i, j int) bool {
-		left, right := closure.references[i], closure.references[j]
-		return left.SourcePath+"\x00"+string(left.Kind)+"\x00"+left.TargetPath+left.Fragment < right.SourcePath+"\x00"+string(right.Kind)+"\x00"+right.TargetPath+right.Fragment
-	})
-	return closure, nil
-}
-
-func (closure *offlineBundleClosure) walkManifest(source string, node any) error {
-	switch typed := node.(type) {
-	case []any:
-		for _, child := range typed {
-			if err := closure.walkManifest(source, child); err != nil {
-				return err
-			}
-		}
-	case map[string]any:
-		if raw, hasRef := typed["schema_ref"]; hasRef {
-			if _, hasDigest := typed["schema_digest"]; hasDigest {
-				if err := closure.follow(source, ReferenceExtensionSchemaRef, raw); err != nil {
-					return err
-				}
-			}
-		}
-		for key, child := range typed {
-			switch key {
-			case "input_schema", "output_schema":
-				if err := closure.walkSchema(source, child); err != nil {
-					return err
-				}
-			case "data":
-				if typed["schema_ref"] != nil {
-					continue
-				}
-				if err := closure.walkManifest(source, child); err != nil {
-					return err
-				}
-			case "schema_ref", "schema_digest":
-				continue
-			default:
-				if err := closure.walkManifest(source, child); err != nil {
-					return err
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (closure *offlineBundleClosure) walkSchema(source string, node any) error {
-	switch typed := node.(type) {
-	case []any:
-		for _, child := range typed {
-			if err := closure.walkSchema(source, child); err != nil {
-				return err
-			}
-		}
-	case map[string]any:
-		for _, key := range []string{"$ref", "$dynamicRef"} {
-			if raw, exists := typed[key]; exists {
-				if err := closure.follow(source, ReferenceSchemaRef, raw); err != nil {
-					return err
-				}
-			}
-		}
-		if raw, exists := typed["$id"]; exists {
-			if err := closure.record(source, ReferenceSchemaID, raw); err != nil {
-				return err
-			}
-		}
-		for key, child := range typed {
-			switch {
-			case key == "$ref" || key == "$dynamicRef" || key == "$id":
-				continue
-			case schemaValueKeyword(key):
-				if err := closure.walkSchema(source, child); err != nil {
-					return err
-				}
-			case schemaMapKeyword(key):
-				children, ok := child.(map[string]any)
-				if !ok {
-					continue
-				}
-				for _, schemaChild := range children {
-					if err := closure.walkSchema(source, schemaChild); err != nil {
-						return err
-					}
-				}
-			case schemaArrayKeyword(key):
-				children, ok := child.([]any)
-				if !ok {
-					continue
-				}
-				for _, schemaChild := range children {
-					if err := closure.walkSchema(source, schemaChild); err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func schemaValueKeyword(key string) bool {
-	switch key {
-	case "additionalProperties", "unevaluatedProperties", "items", "contains", "unevaluatedItems", "propertyNames", "not", "if", "then", "else", "contentSchema":
-		return true
-	default:
-		return false
-	}
-}
-func schemaMapKeyword(key string) bool {
-	return key == "$defs" || key == "definitions" || key == "properties" || key == "patternProperties" || key == "dependentSchemas"
-}
-func schemaArrayKeyword(key string) bool {
-	return key == "allOf" || key == "anyOf" || key == "oneOf" || key == "prefixItems"
-}
-
-func (closure *offlineBundleClosure) record(source string, kind ReferenceKind, raw any) error {
-	text, ok := raw.(string)
-	if !ok {
-		return NewError(CategoryValidation, ReasonReferenceDenied)
-	}
-	reference, err := classifyReference(source, kind, text)
-	if err != nil {
-		return err
-	}
-	key := reference.SourcePath + "\x00" + string(reference.Kind) + "\x00" + reference.TargetPath + "\x00" + reference.Fragment
-	if !closure.seenRefs[key] {
-		closure.seenRefs[key] = true
-		closure.references = append(closure.references, reference)
-	}
-	return nil
-}
-
-func (closure *offlineBundleClosure) follow(source string, kind ReferenceKind, raw any) error {
-	if err := closure.record(source, kind, raw); err != nil {
-		return err
-	}
-	text := raw.(string)
-	reference, _ := classifyReference(source, kind, text)
-	target := reference.TargetPath
-	if reference.Class == ReferenceDocumentFragment {
-		target = source
-	}
-	if target == "" {
-		return NewError(CategoryValidation, ReasonReferenceDenied)
-	}
-	if closure.visited[target] {
-		return nil
-	}
-	document, exists := closure.documents[target]
-	if !exists {
-		content, found := closure.entries[target]
-		if !found {
-			return NewError(CategoryValidation, ReasonReferenceDenied)
-		}
-		parsed, err := parseSemanticDocument(target, content)
-		if err != nil {
-			return NewError(CategoryValidation, ReasonBundleInvalid)
-		}
-		document = parsed
-		closure.documents[target] = parsed
-	}
-	closure.visited[target] = true
-	return closure.walkSchema(target, document)
 }
 
 func semanticDocumentExtension(name string) bool {
@@ -748,53 +573,6 @@ func yamlNodeValue(node *yaml.Node) (any, error) {
 	default:
 		return nil, errors.New("YAML aliases and non-data nodes are forbidden")
 	}
-}
-
-func classifyReference(source string, kind ReferenceKind, raw string) (BundleReference, error) {
-	reference := BundleReference{SourcePath: source, Kind: kind}
-	if raw == "" || !utf8.ValidString(raw) || strings.ContainsAny(raw, "\\%") {
-		return reference, NewError(CategoryValidation, ReasonReferenceDenied)
-	}
-	parsed, err := url.Parse(raw)
-	if err != nil || parsed.IsAbs() {
-		reference.Class = ReferenceNetwork
-		return reference, NewError(CategoryValidation, ReasonReferenceDenied)
-	}
-	if parsed.Host != "" || strings.HasPrefix(raw, "//") {
-		reference.Class = ReferenceAuthority
-		return reference, NewError(CategoryValidation, ReasonReferenceDenied)
-	}
-	if parsed.RawQuery != "" {
-		reference.Class = ReferenceNonPortable
-		return reference, NewError(CategoryValidation, ReasonReferenceDenied)
-	}
-	if parsed.Fragment != "" {
-		reference.Fragment = "#" + parsed.Fragment
-		if !validPortableFragment(reference.Fragment) {
-			return reference, NewError(CategoryValidation, ReasonReferenceDenied)
-		}
-	}
-	if parsed.Path == "" {
-		reference.Class = ReferenceDocumentFragment
-		if err := reference.Validate(); err != nil {
-			return reference, NewError(CategoryValidation, ReasonReferenceDenied)
-		}
-		return reference, nil
-	}
-	if strings.HasPrefix(parsed.Path, "/") {
-		reference.Class = ReferenceAbsolutePath
-		return reference, NewError(CategoryValidation, ReasonReferenceDenied)
-	}
-	target := path.Clean(path.Join(path.Dir(source), strings.TrimPrefix(parsed.Path, "./")))
-	if target == ".." || strings.HasPrefix(target, "../") || !validPortablePath(target) {
-		reference.Class = ReferenceParentEscape
-		return reference, NewError(CategoryValidation, ReasonReferenceDenied)
-	}
-	reference.Class, reference.TargetPath = ReferenceBundleRelative, target
-	if err := reference.Validate(); err != nil {
-		return reference, NewError(CategoryValidation, ReasonReferenceDenied)
-	}
-	return reference, nil
 }
 
 func digestBytes(value []byte) string {
@@ -908,12 +686,18 @@ func verifyDataDescriptor(archive []byte, start, limit int, crc, compressed, unc
 	if start < 0 || start+12 > limit {
 		return 0, errors.New("zip data descriptor absent")
 	}
-	position := start
-	if position+4 <= limit && binary.LittleEndian.Uint32(archive[position:position+4]) == 0x08074b50 {
-		position += 4
+	// Try the signature-less form first. A legitimate CRC may itself equal
+	// 0x08074b50, so the first word alone cannot identify a signature.
+	if binary.LittleEndian.Uint32(archive[start:start+4]) == crc &&
+		binary.LittleEndian.Uint32(archive[start+4:start+8]) == compressed &&
+		binary.LittleEndian.Uint32(archive[start+8:start+12]) == uncompressed {
+		return start + 12, nil
 	}
-	if position+12 > limit || binary.LittleEndian.Uint32(archive[position:position+4]) != crc || binary.LittleEndian.Uint32(archive[position+4:position+8]) != compressed || binary.LittleEndian.Uint32(archive[position+8:position+12]) != uncompressed {
+	if start+16 > limit || binary.LittleEndian.Uint32(archive[start:start+4]) != 0x08074b50 ||
+		binary.LittleEndian.Uint32(archive[start+4:start+8]) != crc ||
+		binary.LittleEndian.Uint32(archive[start+8:start+12]) != compressed ||
+		binary.LittleEndian.Uint32(archive[start+12:start+16]) != uncompressed {
 		return 0, errors.New("zip data descriptor mismatch")
 	}
-	return position + 12, nil
+	return start + 16, nil
 }

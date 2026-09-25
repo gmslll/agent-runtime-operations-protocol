@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -202,16 +201,16 @@ func (service *Service) fail(ctx context.Context, metadata platform.RequestMetad
 	var observation observationFailure
 	auditFailed := errors.As(cause, &observation)
 	if auditFailed {
-		service.markAuditUnhealthy(cause)
+		service.markAuditUnhealthy()
 	} else {
-		service.markDependencyUnhealthy(cause)
+		service.markDependencyUnhealthy()
 	}
 	if err := service.audit(ctx, metadata, operation, started, 503); err != nil {
-		service.markAuditUnhealthy(err)
+		service.markAuditUnhealthy()
 	} else if auditFailed {
 		// A compensating failure observation cannot erase the fact that the
 		// required mutation observation failed inside the atomic transaction.
-		service.markAuditUnhealthy(cause)
+		service.markAuditUnhealthy()
 	}
 	return NewError(CategoryDependency, ReasonDependencyUnavailable)
 }
@@ -224,7 +223,7 @@ func (service *Service) audit(ctx context.Context, metadata platform.RequestMeta
 		return service.appendObservation(transactionContext, metadata, operation, started, status)
 	})
 	if err != nil {
-		service.markAuditUnhealthy(err)
+		service.markAuditUnhealthy()
 	} else if status < 400 {
 		service.markAuditHealthy()
 	}
@@ -234,7 +233,7 @@ func (service *Service) audit(ctx context.Context, metadata platform.RequestMeta
 func (service *Service) appendObservation(ctx context.Context, metadata platform.RequestMetadata, operation Operation, started time.Time, status int) error {
 	auditID, err := service.deps.IDs.NewID(ctx, platformports.IDAudit)
 	if err != nil {
-		return observationFailure{err}
+		return observationFailure{}
 	}
 	ended := service.now()
 	outcome, spanStatus := observability.OutcomeSucceeded, observability.SpanStatusOK
@@ -246,15 +245,14 @@ func (service *Service) appendObservation(ctx context.Context, metadata platform
 	if err := service.deps.Observability.AppendObservation(ctx,
 		observability.AuditEntry{ID: auditID, OccurredAt: ended, RequestID: metadata.RequestID, TraceID: metadata.TraceID, Operation: string(operation), Outcome: outcome, HTTPStatus: status},
 		observability.SpanRecord{TraceID: metadata.TraceID, SpanID: metadata.SpanID, ParentSpanID: metadata.ParentSpanID, RequestID: metadata.RequestID, Operation: string(operation), StartedAt: started, EndedAt: ended, Status: spanStatus}); err != nil {
-		return observationFailure{err}
+		return observationFailure{}
 	}
 	return nil
 }
 
-type observationFailure struct{ cause error }
+type observationFailure struct{}
 
 func (failure observationFailure) Error() string { return "publication observation unavailable" }
-func (failure observationFailure) Unwrap() error { return failure.cause }
 
 func (service *Service) now() time.Time { return service.deps.Clock.Now().UTC() }
 func (service *Service) Name() string   { return "publication-service" }
@@ -263,20 +261,20 @@ func (service *Service) Check(context.Context) error {
 	defer service.healthMu.Unlock()
 	return errors.Join(service.auditUnhealthy, service.dependencyUnhealthy)
 }
-func (service *Service) markAuditUnhealthy(cause error) {
+func (service *Service) markAuditUnhealthy() {
 	service.healthMu.Lock()
 	defer service.healthMu.Unlock()
-	service.auditUnhealthy = fmt.Errorf("publication audit unavailable: %w", cause)
+	service.auditUnhealthy = errors.New("publication audit unavailable")
 }
 func (service *Service) markAuditHealthy() {
 	service.healthMu.Lock()
 	defer service.healthMu.Unlock()
 	service.auditUnhealthy = nil
 }
-func (service *Service) markDependencyUnhealthy(cause error) {
+func (service *Service) markDependencyUnhealthy() {
 	service.healthMu.Lock()
 	defer service.healthMu.Unlock()
-	service.dependencyUnhealthy = fmt.Errorf("publication dependency unavailable: %w", cause)
+	service.dependencyUnhealthy = errors.New("publication dependency unavailable")
 }
 func (service *Service) markDependencyHealthy() {
 	service.healthMu.Lock()

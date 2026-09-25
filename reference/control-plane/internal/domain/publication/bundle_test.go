@@ -5,12 +5,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
+
+	protocolmanifest "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/protocol/manifest"
 )
 
 func TestOfflineBundleValidatorAcceptsContractFixture(t *testing.T) {
@@ -75,8 +79,13 @@ func TestOfflineBundleValidatorRunsAllTrackedP11Archives(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(paths) < 7 {
-		t.Fatalf("tracked archive inventory too small: %d", len(paths))
+	got := make([]string, 0, len(paths))
+	for _, archivePath := range paths {
+		got = append(got, filepath.Base(archivePath))
+	}
+	want := []string{"duplicate-entry.zip", "encrypted-entry.zip", "hardlink-entry.zip", "invalid-path-traversal.zip", "multiple-manifests.zip", "symlink-entry.zip", "valid-agent-version.zip"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("tracked archive inventory=%v want=%v", got, want)
 	}
 	for _, archivePath := range paths {
 		archivePath := archivePath
@@ -94,6 +103,122 @@ func TestOfflineBundleValidatorRunsAllTrackedP11Archives(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDataDescriptorDisambiguatesSignatureFromMatchingCRC(t *testing.T) {
+	t.Parallel()
+	const signature = uint32(0x08074b50)
+	withoutSignature := make([]byte, 12)
+	binary.LittleEndian.PutUint32(withoutSignature[0:4], signature)
+	binary.LittleEndian.PutUint32(withoutSignature[4:8], 5)
+	binary.LittleEndian.PutUint32(withoutSignature[8:12], 6)
+	if end, err := verifyDataDescriptor(withoutSignature, 0, len(withoutSignature), signature, 5, 6); err != nil || end != 12 {
+		t.Fatalf("signature-less descriptor end=%d err=%v", end, err)
+	}
+	withSignature := make([]byte, 16)
+	binary.LittleEndian.PutUint32(withSignature[0:4], signature)
+	binary.LittleEndian.PutUint32(withSignature[4:8], signature)
+	binary.LittleEndian.PutUint32(withSignature[8:12], 5)
+	binary.LittleEndian.PutUint32(withSignature[12:16], 6)
+	if end, err := verifyDataDescriptor(withSignature, 0, len(withSignature), signature, 5, 6); err != nil || end != 16 {
+		t.Fatalf("signed descriptor end=%d err=%v", end, err)
+	}
+}
+
+func TestOfflineBundleAuthorityAloneDecidesSchemaReferenceSemantics(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		entries map[string][]byte
+		valid   bool
+	}{
+		{name: "id-base", valid: true, entries: map[string][]byte{
+			"agent-manifest.json":       []byte(minimalManifestWithSchema(`{"$id":"schemas/root.schema.json","$ref":"child.schema.json"}`)),
+			"schemas/child.schema.json": []byte(`{"type":"object"}`),
+		}},
+		{name: "cycle", entries: map[string][]byte{
+			"agent-manifest.json": []byte(minimalManifestWithSchema(`{"$ref":"./schemas/a.json"}`)),
+			"schemas/a.json":      []byte(`{"$ref":"b.json"}`), "schemas/b.json": []byte(`{"$ref":"a.json"}`),
+		}},
+		{name: "missing", entries: map[string][]byte{
+			"agent-manifest.json": []byte(minimalManifestWithSchema(`{"$ref":"./schemas/missing.json"}`)),
+		}},
+		{name: "fragment", entries: map[string][]byte{
+			"agent-manifest.json": []byte(minimalManifestWithSchema(`{"$ref":"./schemas/a.json#missing"}`)),
+			"schemas/a.json":      []byte(`{"type":"object"}`),
+		}},
+		{name: "dialect", entries: map[string][]byte{
+			"agent-manifest.json": []byte(minimalManifestWithSchema(`{"$schema":"http://json-schema.org/draft-07/schema#","type":"object"}`)),
+		}},
+		{name: "unsupported", entries: map[string][]byte{
+			"agent-manifest.json": []byte(minimalManifestWithSchema(`{"frobnicate":true}`)),
+		}},
+	}
+	validator := OfflineBundleValidator{}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			authorityAccepted := authorityAccepts(t, test.entries)
+			_, validationErr := validator.ValidateBundle(context.Background(), zipBundle(t, test.entries))
+			if (validationErr == nil) != authorityAccepted {
+				t.Fatalf("validator acceptance drifted from authority: authority=%v err=%v", authorityAccepted, validationErr)
+			}
+			if test.name == "id-base" && (!authorityAccepted || validationErr != nil) {
+				t.Fatalf("valid $id base rejected: authority=%v err=%v", authorityAccepted, validationErr)
+			}
+		})
+	}
+}
+
+func TestPrivateArchiveAlwaysCleansUp(t *testing.T) {
+	t.Parallel()
+	entries := map[string][]byte{publicationManifestEntryName: []byte(minimalManifest(""))}
+	for _, test := range []struct {
+		name      string
+		operation func(string) error
+		panics    bool
+	}{
+		{name: "success", operation: func(string) error { return nil }},
+		{name: "error", operation: func(string) error { return errors.New("expected") }},
+		{name: "cancel", operation: func(string) error { return context.Canceled }},
+		{name: "panic", panics: true, operation: func(string) error { panic("expected") }},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			var root string
+			invoke := func() {
+				_ = withPrivateArchive(entries, func(candidate string) error { root = candidate; return test.operation(candidate) })
+			}
+			if test.panics {
+				func() { defer func() { _ = recover() }(); invoke() }()
+			} else {
+				invoke()
+			}
+			if root == "" {
+				t.Fatal("operation did not observe private root")
+			}
+			if _, err := os.Stat(root); !os.IsNotExist(err) {
+				t.Fatalf("private root survived: %s err=%v", root, err)
+			}
+		})
+	}
+	if err := withPrivateArchive(map[string][]byte{"../escape": []byte("x")}, func(string) error { return nil }); err == nil {
+		t.Fatal("path escape materialized")
+	}
+}
+
+func authorityAccepts(t *testing.T, entries map[string][]byte) bool {
+	t.Helper()
+	accepted := false
+	err := withPrivateArchive(entries, func(root string) error {
+		_, err := protocolmanifest.DigestPackageFile(root, publicationManifestEntryName)
+		accepted = err == nil
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("materialize authority fixture: %v", err)
+	}
+	return accepted
 }
 
 func TestOfflineBundleValidatorRejectsZeroMultipleAndCentralMismatch(t *testing.T) {
@@ -382,4 +507,8 @@ func minimalManifest(extra string) string {
 
 func minimalManifestWithRef(reference string) string {
 	return strings.Replace(minimalManifest(""), `"input_schema":{"type":"object"}`, `"input_schema":{"$ref":"`+reference+`"}`, 1)
+}
+
+func minimalManifestWithSchema(schema string) string {
+	return strings.Replace(minimalManifest(""), `"input_schema":{"type":"object"}`, `"input_schema":`+schema, 1)
 }
