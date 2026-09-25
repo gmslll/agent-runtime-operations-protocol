@@ -1185,6 +1185,23 @@ func isGeneratedTypeScriptLibrary(ext, source string, owner Artifact) bool {
 }
 func boundaryNegativeProbes() []string {
 	p := []string{}
+	generatedTypeScript := Artifact{Kind: "generated-code", Language: "typescript"}
+	if !isGeneratedTypeScriptLibrary(".ts", "export interface Model {}\n", generatedTypeScript) {
+		p = append(p, "generated TypeScript library rejected")
+	}
+	for name, probe := range map[string]struct {
+		ext, source string
+		owner       Artifact
+	}{
+		"script-path":       {ext: ".ts", source: "export const value = 1\n", owner: Artifact{Kind: "tooling", Language: "typescript"}},
+		"generated-js":      {ext: ".js", source: "export const value = 1\n", owner: generatedTypeScript},
+		"generated-shebang": {ext: ".ts", source: "#!/usr/bin/env node\nexport const value = 1\n", owner: generatedTypeScript},
+		"wrong-language":    {ext: ".ts", source: "export const value = 1\n", owner: Artifact{Kind: "generated-code", Language: "javascript"}},
+	} {
+		if isGeneratedTypeScriptLibrary(probe.ext, probe.source, probe.owner) {
+			p = append(p, name+" bypassed Node boundary")
+		}
+	}
 	base := []Artifact{{ID: "allowed", Path: "scripts/validate.mjs", Kind: "tooling", ImplementationRuntime: "node", ToolScope: "schema-validation"}}
 	artifactCases := []struct {
 		name     string

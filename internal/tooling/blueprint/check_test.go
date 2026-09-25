@@ -20,6 +20,8 @@ func TestBlueprintBaselineAndEmbeddedNegativeProbes(t *testing.T) {
 
 func TestBoundaryNegativeProbesAreIndividuallyRejected(t *testing.T) {
 	t.Parallel()
+	// The embedded probes include the narrow generated-TypeScript library exemption
+	// and reject scripts, shebangs, JavaScript, and non-generated owners.
 	if escaped := boundaryNegativeProbes(); len(escaped) != 0 {
 		for _, issue := range escaped {
 			t.Error(issue)
@@ -206,31 +208,6 @@ func TestExactSafeNodePackageTemplatePasses(t *testing.T) {
 	}
 	if problems := packageScriptProblems(scripts, []Artifact{entry}); len(problems) != 0 {
 		t.Fatalf("exact safe Node package template rejected: %v", problems)
-	}
-}
-
-func TestGeneratedTypeScriptLibraryBoundaryIsNarrow(t *testing.T) {
-	t.Parallel()
-	generated := Artifact{Kind: "generated-code", Language: "typescript"}
-	if !isGeneratedTypeScriptLibrary(".ts", "export interface Model {}\n", generated) {
-		t.Fatal("generated TypeScript library was treated as a Node executable")
-	}
-	for name, probe := range map[string]struct {
-		ext, source string
-		owner       Artifact
-	}{
-		"script path":       {ext: ".ts", source: "export const value = 1\n", owner: Artifact{Kind: "tooling", Language: "typescript"}},
-		"generated JS":      {ext: ".js", source: "export const value = 1\n", owner: generated},
-		"generated shebang": {ext: ".ts", source: "#!/usr/bin/env node\nexport const value = 1\n", owner: generated},
-		"wrong language":    {ext: ".ts", source: "export const value = 1\n", owner: Artifact{Kind: "generated-code", Language: "javascript"}},
-	} {
-		probe := probe
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			if isGeneratedTypeScriptLibrary(probe.ext, probe.source, probe.owner) {
-				t.Fatal("non-library TypeScript surface bypassed the Node boundary")
-			}
-		})
 	}
 }
 
