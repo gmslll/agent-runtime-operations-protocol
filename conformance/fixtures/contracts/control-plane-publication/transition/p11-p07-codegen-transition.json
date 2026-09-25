@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "waiver_id": "P11-P07-CODEGEN-TRANSITION-001",
+  "waiver_id": "P11-MANIFEST-SCHEMA-CODEGEN-TRANSITION-001",
   "status": "declared",
   "policy": {
     "owner_phase_semantics": "first-introduction-and-accountability",
@@ -12,10 +12,12 @@
   },
   "transition": {
     "from_phases": [
+      "P01",
+      "P06",
       "P07"
     ],
     "to_phase": "P11",
-    "reason": "P11 extends the accepted P07 generator and capability matrix for the first public Control Plane Publication contract while retaining P07 ownership and reproducibility guarantees."
+    "reason": "P11 applies the D-062 safe-integer requirement to the existing AgentManifest Schema, extends the accepted P07 generator and capability matrix, and produces the first public Control Plane Publication contract while retaining all earlier ownership and reproducibility guarantees."
   },
   "affected_artifacts": [
     "codegen-pipeline",
@@ -24,6 +26,7 @@
     "generated-control-plane-python",
     "generated-control-plane-typescript",
     "openapi-control-plane-foundation",
+    "phase-report-p01",
     "phase-report-p06",
     "phase-report-p07",
     "phase-report-p11",
@@ -510,9 +513,7 @@
         "schema-manifest"
       ],
       "owner_phases": [
-        "P06",
-        "P07",
-        "P11"
+        "P06"
       ]
     },
     {
@@ -588,6 +589,12 @@
   ],
   "validation_requirements": {
     "declared_status_rule": "must-not-carry-final-digests-touch-commits-or-pass-validation",
+    "exact_comparisons": [
+      "acceptance-four-phase-set-and-order",
+      "affected-artifacts",
+      "source-closure-owner-mapping",
+      "transition-from-phases"
+    ],
     "validated_status_rule": "requires-exact-independent-git-manifest-inventory-and-report-closure",
     "omission_negative_collections": [
       "acceptance",
@@ -598,6 +605,10 @@
       "inventory.codegen.compile_probes[*].commands[*]",
       "inventory.codegen.compile_probes[*].inputs[*]",
       "inventory.codegen.compile_probes[*].outputs[*]",
+      "inventory.codegen.compile_probes[language=go].environment",
+      "inventory.codegen.compile_probes[language=go].executable",
+      "inventory.codegen.compile_probes[language=go].negative_probes[*]",
+      "inventory.codegen.compile_probes[language=go].preconditions[*]",
       "inventory.codegen.outputs",
       "inventory.codegen.provenance_required_fields",
       "inventory.codegen.roots",
@@ -615,14 +626,20 @@
       "inventory.operations",
       "inventory.resources",
       "source_closure",
-      "static_source_closure"
+      "static_source_closure",
+      "transition.from_phases"
     ],
     "additional_negatives": [
       "declared-promoted-to-validated-without-final-evidence",
       "duplicate-entry",
       "extra-entry",
+      "home-inheritance-nonempty-or-symlink-fails-closed",
+      "hostile-cache-entry-fails-closed",
+      "missing-cache-directory-fails-closed",
       "noncanonical-order",
       "owner-phase-transfer",
+      "path-injection-or-executable-substitution-fails-closed",
+      "symlink-or-outside-temp-cache-fails-closed",
       "unknown-field",
       "wrong-baseline-parent",
       "wrong-digest",

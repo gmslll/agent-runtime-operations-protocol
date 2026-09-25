@@ -349,7 +349,7 @@
     "compile_probes": [
       {
         "argv": [
-          "go",
+          "<resolved-go-toolchain>/bin/go",
           "test",
           "-count=1",
           "-json",
@@ -362,15 +362,21 @@
         "cwd": "<isolated-temp>/go-probe",
         "environment": {
           "CGO_ENABLED": "0",
+          "GOCACHE": "<isolated-temp>/gocache",
           "GOENV": "off",
           "GOFLAGS": "-mod=readonly",
+          "GOMODCACHE": "<isolated-temp>/gomodcache",
           "GONOSUMDB": "*",
           "GOPROXY": "off",
           "GOSUMDB": "off",
+          "GOTMPDIR": "<isolated-temp>/gotmp",
           "GOTOOLCHAIN": "local",
-          "GOWORK": "off"
+          "GOWORK": "off",
+          "HOME": "<isolated-temp>/empty-home"
         },
         "environment_mode": "exact-allowlist-no-inheritance",
+        "executable": "<resolved-go-toolchain>/bin/go",
+        "executable_resolution": "resolve-current-go-executable-once-evaluate-symlinks-require-regular-file-beneath-controlled-GOROOT-bin",
         "forbidden": [
           "cache-reuse",
           "global-codegen-or-language-package",
@@ -385,10 +391,24 @@
         ],
         "language": "go",
         "mode": "isolated-temp-package-go-test",
+        "negative_probes": [
+          "hostile-cache-entry-fails-closed",
+          "home-inheritance-nonempty-or-symlink-fails-closed",
+          "missing-cache-directory-fails-closed",
+          "path-injection-or-executable-substitution-fails-closed",
+          "symlink-or-outside-temp-cache-fails-closed"
+        ],
         "outputs": [
           "go-test-json-terminal"
         ],
         "package": ".",
+        "preconditions": [
+          "empty-home-precreated-empty-mode-0700-nonsymlink-under-temp-root",
+          "gocache-gomodcache-gotmp-precreated-mode-0700-nonsymlink-under-temp-root",
+          "go-probe-precreated-mode-0700-nonsymlink-under-temp-root",
+          "isolated-temp-created-exclusively-mode-0700-absolute-real-path"
+        ],
+        "runtime_cache_policy": "cache-directories-and-content-forbidden-from-static-inputs-and-reports",
         "success_terminal": "package-pass-with-every-test-pass-and-zero-skip",
         "temp_files": [
           "go.mod",
