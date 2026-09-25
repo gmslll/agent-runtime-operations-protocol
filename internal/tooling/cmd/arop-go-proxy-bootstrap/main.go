@@ -39,26 +39,28 @@ const (
 	nestedDirectory  = "reference/control-plane"
 	placeholder      = "v0.0.0-00010101000000-000000000000"
 
-	migrationCommit = "e5cdf162f1bbfeb03a14897d7adc9f7b1a3b952b"
-	p05Commit       = "0bbf501de769ea7b0d31e42f6acb9eebd74d0503"
-	correctionBase  = "0d2a16db5b6c46197d68b2c0ff87fb450b203cfc"
-	p05Tree         = "550cb12448b52cd6b69dcb056ccb1d887db1201f"
-	p05Bootstrap    = "1bc642d6648addb822daec4427d721c25d620043"
-	p05Version      = "v0.0.0-20260923023550-1bc642d6648a"
-	p05ZipH1        = "h1:Fd+w1T7K4+KQji8aWziLDhU5Pdm3Cxa5Ywy/2aizkDU="
-	p05GoModH1      = "h1:ov6WTouj8Qdfs+WL7KgViSYyf6mbrYLBDM8N2EvrxxY="
-	p08Commit       = "e92c2f5fc82ad7d1f0b2ac9c59d004db6419ec29"
-	p09Commit       = "fcfa827482a5379c17c13edaefedc8a54a6f850c"
-	currentPin      = "1195e393bc0629b792a09e4401f3ac91e6af2f64"
-	currentVersion  = "v0.0.0-20260923092055-1195e393bc06"
-	currentZipH1    = "h1:3tJrUIY49T4KBh43mBrY/+wzMcZ5J7bxbF3odles/Ns="
-	currentGoModH1  = "h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk="
+	migrationCommit   = "e5cdf162f1bbfeb03a14897d7adc9f7b1a3b952b"
+	p05Commit         = "0bbf501de769ea7b0d31e42f6acb9eebd74d0503"
+	correctionBase    = "0d2a16db5b6c46197d68b2c0ff87fb450b203cfc"
+	p12CorrectionBase = "0262c7d5b55b6ef02f8c6b002b7381232c508580"
+	p05Tree           = "550cb12448b52cd6b69dcb056ccb1d887db1201f"
+	p05Bootstrap      = "1bc642d6648addb822daec4427d721c25d620043"
+	p05Version        = "v0.0.0-20260923023550-1bc642d6648a"
+	p05ZipH1          = "h1:Fd+w1T7K4+KQji8aWziLDhU5Pdm3Cxa5Ywy/2aizkDU="
+	p05GoModH1        = "h1:ov6WTouj8Qdfs+WL7KgViSYyf6mbrYLBDM8N2EvrxxY="
+	p08Commit         = "e92c2f5fc82ad7d1f0b2ac9c59d004db6419ec29"
+	p09Commit         = "fcfa827482a5379c17c13edaefedc8a54a6f850c"
+	currentPin        = "75ba8694c47f4500725113bbf5554dde4c901d03"
+	currentVersion    = "v0.0.0-20260925112239-75ba8694c47f"
+	currentZipH1      = "h1:+dcN7lxf/kKr+TPIy9O4GZiD+QUt5pyw/otTsI91nqI="
+	currentGoModH1    = "h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk="
 )
 
 var transitionPaths = []string{
 	"conformance/harness/base/testdata/transition/p06-p05-transition.json",
 	"reference/control-plane/internal/app/platform/testdata/transition/p08-p05-transition.json",
 	"reference/control-plane/internal/storage/migrate/testdata/engine-versions/p09-p05-transition.json",
+	"cmd/arop/internal/commands/publish/testdata/transition/p12-p05-transition.json",
 }
 
 var pseudoVersionPattern = regexp.MustCompile(`^v0\.0\.0-(\d{14})-([0-9a-f]{12})$`)
@@ -1400,15 +1402,19 @@ func validateP05TouchLedger(discovered, expected []transitionTouch, owned map[st
 			return "", fmt.Errorf("checker has no bounded correction commit: HEAD=%s dirty=%t", head, checkerDirty)
 		}
 		return "", nil
-	case 1:
+	case 2:
 		parent, err := parentOf(checkerTouches[0].Commit)
 		if err != nil {
 			return "", err
 		}
-		if parent != correctionBase || checkerDirty {
-			return "", fmt.Errorf("checker correction commit=%s parent=%s dirty=%t, want parent=%s and clean", checkerTouches[0].Commit, parent, checkerDirty, correctionBase)
+		p12Parent, err := parentOf(checkerTouches[1].Commit)
+		if err != nil {
+			return "", err
 		}
-		return checkerTouches[0].Commit, nil
+		if parent != correctionBase || p12Parent != p12CorrectionBase || checkerDirty {
+			return "", fmt.Errorf("checker corrections=%v parents=%s,%s dirty=%t", checkerTouches, parent, p12Parent, checkerDirty)
+		}
+		return checkerTouches[1].Commit, nil
 	default:
 		return "", fmt.Errorf("checker has %d correction touches after %s, want exactly one", len(checkerTouches), p05Commit)
 	}
@@ -1702,7 +1708,15 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 	if err != nil {
 		return replay, err
 	}
-	expected := []transitionRecord{p06, p08, p09}
+	p12Result := "0262c7d5b55b6ef02f8c6b002b7381232c508580"
+	p12Baseline := "75ba8694c47f4500725113bbf5554dde4c901d03"
+	p12, err := expectedTransition(root, "P12-P05-MODULE-TRANSITION-001", "P12", p12Baseline, p12Result,
+		[]string{nestedDirectory + "/go.mod", nestedDirectory + "/go.sum"}, []string{p12Result}, []string{"nested-control-plane-go-module"}, &pinTransition{activePinBeforeP12(), activePin},
+		"P12 repins the nested Control Plane to the clean committed root snapshot that contains the accepted P11 generated publication model consumed by production composition.", "make test-publication-service", "build/reports/P12/report.json")
+	if err != nil {
+		return replay, err
+	}
+	expected := []transitionRecord{p06, p08, p09, p12}
 	manifest, err := loadArtifactManifest(root)
 	if err != nil {
 		return replay, err
@@ -1714,10 +1728,11 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 	if err := validateExactSet(discoveredRecords, transitionPaths, "transition record set"); err != nil {
 		return replay, err
 	}
-	expectedCarrierArtifacts := []string{"conformance-harness-base", "control-plane-platform-foundation", "migration-engine-fixture-versions"}
+	expectedCarrierArtifacts := []string{"conformance-harness-base", "control-plane-platform-foundation", "migration-engine-fixture-versions", "arop-cli-publication-command"}
 	expectedAffectedOwners := []map[string]string{
 		{"root-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05", "reference-control-plane-server": "P08"},
+		{"nested-control-plane-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05", "reference-control-plane-server": "P08"},
 	}
 	for index, path := range transitionPaths {
@@ -1781,10 +1796,14 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 		return replay, errors.New("transition ledger did not finish at the active root pin")
 	}
 	replay.Items = append(replay.Items,
-		evidenceValue("active-root-pin-chain", []byte(p05Version+"\n"+currentVersion+"\n")),
+		evidenceValue("active-root-pin-chain", []byte(p05Version+"\n"+activePinBeforeP12().Version+"\n"+currentVersion+"\n")),
 		evidenceValue("recorded-transition-paths", []byte(strings.Join(replay.RecordedTransitionPaths, "\x00"))),
 	)
 	return replay, nil
+}
+
+func activePinBeforeP12() rootPin {
+	return rootPin{"1195e393bc0629b792a09e4401f3ac91e6af2f64", "v0.0.0-20260923092055-1195e393bc06", "h1:3tJrUIY49T4KBh43mBrY/+wzMcZ5J7bxbF3odles/Ns=", "h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk="}
 }
 
 func expectedTransition(root, id, toPhase, baseline, result string, pathspecs, commits, artifacts []string, pin *pinTransition, reason, command, reportPath string) (transitionRecord, error) {
