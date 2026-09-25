@@ -2950,12 +2950,16 @@ func validateWaiver(root string, w waiver) error {
 		}
 	}
 	declared := []string{}
+	endpoint, endpointErr := p11HistoricalEndpoint(root)
+	if endpointErr != nil {
+		return endpointErr
+	}
 	for _, item := range w.SourceClosure {
 		declared = append(declared, item.Path)
 		if item.Path == waiverPath {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(root, item.Path))
+		data, err := git(root, "show", endpoint+":"+item.Path)
 		if err != nil {
 			return err
 		}

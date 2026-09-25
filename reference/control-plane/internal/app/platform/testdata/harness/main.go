@@ -71,6 +71,7 @@ var nestedExternalModules = []modulePin{
 	{Path: "golang.org/x/sync", Version: "v0.17.0"},
 	{Path: "golang.org/x/sys", Version: "v0.37.0"},
 	{Path: "golang.org/x/text", Version: "v0.29.0"},
+	{Path: "go.yaml.in/yaml/v3", Version: "v3.0.5"},
 	{Path: "modernc.org/libc", Version: "v1.67.6"},
 	{Path: "modernc.org/mathutil", Version: "v1.7.1"},
 	{Path: "modernc.org/memory", Version: "v1.11.0"},
@@ -120,6 +121,7 @@ var expectedTests = map[string][]string{
 	},
 	nestedModule + "/internal/app/platform/httpadapter": {
 		"TestHandlerChainPropagatesCorrelatesAndRedacts",
+		"TestPublicationRoutesEnforceScopeUoWBoundaryAndBodyLimit",
 	},
 	nestedModule + "/internal/ports/observability": {
 		"TestObservabilityValuesValidateAndRedact",
@@ -322,6 +324,14 @@ func p10AllowsPackage(root, importPath string) bool {
 	return false
 }
 
+func p12AllowsPackage(root, importPath string) bool {
+	data, err := os.ReadFile(filepath.Join(root, "reference/control-plane/internal/domain/publication/testdata/transition/p12-baseline-transition-waiver.json"))
+	if err != nil || !bytes.Contains(data, []byte(`"status": "validated"`)) || !bytes.Contains(data, []byte(`"commit": "31da1c8353b61e5eceae97f90b5e633e29abf3e5"`)) {
+		return false
+	}
+	return strings.HasPrefix(importPath, nestedModule+"/internal/domain/publication")
+}
+
 func runP10TransitionChecker(root, mode string) ([]byte, error) {
 	path := filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go")
 	cmd := exec.Command("go", "run", "-modfile="+filepath.Join(root, "go.mod"), path, mode)
@@ -468,6 +478,7 @@ func verifyProductionImports(root string) error {
 	observability := nestedModule + "/internal/ports/observability"
 	memory := nestedModule + "/internal/adapters/observability/memory"
 	rootCore := rootModule + "/sdk/go/protocol/core"
+	rootGenerated := rootModule + "/sdk/go/generated/control-plane"
 	durable := nestedModule + "/internal/adapters/observability/durable"
 	postgres := nestedModule + "/internal/adapters/storage/postgres"
 	sqlite := nestedModule + "/internal/adapters/storage/sqlite"
@@ -479,7 +490,8 @@ func verifyProductionImports(root string) error {
 			rootCore:      true,
 		},
 		"reference/control-plane/internal/app/platform/httpadapter": {
-			platform: true,
+			platform: true, platformPorts: true, rootGenerated: true,
+			nestedModule + "/internal/domain/publication": true,
 		},
 		"reference/control-plane/internal/app/platform/ports":  {},
 		"reference/control-plane/internal/ports/observability": {},
@@ -490,6 +502,9 @@ func verifyProductionImports(root string) error {
 			httpAdapter: true, platform: true, platformPorts: true,
 			observability: true, memory: true, durable: true,
 			postgres: true, sqlite: true, migrations: true,
+			nestedModule + "/internal/domain/publication":                  true,
+			nestedModule + "/internal/domain/publication/storage/postgres": true,
+			nestedModule + "/internal/domain/publication/storage/sqlite":   true,
 		},
 	}
 	problems := []string{}
@@ -528,7 +543,7 @@ func verifyProductionImports(root string) error {
 					continue
 				}
 				if !allowedByDirectory[relativeRoot][value] {
-					if relativeRoot == "reference/control-plane/cmd/aropd" && p10AllowsPackage(root, value) {
+					if (relativeRoot == "reference/control-plane/cmd/aropd" && p10AllowsPackage(root, value)) || p12AllowsPackage(root, value) {
 						continue
 					}
 					relative, _ := filepath.Rel(root, path)
@@ -1346,6 +1361,8 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 	seen := map[string]bool{}
 	seenExternalModules := map[string]bool{}
 	rootCore := rootModule + "/sdk/go/protocol/core"
+	rootGenerated := rootModule + "/sdk/go/generated/control-plane"
+	rootManifest := rootModule + "/sdk/go/protocol/manifest"
 	externalVersions := map[string]string{}
 	for _, dependency := range nestedExternalModules {
 		externalVersions[dependency.Path] = dependency.Version
@@ -1373,14 +1390,18 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 			}
 			continue
 		}
-		if item.ImportPath == rootCore {
-			seen[rootCore] = true
+		if item.ImportPath == rootCore || item.ImportPath == rootGenerated || item.ImportPath == rootManifest {
+			seen[item.ImportPath] = true
 			if item.Module == nil || item.Module.Path != rootModule || item.Module.Version != rootVersion || !pathWithin(moduleCache, item.Dir) || pathWithin(root, item.Dir) {
 				problems = append(problems, "root core did not resolve from the exact isolated commit-backed module")
 			}
 			continue
 		}
 		if p10AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" {
+			seen[item.ImportPath] = true
+			continue
+		}
+		if p12AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" {
 			seen[item.ImportPath] = true
 			continue
 		}

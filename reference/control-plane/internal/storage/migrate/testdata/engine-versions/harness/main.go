@@ -1963,6 +1963,9 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 		nestedModule + "/internal/app/platform/ports":                                  true,
 		nestedModule + "/internal/ports/observability":                                 true,
 		nestedModule + "/internal/storage/migrate/testdata/engine-versions/acceptance": true,
+		nestedModule + "/internal/domain/publication":                                  true,
+		nestedModule + "/internal/domain/publication/storage/postgres":                 true,
+		nestedModule + "/internal/domain/publication/storage/sqlite":                   true,
 	}
 	locks, err := nestedModuleLocks(root)
 	if err != nil {
