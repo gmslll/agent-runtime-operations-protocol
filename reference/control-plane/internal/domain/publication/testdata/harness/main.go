@@ -310,7 +310,7 @@ func run(dir string, overrides map[string]string, name string, args ...string) r
 	return result{o, e}
 }
 func cleanEnv(overrides map[string]string) []string {
-	keep := []string{"LANG", "LC_ALL", "PATH", "TMPDIR", "TZ"}
+	keep := []string{"HOME", "LANG", "LC_ALL", "PATH", "TMPDIR", "TZ"}
 	m := map[string]string{}
 	for _, k := range keep {
 		if v := os.Getenv(k); v != "" {
