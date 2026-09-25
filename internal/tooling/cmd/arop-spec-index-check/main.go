@@ -109,6 +109,21 @@ func main() {
 	result.Summary["go_test_cache_hits"] = counts["cache"]
 	result.Summary["go_test_packages_without_tests"] = counts["no_tests"]
 
+	seenCheckNames := make(map[string]struct{}, len(result.Checks)+1)
+	var duplicateCheckNames []string
+	for _, check := range result.Checks {
+		if _, exists := seenCheckNames[check.Name]; exists {
+			duplicateCheckNames = append(duplicateCheckNames, check.Name)
+		}
+		seenCheckNames[check.Name] = struct{}{}
+	}
+	sort.Strings(duplicateCheckNames)
+	uniqueCheckNamesErr := error(nil)
+	if len(duplicateCheckNames) != 0 {
+		uniqueCheckNamesErr = fmt.Errorf("duplicate check names: %s", strings.Join(duplicateCheckNames, ", "))
+	}
+	result.Checks = append(result.Checks, report.Check{Name: "generated-check-name-uniqueness", Passed: uniqueCheckNamesErr == nil, Detail: detailOr(uniqueCheckNamesErr, "all generated check names are unique")})
+
 	inputs := append([]string{}, result.InputPaths...)
 	staticInputs, staticErr := governanceStaticInputs(root)
 	fatal(staticErr)
@@ -135,6 +150,13 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Printf("AROP spec index check passed: %d checks (%d uncached Go tests).\n", len(r.Checks), counts["executed"])
+}
+
+func detailOr(err error, success string) string {
+	if err != nil {
+		return err.Error()
+	}
+	return success
 }
 
 func withoutNodeLoaderEnvironment(environment []string) []string {
