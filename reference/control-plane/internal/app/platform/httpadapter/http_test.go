@@ -15,7 +15,15 @@ import (
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/observability/memory"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/ports/observability"
+	controlplane "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/generated/control-plane"
 )
+
+type failingObservationStore struct{ *memory.Store }
+
+func (store failingObservationStore) AppendObservation(context.Context, observability.AuditEntry, observability.SpanRecord) error {
+	return errors.New("audit unavailable")
+}
 
 type publicationStub struct {
 	publish func(context.Context, publication.PublishRequest) (publication.PublishResult, error)
@@ -92,7 +100,37 @@ func TestPublicationRoutesEnforceScopeUoWBoundaryAndBodyLimit(t *testing.T) {
 		if probeResponse.Code != status || strings.Contains(probeResponse.Body.String(), credential) {
 			t.Fatalf("authentication mapping status=%d want=%d body=%s", probeResponse.Code, status, probeResponse.Body.String())
 		}
+		assertPublicationWireError(t, probeResponse, status)
 	}
+
+	dependencyHandler, err := NewPublicationHandler(application, authenticate, publicationStub{
+		publish: service.publish,
+		get: func(context.Context, publication.GetRequest) (publication.GetResult, error) {
+			return publication.GetResult{}, publication.NewError(publication.CategoryDependency, publication.ReasonDependencyUnavailable)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dependencyRequest := httptest.NewRequest(http.MethodGet, "/v1/agent-definitions/hello.agent/versions/1.0.0", nil)
+	dependencyRequest.Header.Set("Authorization", "Bearer valid-token")
+	dependencyResponse := httptest.NewRecorder()
+	dependencyHandler.ServeHTTP(dependencyResponse, dependencyRequest)
+	assertPublicationWireError(t, dependencyResponse, http.StatusServiceUnavailable)
+
+	failingApplication, err := platform.New(config, platform.Dependencies{Clock: clock, IDs: platform.SystemIDSource{Clock: clock}, Faults: platform.NoopFaultHook{}, UoW: &platform.SerialUnitOfWork{}, Observability: failingObservationStore{Store: store}}, "arop-reference-control-plane", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	failingHandler, err := NewPublicationHandler(failingApplication, authenticate, service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failingRequest := httptest.NewRequest(http.MethodGet, "/v1/agent-definitions/hello.agent/versions/1.0.0", nil)
+	failingRequest.Header.Set("Authorization", "Bearer valid-token")
+	failingResponse := httptest.NewRecorder()
+	failingHandler.ServeHTTP(failingResponse, failingRequest)
+	assertPublicationWireError(t, failingResponse, http.StatusServiceUnavailable)
 
 	for _, size := range []int{publication.MaxBundleBytes - 1, publication.MaxBundleBytes} {
 		probe := httptest.NewRequest(http.MethodPost, "/v1/agent-definitions/hello.agent/versions", bytes.NewReader(bytes.Repeat([]byte{'x'}, size)))
@@ -118,6 +156,32 @@ func TestPublicationRoutesEnforceScopeUoWBoundaryAndBodyLimit(t *testing.T) {
 		handler.ServeHTTP(probeResponse, probe)
 		if probeResponse.Code != http.StatusRequestEntityTooLarge || !strings.Contains(probeResponse.Body.String(), `"code":"BUNDLE_TOO_LARGE"`) {
 			t.Fatalf("oversize chunked=%t status=%d body=%s", chunked, probeResponse.Code, probeResponse.Body.String())
+		}
+	}
+}
+
+func assertPublicationWireError(t *testing.T, response *httptest.ResponseRecorder, status int) {
+	t.Helper()
+	if response.Code != status || len(response.Header().Values("Content-Type")) != 1 || response.Header().Get("Content-Type") != "application/json" {
+		t.Fatalf("typed error status/content-type mismatch: status=%d headers=%v body=%s", response.Code, response.Header(), response.Body.String())
+	}
+	wire, err := controlplane.DecodeAROPError(response.Body.Bytes())
+	if err != nil {
+		t.Fatalf("typed error is not P11 AROPError: %v body=%s", err, response.Body.String())
+	}
+	switch status {
+	case http.StatusUnauthorized:
+		if wire.Code != "AUTHENTICATION_REQUIRED" || wire.Category != "authentication" || wire.Retryable || len(response.Header().Values("WWW-Authenticate")) != 1 || response.Header().Get("WWW-Authenticate") != "Bearer" || len(response.Header().Values("Retry-After")) != 0 || wire.RetryAfterSeconds != nil {
+			t.Fatalf("invalid 401 contract: headers=%v wire=%+v", response.Header(), wire)
+		}
+	case http.StatusServiceUnavailable:
+		if wire.Code != "DEPENDENCY_UNAVAILABLE" || wire.Category != "dependency" || !wire.Retryable || len(response.Header().Values("Retry-After")) != 1 || response.Header().Get("Retry-After") != "1" || len(response.Header().Values("WWW-Authenticate")) != 0 || wire.RetryAfterSeconds == nil || int(*wire.RetryAfterSeconds) != 1 {
+			t.Fatalf("invalid 503 contract: headers=%v wire=%+v", response.Header(), wire)
+		}
+	}
+	for _, canary := range []string{"rejected", "dependency-down", "audit unavailable", "valid-token"} {
+		if strings.Contains(response.Body.String(), canary) {
+			t.Fatalf("typed error leaked %q: %s", canary, response.Body.String())
 		}
 	}
 }

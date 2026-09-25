@@ -134,7 +134,13 @@ func (command Command) Run(ctx context.Context, options Options) (Result, error)
 	endpoint.RawQuery = ""
 	endpoint.Fragment = ""
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(bundle))
+	requestContext := ctx
+	cancelRequest := func() {}
+	if command.Client.Timeout > 0 {
+		requestContext, cancelRequest = context.WithTimeout(ctx, command.Client.Timeout)
+	}
+	defer cancelRequest()
+	request, err := http.NewRequestWithContext(requestContext, http.MethodPost, endpoint.String(), bytes.NewReader(bundle))
 	if err != nil {
 		return Result{}, errors.New("create publication request: invalid endpoint")
 	}
@@ -148,7 +154,7 @@ func (command Command) Run(ctx context.Context, options Options) (Result, error)
 		if response != nil && response.Body != nil {
 			_ = response.Body.Close()
 		}
-		if ctxErr := contextError(ctx); ctxErr != nil {
+		if ctxErr := contextError(requestContext); ctxErr != nil {
 			return Result{}, ctxErr
 		}
 		return Result{}, errors.New("publication transport unavailable")

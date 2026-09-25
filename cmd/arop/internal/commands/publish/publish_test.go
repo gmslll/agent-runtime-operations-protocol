@@ -723,6 +723,24 @@ func TestRunHonorsCancellationAndTimeout(t *testing.T) {
 	if _, err := command.Run(timed, options); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("timeout error = %v", err)
 	}
+
+	var roundTrips atomic.Int32
+	command, options = testCommand(t, "https://control.example.invalid")
+	command.Client = &http.Client{Timeout: 20 * time.Millisecond, Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		roundTrips.Add(1)
+		deadline, ok := request.Context().Deadline()
+		if !ok || time.Until(deadline) > 30*time.Millisecond {
+			return nil, errors.New("AROP_TIMEOUT_DEADLINE_CANARY")
+		}
+		<-request.Context().Done()
+		return nil, errors.New("AROP_TIMEOUT_TRANSPORT_CANARY")
+	})}
+	if _, err := command.Run(context.Background(), options); !errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), "CANARY") || strings.Contains(err.Error(), testCredential) {
+		t.Fatalf("client timeout error = %v", err)
+	}
+	if roundTrips.Load() != 1 {
+		t.Fatalf("client timeout made %d transport hops", roundTrips.Load())
+	}
 }
 
 func typedError(code, category string, retryable bool, suffix string) string {

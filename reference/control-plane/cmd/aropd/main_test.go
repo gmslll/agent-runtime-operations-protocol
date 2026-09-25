@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -84,6 +85,34 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 		if !snapshot.Ready || !foundIdentity || !foundPublication || application.Config().MaxBodyBytes != 10<<20 {
 			t.Fatalf("P12 durable readiness/config missing: %+v config=%+v", snapshot, application.Config())
 		}
+		t.Run("real-server-cli-typed-authentication-interoperability", func(t *testing.T) {
+			httpServer := httptest.NewServer(server.Handler)
+			defer httpServer.Close()
+			repositoryRoot, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+			if err != nil {
+				t.Fatal(err)
+			}
+			bundle := filepath.Join(repositoryRoot, "conformance", "fixtures", "contracts", "control-plane-publication", "fixtures", "bundles", "valid-agent-version.zip")
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			command := exec.CommandContext(ctx, "go", "run", "./cmd/arop", "publish", "hello.agent", bundle)
+			command.Dir = repositoryRoot
+			command.Env = append(os.Environ(),
+				"AROP_CONTROL_PLANE_URL="+httpServer.URL,
+				"AROP_CONTROL_PLANE_TOKEN=p12-cli-server-auth-canary",
+				"AROP_IDEMPOTENCY_KEY=publication-request-interop",
+				"GOENV=off", "GOFLAGS=-mod=readonly", "GOWORK=off", "GOTOOLCHAIN=local", "CGO_ENABLED=0",
+			)
+			output, runErr := command.CombinedOutput()
+			if runErr == nil || !strings.Contains(string(output), "status=401 code=AUTHENTICATION_REQUIRED") {
+				t.Fatalf("CLI did not decode server P11 error: err=%v output=%s", runErr, output)
+			}
+			for _, secret := range []string{"p12-cli-server-auth-canary", "authentication-required", `"message"`} {
+				if strings.Contains(string(output), secret) {
+					t.Fatalf("CLI interoperability output leaked %q: %s", secret, output)
+				}
+			}
+		})
 		for _, path := range []string{"/v1/secrets", "/v1/secret-values", "/v1/credentials/cred_test/value"} {
 			response := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, path, nil)

@@ -212,13 +212,16 @@ func writeDomainError(writer http.ResponseWriter, err error) {
 }
 
 func writePublicationError(writer http.ResponseWriter, status int, code, category string, retryable bool) {
+	var retryAfter *controlplane.SafeInteger
 	if status == http.StatusUnauthorized {
-		writer.Header().Set("WWW-Authenticate", `Bearer realm="arop-control-plane"`)
+		writer.Header().Set("WWW-Authenticate", "Bearer")
 	}
 	if status == http.StatusServiceUnavailable {
 		writer.Header().Set("Retry-After", "1")
+		value := controlplane.SafeInteger(1)
+		retryAfter = &value
 	}
-	encoded, err := controlplane.EncodeAROPError(controlplane.AROPError{Category: category, Code: code, Message: code, Retryable: retryable})
+	encoded, err := controlplane.EncodeAROPError(controlplane.AROPError{Category: category, Code: code, Message: code, Retryable: retryable, RetryAfterSeconds: retryAfter})
 	if err != nil {
 		writeJSON(writer, http.StatusInternalServerError, errorResponse{Status: "error"})
 		return
@@ -286,9 +289,17 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 					request = request.WithContext(requestContext)
 					invoke(application, capture, request, next)
 				case errors.Is(authenticationErr, ErrAuthenticationUnavailable):
-					writeJSON(capture, http.StatusServiceUnavailable, errorResponse{Status: "unavailable"})
+					if isPublicationOperation(operation) {
+						writePublicationError(capture, http.StatusServiceUnavailable, "DEPENDENCY_UNAVAILABLE", "dependency", true)
+					} else {
+						writeJSON(capture, http.StatusServiceUnavailable, errorResponse{Status: "unavailable"})
+					}
 				default:
-					writeJSON(capture, http.StatusUnauthorized, errorResponse{Status: "unauthorized"})
+					if isPublicationOperation(operation) {
+						writePublicationError(capture, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication", false)
+					} else {
+						writeJSON(capture, http.StatusUnauthorized, errorResponse{Status: "unauthorized"})
+					}
 				}
 			} else {
 				invoke(application, capture, request, next)
@@ -312,11 +323,19 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 				setSecurityHeaders(capture.Header())
 				capture.Header().Set(requestIDHeader, metadata.RequestID)
 				capture.Header().Set(traceparentHeader, metadata.Traceparent())
-				writeJSON(capture, http.StatusServiceUnavailable, errorResponse{Status: "unavailable"})
+				if isPublicationOperation(operation) {
+					writePublicationError(capture, http.StatusServiceUnavailable, "DEPENDENCY_UNAVAILABLE", "dependency", true)
+				} else {
+					writeJSON(capture, http.StatusServiceUnavailable, errorResponse{Status: "unavailable"})
+				}
 			}
 		}
 		copyResponse(writer, capture)
 	})
+}
+
+func isPublicationOperation(operation string) bool {
+	return operation == "publication.publish" || operation == "publication.get"
 }
 
 func authenticateBearer(ctx context.Context, values []string, metadata platform.RequestMetadata, authenticate AuthenticateFunc) (AuthenticatedPrincipal, error) {
