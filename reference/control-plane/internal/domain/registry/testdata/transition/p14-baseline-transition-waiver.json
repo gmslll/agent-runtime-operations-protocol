@@ -34,6 +34,7 @@
     "machine-report-verifier-tests",
     "migration-engine",
     "migration-engine-fixture-versions",
+    "p01-fixed-test-inventory",
     "p01-fixed-test-runner",
     "p01-fixed-test-runner-tests",
     "phase-report-p08",
@@ -112,7 +113,8 @@
     "reference/control-plane/migrations/sqlite/0030_registry.sql",
     "schemas/registry/lease-v1.schema.json",
     "schemas/registry/registry-event-v1.schema.json",
-    "schemas/registry/runtime-instance-v1.schema.json"
+    "schemas/registry/runtime-instance-v1.schema.json",
+    "spec/p01-test-inventory.yaml"
   ],
   "acceptance": [
     {"phase":"P05","command":"make test-go-workspace","report":"build/reports/P05/report.json"},
