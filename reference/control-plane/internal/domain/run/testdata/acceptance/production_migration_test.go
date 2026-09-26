@@ -37,7 +37,7 @@ func TestProductionMigration0040Conformance(t *testing.T) {
 			t.Run("empty-and-idempotent", func(t *testing.T) {
 				database := openDatabase(t, dialect)
 				defer database.close()
-				runner := newRunner(t, database, loadCatalog(t, migrate.CurrentProductionCatalog(), dialect), p18Verifier(dialect), nil)
+				runner := newRunner(t, database, loadCatalog(t, migrate.P18ProductionCatalog(), dialect), p18Verifier(dialect), nil)
 				result, err := runner.Migrate(context.Background())
 				requireNoError(t, err)
 				if result.FromVersion != 0 || result.ToVersion != 40 || !reflect.DeepEqual(result.Applied, []int64{1, 5, 10, 20, 30, 40}) || result.Snapshot != nil {
@@ -60,7 +60,7 @@ func TestProductionMigration0040Conformance(t *testing.T) {
 				if setup.ToVersion != 30 || !reflect.DeepEqual(setup.Applied, []int64{1, 5, 10, 20, 30}) {
 					t.Fatalf("P14 setup result: %#v", setup)
 				}
-				current := newRunner(t, database, loadCatalog(t, migrate.CurrentProductionCatalog(), dialect), p18Verifier(dialect), database.backup)
+				current := newRunner(t, database, loadCatalog(t, migrate.P18ProductionCatalog(), dialect), p18Verifier(dialect), database.backup)
 				result, err := current.Migrate(context.Background())
 				requireNoError(t, err)
 				if result.FromVersion != 30 || result.ToVersion != 40 || !reflect.DeepEqual(result.Applied, []int64{40}) || result.Snapshot == nil {
@@ -72,7 +72,7 @@ func TestProductionMigration0040Conformance(t *testing.T) {
 			t.Run("dirty-history-fails-closed", func(t *testing.T) {
 				database := openDatabase(t, dialect)
 				defer database.close()
-				runner := newRunner(t, database, loadCatalog(t, migrate.CurrentProductionCatalog(), dialect), p18Verifier(dialect), nil)
+				runner := newRunner(t, database, loadCatalog(t, migrate.P18ProductionCatalog(), dialect), p18Verifier(dialect), nil)
 				_, err := runner.Migrate(context.Background())
 				requireNoError(t, err)
 				statement := `UPDATE arop_schema_migrations SET dirty=1,applied_at_ns=NULL WHERE version=40`

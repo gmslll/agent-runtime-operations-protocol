@@ -90,12 +90,12 @@ func P14ProductionCatalog() CatalogClosure {
 	}
 }
 
-// CurrentProductionCatalog is the only catalog used by production
-// composition. P18 advances the paired history to 0040. Historical phases
-// always inject their immutable snapshot instead.
-func CurrentProductionCatalog() CatalogClosure {
+// P18ProductionCatalog is the immutable historical catalog used when P18 is
+// replayed under later phases. It must never include a migration owned after
+// P18.
+func P18ProductionCatalog() CatalogClosure {
 	return CatalogClosure{
-		ID: "control-plane-production-migrations", ReportPhase: "P18", ReportPath: "build/reports/P18/report.json",
+		ID: "control-plane-p18-production-migrations", ReportPhase: "P18", ReportPath: "build/reports/P18/report.json",
 		OwnerPhases: []string{"P09", "P10", "P12", "P13", "P14", "P18"},
 		Migrations: []DeclaredMigration{
 			{Dialect: DialectPostgres, Path: "postgres/0001_base.sql", OwnerPhase: "P09", SHA256: "c9f04000d5ce26ee7d86d3b89131ac05861945f5e95537c52ffa6cf359388707"},
@@ -112,4 +112,20 @@ func CurrentProductionCatalog() CatalogClosure {
 			{Dialect: DialectSQLite, Path: "sqlite/0040_run.sql", OwnerPhase: "P18", SHA256: "e8fff4625a6e2fc57a43af359905deef60b1971c29e3453b995ba5d992b8e478"},
 		},
 	}
+}
+
+// CurrentProductionCatalog is the only catalog used by production
+// composition. P19 advances the paired history to 0050. Historical phases
+// always inject their immutable snapshot instead.
+func CurrentProductionCatalog() CatalogClosure {
+	closure := P18ProductionCatalog()
+	closure.ID = "control-plane-production-migrations"
+	closure.ReportPhase = "P19"
+	closure.ReportPath = "build/reports/P19/report.json"
+	closure.OwnerPhases = append(closure.OwnerPhases, "P19")
+	closure.Migrations = append(closure.Migrations,
+		DeclaredMigration{Dialect: DialectPostgres, Path: "postgres/0050_dispatch.sql", OwnerPhase: "P19", SHA256: "a4030579cdb3e7c92126a66da305a3eab64eacb18fb0e1114cdc9701b254e7fc"},
+		DeclaredMigration{Dialect: DialectSQLite, Path: "sqlite/0050_dispatch.sql", OwnerPhase: "P19", SHA256: "e8c4d5593b6629f3114544e94dd5d898aca88a2433c734eb62c6d938d640d9ab"},
+	)
+	return closure
 }
