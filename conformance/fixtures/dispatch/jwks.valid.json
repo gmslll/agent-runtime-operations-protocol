@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "issuer": "https://control.example.invalid",
+  "cache_until": "2026-09-27T09:01:00Z",
+  "keys": [
+    {
+      "kty": "EC",
+      "crv": "P-256",
+      "use": "sig",
+      "alg": "ES256",
+      "kid": "key-20260927",
+      "x": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "y": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "status": "active",
+      "not_before": "2026-09-27T08:55:00Z",
+      "sign_until": "2026-09-27T10:00:00Z",
+      "verify_until": "2026-09-27T10:10:00Z",
+      "created_at": "2026-09-27T08:55:00Z"
+    }
+  ]
+}

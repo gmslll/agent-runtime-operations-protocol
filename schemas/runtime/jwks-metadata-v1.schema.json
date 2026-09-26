@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/runtime/jwks-metadata-v1.schema.json",
+  "title": "AROP v1 dispatch JWKS metadata",
+  "$comment": "Public ES256 verification material and rotation metadata. Private key material is structurally impossible in this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "issuer", "cache_until", "keys"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "issuer": {"type": "string", "format": "uri", "pattern": "^https://[^?#]+$", "maxLength": 2048},
+    "cache_until": {"type": "string", "format": "date-time"},
+    "keys": {"type": "array", "minItems": 1, "maxItems": 32, "items": {"$ref": "#/$defs/key"}}
+  },
+  "$defs": {
+    "key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kty", "crv", "use", "alg", "kid", "x", "y", "status", "not_before", "sign_until", "verify_until", "created_at"],
+      "properties": {
+        "kty": {"const": "EC"},
+        "crv": {"const": "P-256"},
+        "use": {"const": "sig"},
+        "alg": {"const": "ES256"},
+        "kid": {"type": "string", "minLength": 8, "maxLength": 128, "pattern": "^[A-Za-z0-9._-]+$"},
+        "x": {"type": "string", "minLength": 43, "maxLength": 43, "pattern": "^[A-Za-z0-9_-]+$"},
+        "y": {"type": "string", "minLength": 43, "maxLength": 43, "pattern": "^[A-Za-z0-9_-]+$"},
+        "status": {"enum": ["active", "retiring"]},
+        "not_before": {"type": "string", "format": "date-time"},
+        "sign_until": {"type": "string", "format": "date-time"},
+        "verify_until": {"type": "string", "format": "date-time"},
+        "created_at": {"type": "string", "format": "date-time"}
+      },
+      "not": {"required": ["d"]}
+    }
+  }
+}

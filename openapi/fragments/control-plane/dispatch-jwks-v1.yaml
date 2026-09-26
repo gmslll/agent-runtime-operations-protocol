@@ -1,0 +1,103 @@
+openapi: 3.1.0
+info:
+  title: AROP Control Plane Dispatch and JWKS v1 fragment
+  version: 1.0.0
+  description: Durable dispatch, short-lived Attempt ticket issuance and public ES256 verification keys.
+paths:
+  /v1/agent-runs/{run_id}:dispatch:
+    post:
+      operationId: dispatchAgentRun
+      security:
+        - ControlPlaneBearer: []
+      x-arop-required-scopes: [run:dispatch]
+      x-arop-attempt-fencing: true
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: A durable Attempt was created and a short-lived Dispatch Ticket was issued.
+          headers:
+            Location:
+              required: true
+              schema: {type: string, pattern: '^/v1/agent-runs/run_[0-9a-f-]+/attempts/att_[0-9a-f-]+$'}
+            Cache-Control:
+              required: true
+              schema: {const: no-store}
+          content:
+            application/json:
+              schema:
+                $ref: '../../../schemas/runtime/dispatch-ticket-v1.schema.json'
+        '400': {$ref: '#/components/responses/Typed400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Typed403'}
+        '404': {$ref: '#/components/responses/Typed404'}
+        '409': {$ref: '#/components/responses/Typed409'}
+        '429': {$ref: '#/components/responses/Error429'}
+        '503': {$ref: '#/components/responses/Error503'}
+  /.well-known/arop-jwks.json:
+    get:
+      operationId: getDispatchJWKS
+      security: []
+      responses:
+        '200':
+          description: Active and overlap-retained ES256 verification keys.
+          headers:
+            Cache-Control:
+              required: true
+              schema: {type: string, pattern: '^public, max-age=[1-9][0-9]{0,3}$'}
+          content:
+            application/json:
+              schema:
+                $ref: '../../../schemas/runtime/jwks-metadata-v1.schema.json'
+        '503': {$ref: '#/components/responses/Error503'}
+components:
+  securitySchemes:
+    ControlPlaneBearer: {type: http, scheme: bearer}
+  parameters:
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      schema:
+        $ref: '../../../schemas/common/identifiers.schema.json#/$defs/runId'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 8, maxLength: 200, pattern: '^[!-~]+$'}
+  schemas:
+    AROPError:
+      $ref: '../../../schemas/common/error.schema.json'
+    Attempt:
+      $ref: '../../../schemas/runtime/attempt-v1.schema.json'
+  responses:
+    Error401:
+      description: Authentication required.
+      headers:
+        WWW-Authenticate:
+          required: true
+          schema: {type: string, pattern: '^Bearer(?: [A-Za-z][A-Za-z0-9_-]*="[ -!#-~]*")*$'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Error429:
+      description: No eligible runtime capacity is currently available.
+      headers:
+        Retry-After: {required: true, schema: {type: integer, minimum: 1, maximum: 86400}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Error503:
+      description: Durable dispatch storage or signing service is unavailable.
+      headers:
+        Retry-After: {required: true, schema: {type: integer, minimum: 1, maximum: 86400}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Typed400:
+      description: Invalid dispatch request.
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Typed403:
+      description: Caller is not authorized to dispatch the Run.
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Typed404:
+      description: Run not found within the caller tenant.
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Typed409:
+      description: Run state, Attempt fencing or idempotency conflict.
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}

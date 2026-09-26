@@ -1,0 +1,254 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "command": {
+    "entry": "scripts/generate.mjs",
+    "config": "conformance/fixtures/dispatch/pipeline.json",
+    "output": "<output>",
+    "result": "<output>/provenance.json"
+  },
+  "generator": {
+    "path": "scripts/generate.mjs",
+    "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+    "files": [
+      {
+        "path": "scripts/generate.mjs",
+        "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+        "bytes": 142421,
+        "mode": "100644"
+      },
+      {
+        "path": "scripts/lib/repository.mjs",
+        "sha256": "4d87c901bbfeee969214d8620154acefb6b76d9a8084fa858db1917c726b2733",
+        "bytes": 44748,
+        "mode": "100644"
+      },
+      {
+        "path": "package.json",
+        "sha256": "a0480da8a20f9ba2c1355d58723295d22ca3a06235e3763aaf67742edc4e2661",
+        "bytes": 574,
+        "mode": "100644"
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "982e444493976055a5d34793bcdbc50751ec6f9d60148562a037f19a8d036b37",
+        "bytes": 5565,
+        "mode": "100644"
+      }
+    ]
+  },
+  "configuration": {
+    "path": "conformance/fixtures/dispatch/pipeline.json",
+    "sha256": "79b977355cf2648d4a33b885e04f2051316b9e6aa46f8cc44789425ac7eba098",
+    "bytes": 2864,
+    "mode": "100644"
+  },
+  "resources": [
+    {
+      "path": "schemas/common/identifiers.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/identifiers.schema.json",
+      "sha256": "87503f773550083f8cb7f0213b6fd336bc21bf5c54575af49a21f447de209269",
+      "bytes": 2818,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/common/trace.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/trace.schema.json",
+      "sha256": "9de00b47d1d56071c449111062f1f0cc2b29090a5720c3df90a29d04c3db5053",
+      "bytes": 744,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/resources/asset-ref-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json",
+      "sha256": "3fcd98064f555252a27d80af1bf951619dff2ae3c68680d6fd6215e83ca18433",
+      "bytes": 1243,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/resources/data-ref-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/resources/data-ref-v1.schema.json",
+      "sha256": "85b13a3b8fd4a1d4c74cb4d437fe3eea61aac30ba8934a175aece768d525948f",
+      "bytes": 916,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/common/content-part.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/content-part.schema.json",
+      "sha256": "d90e09b9c933cc8024ed3016d067a3f79a861548dd9e20c682b77ad13d120fee",
+      "bytes": 1189,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/runtime/run-request-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/runtime/run-request-v1.schema.json",
+      "sha256": "d9ea7ce7ed0ea57dc2809a8b6dede6552946ae55b71f0edac134a128d8561a36",
+      "bytes": 3068,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/runtime/attempt-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/runtime/attempt-v1.schema.json",
+      "sha256": "4884c1219f80142e65ae6af73cb5231fc69bdfefd0632e9c615b99cd12b50def",
+      "bytes": 2374,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/runtime/dispatch-ticket-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/runtime/dispatch-ticket-v1.schema.json",
+      "sha256": "b7534b2e9269300649d8c63391e6e8ca2d4835fa3537904e69f8d20d81352154",
+      "bytes": 2293,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/runtime/jwks-metadata-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/runtime/jwks-metadata-v1.schema.json",
+      "sha256": "d6a25fc59bb831555cc05cd82a077773f765103c3a291a2ef0742ae6494f3157",
+      "bytes": 1806,
+      "mode": "100644"
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "attempt",
+      "class": "valid",
+      "root": "Attempt",
+      "path": "conformance/fixtures/dispatch/attempt.valid.json",
+      "sha256": "32c49da7e502e48da31dd0d86be0baafe0f4cba752eb0509d589cd380ff18f6b",
+      "bytes": 738,
+      "mode": "100644"
+    },
+    {
+      "id": "dispatch-ticket",
+      "class": "valid",
+      "root": "DispatchTicket",
+      "path": "conformance/fixtures/dispatch/dispatch-ticket.valid.json",
+      "sha256": "c191cade7ea806faa9641d7db27ccbf95b4ac8d1fde64841cde0ea688500b2d6",
+      "bytes": 1125,
+      "mode": "100644"
+    },
+    {
+      "id": "jwks",
+      "class": "valid",
+      "root": "JWKSMetadata",
+      "path": "conformance/fixtures/dispatch/jwks.valid.json",
+      "sha256": "8863e10c6c61623378a020c0dd3c986a5f2812c68ef19ee21f8abbb9b7a408a4",
+      "bytes": 574,
+      "mode": "100644"
+    },
+    {
+      "id": "dispatch-ticket-future-field",
+      "class": "forward",
+      "root": "DispatchTicket",
+      "path": "conformance/fixtures/dispatch/dispatch-ticket.forward.json",
+      "sha256": "9dcbdac7af1498b79757d275511f42c5a2ea6a71a61b89cbbf6909479bd6651c",
+      "bytes": 1041,
+      "mode": "100644"
+    },
+    {
+      "id": "attempt-unsafe-number",
+      "class": "invalid",
+      "root": "Attempt",
+      "path": "conformance/fixtures/dispatch/attempt.invalid.json",
+      "sha256": "7fe1929fb8bed4536fdef00c92c408a1f893c6d6ad632fb5041efed270817efa",
+      "bytes": 753,
+      "mode": "100644"
+    },
+    {
+      "id": "dispatch-ticket-invalid-jws",
+      "class": "invalid",
+      "root": "DispatchTicket",
+      "path": "conformance/fixtures/dispatch/dispatch-ticket.invalid.json",
+      "sha256": "565e710d7fac27e5cc5404325c41be3d82e8cbd0ca47c0a818952b6248f545f5",
+      "bytes": 842,
+      "mode": "100644"
+    },
+    {
+      "id": "jwks-private-material",
+      "class": "invalid",
+      "root": "JWKSMetadata",
+      "path": "conformance/fixtures/dispatch/jwks.invalid.json",
+      "sha256": "6a56182a781d1673ac0fa42e3b0cadec3ce893fc3e4109f8b67ba78a9731b97e",
+      "bytes": 579,
+      "mode": "100644"
+    }
+  ],
+  "inputs_sha256": "49c03593c41ca03a06eef3b9b60e8e0d6f794d2081d3d2e7dbb06f28d5c8d50c",
+  "outputs": [
+    {
+      "language": "go",
+      "path": "sdk/go/generated/dispatch/dispatch.gen.go",
+      "sha256": "ed0fbac7902a70cbedafd53c202c47a65f34e38c55a8d7cbbf6369e7fbf73ad7",
+      "bytes": 52684,
+      "mode": "100644"
+    },
+    {
+      "language": "python",
+      "path": "sdk/python/src/arop/generated/dispatch/dispatch_gen.py",
+      "sha256": "6c539f8614bd82eeb425c922b0275e76e242809632661d2a19749e3be0b0660a",
+      "bytes": 27338,
+      "mode": "100644"
+    },
+    {
+      "language": "typescript",
+      "path": "sdk/typescript/src/generated/dispatch/dispatch.gen.ts",
+      "sha256": "5206d1bab1d782a93502b29581f2d65d9dd62c0e6402e7b4c3e9b1ef24dfee77",
+      "bytes": 28286,
+      "mode": "100644"
+    }
+  ],
+  "outputs_sha256": "0a9a059cc5cb8435b66fcb05695877cfb89c9a2962eb89ac4472df6a272d8dd9",
+  "checks": [
+    {
+      "id": "schema-valid-attempt",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-dispatch-ticket",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-jwks",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-forward-dispatch-ticket-future-field",
+      "passed": true,
+      "detail": "data must NOT have additional properties"
+    },
+    {
+      "id": "schema-invalid-attempt-unsafe-number",
+      "passed": true,
+      "detail": "unsafe JSON number at /attempt_number"
+    },
+    {
+      "id": "schema-invalid-dispatch-ticket-invalid-jws",
+      "passed": true,
+      "detail": "data/run_token must NOT have fewer than 96 characters, data/run_token must match pattern \"^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$\""
+    },
+    {
+      "id": "schema-invalid-jwks-private-material",
+      "passed": true,
+      "detail": "data/keys/0 must NOT be valid, data/keys/0 must have required property 'sign_until', data/keys/0 must NOT have additional properties"
+    },
+    {
+      "id": "offline-resource-closure",
+      "passed": true,
+      "detail": "9 explicit resources"
+    },
+    {
+      "id": "mapping-profile",
+      "passed": true,
+      "detail": "19 named types"
+    },
+    {
+      "id": "deterministic-output-set",
+      "passed": true,
+      "detail": "3 outputs"
+    }
+  ]
+}

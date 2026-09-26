@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "resources": [
+    {"path": "schemas/common/identifiers.schema.json", "uri": "https://arop.invalid/schemas/v1/common/identifiers.schema.json"},
+    {"path": "schemas/common/trace.schema.json", "uri": "https://arop.invalid/schemas/v1/common/trace.schema.json"},
+    {"path": "schemas/resources/asset-ref-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json"},
+    {"path": "schemas/resources/data-ref-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/resources/data-ref-v1.schema.json"},
+    {"path": "schemas/common/content-part.schema.json", "uri": "https://arop.invalid/schemas/v1/common/content-part.schema.json"},
+    {"path": "schemas/runtime/run-request-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/runtime/run-request-v1.schema.json"},
+    {"path": "schemas/runtime/attempt-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/runtime/attempt-v1.schema.json"},
+    {"path": "schemas/runtime/dispatch-ticket-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/runtime/dispatch-ticket-v1.schema.json"},
+    {"path": "schemas/runtime/jwks-metadata-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/runtime/jwks-metadata-v1.schema.json"}
+  ],
+  "roots": [
+    {"ref": "https://arop.invalid/schemas/v1/runtime/attempt-v1.schema.json", "name": "Attempt"},
+    {"ref": "https://arop.invalid/schemas/v1/runtime/dispatch-ticket-v1.schema.json", "name": "DispatchTicket"},
+    {"ref": "https://arop.invalid/schemas/v1/runtime/jwks-metadata-v1.schema.json", "name": "JWKSMetadata"}
+  ],
+  "fixtures": {
+    "valid": [
+      {"id": "attempt", "path": "conformance/fixtures/dispatch/attempt.valid.json", "root": "Attempt"},
+      {"id": "dispatch-ticket", "path": "conformance/fixtures/dispatch/dispatch-ticket.valid.json", "root": "DispatchTicket"},
+      {"id": "jwks", "path": "conformance/fixtures/dispatch/jwks.valid.json", "root": "JWKSMetadata"}
+    ],
+    "forward": [
+      {"id": "dispatch-ticket-future-field", "path": "conformance/fixtures/dispatch/dispatch-ticket.forward.json", "root": "DispatchTicket"}
+    ],
+    "invalid": [
+      {"id": "attempt-unsafe-number", "path": "conformance/fixtures/dispatch/attempt.invalid.json", "root": "Attempt"},
+      {"id": "dispatch-ticket-invalid-jws", "path": "conformance/fixtures/dispatch/dispatch-ticket.invalid.json", "root": "DispatchTicket"},
+      {"id": "jwks-private-material", "path": "conformance/fixtures/dispatch/jwks.invalid.json", "root": "JWKSMetadata"}
+    ]
+  },
+  "outputs": {
+    "go": {"model": "sdk/go/generated/dispatch/dispatch.gen.go"},
+    "python": {"model": "sdk/python/src/arop/generated/dispatch/dispatch_gen.py"},
+    "typescript": {"model": "sdk/typescript/src/generated/dispatch/dispatch.gen.ts"}
+  }
+}

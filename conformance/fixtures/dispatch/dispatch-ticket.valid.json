@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "run_id": "run_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c",
+  "attempt_id": "att_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5d",
+  "fencing_token": 1,
+  "agent": {
+    "id": "image.generate",
+    "version": "1.0.0",
+    "skill_id": "default",
+    "manifest_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  },
+  "delivery": {
+    "mode": "direct",
+    "deployment_id": "dep_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5e",
+    "instance_id": "image-agent-a",
+    "generation": 7,
+    "audience": "https://control.example.invalid/deployments/dep_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5e",
+    "endpoint": "https://runtime.example.invalid/v1/runs",
+    "stream_endpoint": "https://runtime.example.invalid/v1/runs/run_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c/events",
+    "expires_at": "2026-09-27T09:05:00Z"
+  },
+  "run_token": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImtleS0yMDI2MDkyNyJ9.eyJydW5faWQiOiJydW5fMDE4ZjZiNmUifQ.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  }
+}

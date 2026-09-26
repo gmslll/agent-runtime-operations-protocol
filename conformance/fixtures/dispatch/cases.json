@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "valid": [
+    {"schema": "schemas/runtime/attempt-v1.schema.json", "document": "conformance/fixtures/dispatch/attempt.valid.json"},
+    {"schema": "schemas/runtime/dispatch-ticket-v1.schema.json", "document": "conformance/fixtures/dispatch/dispatch-ticket.valid.json"},
+    {"schema": "schemas/runtime/jwks-metadata-v1.schema.json", "document": "conformance/fixtures/dispatch/jwks.valid.json"}
+  ],
+  "invalid": [
+    {"schema": "schemas/runtime/attempt-v1.schema.json", "document": "conformance/fixtures/dispatch/attempt.invalid.json"},
+    {"schema": "schemas/runtime/dispatch-ticket-v1.schema.json", "document": "conformance/fixtures/dispatch/dispatch-ticket.invalid.json"},
+    {"schema": "schemas/runtime/jwks-metadata-v1.schema.json", "document": "conformance/fixtures/dispatch/jwks.invalid.json"}
+  ]
+}

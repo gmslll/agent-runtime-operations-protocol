@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/runtime/dispatch-ticket-v1.schema.json",
+  "title": "AROP v1 dispatch ticket",
+  "$comment": "A short-lived invocation capability for one run attempt. The bearer token must never be logged or persisted by consumers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "attempt_id", "fencing_token", "agent", "delivery", "run_token", "trace"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "run_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/runId"},
+    "attempt_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/attemptId"},
+    "fencing_token": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "agent": {"$ref": "https://arop.invalid/schemas/v1/runtime/run-request-v1.schema.json#/$defs/agentBinding"},
+    "delivery": {"$ref": "#/$defs/delivery"},
+    "run_token": {"type": "string", "minLength": 96, "maxLength": 8192, "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"},
+    "trace": {"$ref": "https://arop.invalid/schemas/v1/common/trace.schema.json"}
+  },
+  "$defs": {
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "deployment_id", "instance_id", "generation", "audience", "endpoint", "expires_at"],
+      "properties": {
+        "mode": {"enum": ["direct", "proxy", "worker_pull"]},
+        "deployment_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/deploymentId"},
+        "instance_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/instanceId"},
+        "generation": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "audience": {"type": "string", "format": "uri", "pattern": "^https://[^?#]+$", "maxLength": 2048},
+        "endpoint": {"type": "string", "format": "uri", "pattern": "^https://[^?#]+/v1/runs$", "maxLength": 2048},
+        "stream_endpoint": {"type": "string", "format": "uri", "pattern": "^https://[^?#]+/v1/runs/run_[0-9a-f-]+/events$", "maxLength": 2048},
+        "expires_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}
