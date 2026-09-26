@@ -23,10 +23,11 @@ import (
 )
 
 const (
-	command  = "make test-registry-recovery"
-	checker  = "reference/control-plane/internal/app/registrywatch/testdata/harness/main.go"
-	waiver   = "reference/control-plane/internal/app/registrywatch/testdata/transition/p16-baseline-transition-waiver.json"
-	baseline = "1f8ebc05d503292149a344f3e4c606262a242e8e"
+	command    = "make test-registry-recovery"
+	checker    = "reference/control-plane/internal/app/registrywatch/testdata/harness/main.go"
+	waiver     = "reference/control-plane/internal/app/registrywatch/testdata/transition/p16-baseline-transition-waiver.json"
+	nextWaiver = "reference/control-plane/internal/domain/run/testdata/transition/p18-baseline-transition-waiver.json"
+	baseline   = "1f8ebc05d503292149a344f3e4c606262a242e8e"
 )
 
 var ownedArtifacts = []string{"registry-recovery-service", "registry-watch-fixtures"}
@@ -96,7 +97,9 @@ func main() {
 	}
 	add("p16-transition-waiver", transitionErr, "waiver exactly equals Git, compile/read and manifest-derived closure")
 	add("p16-p15-wire-byte-stability", validateP15WireStability(root), "P15 wire, generated models and provenance are byte-identical")
-	add("p16-no-production-migration", gitQuiet(root, "diff", "--quiet", baseline+"..HEAD", "--", "reference/control-plane/migrations"), "P16 introduces no migration")
+	endpoint, endpointErr := transitionEndpoint(root)
+	add("p16-historical-endpoint", endpointErr, "P18 carrier freezes the accepted P16/P17 endpoint")
+	add("p16-no-production-migration", errors.Join(endpointErr, gitQuiet(root, "diff", "--quiet", baseline+".."+endpoint, "--", "reference/control-plane/migrations")), "P16 introduces no migration")
 	fixtureEvidence, fixtureErr := validateFixtures(root)
 	add("p16-watch-fixtures", fixtureErr, "Watch, compaction, cancellation and restore fixtures are strict and complete")
 
@@ -299,7 +302,11 @@ func discoverTransition(root string) (discoveredTransition, error) {
 	if parent.err != nil || strings.TrimSpace(string(parent.output)) != baseline {
 		return discoveredTransition{}, errors.New("P16 carrier parent is not the accepted P15 endpoint")
 	}
-	diff := run(root, nil, "git", "diff", "--no-renames", "-z", "--name-status", baseline+"..HEAD")
+	endpoint, err := transitionEndpoint(root)
+	if err != nil {
+		return discoveredTransition{}, err
+	}
+	diff := run(root, nil, "git", "diff", "--no-renames", "-z", "--name-status", baseline+".."+endpoint)
 	if diff.err != nil {
 		return discoveredTransition{}, diff.err
 	}
@@ -585,9 +592,33 @@ func cloneTransition(value transition) transition {
 }
 
 func validateP15WireStability(root string) error {
+	endpoint, err := transitionEndpoint(root)
+	if err != nil {
+		return err
+	}
 	paths := []string{"openapi/discovery-runtime-v1.yaml", "openapi/registry-runtime-v1.yaml", "schemas/registry/discovery-snapshot-v1.schema.json", "schemas/registry/registry-event-v1.schema.json", "sdk/go/generated/registry/registry.gen.go", "sdk/python/src/arop/generated/registry/registry_gen.py", "sdk/typescript/src/generated/registry/registry.gen.ts", "reference/control-plane/internal/app/registryapi/testdata/generated/provenance.json"}
-	args := append([]string{"diff", "--quiet", baseline + "..HEAD", "--"}, paths...)
+	args := append([]string{"diff", "--quiet", baseline + ".." + endpoint, "--"}, paths...)
 	return gitQuiet(root, args...)
+}
+
+func transitionEndpoint(root string) (string, error) {
+	introduction := run(root, nil, "git", "log", "--format=%H", "--diff-filter=A", "--", nextWaiver)
+	commits := lines(introduction.output)
+	if introduction.err != nil || len(commits) != 1 {
+		return "", errors.New("P18 transition carrier must have one introduction commit")
+	}
+	parent := run(root, nil, "git", "rev-parse", commits[0]+"^")
+	if parent.err != nil {
+		return "", parent.err
+	}
+	endpoint := strings.TrimSpace(string(parent.output))
+	if endpoint != "e2cc6266530d462d968e6f9a35dd80a045ddc533" {
+		return "", fmt.Errorf("P16/P17 historical endpoint=%s", endpoint)
+	}
+	if ancestor := run(root, nil, "git", "merge-base", "--is-ancestor", endpoint, "HEAD"); ancestor.err != nil {
+		return "", errors.New("P16/P17 historical endpoint is not an ancestor of HEAD")
+	}
+	return endpoint, nil
 }
 
 func gitQuiet(root string, args ...string) error { return run(root, nil, "git", args...).err }

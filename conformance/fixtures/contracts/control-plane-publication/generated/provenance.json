@@ -10,12 +10,12 @@
   },
   "generator": {
     "path": "scripts/generate.mjs",
-    "sha256": "7444506c82ae760ee597d48275137a422d7769ab96dcd7cbcd7b905478d94828",
+    "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
     "files": [
       {
         "path": "scripts/generate.mjs",
-        "sha256": "7444506c82ae760ee597d48275137a422d7769ab96dcd7cbcd7b905478d94828",
-        "bytes": 139117,
+        "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+        "bytes": 142421,
         "mode": "100644"
       },
       {
@@ -173,31 +173,31 @@
       "mode": "100644"
     }
   ],
-  "inputs_sha256": "15e7c0c5847d089624b358d37d6366548637b75a646621577085e1f1233adee6",
+  "inputs_sha256": "9b699dfddeb195579ee5b410eb4b83d5a9c8e18941017e4fc12970228508e63c",
   "outputs": [
     {
       "language": "go",
       "path": "sdk/go/generated/control-plane/publication.gen.go",
-      "sha256": "58b386484c97d27c10cf1257ebc5f3cefcaaea2d7d4b726548751de6bda8f4cc",
-      "bytes": 94743,
+      "sha256": "4380073fd936be598a19ff9fa23eeaf96bf1da38ed5c8dadd264ecc7762e03f5",
+      "bytes": 94553,
       "mode": "100644"
     },
     {
       "language": "python",
       "path": "sdk/python/src/arop/generated/control-plane/publication_gen.py",
-      "sha256": "faaaf983f9620ffac6ffd207ab9923df17b457c6a737435bdaad2fbe671a6a7b",
-      "bytes": 40757,
+      "sha256": "5bb271372ead90af94ed86df512b8bda0c51ca679b9d3845a3283593fac62bcb",
+      "bytes": 40756,
       "mode": "100644"
     },
     {
       "language": "typescript",
       "path": "sdk/typescript/src/generated/control-plane/publication.gen.ts",
-      "sha256": "b11b47986e35766b20cbad217967f42133623695445e995476a93c6ee8ae262e",
-      "bytes": 38211,
+      "sha256": "bc0af240fae7e25ea2f7fa6dde58bf10e72fbbe21b1c2633ed18c1555cb159f0",
+      "bytes": 38215,
       "mode": "100644"
     }
   ],
-  "outputs_sha256": "01e8b7d01cae0d9fec79ea22694a955d265d188c66790a6777286732f69f9bcd",
+  "outputs_sha256": "c93f9775e7451e80adc8debc3e943a270dce5ef2900ab289dbcc9af83c7c9eed",
   "checks": [
     {
       "id": "schema-valid-asset-ref-safe-integer-maximum",

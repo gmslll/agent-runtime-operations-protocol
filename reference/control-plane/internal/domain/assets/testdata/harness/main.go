@@ -420,7 +420,7 @@ func validateCatalog(root string) error {
 			return fmt.Errorf("catalog missing %s", required)
 		}
 	}
-	start, end := strings.Index(text, "func P13ProductionCatalog()"), strings.Index(text, "func CurrentProductionCatalog()")
+	start, end := strings.Index(text, "func P13ProductionCatalog()"), strings.Index(text, "func P14ProductionCatalog()")
 	if start < 0 || end <= start || strings.Count(text[start:end], "0020_asset.sql") != 2 || strings.Contains(text[start:end], "0030_registry.sql") {
 		return errors.New("P13 catalog snapshot is not exactly complete through 0020")
 	}

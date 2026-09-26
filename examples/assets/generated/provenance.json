@@ -10,12 +10,12 @@
   },
   "generator": {
     "path": "scripts/generate.mjs",
-    "sha256": "7444506c82ae760ee597d48275137a422d7769ab96dcd7cbcd7b905478d94828",
+    "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
     "files": [
       {
         "path": "scripts/generate.mjs",
-        "sha256": "7444506c82ae760ee597d48275137a422d7769ab96dcd7cbcd7b905478d94828",
-        "bytes": 139117,
+        "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+        "bytes": 142421,
         "mode": "100644"
       },
       {
@@ -141,31 +141,31 @@
       "mode": "100644"
     }
   ],
-  "inputs_sha256": "d9c68fa8556547adf6072357e33b24f852d974576aea94f6e1ff9dd404785cf2",
+  "inputs_sha256": "3e61d55aa2bc461d96fff20c34ada261708b39440203dc738aef71d47533b410",
   "outputs": [
     {
       "language": "go",
       "path": "sdk/go/generated/asset/asset.gen.go",
-      "sha256": "3ed0ceb4ca237aa95a3c02c18241249e03d8bc8c447194f17152824c45743c60",
+      "sha256": "0705df43bac8cb16bbb0b97256bd2ee9144ee3ed1822a608bb730eb7f85c5b7b",
       "bytes": 30873,
       "mode": "100644"
     },
     {
       "language": "python",
       "path": "sdk/python/src/arop/generated/asset/asset_gen.py",
-      "sha256": "a0bad40508383fa79ce122a6fa8bf3d578f58c687de830b595b9821202b26ab5",
+      "sha256": "fb5aae9aa670a0d95dfc6d35f7742f176a679f776f09d8c8a1667ebd92e60ea5",
       "bytes": 19090,
       "mode": "100644"
     },
     {
       "language": "typescript",
       "path": "sdk/typescript/src/generated/asset/asset.gen.ts",
-      "sha256": "075f586fe257bcb719b81b9b7fff3d25843cc3a32a05e5c1c5d75dfca023200c",
+      "sha256": "32f000f5f5e5dcd4ae390c7752d0983121b569117f4e13c4bda8332e2419f3e3",
       "bytes": 20078,
       "mode": "100644"
     }
   ],
-  "outputs_sha256": "ed6c865cd2730ad73cae19a9f2d8e3c6973f5d78a0ea2e95d6439709a345ecb4",
+  "outputs_sha256": "e990f449d7b3134afc92fb874c0c72baefb862524ccf8c1c7d84fded140117ae",
   "checks": [
     {
       "id": "schema-valid-download-grant",

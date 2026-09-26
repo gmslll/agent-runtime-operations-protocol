@@ -19,6 +19,7 @@ import (
 const (
 	command = "make verify-registry"
 	checker = "conformance/fixtures/registry-watch/testdata/verification/main.go"
+	carrier = "e2cc6266530d462d968e6f9a35dd80a045ddc533"
 )
 
 func main() {
@@ -96,11 +97,15 @@ func validateManifest(root string) error {
 }
 
 func treeIdenticalCarrier(root string) error {
-	parent := execute(root, "git", "rev-parse", "HEAD^")
+	ancestor := execute(root, "git", "merge-base", "--is-ancestor", carrier, "HEAD")
+	if ancestor.err != nil {
+		return errors.New("P17 carrier is not an ancestor of HEAD")
+	}
+	parent := execute(root, "git", "rev-parse", carrier+"^")
 	if parent.err != nil || len(strings.TrimSpace(string(parent.output))) != 40 {
 		return errors.New("P17 carrier parent is unavailable")
 	}
-	return execute(root, "git", "diff", "--quiet", "HEAD^", "HEAD", "--").err
+	return execute(root, "git", "diff", "--quiet", strings.TrimSpace(string(parent.output)), carrier, "--").err
 }
 
 type result struct {

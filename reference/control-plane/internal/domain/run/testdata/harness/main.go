@@ -100,7 +100,7 @@ type fixtureCases struct {
 	InvalidMutations []struct {
 		Name, Document, Pointer string
 		Value                   any
-		Delete                  bool
+		Delete, Add             bool
 	} `json:"invalid_mutations"`
 	TerminalStates    []string `json:"terminal_states"`
 	NonterminalStates []string `json:"nonterminal_states"`
@@ -735,7 +735,7 @@ func validateFixtures(root string) ([]byte, error) {
 	if err := structuredfile.Load(filepath.Join(root, "conformance/fixtures/run/cases.json"), &cases); err != nil {
 		return nil, err
 	}
-	if cases.SchemaVersion != 1 || len(cases.Valid) != 4 || len(cases.InvalidMutations) != 4 || !reflect.DeepEqual(cases.TerminalStates, []string{"succeeded", "failed", "cancelled", "timed_out"}) || !reflect.DeepEqual(cases.NonterminalStates, []string{"queued", "dispatching", "running", "waiting_input", "cancel_requested"}) {
+	if cases.SchemaVersion != 1 || len(cases.Valid) != 4 || len(cases.InvalidMutations) != 5 || !reflect.DeepEqual(cases.TerminalStates, []string{"succeeded", "failed", "cancelled", "timed_out"}) || !reflect.DeepEqual(cases.NonterminalStates, []string{"queued", "dispatching", "running", "waiting_input", "cancel_requested"}) {
 		return nil, errors.New("run fixture inventory is incomplete")
 	}
 	type validDocument struct {
@@ -764,7 +764,7 @@ func validateFixtures(root string) ([]byte, error) {
 		}
 		encoded, _ := json.Marshal(document.value)
 		var copy any
-		if json.Unmarshal(encoded, &copy) != nil || mutateJSONPointer(copy, item.Pointer, item.Value, item.Delete) != nil {
+		if json.Unmarshal(encoded, &copy) != nil || mutateJSONPointer(copy, item.Pointer, item.Value, item.Delete, item.Add) != nil {
 			return nil, fmt.Errorf("mutation %s has invalid pointer", item.Name)
 		}
 		if schema.ValidateFile(root, document.schema, copy) == nil {
@@ -775,7 +775,10 @@ func validateFixtures(root string) ([]byte, error) {
 	return evidence.Bytes(), nil
 }
 
-func mutateJSONPointer(value any, pointer string, replacement any, remove bool) error {
+func mutateJSONPointer(value any, pointer string, replacement any, remove, add bool) error {
+	if remove && add {
+		return errors.New("pointer mutation cannot add and remove")
+	}
 	if pointer == "" || !strings.HasPrefix(pointer, "/") {
 		return errors.New("pointer must select a property")
 	}
@@ -788,7 +791,11 @@ func mutateJSONPointer(value any, pointer string, replacement any, remove bool) 
 			return errors.New("pointer traverses non-object")
 		}
 		if index == len(parts)-1 {
-			if _, exists := object[part]; !exists {
+			_, exists := object[part]
+			if add && exists {
+				return errors.New("pointer add property already exists")
+			}
+			if !add && !exists {
 				return errors.New("pointer property is missing")
 			}
 			if remove {
@@ -923,6 +930,7 @@ func runTests(root, scratch, dsn string) commandResult {
 	environment := map[string]string{
 		"GOWORK": work, "GOENV": "off", "GOFLAGS": "-mod=readonly", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "TMPDIR": realScratch,
 		"AROP_P18_SCRATCH": realScratch, "AROP_P18_MIGRATION_ROOT": filepath.Join(root, "reference/control-plane/migrations"), "AROP_P18_POSTGRES_URL": dsn,
+		"AROP_TEST_POSTGRES_DSN": dsn,
 	}
 	return run(filepath.Join(root, "reference/control-plane"), environment, "go", "test", "-count=1", "-race", "-json",
 		"./cmd/aropd", "./internal/app/platform/httpadapter", "./internal/domain/run", "./internal/domain/run/storage/internalstore", "./internal/domain/run/testdata/acceptance", "./internal/domain/run/testdata/harness", "./internal/storage/migrate")
