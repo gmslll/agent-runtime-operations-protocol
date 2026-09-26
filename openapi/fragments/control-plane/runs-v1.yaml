@@ -34,6 +34,8 @@ paths:
         '401': {$ref: '#/components/responses/Error401'}
         '403': {$ref: '#/components/responses/Error403'}
         '409': {$ref: '#/components/responses/Error409'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
         '429': {$ref: '#/components/responses/Error429'}
         '503': {$ref: '#/components/responses/Error503'}
   /v1/agent-runs/{run_id}:
@@ -83,6 +85,8 @@ paths:
         '403': {$ref: '#/components/responses/Error403'}
         '404': {$ref: '#/components/responses/Error404'}
         '409': {$ref: '#/components/responses/Error409'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
         '503': {$ref: '#/components/responses/Error503'}
 components:
   securitySchemes:
@@ -114,6 +118,12 @@ components:
     Error403: {$ref: '#/components/responses/Typed403'}
     Error404: {$ref: '#/components/responses/Typed404'}
     Error409: {$ref: '#/components/responses/Typed409'}
+    Error413:
+      description: Run request or command body exceeds the one MiB limit.
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Error415:
+      description: Content-Type must be exactly application/json.
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
     Error429:
       description: Capacity exhausted.
       headers:

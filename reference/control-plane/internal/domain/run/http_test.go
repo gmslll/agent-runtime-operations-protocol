@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	generated "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/generated/run"
@@ -20,7 +21,7 @@ func (provider testCallerProvider) Authenticate(*http.Request, Operation) (Calle
 }
 
 func TestHTTPCreateGetCancelContract(t *testing.T) {
-	service, _, _, _ := newTestService(t)
+	service, _, repository, _ := newTestService(t)
 	handler, err := NewHTTPHandler(service, testCallerProvider{})
 	if err != nil {
 		t.Fatal(err)
@@ -44,6 +45,10 @@ func TestHTTPCreateGetCancelContract(t *testing.T) {
 	runID := string(status.RunID)
 	if response.Header().Get("Location") != "/v1/agent-runs/"+runID {
 		t.Fatal("location not bound to run")
+	}
+	stored := repository.runs[key("acme", runID)]
+	if string(stored.Labels) != `{"priority":"normal"}` {
+		t.Fatalf("wire labels were not preserved: %s", stored.Labels)
 	}
 	get := httptest.NewRequest(http.MethodGet, "/v1/agent-runs/"+runID, nil)
 	getResponse := httptest.NewRecorder()
@@ -86,5 +91,13 @@ func TestHTTPFailsClosedOnAuthenticationAndMediaType(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != 415 {
 		t.Fatalf("media type accepted: %d", response.Code)
+	}
+	request = httptest.NewRequest(http.MethodPost, "/v1/agent-runs", bytes.NewReader(bytes.Repeat([]byte("x"), maxRunRequestBytes+1)))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Idempotency-Key", "create-key-oversize")
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusRequestEntityTooLarge || !strings.Contains(response.Body.String(), "RUN_REQUEST_TOO_LARGE") {
+		t.Fatalf("oversize body contract missing: status=%d body=%s", response.Code, response.Body.String())
 	}
 }

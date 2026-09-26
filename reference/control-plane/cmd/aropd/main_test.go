@@ -176,6 +176,64 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 		}
 	})
 
+	t.Run("p18-durable-sqlite-composes-run-lifecycle", func(t *testing.T) {
+		root, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		migrationRoot := filepath.Join(root, "migrations")
+		for _, relative := range []string{
+			"sqlite/0001_base.sql", "sqlite/0005_identity.sql", "sqlite/0010_publication.sql", "sqlite/0020_asset.sql", "sqlite/0030_registry.sql", "sqlite/0040_run.sql",
+			"postgres/0001_base.sql", "postgres/0005_identity.sql", "postgres/0010_publication.sql", "postgres/0020_asset.sql", "postgres/0030_registry.sql", "postgres/0040_run.sql",
+		} {
+			contents, readErr := os.ReadFile(filepath.Join("..", "..", "migrations", filepath.FromSlash(relative)))
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			target := filepath.Join(migrationRoot, filepath.FromSlash(relative))
+			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(target, contents, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		backup := filepath.Join(root, "backup")
+		if err := os.Mkdir(backup, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		keyPath := filepath.Join(root, "asset-token.key")
+		if err := os.WriteFile(keyPath, []byte("0123456789abcdef0123456789abcdef"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		application, server, cleanup, err := composeWithCatalog([]string{
+			"--listen=127.0.0.1:0", "--mode=sqlite", "--database-dsn=" + filepath.Join(root, "p18.db"),
+			"--migration-root=" + migrationRoot, "--backup-directory=" + backup,
+			"--asset-token-key-file=" + keyPath, "--asset-token-key-id=atk_reference_test",
+		}, nil, migrate.CurrentProductionCatalog())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer cleanup()
+		snapshot := application.Readiness(context.Background())
+		found := map[string]bool{}
+		for _, check := range snapshot.Checks {
+			found[check.Name] = check.Ready
+		}
+		if !snapshot.Ready || !found["run-lifecycle-service"] {
+			t.Fatalf("P18 durable readiness missing: %+v", snapshot)
+		}
+		request := httptest.NewRequest(http.MethodPost, "/v1/agent-runs", strings.NewReader(`{}`))
+		request.Header.Set("Authorization", "Bearer p18-invalid-credential")
+		request.Header.Set("Content-Type", "application/json")
+		request.Header.Set("Idempotency-Key", "p18-create-request")
+		response := httptest.NewRecorder()
+		server.Handler.ServeHTTP(response, request)
+		if response.Code != http.StatusUnauthorized || response.Header().Get("WWW-Authenticate") != "Bearer" || !strings.Contains(response.Body.String(), `"code":"AUTHENTICATION_REQUIRED"`) {
+			t.Fatalf("P18 run route authentication contract missing: status=%d headers=%v body=%s", response.Code, response.Header(), response.Body.String())
+		}
+	})
+
 	t.Run("asset-token-key-loader-fails-closed", func(t *testing.T) {
 		root, err := filepath.EvalSymlinks(t.TempDir())
 		if err != nil {

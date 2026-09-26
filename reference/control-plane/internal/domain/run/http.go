@@ -14,8 +14,13 @@ import (
 
 const maxRunRequestBytes = 1 << 20
 
+var errRunRequestTooLarge = errors.New("run request too large")
+
 type CallerProvider interface {
 	Authenticate(*http.Request, Operation) (Caller, error)
+}
+type requestMetadataProvider interface {
+	Metadata(*http.Request) (platform.RequestMetadata, bool)
 }
 type HTTPHandler struct {
 	service *Service
@@ -74,6 +79,10 @@ func (handler *HTTPHandler) create(writer http.ResponseWriter, request *http.Req
 	}
 	body, err := readBody(request)
 	if err != nil {
+		if errors.Is(err, errRunRequestTooLarge) {
+			writeTyped(writer, NewError(CategoryCapacity, ReasonRunRequestTooLarge))
+			return
+		}
 		writeRunError(writer, NewError(CategoryValidation, ReasonInvalidRequest), 400)
 		return
 	}
@@ -105,7 +114,19 @@ func (handler *HTTPHandler) create(writer http.ResponseWriter, request *http.Req
 	if wire.ConversationRef != nil {
 		conversation = string(*wire.ConversationRef)
 	}
-	record, err := handler.service.Create(request.Context(), CreateRequest{Caller: caller, Agent: AgentBinding{ID: string(wire.Agent.ID), Version: string(wire.Agent.Version), SkillID: string(wire.Agent.SkillID), ManifestDigest: string(wire.Agent.ManifestDigest)}, Input: input, ConversationRef: conversation, DeadlineAt: deadline.UTC(), Effects: effect, Metadata: metadataFromWire(wire.Trace.Traceparent), IdempotencyKey: idempotency})
+	var labels json.RawMessage
+	if wire.Labels != nil {
+		labels, err = json.Marshal(wire.Labels)
+		if err != nil {
+			writeRunError(writer, NewError(CategoryValidation, ReasonInvalidRequest), 400)
+			return
+		}
+	}
+	tracestate := ""
+	if wire.Trace.Tracestate != nil {
+		tracestate = *wire.Trace.Tracestate
+	}
+	record, err := handler.service.Create(request.Context(), CreateRequest{Caller: caller, Agent: AgentBinding{ID: string(wire.Agent.ID), Version: string(wire.Agent.Version), SkillID: string(wire.Agent.SkillID), ManifestDigest: string(wire.Agent.ManifestDigest)}, Input: input, Labels: labels, ConversationRef: conversation, DeadlineAt: deadline.UTC(), Effects: effect, Metadata: handler.metadata(request, wire.Trace.Traceparent), Tracestate: tracestate, IdempotencyKey: idempotency})
 	if err != nil {
 		writeTyped(writer, err)
 		return
@@ -119,7 +140,7 @@ func (handler *HTTPHandler) get(writer http.ResponseWriter, request *http.Reques
 		writeAuthError(writer, err)
 		return
 	}
-	record, err := handler.service.Get(request.Context(), caller, runID, metadataFromHeader(request))
+	record, err := handler.service.Get(request.Context(), caller, runID, handler.metadata(request, request.Header.Get("traceparent")))
 	if err != nil {
 		writeTyped(writer, err)
 		return
@@ -143,6 +164,10 @@ func (handler *HTTPHandler) command(writer http.ResponseWriter, request *http.Re
 	}
 	body, err := readBody(request)
 	if err != nil {
+		if errors.Is(err, errRunRequestTooLarge) {
+			writeTyped(writer, NewError(CategoryCapacity, ReasonRunRequestTooLarge))
+			return
+		}
 		writeRunError(writer, NewError(CategoryValidation, ReasonInvalidRequest), 400)
 		return
 	}
@@ -158,7 +183,7 @@ func (handler *HTTPHandler) command(writer http.ResponseWriter, request *http.Re
 		writeRunError(writer, NewError(CategoryValidation, ReasonInvalidRequest), 400)
 		return
 	}
-	record, err := handler.service.Cancel(request.Context(), CommandRequest{Caller: caller, RunID: runID, IdempotencyKey: idempotency, Command: Command{CommandID: wire.CommandID, ExpectedStateVersion: uint64(wire.ExpectedStateVersion), Type: wire.Type, Data: raw.Data}, Metadata: metadataFromHeader(request)})
+	record, err := handler.service.Cancel(request.Context(), CommandRequest{Caller: caller, RunID: runID, IdempotencyKey: idempotency, Command: Command{CommandID: wire.CommandID, ExpectedStateVersion: uint64(wire.ExpectedStateVersion), Type: wire.Type, Data: raw.Data}, Metadata: handler.metadata(request, request.Header.Get("traceparent"))})
 	if err != nil {
 		writeTyped(writer, err)
 		return
@@ -172,19 +197,48 @@ func readBody(request *http.Request) ([]byte, error) {
 	}
 	defer request.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(request.Body, maxRunRequestBytes+1))
-	if err != nil || len(body) == 0 || len(body) > maxRunRequestBytes {
+	var maxBytes *http.MaxBytesError
+	if errors.As(err, &maxBytes) || len(body) > maxRunRequestBytes {
+		return nil, errRunRequestTooLarge
+	}
+	if err != nil || len(body) == 0 {
 		return nil, errors.New("invalid body")
 	}
 	return body, nil
 }
 func writeStatus(writer http.ResponseWriter, record Run, status int) {
-	wire := map[string]any{"schema_version": 1, "run_id": record.RunID, "state": record.State, "state_version": record.StateVersion, "agent": map[string]any{"id": record.Agent.ID, "version": record.Agent.Version, "skill_id": record.Agent.SkillID, "manifest_digest": record.Agent.ManifestDigest}, "authorization_snapshot_digest": record.AuthorizationSnapshotDigest, "created_at": record.CreatedAt.Format(time.RFC3339Nano), "updated_at": record.UpdatedAt.Format(time.RFC3339Nano), "deadline_at": record.DeadlineAt.Format(time.RFC3339Nano), "trace": map[string]any{"traceparent": record.Traceparent}}
+	wire := generated.RunStatus{
+		SchemaVersion: 1,
+		RunID:         generated.RunId(record.RunID),
+		State:         string(record.State),
+		StateVersion:  generated.SafeInteger(record.StateVersion),
+		Agent: generated.AgentBinding{
+			ID:             generated.AgentId(record.Agent.ID),
+			Version:        generated.SemanticVersion(record.Agent.Version),
+			SkillID:        generated.SkillId(record.Agent.SkillID),
+			ManifestDigest: generated.Sha256Digest(record.Agent.ManifestDigest),
+		},
+		AuthorizationSnapshotDigest: generated.Sha256Digest(record.AuthorizationSnapshotDigest),
+		CreatedAt:                   generated.DateTime(record.CreatedAt.Format(time.RFC3339Nano)),
+		UpdatedAt:                   generated.DateTime(record.UpdatedAt.Format(time.RFC3339Nano)),
+		DeadlineAt:                  generated.DateTime(record.DeadlineAt.Format(time.RFC3339Nano)),
+		Trace:                       generated.AROPV1W3CTraceContext{Traceparent: record.Traceparent},
+	}
+	if record.Tracestate != "" {
+		wire.Trace.Tracestate = &record.Tracestate
+	}
 	if record.CancelRequestedAt != nil {
-		wire["cancel_requested_at"] = record.CancelRequestedAt.Format(time.RFC3339Nano)
+		value := generated.DateTime(record.CancelRequestedAt.Format(time.RFC3339Nano))
+		wire.CancelRequestedAt = &value
+	}
+	encoded, err := generated.EncodeRunStatus(wire)
+	if err != nil {
+		writeTyped(writer, NewError(CategoryDependency, ReasonDependencyUnavailable))
+		return
 	}
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(status)
-	_ = json.NewEncoder(writer).Encode(wire)
+	_, _ = writer.Write(encoded)
 }
 func writeTyped(writer http.ResponseWriter, err error) {
 	failure, ok := AsError(err)
@@ -203,6 +257,8 @@ func writeTyped(writer http.ResponseWriter, err error) {
 		status = 404
 	case CategoryConflict:
 		status = 409
+	case CategoryCapacity:
+		status = http.StatusRequestEntityTooLarge
 	case CategoryTimeout:
 		status = 408
 	case CategoryDependency:
@@ -255,8 +311,17 @@ func allowedMethod(parts []string) string {
 	}
 	return ""
 }
-func metadataFromHeader(request *http.Request) platform.RequestMetadata {
-	return metadataFromWire(request.Header.Get("traceparent"))
+func (handler *HTTPHandler) metadata(request *http.Request, traceparent string) platform.RequestMetadata {
+	metadata := metadataFromWire(traceparent)
+	if provider, ok := handler.callers.(requestMetadataProvider); ok {
+		if outer, found := provider.Metadata(request); found {
+			metadata.RequestID = outer.RequestID
+			if traceparent == "" {
+				metadata = outer
+			}
+		}
+	}
+	return metadata
 }
 func metadataFromWire(traceparent string) platform.RequestMetadata {
 	parts := strings.Split(traceparent, "-")

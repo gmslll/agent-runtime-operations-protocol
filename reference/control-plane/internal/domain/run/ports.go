@@ -15,11 +15,12 @@ type IDSource interface {
 type Authorizer interface {
 	Authorize(context.Context, Caller, Operation, AgentBinding) (AuthorizationSnapshot, error)
 }
+type OutboxFactory func(context.Context, uint64) (Outbox, error)
 type Repository interface {
 	Create(context.Context, Run, string, string, Outbox) error
 	Get(context.Context, string, string) (Run, error)
 	GetByIdempotency(context.Context, string, string) (Run, string, error)
-	Cancel(context.Context, string, string, Command, string, string, time.Time, Outbox) (Run, error)
+	Cancel(context.Context, string, string, Command, string, string, time.Time, OutboxFactory) (Run, error)
 	Expire(context.Context, string, string, uint64, time.Time, Outbox) (Run, error)
 	ReserveEffect(context.Context, EffectReservation) (bool, error)
 }

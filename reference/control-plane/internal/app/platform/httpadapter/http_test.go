@@ -30,6 +30,23 @@ type publicationStub struct {
 	get     func(context.Context, publication.GetRequest) (publication.GetResult, error)
 }
 
+func TestRunRouteScopesAreExact(t *testing.T) {
+	for _, test := range []struct {
+		method, path, operation, scope string
+	}{
+		{http.MethodPost, "/v1/agent-runs", "run.create", "run:create"},
+		{http.MethodGet, "/v1/agent-runs/run_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c", "run.read", "run:read"},
+		{http.MethodPost, "/v1/agent-runs/run_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c/commands", "run.command", "run:command"},
+	} {
+		if actual := classifyOperation(test.method, test.path); actual != test.operation {
+			t.Fatalf("%s %s operation=%s want=%s", test.method, test.path, actual, test.operation)
+		}
+		if scopes := scopesForOperation(test.operation); len(scopes) != 1 || scopes[0] != test.scope {
+			t.Fatalf("%s scopes=%v want=%s", test.operation, scopes, test.scope)
+		}
+	}
+}
+
 func (stub publicationStub) Publish(ctx context.Context, request publication.PublishRequest) (publication.PublishResult, error) {
 	return stub.publish(ctx, request)
 }

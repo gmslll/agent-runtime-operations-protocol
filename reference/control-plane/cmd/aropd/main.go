@@ -35,6 +35,9 @@ import (
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/registry"
 	registrypostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/registry/storage/postgres"
 	registrysqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/registry/storage/sqlite"
+	domainrun "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/run"
+	runpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/run/storage/postgres"
+	runsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/run/storage/sqlite"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/identity"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/ports/observability"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/storage/migrate"
@@ -106,6 +109,13 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 	if err != nil {
 		_ = cleanup()
 		return nil, nil, nil, errors.New("assemble Control Plane HTTP handler")
+	}
+	if runService := runServiceFromChecks(checks); runService != nil {
+		handler, err = httpadapter.NewRunApplicationHandler(application, referenceAuthenticate(identityServiceFromChecks(checks), ids), publicationServiceFromChecks(checks), assetServiceFromChecks(checks), registryAPIServiceFromChecks(checks), registryWatchServiceFromChecks(checks), runService)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, errors.New("assemble run lifecycle HTTP handler")
+		}
 	}
 	httpServer := httpadapter.NewServer(application, handler)
 	if registryWatchServiceFromChecks(checks) != nil {
@@ -237,6 +247,14 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			}
 			checks = append(checks, registryService, watchService)
 		}
+		if catalogOwns(catalogClosure, "P18") {
+			runService, err := composeRun(db, migrate.DialectSQLite, uow.Transaction, uow, store, clock, ids)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, runService)
+		}
 		return uow, store, checks, cleanup, nil
 	case platform.ModePostgres:
 		root, err := canonicalDirectory(config.MigrationRoot)
@@ -335,6 +353,14 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			}
 			checks = append(checks, registryService, watchService)
 		}
+		if catalogOwns(catalogClosure, "P18") {
+			runService, err := composeRun(db, migrate.DialectPostgres, uow.Transaction, uow, store, clock, ids)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, runService)
+		}
 		return uow, store, checks, cleanup, nil
 	default:
 		return nil, nil, nil, nil, errors.New("unsupported storage mode")
@@ -375,9 +401,17 @@ func schemaVerifier(catalog migrate.CatalogClosure, dialect migrate.Dialect) mig
 			return err
 		}
 		if dialect == migrate.DialectSQLite {
-			return registrysqlite.VerifySchema()(ctx, query)
+			err = registrysqlite.VerifySchema()(ctx, query)
+		} else {
+			err = registrypostgres.VerifySchema()(ctx, query)
 		}
-		return registrypostgres.VerifySchema()(ctx, query)
+		if err != nil || !catalogOwns(catalog, "P18") {
+			return err
+		}
+		if dialect == migrate.DialectSQLite {
+			return runsqlite.VerifySchema()(ctx, query)
+		}
+		return runpostgres.VerifySchema()(ctx, query)
 	}
 }
 
@@ -388,7 +422,7 @@ func composeIdentity(db *sql.DB, dialect migrate.Dialect, lookup durable.Transac
 	}
 	service, err := identity.New(identity.Dependencies{
 		Clock: clock, IDs: ids, Faults: faults, UoW: uow, Observability: observations, Repository: repository,
-		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent:publish", "agent:read", "asset:exchange", "registry:discover", "registry:operate", "registry:register", "registry:write", "secret.read"}, AllowedTenants: []string{"reference-dev"},
+		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent:publish", "agent:read", "asset:exchange", "registry:discover", "registry:operate", "registry:register", "registry:write", "run:command", "run:create", "run:read", "secret.read"}, AllowedTenants: []string{"reference-dev"},
 	})
 	if err != nil {
 		return nil, errors.New("initialize identity service")
@@ -553,6 +587,65 @@ func composeRegistry(db *sql.DB, dialect migrate.Dialect, lookup durable.Transac
 	return service, watchService, nil
 }
 
+type referenceRunAuthorizer struct{}
+
+func (referenceRunAuthorizer) Authorize(_ context.Context, caller domainrun.Caller, operation domainrun.Operation, agent domainrun.AgentBinding) (domainrun.AuthorizationSnapshot, error) {
+	want := "run:command"
+	switch operation {
+	case domainrun.OperationCreate:
+		want = "run:create"
+	case domainrun.OperationRead:
+		want = "run:read"
+	case domainrun.OperationCommand, domainrun.OperationExpire, domainrun.OperationEffect:
+	default:
+		return domainrun.AuthorizationSnapshot{}, domainrun.NewError(domainrun.CategoryAuthorization, domainrun.ReasonRunForbidden)
+	}
+	if !slices.Contains(caller.Scopes, want) {
+		return domainrun.AuthorizationSnapshot{}, domainrun.NewError(domainrun.CategoryAuthorization, domainrun.ReasonRunForbidden)
+	}
+	snapshot := domainrun.AuthorizationSnapshot{TenantID: caller.TenantID, PrincipalID: caller.PrincipalID, CredentialID: caller.CredentialID, Operation: operation, Agent: agent, Scopes: slices.Clone(caller.Scopes), BudgetClass: "standard", RiskClass: "controlled"}
+	if _, _, _, err := snapshot.Canonical(); err != nil {
+		return domainrun.AuthorizationSnapshot{}, domainrun.NewError(domainrun.CategoryValidation, domainrun.ReasonInvalidRequest)
+	}
+	return snapshot, nil
+}
+
+type runIDSource struct{ source platformports.IDSource }
+
+func (source runIDSource) next(ctx context.Context, prefix string) (string, error) {
+	identifier, err := source.source.NewID(ctx, platformports.IDEvent)
+	if err != nil || !strings.HasPrefix(identifier, "evt_") {
+		return "", errors.New("generate run lifecycle identifier")
+	}
+	return prefix + strings.TrimPrefix(identifier, "evt_"), nil
+}
+
+func (source runIDSource) NewRunID(ctx context.Context) (string, error) {
+	return source.next(ctx, "run_")
+}
+
+func (source runIDSource) NewOutboxID(ctx context.Context) (string, error) {
+	return source.next(ctx, "out_")
+}
+
+func composeRun(db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, observations observability.Store, clock platformports.Clock, ids platformports.IDSource) (*domainrun.Service, error) {
+	var repository domainrun.Repository
+	var err error
+	if dialect == migrate.DialectSQLite {
+		repository, err = runsqlite.New(db, lookup)
+	} else {
+		repository, err = runpostgres.New(db, lookup)
+	}
+	if err != nil {
+		return nil, errors.New("initialize run repository")
+	}
+	service, err := domainrun.New(domainrun.Dependencies{Clock: clock, IDs: runIDSource{source: ids}, UoW: uow, Observability: observations, Authorizer: referenceRunAuthorizer{}, Repository: repository})
+	if err != nil {
+		return nil, errors.New("initialize run lifecycle service")
+	}
+	return service, nil
+}
+
 func identityServiceFromChecks(checks []platformports.ReadinessCheck) *identity.Service {
 	for _, check := range checks {
 		if service, ok := check.(*identity.Service); ok {
@@ -592,6 +685,15 @@ func registryAPIServiceFromChecks(checks []platformports.ReadinessCheck) *regist
 func registryWatchServiceFromChecks(checks []platformports.ReadinessCheck) *registrywatch.Service {
 	for _, check := range checks {
 		if service, ok := check.(*registrywatch.Service); ok {
+			return service
+		}
+	}
+	return nil
+}
+
+func runServiceFromChecks(checks []platformports.ReadinessCheck) *domainrun.Service {
+	for _, check := range checks {
+		if service, ok := check.(*domainrun.Service); ok {
 			return service
 		}
 	}

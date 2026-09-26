@@ -50,7 +50,7 @@ func (store *Store) Create(ctx context.Context, record run.Run, keyDigest, reque
 	} else if found {
 		return run.NewError(run.CategoryConflict, run.ReasonIdempotencyConflict)
 	}
-	_, err = tx.ExecContext(ctx, store.query(`INSERT INTO arop_runs(tenant_id,run_id,agent_id,agent_version,skill_id,manifest_digest,input_json,conversation_ref,effect_level,effect_id,state,state_version,authorization_snapshot_json,authorization_snapshot_digest,traceparent,deadline_at,created_at,updated_at,cancel_requested_at,usage_input_tokens,usage_output_tokens,usage_duration_ms,usage_billable_units) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`), record.TenantID, record.RunID, record.Agent.ID, record.Agent.Version, record.Agent.SkillID, record.Agent.ManifestDigest, string(record.Input), nullable(record.ConversationRef), string(record.Effects.Level), nullable(record.Effects.EffectID), string(record.State), record.StateVersion, string(record.AuthorizationSnapshot), record.AuthorizationSnapshotDigest, record.Traceparent, formatTime(record.DeadlineAt), formatTime(record.CreatedAt), formatTime(record.UpdatedAt), nil, record.Usage.InputTokens, record.Usage.OutputTokens, record.Usage.DurationMS, record.Usage.BillableUnits)
+	_, err = tx.ExecContext(ctx, store.query(`INSERT INTO arop_runs(tenant_id,run_id,agent_id,agent_version,skill_id,manifest_digest,input_json,labels_json,conversation_ref,effect_level,effect_id,state,state_version,authorization_snapshot_json,authorization_snapshot_digest,traceparent,tracestate,deadline_at,created_at,updated_at,cancel_requested_at,usage_input_tokens,usage_output_tokens,usage_duration_ms,usage_billable_units) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`), record.TenantID, record.RunID, record.Agent.ID, record.Agent.Version, record.Agent.SkillID, record.Agent.ManifestDigest, string(record.Input), labelsJSON(record.Labels), nullable(record.ConversationRef), string(record.Effects.Level), nullable(record.Effects.EffectID), string(record.State), record.StateVersion, string(record.AuthorizationSnapshot), record.AuthorizationSnapshotDigest, record.Traceparent, nullable(record.Tracestate), formatTime(record.DeadlineAt), formatTime(record.CreatedAt), formatTime(record.UpdatedAt), nil, record.Usage.InputTokens, record.Usage.OutputTokens, record.Usage.DurationMS, record.Usage.BillableUnits)
 	if err != nil {
 		return store.classify(err)
 	}
@@ -84,7 +84,7 @@ func (store *Store) GetByIdempotency(ctx context.Context, tenantID, keyDigest st
 	return record, requestDigest, err
 }
 
-func (store *Store) Cancel(ctx context.Context, tenantID, runID string, command run.Command, keyDigest, commandDigest string, now time.Time, outbox run.Outbox) (run.Run, error) {
+func (store *Store) Cancel(ctx context.Context, tenantID, runID string, command run.Command, keyDigest, commandDigest string, now time.Time, outboxFactory run.OutboxFactory) (run.Run, error) {
 	tx, err := store.writeTx(ctx)
 	if err != nil {
 		return run.Run{}, err
@@ -117,6 +117,10 @@ func (store *Store) Cancel(ctx context.Context, tenantID, runID string, command 
 	if next > run.MaxSafeInteger {
 		return run.Run{}, run.NewError(run.CategoryConflict, run.ReasonStateVersionConflict)
 	}
+	outbox, err := outboxFactory(ctx, next)
+	if err != nil {
+		return run.Run{}, err
+	}
 	_, err = tx.ExecContext(ctx, store.query(`UPDATE arop_runs SET state='cancel_requested',state_version=?,updated_at=?,cancel_requested_at=? WHERE tenant_id=? AND run_id=? AND state_version=?`), next, formatTime(now), formatTime(now), tenantID, runID, record.StateVersion)
 	if err != nil {
 		return run.Run{}, store.classify(err)
@@ -125,7 +129,6 @@ func (store *Store) Cancel(ctx context.Context, tenantID, runID string, command 
 	if err != nil {
 		return run.Run{}, store.classify(err)
 	}
-	outbox.StateVersion = next
 	if err = store.insertOutbox(ctx, tx, outbox); err != nil {
 		return run.Run{}, err
 	}
@@ -151,6 +154,9 @@ func (store *Store) Expire(ctx context.Context, tenantID, runID string, expected
 		return run.Run{}, run.NewError(run.CategoryConflict, run.ReasonStateVersionConflict)
 	}
 	next := expected + 1
+	if next > run.MaxSafeInteger {
+		return run.Run{}, run.NewError(run.CategoryConflict, run.ReasonStateVersionConflict)
+	}
 	_, err = tx.ExecContext(ctx, store.query(`UPDATE arop_runs SET state='timed_out',state_version=?,updated_at=? WHERE tenant_id=? AND run_id=? AND state_version=?`), next, formatTime(now), tenantID, runID, expected)
 	if err != nil {
 		return run.Run{}, store.classify(err)
@@ -190,10 +196,10 @@ func (store *Store) ReserveEffect(ctx context.Context, reservation run.EffectRes
 
 func (store *Store) load(ctx context.Context, queryer migrate.Queryer, tenantID, runID string) (run.Run, error) {
 	var record run.Run
-	var input, auth string
-	var conversation, effectID, cancel sql.NullString
+	var input, labels, auth string
+	var conversation, effectID, tracestate, cancel sql.NullString
 	var state, effectLevel, deadline, created, updated string
-	err := queryer.QueryRowContext(ctx, store.query(`SELECT tenant_id,run_id,agent_id,agent_version,skill_id,manifest_digest,input_json,conversation_ref,effect_level,effect_id,state,state_version,authorization_snapshot_json,authorization_snapshot_digest,traceparent,deadline_at,created_at,updated_at,cancel_requested_at,usage_input_tokens,usage_output_tokens,usage_duration_ms,usage_billable_units FROM arop_runs WHERE tenant_id=? AND run_id=?`), tenantID, runID).Scan(&record.TenantID, &record.RunID, &record.Agent.ID, &record.Agent.Version, &record.Agent.SkillID, &record.Agent.ManifestDigest, &input, &conversation, &effectLevel, &effectID, &state, &record.StateVersion, &auth, &record.AuthorizationSnapshotDigest, &record.Traceparent, &deadline, &created, &updated, &cancel, &record.Usage.InputTokens, &record.Usage.OutputTokens, &record.Usage.DurationMS, &record.Usage.BillableUnits)
+	err := queryer.QueryRowContext(ctx, store.query(`SELECT tenant_id,run_id,agent_id,agent_version,skill_id,manifest_digest,input_json,labels_json,conversation_ref,effect_level,effect_id,state,state_version,authorization_snapshot_json,authorization_snapshot_digest,traceparent,tracestate,deadline_at,created_at,updated_at,cancel_requested_at,usage_input_tokens,usage_output_tokens,usage_duration_ms,usage_billable_units FROM arop_runs WHERE tenant_id=? AND run_id=?`), tenantID, runID).Scan(&record.TenantID, &record.RunID, &record.Agent.ID, &record.Agent.Version, &record.Agent.SkillID, &record.Agent.ManifestDigest, &input, &labels, &conversation, &effectLevel, &effectID, &state, &record.StateVersion, &auth, &record.AuthorizationSnapshotDigest, &record.Traceparent, &tracestate, &deadline, &created, &updated, &cancel, &record.Usage.InputTokens, &record.Usage.OutputTokens, &record.Usage.DurationMS, &record.Usage.BillableUnits)
 	if errors.Is(err, sql.ErrNoRows) {
 		return run.Run{}, run.NewError(run.CategoryNotFound, run.ReasonRunNotFound)
 	}
@@ -201,8 +207,10 @@ func (store *Store) load(ctx context.Context, queryer migrate.Queryer, tenantID,
 		return run.Run{}, run.NewError(run.CategoryDependency, run.ReasonDependencyUnavailable)
 	}
 	record.Input = json.RawMessage(input)
+	record.Labels = json.RawMessage(labels)
 	record.AuthorizationSnapshot = json.RawMessage(auth)
 	record.ConversationRef = conversation.String
+	record.Tracestate = tracestate.String
 	record.Effects = run.EffectIntent{Level: run.EffectLevel(effectLevel), EffectID: effectID.String}
 	record.State = run.State(state)
 	record.DeadlineAt, err = parseTime(deadline)
@@ -291,6 +299,12 @@ func nullable(value string) any {
 		return nil
 	}
 	return value
+}
+func labelsJSON(value json.RawMessage) string {
+	if len(value) == 0 {
+		return "{}"
+	}
+	return string(value)
 }
 func formatTime(value time.Time) string { return value.UTC().Format("2006-01-02T15:04:05.000000000Z") }
 func parseTime(value string) (time.Time, error) {

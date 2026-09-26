@@ -43,6 +43,11 @@ func (service *Service) Create(ctx context.Context, request CreateRequest) (Run,
 	if err != nil || canonical.TenantID != request.Caller.TenantID || canonical.PrincipalID != request.Caller.PrincipalID {
 		return Run{}, service.fail(ctx, request.Metadata, OperationCreate, now)
 	}
+	labels, err := canonicalLabels(request.Labels)
+	if err != nil {
+		return Run{}, service.reject(ctx, request.Metadata, OperationCreate, now, 400, NewError(CategoryValidation, ReasonInvalidRequest))
+	}
+	request.Labels = labels
 	requestDigest, err := createRequestDigest(request, canonical)
 	if err != nil {
 		return Run{}, service.fail(ctx, request.Metadata, OperationCreate, now)
@@ -55,6 +60,7 @@ func (service *Service) Create(ctx context.Context, request CreateRequest) (Run,
 		if err := service.audit(ctx, request.Metadata, OperationCreate, now, 201); err != nil {
 			return Run{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
 		}
+		service.healthy()
 		return existing, nil
 	} else if !isNotFound(lookupErr) {
 		return Run{}, service.fail(ctx, request.Metadata, OperationCreate, now)
@@ -67,7 +73,7 @@ func (service *Service) Create(ctx context.Context, request CreateRequest) (Run,
 	if err != nil || !prefixedUUID("out_", outboxID) {
 		return Run{}, service.fail(ctx, request.Metadata, OperationCreate, now)
 	}
-	run := Run{TenantID: request.Caller.TenantID, RunID: runID, Agent: request.Agent, Input: append(json.RawMessage(nil), request.Input...), ConversationRef: request.ConversationRef, Effects: request.Effects, State: StateQueued, StateVersion: 1, AuthorizationSnapshot: snapshotJSON, AuthorizationSnapshotDigest: snapshotDigest, Traceparent: request.Metadata.Traceparent(), DeadlineAt: request.DeadlineAt, CreatedAt: now, UpdatedAt: now}
+	run := Run{TenantID: request.Caller.TenantID, RunID: runID, Agent: request.Agent, Input: append(json.RawMessage(nil), request.Input...), Labels: append(json.RawMessage(nil), labels...), ConversationRef: request.ConversationRef, Effects: request.Effects, State: StateQueued, StateVersion: 1, AuthorizationSnapshot: snapshotJSON, AuthorizationSnapshotDigest: snapshotDigest, Traceparent: request.Metadata.Traceparent(), Tracestate: request.Tracestate, DeadlineAt: request.DeadlineAt, CreatedAt: now, UpdatedAt: now}
 	payload, _ := json.Marshal(map[string]any{"run_id": runID, "state": StateQueued, "state_version": 1})
 	outbox := Outbox{OutboxID: outboxID, TenantID: run.TenantID, RunID: runID, Kind: "run-queued", StateVersion: 1, Payload: payload, CreatedAt: now}
 	err = service.deps.UoW.Within(ctx, func(txctx context.Context) error {
@@ -77,6 +83,19 @@ func (service *Service) Create(ctx context.Context, request CreateRequest) (Run,
 		return service.observe(txctx, request.Metadata, OperationCreate, now, 201)
 	})
 	if err != nil {
+		if typed, ok := AsError(err); ok && typed.Category == CategoryConflict {
+			existing, stored, lookupErr := service.deps.Repository.GetByIdempotency(ctx, request.Caller.TenantID, keyDigest)
+			if lookupErr == nil && stored == requestDigest {
+				if auditErr := service.audit(ctx, request.Metadata, OperationCreate, now, 201); auditErr != nil {
+					return Run{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
+				}
+				service.healthy()
+				return existing, nil
+			}
+			if lookupErr == nil {
+				return Run{}, service.reject(ctx, request.Metadata, OperationCreate, now, 409, NewError(CategoryConflict, ReasonIdempotencyConflict))
+			}
+		}
 		return Run{}, service.fail(ctx, request.Metadata, OperationCreate, now)
 	}
 	service.healthy()
@@ -101,6 +120,7 @@ func (service *Service) Get(ctx context.Context, caller Caller, runID string, me
 	if err := service.audit(ctx, metadata, OperationRead, started, 200); err != nil {
 		return Run{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
 	}
+	service.healthy()
 	return record, nil
 }
 
@@ -111,27 +131,29 @@ func (service *Service) Cancel(ctx context.Context, request CommandRequest) (Run
 	}
 	current, err := service.deps.Repository.Get(ctx, request.Caller.TenantID, request.RunID)
 	if err != nil {
-		return Run{}, err
+		if isNotFound(err) {
+			return Run{}, service.reject(ctx, request.Metadata, OperationCommand, started, 404, err)
+		}
+		return Run{}, service.fail(ctx, request.Metadata, OperationCommand, started)
 	}
 	if _, err = service.deps.Authorizer.Authorize(ctx, request.Caller, OperationCommand, current.Agent); err != nil {
 		return Run{}, service.reject(ctx, request.Metadata, OperationCommand, started, statusFor(err), normalizeAuthorization(err))
 	}
-	if current.State.Terminal() {
-		return Run{}, service.reject(ctx, request.Metadata, OperationCommand, started, 409, NewError(CategoryConflict, ReasonTerminalStateConflict))
-	}
-	outboxID, err := service.deps.IDs.NewOutboxID(ctx)
-	if err != nil {
-		return Run{}, service.fail(ctx, request.Metadata, OperationCommand, started)
-	}
 	payload, _ := json.Marshal(map[string]any{"run_id": request.RunID, "command_id": request.Command.CommandID, "type": request.Command.Type})
-	outbox := Outbox{OutboxID: outboxID, TenantID: request.Caller.TenantID, RunID: request.RunID, Kind: "run-command", StateVersion: request.Command.ExpectedStateVersion + 1, Payload: payload, CreatedAt: started}
+	outboxFactory := func(factoryCtx context.Context, stateVersion uint64) (Outbox, error) {
+		outboxID, idErr := service.deps.IDs.NewOutboxID(factoryCtx)
+		if idErr != nil || !prefixedUUID("out_", outboxID) {
+			return Outbox{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
+		}
+		return Outbox{OutboxID: outboxID, TenantID: request.Caller.TenantID, RunID: request.RunID, Kind: "run-command", StateVersion: stateVersion, Payload: payload, CreatedAt: started}, nil
+	}
 	commandBytes, _ := json.Marshal(request.Command)
 	commandDigest := digestBytes(commandBytes)
 	keyDigest := digestText(request.IdempotencyKey)
 	var result Run
 	err = service.deps.UoW.Within(ctx, func(txctx context.Context) error {
 		var inner error
-		result, inner = service.deps.Repository.Cancel(txctx, request.Caller.TenantID, request.RunID, request.Command, keyDigest, commandDigest, started, outbox)
+		result, inner = service.deps.Repository.Cancel(txctx, request.Caller.TenantID, request.RunID, request.Command, keyDigest, commandDigest, started, outboxFactory)
 		if inner != nil {
 			return inner
 		}
@@ -143,23 +165,34 @@ func (service *Service) Cancel(ctx context.Context, request CommandRequest) (Run
 		}
 		return Run{}, service.fail(ctx, request.Metadata, OperationCommand, started)
 	}
+	service.healthy()
 	return result, nil
 }
 
 func (service *Service) Expire(ctx context.Context, caller Caller, runID string, expectedVersion uint64, metadata platform.RequestMetadata) (Run, error) {
 	now := service.now()
+	if caller.Validate() != nil || !prefixedUUID("run_", runID) || expectedVersion == 0 || expectedVersion > MaxSafeInteger {
+		return Run{}, service.reject(ctx, metadata, OperationExpire, now, 400, NewError(CategoryValidation, ReasonInvalidRequest))
+	}
 	current, err := service.deps.Repository.Get(ctx, caller.TenantID, runID)
 	if err != nil {
-		return Run{}, err
-	}
-	if now.Before(current.DeadlineAt) {
-		return Run{}, NewError(CategoryValidation, ReasonInvalidRequest)
-	}
-	if current.State.Terminal() {
-		return current, nil
+		if isNotFound(err) {
+			return Run{}, service.reject(ctx, metadata, OperationExpire, now, 404, err)
+		}
+		return Run{}, service.fail(ctx, metadata, OperationExpire, now)
 	}
 	if _, err = service.deps.Authorizer.Authorize(ctx, caller, OperationExpire, current.Agent); err != nil {
-		return Run{}, normalizeAuthorization(err)
+		return Run{}, service.reject(ctx, metadata, OperationExpire, now, statusFor(err), normalizeAuthorization(err))
+	}
+	if now.Before(current.DeadlineAt) {
+		return Run{}, service.reject(ctx, metadata, OperationExpire, now, 400, NewError(CategoryValidation, ReasonInvalidRequest))
+	}
+	if current.State.Terminal() {
+		if err := service.audit(ctx, metadata, OperationExpire, now, 200); err != nil {
+			return Run{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
+		}
+		service.healthy()
+		return current, nil
 	}
 	outboxID, err := service.deps.IDs.NewOutboxID(ctx)
 	if err != nil {
@@ -177,43 +210,62 @@ func (service *Service) Expire(ctx context.Context, caller Caller, runID string,
 		return service.observe(txctx, metadata, OperationExpire, now, 200)
 	})
 	if err != nil {
+		if typed, ok := AsError(err); ok && typed.Category == CategoryConflict {
+			return Run{}, service.reject(ctx, metadata, OperationExpire, now, 409, err)
+		}
 		return Run{}, service.fail(ctx, metadata, OperationExpire, now)
 	}
+	service.healthy()
 	return result, nil
 }
 
-func (service *Service) ReserveEffect(ctx context.Context, caller Caller, runID, effectID, semanticDigest string) (bool, error) {
+func (service *Service) ReserveEffect(ctx context.Context, caller Caller, runID, effectID, semanticDigest string, metadata platform.RequestMetadata) (bool, error) {
+	started := service.now()
 	if caller.Validate() != nil || !prefixedUUID("run_", runID) || !effectPattern.MatchString(effectID) || !digestPattern.MatchString(semanticDigest) {
-		return false, NewError(CategoryValidation, ReasonInvalidRequest)
+		return false, service.reject(ctx, metadata, OperationEffect, started, 400, NewError(CategoryValidation, ReasonInvalidRequest))
 	}
 	record, err := service.deps.Repository.Get(ctx, caller.TenantID, runID)
 	if err != nil {
-		return false, err
+		if isNotFound(err) {
+			return false, service.reject(ctx, metadata, OperationEffect, started, 404, err)
+		}
+		return false, service.fail(ctx, metadata, OperationEffect, started)
 	}
 	if record.Effects.Level != EffectWrite && record.Effects.Level != EffectIrreversible || record.Effects.EffectID != effectID {
-		return false, NewError(CategoryConflict, ReasonEffectConflict)
+		return false, service.reject(ctx, metadata, OperationEffect, started, 409, NewError(CategoryConflict, ReasonEffectConflict))
 	}
 	if _, err = service.deps.Authorizer.Authorize(ctx, caller, OperationEffect, record.Agent); err != nil {
-		return false, normalizeAuthorization(err)
+		return false, service.reject(ctx, metadata, OperationEffect, started, statusFor(err), normalizeAuthorization(err))
 	}
 	var replay bool
 	err = service.deps.UoW.Within(ctx, func(txctx context.Context) error {
 		var inner error
 		replay, inner = service.deps.Repository.ReserveEffect(txctx, EffectReservation{TenantID: caller.TenantID, RunID: runID, EffectID: effectID, SemanticDigest: semanticDigest, CreatedAt: service.now()})
-		return inner
+		if inner != nil {
+			return inner
+		}
+		return service.observe(txctx, metadata, OperationEffect, started, 200)
 	})
-	return replay, err
+	if err != nil {
+		if typed, ok := AsError(err); ok && typed.Category == CategoryConflict {
+			return false, service.reject(ctx, metadata, OperationEffect, started, 409, err)
+		}
+		return false, service.fail(ctx, metadata, OperationEffect, started)
+	}
+	service.healthy()
+	return replay, nil
 }
 
 func createRequestDigest(request CreateRequest, snapshot AuthorizationSnapshot) (string, error) {
 	value := struct {
 		Agent           AgentBinding          `json:"agent"`
 		Input           json.RawMessage       `json:"input"`
+		Labels          json.RawMessage       `json:"labels"`
 		ConversationRef string                `json:"conversation_ref,omitempty"`
 		DeadlineAt      string                `json:"deadline_at"`
 		Effects         EffectIntent          `json:"effects"`
 		Authorization   AuthorizationSnapshot `json:"authorization"`
-	}{request.Agent, request.Input, request.ConversationRef, request.DeadlineAt.Format(time.RFC3339Nano), request.Effects, snapshot}
+	}{request.Agent, request.Input, request.Labels, request.ConversationRef, request.DeadlineAt.Format(time.RFC3339Nano), request.Effects, snapshot}
 	encoded, err := json.Marshal(value)
 	if err != nil {
 		return "", err

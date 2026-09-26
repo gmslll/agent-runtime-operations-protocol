@@ -76,6 +76,23 @@ type memoryRepo struct {
 func newMemoryRepo() *memoryRepo {
 	return &memoryRepo{runs: map[string]Run{}, idem: map[string]idem{}, commands: map[string]string{}, effects: map[string]effect{}}
 }
+
+type concurrentReplayRepo struct {
+	*memoryRepo
+	mu       sync.Mutex
+	hideOnce bool
+}
+
+func (repo *concurrentReplayRepo) GetByIdempotency(ctx context.Context, tenant, digest string) (Run, string, error) {
+	repo.mu.Lock()
+	hide := repo.hideOnce
+	repo.hideOnce = false
+	repo.mu.Unlock()
+	if hide {
+		return Run{}, "", NewError(CategoryNotFound, ReasonRunNotFound)
+	}
+	return repo.memoryRepo.GetByIdempotency(ctx, tenant, digest)
+}
 func key(tenant, id string) string { return tenant + "/" + id }
 func (repo *memoryRepo) tx(ctx context.Context) error {
 	if ctx.Value(txKey{}) != true {
@@ -116,7 +133,7 @@ func (repo *memoryRepo) GetByIdempotency(_ context.Context, tenant, digest strin
 	}
 	return repo.runs[key(tenant, stored.runID)], stored.digest, nil
 }
-func (repo *memoryRepo) Cancel(ctx context.Context, tenant, runID string, command Command, keyDigest, commandDigest string, now time.Time, outbox Outbox) (Run, error) {
+func (repo *memoryRepo) Cancel(ctx context.Context, tenant, runID string, command Command, keyDigest, commandDigest string, now time.Time, outboxFactory OutboxFactory) (Run, error) {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
 	if err := repo.tx(ctx); err != nil {
@@ -143,9 +160,12 @@ func (repo *memoryRepo) Cancel(ctx context.Context, tenant, runID string, comman
 	record.StateVersion++
 	record.UpdatedAt = now
 	record.CancelRequestedAt = &now
+	outbox, err := outboxFactory(ctx, record.StateVersion)
+	if err != nil {
+		return Run{}, err
+	}
 	repo.runs[key(tenant, runID)] = record
 	repo.commands[ck] = commandDigest
-	outbox.StateVersion = record.StateVersion
 	repo.outbox = append(repo.outbox, outbox)
 	return record, nil
 }
@@ -205,7 +225,7 @@ func metadata() platform.RequestMetadata {
 	return platform.RequestMetadata{RequestID: "req_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c", TraceID: "4bf92f3577b34da6a3ce929d0e0e4736", SpanID: "00f067aa0ba902b7", TraceFlags: "01"}
 }
 func request() CreateRequest {
-	return CreateRequest{Caller: caller(), Agent: AgentBinding{ID: "support.agent", Version: "1.2.3", SkillID: "answer", ManifestDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, Input: json.RawMessage(`[{"type":"text","text":"hello"}]`), DeadlineAt: baseTime.Add(time.Hour), Effects: EffectIntent{Level: EffectWrite, EffectID: "eff_invoice-01"}, Metadata: metadata(), IdempotencyKey: "create-key-0001"}
+	return CreateRequest{Caller: caller(), Agent: AgentBinding{ID: "support.agent", Version: "1.2.3", SkillID: "answer", ManifestDigest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, Input: json.RawMessage(`[{"type":"text","text":"hello"}]`), Labels: json.RawMessage(`{"priority":"high"}`), DeadlineAt: baseTime.Add(time.Hour), Effects: EffectIntent{Level: EffectWrite, EffectID: "eff_invoice-01"}, Metadata: metadata(), Tracestate: "vendor=value", IdempotencyKey: "create-key-0001"}
 }
 
 func TestCreateReplayCancelDeadlineAndEffectFencing(t *testing.T) {
@@ -217,6 +237,9 @@ func TestCreateReplayCancelDeadlineAndEffectFencing(t *testing.T) {
 	if created.State != StateQueued || created.StateVersion != 1 || len(repo.outbox) != 1 || len(audit.entries) != 1 {
 		t.Fatalf("unexpected create: %#v", created)
 	}
+	if string(created.Labels) != `{"priority":"high"}` || created.Tracestate != "vendor=value" {
+		t.Fatalf("run labels or tracestate were not durable: %#v", created)
+	}
 	replay, err := service.Create(context.Background(), request())
 	if err != nil || replay.RunID != created.RunID || len(repo.outbox) != 1 {
 		t.Fatalf("replay duplicated durable effects: %#v %v", replay, err)
@@ -225,6 +248,11 @@ func TestCreateReplayCancelDeadlineAndEffectFencing(t *testing.T) {
 	changed.DeadlineAt = changed.DeadlineAt.Add(time.Minute)
 	if _, err = service.Create(context.Background(), changed); !hasReason(err, ReasonIdempotencyConflict) {
 		t.Fatalf("changed replay accepted: %v", err)
+	}
+	changed = request()
+	changed.Labels = json.RawMessage(`{"priority":"low"}`)
+	if _, err = service.Create(context.Background(), changed); !hasReason(err, ReasonIdempotencyConflict) {
+		t.Fatalf("label-drift replay accepted: %v", err)
 	}
 	command := CommandRequest{Caller: caller(), RunID: created.RunID, IdempotencyKey: "command-key-0001", Command: Command{CommandID: "cmd_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c", ExpectedStateVersion: 1, Type: "run.cancel", Data: json.RawMessage(`{"reason":"operator"}`)}, Metadata: metadata()}
 	cancelled, err := service.Cancel(context.Background(), command)
@@ -236,21 +264,55 @@ func TestCreateReplayCancelDeadlineAndEffectFencing(t *testing.T) {
 		t.Fatalf("cancel replay not stable: %#v %v", again, err)
 	}
 	semantic := "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	replayed, err := service.ReserveEffect(context.Background(), caller(), created.RunID, "eff_invoice-01", semantic)
+	replayed, err := service.ReserveEffect(context.Background(), caller(), created.RunID, "eff_invoice-01", semantic, metadata())
 	if err != nil || replayed {
 		t.Fatalf("first effect reservation: %v %v", replayed, err)
 	}
-	replayed, err = service.ReserveEffect(context.Background(), caller(), created.RunID, "eff_invoice-01", semantic)
+	replayed, err = service.ReserveEffect(context.Background(), caller(), created.RunID, "eff_invoice-01", semantic, metadata())
 	if err != nil || !replayed {
 		t.Fatalf("effect replay: %v %v", replayed, err)
 	}
-	if _, err = service.ReserveEffect(context.Background(), caller(), created.RunID, "eff_invoice-01", "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"); !hasReason(err, ReasonEffectConflict) {
+	if _, err = service.ReserveEffect(context.Background(), caller(), created.RunID, "eff_invoice-01", "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", metadata()); !hasReason(err, ReasonEffectConflict) {
 		t.Fatalf("effect drift accepted: %v", err)
 	}
 	clock.now = baseTime.Add(2 * time.Hour)
 	expired, err := service.Expire(context.Background(), caller(), created.RunID, 2, metadata())
 	if err != nil || expired.State != StateTimedOut || expired.Usage != (Usage{}) {
 		t.Fatalf("deadline terminal invalid: %#v %v", expired, err)
+	}
+	again, err = service.Cancel(context.Background(), command)
+	if err != nil || again.State != StateTimedOut || len(repo.outbox) != 3 {
+		t.Fatalf("durable command replay after terminal transition failed: %#v %v", again, err)
+	}
+}
+
+func TestConcurrentCreateReplayRecoversCommittedWinner(t *testing.T) {
+	service, _, base, _ := newTestService(t)
+	winner, err := service.Create(context.Background(), request())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository := &concurrentReplayRepo{memoryRepo: base, hideOnce: true}
+	audit := &fakeAudit{}
+	replayService, err := New(Dependencies{Clock: &fakeClock{baseTime}, IDs: &fakeIDs{}, UoW: fakeUoW{}, Observability: audit, Authorizer: fakeAuth{}, Repository: repository})
+	if err != nil {
+		t.Fatal(err)
+	}
+	replayed, err := replayService.Create(context.Background(), request())
+	if err != nil || replayed.RunID != winner.RunID || len(base.outbox) != 1 || len(audit.entries) != 1 {
+		t.Fatalf("concurrent idempotent winner was not recovered: %#v %v", replayed, err)
+	}
+}
+
+func TestCreateRejectsAmbiguousLabels(t *testing.T) {
+	service, _, repo, _ := newTestService(t)
+	candidate := request()
+	candidate.Labels = json.RawMessage(`{"priority":"high","priority":"low"}`)
+	if _, err := service.Create(context.Background(), candidate); !hasReason(err, ReasonInvalidRequest) {
+		t.Fatalf("duplicate labels accepted: %v", err)
+	}
+	if len(repo.runs) != 0 || len(repo.outbox) != 0 {
+		t.Fatal("invalid labels created durable run state")
 	}
 }
 func TestAuthorizationSnapshotIsDurableAndBound(t *testing.T) {

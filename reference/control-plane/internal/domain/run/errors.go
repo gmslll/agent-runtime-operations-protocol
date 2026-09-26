@@ -11,6 +11,7 @@ const (
 	CategoryAuthorization  ErrorCategory = "authorization"
 	CategoryNotFound       ErrorCategory = "not_found"
 	CategoryConflict       ErrorCategory = "conflict"
+	CategoryCapacity       ErrorCategory = "capacity"
 	CategoryTimeout        ErrorCategory = "timeout"
 	CategoryDependency     ErrorCategory = "dependency"
 
@@ -23,6 +24,7 @@ const (
 	ReasonTerminalStateConflict  ErrorReason = "terminal-state-conflict"
 	ReasonEffectConflict         ErrorReason = "effect-conflict"
 	ReasonDeadlineExceeded       ErrorReason = "deadline-exceeded"
+	ReasonRunRequestTooLarge     ErrorReason = "run-request-too-large"
 	ReasonDependencyUnavailable  ErrorReason = "dependency-unavailable"
 )
 

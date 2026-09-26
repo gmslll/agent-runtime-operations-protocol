@@ -63,7 +63,7 @@ func VerifySchema() migrate.Verifier {
 			return errors.New("SQLite asset grants reference a run table")
 		}
 		var runReferences int
-		if queryer.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE sql LIKE '%arop_runs%'`).Scan(&runReferences) != nil || runReferences != 0 {
+		if queryer.QueryRowContext(ctx, `SELECT count(*) FROM sqlite_master WHERE type='table' AND name IN ('arop_assets','arop_asset_grants') AND sql LIKE '%arop_runs%'`).Scan(&runReferences) != nil || runReferences != 0 {
 			return errors.New("SQLite asset schema references a run table")
 		}
 		return nil

@@ -19,6 +19,7 @@ import (
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/registrywatch"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/run"
 	assetwire "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/generated/asset"
 	controlplane "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/generated/control-plane"
 )
@@ -99,14 +100,21 @@ func NewRegistryApplicationHandler(application *platform.Platform, authenticate 
 	if authenticate == nil || publicationService == nil || assetService == nil || registryService == nil {
 		return nil, errors.New("authentication and all application services are required")
 	}
-	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, nil)
+	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, nil, nil)
 }
 
 func NewRegistryRecoveryApplicationHandler(application *platform.Platform, authenticate AuthenticateFunc, publicationService publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service) (http.Handler, error) {
 	if authenticate == nil || publicationService == nil || assetService == nil || registryService == nil || watchService == nil {
 		return nil, errors.New("authentication and all registry recovery services are required")
 	}
-	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService)
+	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService, nil)
+}
+
+func NewRunApplicationHandler(application *platform.Platform, authenticate AuthenticateFunc, publicationService publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service, runService *run.Service) (http.Handler, error) {
+	if authenticate == nil || publicationService == nil || assetService == nil || registryService == nil || watchService == nil || runService == nil {
+		return nil, errors.New("authentication and all run application services are required")
+	}
+	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService, runService)
 }
 
 func newHandler(application *platform.Platform, authenticate AuthenticateFunc) (http.Handler, error) {
@@ -118,10 +126,10 @@ func newHandlerWithPublication(application *platform.Platform, authenticate Auth
 }
 
 func newHandlerWithServices(application *platform.Platform, authenticate AuthenticateFunc, service publication.PublicationService, assetService assets.AssetBrokerService) (http.Handler, error) {
-	return newHandlerWithAllServices(application, authenticate, service, assetService, nil, nil)
+	return newHandlerWithAllServices(application, authenticate, service, assetService, nil, nil, nil)
 }
 
-func newHandlerWithAllServices(application *platform.Platform, authenticate AuthenticateFunc, service publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service) (http.Handler, error) {
+func newHandlerWithAllServices(application *platform.Platform, authenticate AuthenticateFunc, service publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service, runService *run.Service) (http.Handler, error) {
 	if application == nil {
 		return nil, errors.New("platform application is required")
 	}
@@ -171,7 +179,30 @@ func newHandlerWithAllServices(application *platform.Platform, authenticate Auth
 			mux.Handle("GET /v1/discovery/changes", watchHandler)
 		}
 	}
+	if runService != nil {
+		runHandler, err := run.NewHTTPHandler(runService, runContextCallerProvider{})
+		if err != nil {
+			return nil, err
+		}
+		mux.Handle("POST /v1/agent-runs", runHandler)
+		mux.Handle("GET /v1/agent-runs/{run_id}", runHandler)
+		mux.Handle("POST /v1/agent-runs/{run_id}/commands", runHandler)
+	}
 	return instrument(application, mux, authenticate), nil
+}
+
+type runContextCallerProvider struct{}
+
+func (runContextCallerProvider) Authenticate(request *http.Request, _ run.Operation) (run.Caller, error) {
+	principal, ok := PrincipalFromContext(request.Context())
+	if !ok {
+		return run.Caller{}, run.NewError(run.CategoryAuthentication, run.ReasonAuthenticationRequired)
+	}
+	return run.Caller{TenantID: principal.TenantID, PrincipalID: principal.PrincipalID, CredentialID: principal.CredentialID, Scopes: slices.Clone(principal.Scopes)}, nil
+}
+
+func (runContextCallerProvider) Metadata(request *http.Request) (platform.RequestMetadata, bool) {
+	return MetadataFromContext(request.Context())
 }
 
 func assetExchange(application *platform.Platform, service assets.AssetBrokerService) http.HandlerFunc {
@@ -548,6 +579,8 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 				writeAssetError(capture, assets.NewError(assets.CategoryCapacity, assets.ReasonAssetTooLarge))
 			} else if isRegistryOperation(operation) {
 				writePublicationError(capture, http.StatusBadRequest, "REGISTRY_INVALID_REQUEST", "validation", false)
+			} else if isRunOperation(operation) {
+				writePublicationError(capture, http.StatusRequestEntityTooLarge, "RUN_REQUEST_TOO_LARGE", "capacity", false)
 			} else {
 				writeJSON(capture, http.StatusRequestEntityTooLarge, errorResponse{Status: "rejected"})
 			}
@@ -571,7 +604,7 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 				default:
 					if operation == "asset.exchange" {
 						writeAssetError(capture, assets.NewError(assets.CategoryAuthentication, assets.ReasonAuthenticationRequired))
-					} else if isPublicationOperation(operation) || isRegistryOperation(operation) {
+					} else if isPublicationOperation(operation) || isRegistryOperation(operation) || isRunOperation(operation) {
 						writePublicationError(capture, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication", false)
 					} else {
 						writeJSON(capture, http.StatusUnauthorized, errorResponse{Status: "unauthorized"})
@@ -622,8 +655,10 @@ func isRegistryOperation(operation string) bool {
 	return strings.HasPrefix(operation, "registry.")
 }
 
+func isRunOperation(operation string) bool { return strings.HasPrefix(operation, "run.") }
+
 func isContractOperation(operation string) bool {
-	return isPublicationOperation(operation) || isAssetOperation(operation) || isRegistryOperation(operation)
+	return isPublicationOperation(operation) || isAssetOperation(operation) || isRegistryOperation(operation) || isRunOperation(operation)
 }
 
 func requiresControlPlaneAuthentication(operation string) bool {
@@ -724,6 +759,15 @@ func classifyOperation(method, path string) string {
 		// mux's 404 until P16, never a fallback scope or an accidental route.
 		return "registry.watch"
 	}
+	if method == http.MethodPost && len(segments) == 2 && segments[0] == "v1" && segments[1] == "agent-runs" {
+		return "run.create"
+	}
+	if method == http.MethodGet && len(segments) == 3 && segments[0] == "v1" && segments[1] == "agent-runs" {
+		return "run.read"
+	}
+	if method == http.MethodPost && len(segments) == 4 && segments[0] == "v1" && segments[1] == "agent-runs" && segments[3] == "commands" {
+		return "run.command"
+	}
 	return "http.unmatched"
 }
 
@@ -743,6 +787,12 @@ func scopesForOperation(operation string) []string {
 		return []string{"registry:write"}
 	case "registry.discover", "registry.watch":
 		return []string{"registry:discover"}
+	case "run.create":
+		return []string{"run:create"}
+	case "run.read":
+		return []string{"run:read"}
+	case "run.command":
+		return []string{"run:command"}
 	default:
 		return []string{"secret.read"}
 	}

@@ -5,13 +5,17 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
+	protocolcore "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/protocol/core"
 )
 
 const MaxSafeInteger uint64 = 9007199254740991
@@ -88,7 +92,7 @@ func (intent EffectIntent) Validate() error {
 			return errors.New("read-only effect has identifier")
 		}
 	case EffectWrite, EffectIrreversible:
-		if !effectPattern.MatchString(intent.EffectID) {
+		if !effectPattern.MatchString(intent.EffectID) || utf8.RuneCountInString(intent.EffectID) < 8 || utf8.RuneCountInString(intent.EffectID) > 200 {
 			return errors.New("stable effect identifier is required")
 		}
 	default:
@@ -101,7 +105,9 @@ type CreateRequest struct {
 	Caller          Caller
 	Agent           AgentBinding
 	Input           json.RawMessage
+	Labels          json.RawMessage
 	ConversationRef string
+	Tracestate      string
 	DeadlineAt      time.Time
 	Effects         EffectIntent
 	Metadata        platform.RequestMetadata
@@ -109,8 +115,14 @@ type CreateRequest struct {
 }
 
 func (request CreateRequest) Validate(now time.Time) error {
-	if request.Caller.Validate() != nil || request.Agent.Validate() != nil || len(request.Input) == 0 || !json.Valid(request.Input) || request.Effects.Validate() != nil || !validIdempotencyKey(request.IdempotencyKey) || !utc(request.DeadlineAt) || !request.DeadlineAt.After(now) || request.DeadlineAt.Sub(now) > 7*24*time.Hour {
+	if request.Caller.Validate() != nil || request.Agent.Validate() != nil || !validRunInput(request.Input) || request.Effects.Validate() != nil || !validIdempotencyKey(request.IdempotencyKey) || !utc(request.DeadlineAt) || !request.DeadlineAt.After(now) || request.DeadlineAt.Sub(now) > 7*24*time.Hour {
 		return errors.New("invalid run request")
+	}
+	if _, err := canonicalLabels(request.Labels); err != nil {
+		return errors.New("invalid run labels")
+	}
+	if err := (protocolcore.TraceContext{Traceparent: request.Metadata.Traceparent(), Tracestate: request.Tracestate}).Validate(); err != nil {
+		return errors.New("invalid run trace context")
 	}
 	if request.ConversationRef != "" && !prefixedUUID("conv_", request.ConversationRef) {
 		return errors.New("invalid conversation reference")
@@ -182,6 +194,7 @@ type Run struct {
 	TenantID, RunID                  string
 	Agent                            AgentBinding
 	Input                            json.RawMessage
+	Labels                           json.RawMessage
 	ConversationRef                  string
 	Effects                          EffectIntent
 	State                            State
@@ -189,17 +202,37 @@ type Run struct {
 	AuthorizationSnapshot            json.RawMessage
 	AuthorizationSnapshotDigest      string
 	Traceparent                      string
+	Tracestate                       string
 	DeadlineAt, CreatedAt, UpdatedAt time.Time
 	CancelRequestedAt                *time.Time
 	Usage                            Usage
 }
 
 func (run Run) Validate() error {
-	if !slugPattern.MatchString(run.TenantID) || !prefixedUUID("run_", run.RunID) || run.Agent.Validate() != nil || len(run.Input) == 0 || !json.Valid(run.Input) || run.Effects.Validate() != nil || run.StateVersion == 0 || run.StateVersion > MaxSafeInteger || !digestPattern.MatchString(run.AuthorizationSnapshotDigest) || !json.Valid(run.AuthorizationSnapshot) || !utc(run.DeadlineAt) || !utc(run.CreatedAt) || !utc(run.UpdatedAt) || run.UpdatedAt.Before(run.CreatedAt) || run.Usage.Validate() != nil {
+	if !slugPattern.MatchString(run.TenantID) || !prefixedUUID("run_", run.RunID) || run.Agent.Validate() != nil || !validRunInput(run.Input) || run.Effects.Validate() != nil || run.StateVersion == 0 || run.StateVersion > MaxSafeInteger || !digestPattern.MatchString(run.AuthorizationSnapshotDigest) || !json.Valid(run.AuthorizationSnapshot) || !utc(run.DeadlineAt) || !utc(run.CreatedAt) || !utc(run.UpdatedAt) || run.UpdatedAt.Before(run.CreatedAt) || run.Usage.Validate() != nil {
 		return errors.New("invalid run")
 	}
-	if run.State == "" {
+	if _, err := canonicalLabels(run.Labels); err != nil {
+		return errors.New("invalid run labels")
+	}
+	if err := (protocolcore.TraceContext{Traceparent: run.Traceparent, Tracestate: run.Tracestate}).Validate(); err != nil {
+		return errors.New("invalid run trace context")
+	}
+	switch run.State {
+	case StateQueued, StateDispatching, StateRunning, StateWaitingInput, StateCancelRequested, StateSucceeded, StateFailed, StateCancelled, StateTimedOut:
+	default:
 		return errors.New("invalid state")
+	}
+	if run.ConversationRef != "" && !prefixedUUID("conv_", run.ConversationRef) {
+		return errors.New("invalid run conversation reference")
+	}
+	var snapshot AuthorizationSnapshot
+	if json.Unmarshal(run.AuthorizationSnapshot, &snapshot) != nil {
+		return errors.New("invalid authorization snapshot")
+	}
+	canonical, digest, _, err := snapshot.Canonical()
+	if err != nil || digest != run.AuthorizationSnapshotDigest || canonical.TenantID != run.TenantID || canonical.Agent != run.Agent || canonical.Operation != OperationCreate {
+		return errors.New("authorization snapshot binding mismatch")
 	}
 	return nil
 }
@@ -258,6 +291,62 @@ func validIdempotencyKey(value string) bool {
 		}
 	}
 	return true
+}
+
+func validRunInput(raw json.RawMessage) bool {
+	if len(raw) == 0 || !utf8.Valid(raw) {
+		return false
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	var parts []json.RawMessage
+	if decoder.Decode(&parts) != nil || len(parts) < 1 || len(parts) > 256 {
+		return false
+	}
+	return decoder.Decode(&struct{}{}) == io.EOF
+}
+
+func canonicalLabels(raw json.RawMessage) (json.RawMessage, error) {
+	if len(raw) == 0 {
+		return json.RawMessage(`{}`), nil
+	}
+	if !utf8.Valid(raw) {
+		return nil, errors.New("labels are not UTF-8")
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	opening, err := decoder.Token()
+	if err != nil || opening != json.Delim('{') {
+		return nil, errors.New("invalid labels")
+	}
+	labels := map[string]string{}
+	for decoder.More() {
+		token, tokenErr := decoder.Token()
+		key, ok := token.(string)
+		if tokenErr != nil || !ok {
+			return nil, errors.New("invalid label key")
+		}
+		if _, duplicate := labels[key]; duplicate {
+			return nil, errors.New("duplicate label key")
+		}
+		var value string
+		if decoder.Decode(&value) != nil {
+			return nil, errors.New("invalid label value")
+		}
+		labels[key] = value
+	}
+	closing, err := decoder.Token()
+	if err != nil || closing != json.Delim('}') || len(labels) > 64 {
+		return nil, errors.New("invalid labels")
+	}
+	if err = decoder.Decode(&struct{}{}); err != io.EOF {
+		return nil, errors.New("labels contain trailing value")
+	}
+	for key, value := range labels {
+		if !slugPattern.MatchString(key) || utf8.RuneCountInString(key) > 64 || value == "" || utf8.RuneCountInString(value) > 256 {
+			return nil, fmt.Errorf("invalid label %q", key)
+		}
+	}
+	encoded, err := json.Marshal(labels)
+	return json.RawMessage(encoded), err
 }
 func utc(value time.Time) bool { return !value.IsZero() && value.Location() == time.UTC }
 func digestText(value string) string {
