@@ -107,9 +107,12 @@ func TestPostgresCoordinatorFencesLeaderAndCompactsMonotonically(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(`DROP TABLE IF EXISTS arop_registry_events; DROP TABLE IF EXISTS arop_registry_meta; CREATE TABLE arop_registry_meta(singleton SMALLINT PRIMARY KEY,revision BIGINT NOT NULL,compaction_watermark BIGINT NOT NULL); INSERT INTO arop_registry_meta VALUES(1,12,3); CREATE TABLE arop_registry_events(revision BIGINT PRIMARY KEY); INSERT INTO arop_registry_events VALUES(1),(12)`); err != nil {
+	if _, err := db.Exec(`DROP TABLE IF EXISTS arop_registry_events; DROP TABLE IF EXISTS arop_registry_meta; DROP TABLE IF EXISTS arop_schema_migrations; CREATE TABLE arop_schema_migrations(version BIGINT PRIMARY KEY,dirty BOOLEAN NOT NULL); INSERT INTO arop_schema_migrations VALUES(30,FALSE); CREATE TABLE arop_registry_meta(singleton SMALLINT PRIMARY KEY,revision BIGINT NOT NULL,compaction_watermark BIGINT NOT NULL); INSERT INTO arop_registry_meta VALUES(1,12,3); CREATE TABLE arop_registry_events(revision BIGINT PRIMARY KEY); INSERT INTO arop_registry_events VALUES(1),(12)`); err != nil {
 		t.Fatal(err)
 	}
+	defer func() {
+		_, _ = db.Exec(`DROP TABLE IF EXISTS arop_registry_events; DROP TABLE IF EXISTS arop_registry_meta; DROP TABLE IF EXISTS arop_schema_migrations`)
+	}()
 	first, _ := NewPostgresCoordinator(db)
 	second, _ := NewPostgresCoordinator(db)
 	leadership, err := first.Acquire(context.Background(), "node-a")

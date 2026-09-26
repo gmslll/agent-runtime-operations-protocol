@@ -625,15 +625,14 @@ func runGoTests(root, scratch, dsn, postgresBin string) ([]byte, error) {
 	// The P14 repository test and the P16 coordinator test both rebuild the
 	// registry tables. Run them serially against the private cluster so package
 	// parallelism cannot turn independent destructive fixtures into a race. The
-	// P14 repository matrix runs first because it needs the production schema;
-	// the P16 coordinator deliberately replaces that schema with a minimal
-	// recovery fixture afterward.
+	// coordinator owns and removes its minimal recovery fixture before the P14
+	// repository matrix installs the production schema.
+	primary := run(directory, overrides, "go", "test", "-count=1", "-race", "-json", "./internal/app/registrywatch", "./internal/app/registryapi", "./internal/app/platform/httpadapter", "./internal/domain/registry/storage/sqlite", "./cmd/aropd")
 	overrides["AROP_P14_POSTGRES_URL"] = dsn
 	overrides["AROP_P14_MIGRATION_ROOT"] = filepath.Join(root, "reference/control-plane/migrations")
 	postgres := run(directory, overrides, "go", "test", "-count=1", "-race", "-json", "./internal/domain/registry/storage/postgres")
-	primary := run(directory, overrides, "go", "test", "-count=1", "-race", "-json", "./internal/app/registrywatch", "./internal/app/registryapi", "./internal/app/platform/httpadapter", "./internal/domain/registry/storage/sqlite", "./cmd/aropd")
-	output := append(append([]byte(nil), postgres.output...), primary.output...)
-	return output, errors.Join(postgres.err, primary.err)
+	output := append(append([]byte(nil), primary.output...), postgres.output...)
+	return output, errors.Join(primary.err, postgres.err)
 }
 
 func rejectIncompleteTests(output []byte) error {
