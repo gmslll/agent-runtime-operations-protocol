@@ -3,7 +3,7 @@ module github.com/gmslll/agent-runtime-operations-protocol/reference/control-pla
 go 1.24.0
 
 require (
-	github.com/gmslll/agent-runtime-operations-protocol v0.0.0-20260925200248-dff156e5d354
+	github.com/gmslll/agent-runtime-operations-protocol v0.0.0-20260926182258-013439d2752e
 	github.com/gofrs/flock v0.13.0
 	github.com/jackc/pgx/v5 v5.8.0
 	go.yaml.in/yaml/v3 v3.0.5
