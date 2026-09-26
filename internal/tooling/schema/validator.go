@@ -5,6 +5,7 @@ package schema
 import (
 	"fmt"
 	"net/url"
+	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -15,7 +16,11 @@ import (
 
 // ValidateFile validates value against a repository-local JSON Schema.
 func ValidateFile(root, schemaPath string, value any) error {
-	abs, err := filepath.Abs(filepath.Join(root, filepath.FromSlash(schemaPath)))
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("resolve repository root: %w", err)
+	}
+	abs, err := filepath.Abs(filepath.Join(absRoot, filepath.FromSlash(schemaPath)))
 	if err != nil {
 		return fmt.Errorf("resolve schema %s: %w", schemaPath, err)
 	}
@@ -29,7 +34,8 @@ func ValidateFile(root, schemaPath string, value any) error {
 	compiler.AssertFormat()
 	compiler.AssertVocabs()
 	compiler.UseRegexpEngine(compileECMAScript)
-	compiler.UseLoader(jsonschema.SchemeURLLoader{"file": strictFileLoader{}})
+	loader := strictRepositoryLoader{root: absRoot}
+	compiler.UseLoader(jsonschema.SchemeURLLoader{"file": loader, "https": loader})
 	if err := compiler.AddResource(location, document); err != nil {
 		return fmt.Errorf("register schema %s: %w", schemaPath, err)
 	}
@@ -118,13 +124,39 @@ func ValidatePath(root, schemaPath, documentPath string) (any, []byte, error) {
 	return value, data, nil
 }
 
-type strictFileLoader struct{}
+type strictRepositoryLoader struct {
+	root string
+}
 
-func (strictFileLoader) Load(rawURL string) (any, error) {
+func (loader strictRepositoryLoader) Load(rawURL string) (any, error) {
 	u, err := url.Parse(rawURL)
-	if err != nil || u.Scheme != "file" {
+	if err != nil {
 		return nil, fmt.Errorf("offline schema loader rejected %q", rawURL)
 	}
-	value, _, err := structuredfile.LoadAny(filepath.FromSlash(u.Path))
+	var target string
+	switch u.Scheme {
+	case "file":
+		if u.Host != "" || u.User != nil || u.RawQuery != "" {
+			return nil, fmt.Errorf("offline schema loader rejected %q", rawURL)
+		}
+		target = filepath.Clean(filepath.FromSlash(u.Path))
+	case "https":
+		const prefix = "/schemas/v1/"
+		if u.Host != "arop.invalid" || u.User != nil || u.RawQuery != "" || !strings.HasPrefix(u.Path, prefix) {
+			return nil, fmt.Errorf("offline schema loader rejected %q", rawURL)
+		}
+		relative := strings.TrimPrefix(u.Path, prefix)
+		if relative == "" || relative != pathpkg.Clean(relative) || strings.Contains(relative, `\`) {
+			return nil, fmt.Errorf("offline schema loader rejected %q", rawURL)
+		}
+		target = filepath.Join(loader.root, "schemas", filepath.FromSlash(relative))
+	default:
+		return nil, fmt.Errorf("offline schema loader rejected %q", rawURL)
+	}
+	relative, err := filepath.Rel(loader.root, target)
+	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) || filepath.IsAbs(relative) {
+		return nil, fmt.Errorf("offline schema loader rejected %q", rawURL)
+	}
+	value, _, err := structuredfile.LoadAny(target)
 	return value, err
 }

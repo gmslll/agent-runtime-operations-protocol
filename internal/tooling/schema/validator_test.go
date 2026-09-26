@@ -93,6 +93,43 @@ func TestDraft2020AndFormatAssertions(t *testing.T) {
 	}
 }
 
+func TestRepositorySchemaLoaderResolvesOnlyLocalCanonicalIDs(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "schemas", "common"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	common := `{"$id":"https://arop.invalid/schemas/v1/common/value.schema.json","$schema":"https://json-schema.org/draft/2020-12/schema","type":"string","const":"ok"}`
+	if err := os.WriteFile(filepath.Join(root, "schemas", "common", "value.schema.json"), []byte(common), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	main := `{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":"https://arop.invalid/schemas/v1/common/value.schema.json"}`
+	if err := os.WriteFile(filepath.Join(root, "schema.json"), []byte(main), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateFile(root, "schema.json", "ok"); err != nil {
+		t.Fatalf("canonical repository reference rejected: %v", err)
+	}
+	if err := ValidateFile(root, "schema.json", "wrong"); err == nil {
+		t.Fatal("referenced constraint was not enforced")
+	}
+
+	for _, ref := range []string{
+		"https://example.com/schemas/v1/common/value.schema.json",
+		"https://arop.invalid/other/value.schema.json",
+		"https://arop.invalid/schemas/v1/../common/value.schema.json",
+		"http://arop.invalid/schemas/v1/common/value.schema.json",
+	} {
+		content := fmt.Sprintf(`{"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":%q}`, ref)
+		if err := os.WriteFile(filepath.Join(root, "schema.json"), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := ValidateFile(root, "schema.json", "ok"); err == nil {
+			t.Fatalf("unsafe or remote reference %q was accepted", ref)
+		}
+	}
+}
+
 func TestPlanningAndGateSummarySchemasAreStrict(t *testing.T) {
 	t.Parallel()
 	root := filepath.Clean(filepath.Join("..", "..", ".."))
