@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "waiver_id": "P20-EVENT-LEDGER-TRANSITION-001",
+  "status": "draft",
+  "policy": {
+    "owner_phase_semantics": "first-introduction-and-accountability",
+    "ownership_transferred": false
+  },
+  "baseline": {
+    "rule": "parent-of-unique-waiver-introduction-commit",
+    "commit": "459c869214cf719aaf0364fbadc6ee094bbf2376"
+  },
+  "transition": {
+    "from_phases": ["P01", "P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18", "P19"],
+    "to_phase": "P20",
+    "reason": "P20 introduces scoped Event Sessions, an immutable Event ledger, durable Inbox deduplication, ordered projections, irreversible terminal state and atomic Runtime capacity release while preserving all earlier ownership and historical acceptance boundaries."
+  },
+  "affected_artifacts": [],
+  "source_closure": [],
+  "acceptance": [],
+  "constraints": []
+}
