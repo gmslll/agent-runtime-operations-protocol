@@ -65,6 +65,7 @@
     "reference/control-plane/internal/app/platform/httpadapter/http.go",
     "reference/control-plane/internal/app/platform/httpadapter/registry_test.go",
     "reference/control-plane/internal/app/platform/httpadapter/registrywatch_test.go",
+    "reference/control-plane/internal/app/platform/testdata/harness/main.go",
     "reference/control-plane/internal/app/registryapi/notifier_test.go",
     "reference/control-plane/internal/app/registryapi/service.go",
     "reference/control-plane/internal/app/registryapi/testdata/harness/main.go",
@@ -80,7 +81,8 @@
     "reference/control-plane/internal/app/registrywatch/types.go",
     "reference/control-plane/internal/domain/registry/repository.go",
     "reference/control-plane/internal/domain/registry/storage/internalstore/store.go",
-    "reference/control-plane/internal/domain/registry/storage/internaltest/matrix.go"
+    "reference/control-plane/internal/domain/registry/storage/internaltest/matrix.go",
+    "reference/control-plane/internal/storage/migrate/testdata/engine-versions/harness/main.go"
   ],
   "acceptance": [
     {"phase":"P01","command":"make spec-index-check","report":"build/reports/P01/report.json"},
