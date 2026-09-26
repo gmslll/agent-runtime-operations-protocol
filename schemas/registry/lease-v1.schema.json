@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/registry/lease-v1.schema.json",
+  "title": "AROP v1 registry lease",
+  "$comment": "Lease expiry is determined only by server_time; reported_at is diagnostic and cannot extend the lease.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "lease_id", "instance_id", "session_id", "generation", "heartbeat_sequence", "server_time", "lease_expires_at", "registry_revision", "lease_ttl_seconds", "keepalive_interval_seconds"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "lease_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/leaseId"},
+    "instance_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/instanceId"},
+    "session_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/sessionId"},
+    "generation": {"$ref": "#/$defs/positiveSafeInteger"},
+    "heartbeat_sequence": {"$ref": "#/$defs/positiveSafeInteger"},
+    "reported_at": {"type": "string", "format": "date-time"},
+    "server_time": {"type": "string", "format": "date-time"},
+    "lease_expires_at": {"type": "string", "format": "date-time"},
+    "registry_revision": {"$ref": "#/$defs/positiveSafeInteger"},
+    "lease_ttl_seconds": {"type": "integer", "minimum": 1, "maximum": 600},
+    "keepalive_interval_seconds": {"type": "integer", "minimum": 1, "maximum": 599}
+  },
+  "$defs": {
+    "positiveSafeInteger": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}
+  }
+}

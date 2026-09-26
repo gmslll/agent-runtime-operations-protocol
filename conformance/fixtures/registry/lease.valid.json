@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "lease_id": "lease_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c",
+  "instance_id": "runtime-a",
+  "session_id": "ses_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c",
+  "generation": 1,
+  "heartbeat_sequence": 2,
+  "reported_at": "2026-09-26T07:59:59Z",
+  "server_time": "2026-09-26T08:00:00Z",
+  "lease_expires_at": "2026-09-26T08:00:30Z",
+  "registry_revision": 2,
+  "lease_ttl_seconds": 30,
+  "keepalive_interval_seconds": 10
+}

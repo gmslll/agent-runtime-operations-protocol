@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "valid": [
+    {"schema": "schemas/registry/runtime-instance-v1.schema.json", "document": "conformance/fixtures/registry/runtime-instance.valid.json"},
+    {"schema": "schemas/registry/lease-v1.schema.json", "document": "conformance/fixtures/registry/lease.valid.json"},
+    {"schema": "schemas/registry/registry-event-v1.schema.json", "document": "conformance/fixtures/registry/registry-event.valid.json"}
+  ],
+  "invalid_mutations": [
+    {"name": "unsafe-generation", "document": "runtime-instance.valid.json", "pointer": "/generation", "value": 9007199254740992},
+    {"name": "malformed-session", "document": "runtime-instance.valid.json", "pointer": "/session_id", "value": "ses_reused"},
+    {"name": "negative-capacity", "document": "runtime-instance.valid.json", "pointer": "/runtime/capacity/available_slots", "value": -1},
+    {"name": "unknown-property", "document": "runtime-instance.valid.json", "pointer": "/endpoint_url", "value": "https://forbidden.invalid"},
+    {"name": "unsafe-heartbeat", "document": "lease.valid.json", "pointer": "/heartbeat_sequence", "value": 9007199254740992},
+    {"name": "malformed-server-time", "document": "lease.valid.json", "pointer": "/server_time", "value": "2026-09-26 08:00:00"},
+    {"name": "zero-revision", "document": "registry-event.valid.json", "pointer": "/revision", "value": 0},
+    {"name": "unknown-event", "document": "registry-event.valid.json", "pointer": "/type", "value": "compacted"}
+  ],
+  "discovery_eligibility_dimensions": ["lease_alive", "healthy", "ready", "enabled", "not_draining", "capacity_available", "protocol_compatible", "binding_matches"],
+  "fencing_negative_dimensions": ["stale_session", "stale_lease", "stale_generation", "reused_session", "stale_resource_version", "stale_heartbeat_sequence"]
+}
