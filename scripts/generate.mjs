@@ -500,7 +500,9 @@ class ModelCompiler {
         if (schema.maxProperties !== undefined && (!Number.isSafeInteger(schema.maxProperties) || schema.maxProperties < 0)) fail(`maxProperties at ${hint} must be a non-negative safe integer`);
         if (schema.minProperties !== undefined && schema.maxProperties !== undefined && schema.minProperties > schema.maxProperties) fail(`object bounds at ${hint} are inverted`);
         const propertyNames = schema.propertyNames === undefined ? undefined : this.compileSchema(
-          schema.propertyNames.type === undefined ? { type: "string", ...schema.propertyNames } : schema.propertyNames,
+          schema.propertyNames.type === undefined && !Object.hasOwn(schema.propertyNames, "$ref")
+            ? { type: "string", ...schema.propertyNames }
+            : schema.propertyNames,
           baseURI,
           `${hint}PropertyName`,
         );

@@ -10,12 +10,12 @@
   },
   "generator": {
     "path": "scripts/generate.mjs",
-    "sha256": "5302f458ec00332b09723106bebf093226a24a58ab1176ee638c1322cc497e7d",
+    "sha256": "7444506c82ae760ee597d48275137a422d7769ab96dcd7cbcd7b905478d94828",
     "files": [
       {
         "path": "scripts/generate.mjs",
-        "sha256": "5302f458ec00332b09723106bebf093226a24a58ab1176ee638c1322cc497e7d",
-        "bytes": 139045,
+        "sha256": "7444506c82ae760ee597d48275137a422d7769ab96dcd7cbcd7b905478d94828",
+        "bytes": 139117,
         "mode": "100644"
       },
       {
@@ -137,31 +137,31 @@
       "mode": "100644"
     }
   ],
-  "inputs_sha256": "f52ba7e447762b128f2478f405b094243cfaea2446181dbbe893799a9427815b",
+  "inputs_sha256": "0f8fc611519f7de00c04601501949e2fb64465375b97c8e62c635be2c2799df3",
   "outputs": [
     {
       "language": "go",
       "path": "sdk/go/generated/registry/registry.gen.go",
-      "sha256": "73aff0f095fc973beaf29bd1427c8dd7a7339037c8a9dd2a545c72f36f17c43f",
+      "sha256": "3ca488806b5fa260a807350c5207b9facff13db67526625159bebc61748bfaec",
       "bytes": 68032,
       "mode": "100644"
     },
     {
       "language": "python",
       "path": "sdk/python/src/arop/generated/registry/registry_gen.py",
-      "sha256": "6441318d3d13d23fa0b3ce4d018fca2c82665009eee96076c908eee8dec6edf2",
+      "sha256": "19945dd08b5b63ce638a79f654738b02f6e86daf6c30a6ec42489a068bde4c4a",
       "bytes": 33419,
       "mode": "100644"
     },
     {
       "language": "typescript",
       "path": "sdk/typescript/src/generated/registry/registry.gen.ts",
-      "sha256": "bd2fad55f5e4038fbc7ede89a11c663a33ff44583154bb869d933d258812e534",
+      "sha256": "ef2d485b84d97314d201e6d241444f0eaaffcfccc07ff2bf838832a43bd608b2",
       "bytes": 33597,
       "mode": "100644"
     }
   ],
-  "outputs_sha256": "140e55b968be4e6aee8ef24e90055ce3f6f9a5b2288c7ac67c6aebcebfd2519b",
+  "outputs_sha256": "3771bc3a8f2c0c51f5f3298dd5357d9901eadbe950eed5a5357ccd3edff54df5",
   "checks": [
     {
       "id": "schema-valid-runtime-instance",

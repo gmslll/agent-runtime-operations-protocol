@@ -232,6 +232,8 @@ func validateOwnedArtifacts(root string) error {
 		return fmt.Errorf("P15 owned artifacts=%v want=%v", found, want)
 	}
 	wantDependencies := append([]string(nil), requiredOwnedArtifacts...)
+	sort.Strings(reportDependencies)
+	sort.Strings(wantDependencies)
 	if !reflect.DeepEqual(reportDependencies, wantDependencies) {
 		return fmt.Errorf("phase-report-p15 derives_from=%v want=%v", reportDependencies, wantDependencies)
 	}
@@ -777,17 +779,25 @@ func sortedMapKeys(value map[string]any) []string {
 }
 
 func validateGenerated(root string) ([]byte, error) {
-	temporary, err := os.MkdirTemp("/tmp", "arop-p15-codegen-")
+	codegenRoot := filepath.Join(root, "build", "codegen")
+	if err := os.MkdirAll(codegenRoot, 0o755); err != nil {
+		return nil, err
+	}
+	output, err := os.MkdirTemp(codegenRoot, "p15-")
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(temporary)
-	if err := os.Chmod(temporary, 0o700); err != nil {
+	defer os.RemoveAll(output)
+	if err := os.Chmod(output, 0o700); err != nil {
 		return nil, err
 	}
-	output := filepath.Join(temporary, "output")
+	relative, err := filepath.Rel(root, output)
+	if err != nil {
+		return nil, err
+	}
+	relative = filepath.ToSlash(relative)
 	result := filepath.Join(output, "provenance.json")
-	node := run(root, nil, "node", "--permission", "--allow-fs-read="+root, "--allow-fs-write="+temporary, "--disable-proto=throw", "--no-addons", "scripts/generate.mjs", "--config", "conformance/fixtures/registry/pipeline.json", "--output", output, "--result", result)
+	node := run(root, nil, "node", "--permission", "--allow-fs-read="+root, "--allow-fs-write="+codegenRoot, "--disable-proto=throw", "--no-addons", "scripts/generate.mjs", "--config", "conformance/fixtures/registry/pipeline.json", "--output", relative, "--result", relative+"/provenance.json")
 	if node.err != nil {
 		return nil, node.err
 	}

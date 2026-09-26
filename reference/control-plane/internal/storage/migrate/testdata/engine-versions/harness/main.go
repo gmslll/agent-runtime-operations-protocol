@@ -35,6 +35,7 @@ const (
 	waiverPath      = "reference/control-plane/internal/storage/migrate/testdata/engine-versions/baseline-transition-waiver.json"
 	p10WaiverPath   = "reference/control-plane/internal/identity/testdata/transition/p10-baseline-transition-waiver.json"
 	p14WaiverPath   = "reference/control-plane/internal/domain/registry/testdata/transition/p14-baseline-transition-waiver.json"
+	p15WaiverPath   = "reference/control-plane/internal/app/registryapi/testdata/transition/p15-baseline-transition-waiver.json"
 	reportDirectory = "build/reports/P09"
 	compositionTest = "reference/control-plane/internal/storage/migrate/testdata/engine-versions/composition/p09_storage_acceptance_test.go"
 	nestedModule    = "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane"
@@ -427,6 +428,15 @@ func p14AllowsPackage(root, importPath string) bool {
 		return false
 	}
 	base := nestedModule + "/internal/domain/registry"
+	return importPath == base || strings.HasPrefix(importPath, base+"/")
+}
+
+func p15AllowsPackage(root, importPath string) bool {
+	data, err := os.ReadFile(filepath.Join(root, p15WaiverPath))
+	if err != nil || !bytes.Contains(data, []byte(`"status": "validated"`)) || !bytes.Contains(data, []byte(`"commit": "abb436d62ea9455f6691f6703837ef433ba5225f"`)) {
+		return false
+	}
+	base := nestedModule + "/internal/app/registryapi"
 	return importPath == base || strings.HasPrefix(importPath, base+"/")
 }
 
@@ -2022,6 +2032,10 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 			continue
 		}
 		if p14AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) {
+			seenNested[item.ImportPath] = true
+			continue
+		}
+		if p15AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) {
 			seenNested[item.ImportPath] = true
 			continue
 		}
