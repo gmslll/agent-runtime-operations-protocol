@@ -23,10 +23,12 @@ import (
 )
 
 const (
-	command  = "make test-asset-broker"
-	checker  = "reference/control-plane/internal/domain/assets/testdata/harness/main.go"
-	waiver   = "reference/control-plane/internal/domain/assets/testdata/transition/p13-baseline-transition-waiver.json"
-	baseline = "3db6ee93a693d62d47e2d2fd25c5de43749f2e7d"
+	command     = "make test-asset-broker"
+	checker     = "reference/control-plane/internal/domain/assets/testdata/harness/main.go"
+	waiver      = "reference/control-plane/internal/domain/assets/testdata/transition/p13-baseline-transition-waiver.json"
+	baseline    = "3db6ee93a693d62d47e2d2fd25c5de43749f2e7d"
+	p14Carrier  = "reference/control-plane/internal/domain/registry/testdata/transition/p14-baseline-transition-waiver.json"
+	p13Endpoint = "958d1d42bb7b4a3f6c015ad97004b434ba07d2d3"
 )
 
 type commandResult struct {
@@ -238,7 +240,16 @@ func validateTransition(root string) error {
 	if parent.err != nil || strings.TrimSpace(string(parent.output)) != baseline {
 		return errors.New("transition carrier introduction parent is not the P12 endpoint")
 	}
-	sources, err := changedSources(root)
+	successor := run(root, nil, "git", "log", "--format=%H", "--diff-filter=A", "--", p14Carrier)
+	successorCommits := lines(successor.output)
+	if successor.err != nil || len(successorCommits) != 1 {
+		return errors.New("P14 transition carrier must have one introduction commit")
+	}
+	successorParent := run(root, nil, "git", "rev-parse", successorCommits[0]+"^")
+	if successorParent.err != nil || strings.TrimSpace(string(successorParent.output)) != p13Endpoint {
+		return errors.New("P14 transition carrier does not freeze the P13 endpoint")
+	}
+	sources, err := changedSources(root, p13Endpoint)
 	if err != nil {
 		return err
 	}
@@ -259,8 +270,8 @@ func validateTransition(root string) error {
 	return validateTransitionNegatives(value, sources, artifacts)
 }
 
-func changedSources(root string) ([]string, error) {
-	result := run(root, nil, "git", "diff", "--no-renames", "--name-only", "--diff-filter=ACMRTD", baseline+"..HEAD")
+func changedSources(root, endpoint string) ([]string, error) {
+	result := run(root, nil, "git", "diff", "--no-renames", "--name-only", "--diff-filter=ACMRTD", baseline+".."+endpoint)
 	if result.err != nil {
 		return nil, result.err
 	}
