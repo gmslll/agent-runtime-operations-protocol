@@ -37,6 +37,7 @@ const (
 	p14WaiverPath   = "reference/control-plane/internal/domain/registry/testdata/transition/p14-baseline-transition-waiver.json"
 	p15WaiverPath   = "reference/control-plane/internal/app/registryapi/testdata/transition/p15-baseline-transition-waiver.json"
 	p16WaiverPath   = "reference/control-plane/internal/app/registrywatch/testdata/transition/p16-baseline-transition-waiver.json"
+	p18WaiverPath   = "reference/control-plane/internal/domain/run/testdata/transition/p18-baseline-transition-waiver.json"
 	reportDirectory = "build/reports/P09"
 	compositionTest = "reference/control-plane/internal/storage/migrate/testdata/engine-versions/composition/p09_storage_acceptance_test.go"
 	nestedModule    = "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane"
@@ -448,6 +449,15 @@ func p16AllowsPackage(root, importPath string) bool {
 	}
 	base := nestedModule + "/internal/app/registrywatch"
 	return importPath == base || strings.HasPrefix(importPath, base+"/")
+}
+
+func p18AllowsPackage(root, importPath string) bool {
+	data, err := os.ReadFile(filepath.Join(root, p18WaiverPath))
+	if err != nil || !bytes.Contains(data, []byte(`"status": "validated"`)) || !bytes.Contains(data, []byte(`"commit": "e2cc6266530d462d968e6f9a35dd80a045ddc533"`)) {
+		return false
+	}
+	base := nestedModule + "/internal/domain/run"
+	return importPath == base || strings.HasPrefix(importPath, base+"/") || importPath == rootModule+"/sdk/go/generated/run"
 }
 
 func verifyBaselineTransitionWaiver(root string, inputPaths []string, goListOutput []byte) error {
@@ -2052,6 +2062,12 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 		if p16AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) {
 			seenNested[item.ImportPath] = true
 			continue
+		}
+		if p18AllowsPackage(root, item.ImportPath) && item.Module != nil {
+			if item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) || item.Module.Path == rootModule && item.Module.Version == rootVersion && pathWithin(moduleCache, item.Dir) && !pathWithin(root, item.Dir) {
+				seenNested[item.ImportPath] = true
+				continue
+			}
 		}
 		if item.ImportPath == rootModule+"/sdk/go/protocol/core" {
 			if item.Module == nil || item.Module.Path != rootModule || item.Module.Version != rootVersion || !pathWithin(moduleCache, item.Dir) || pathWithin(root, item.Dir) {
