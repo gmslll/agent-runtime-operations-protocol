@@ -29,6 +29,9 @@ import (
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets"
 	assetpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets/storage/postgres"
 	assetsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets/storage/sqlite"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/dispatch"
+	dispatchpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/dispatch/storage/postgres"
+	dispatchsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/dispatch/storage/sqlite"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication"
 	publicationpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication/storage/postgres"
 	publicationsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication/storage/sqlite"
@@ -115,6 +118,13 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 		if err != nil {
 			_ = cleanup()
 			return nil, nil, nil, errors.New("assemble run lifecycle HTTP handler")
+		}
+	}
+	if dispatchService := dispatchServiceFromChecks(checks); dispatchService != nil {
+		handler, err = httpadapter.NewDispatchApplicationHandler(application, referenceAuthenticate(identityServiceFromChecks(checks), ids), publicationServiceFromChecks(checks), assetServiceFromChecks(checks), registryAPIServiceFromChecks(checks), registryWatchServiceFromChecks(checks), runServiceFromChecks(checks), dispatchService)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, errors.New("assemble dispatch HTTP handler")
 		}
 	}
 	httpServer := httpadapter.NewServer(application, handler)
@@ -255,6 +265,14 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			}
 			checks = append(checks, runService)
 		}
+		if catalogOwns(catalogClosure, "P19") {
+			dispatchService, err := composeDispatch(ctx, db, migrate.DialectSQLite, uow.Transaction, uow, store, clock, ids, config.DispatchIssuer)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, dispatchService)
+		}
 		return uow, store, checks, cleanup, nil
 	case platform.ModePostgres:
 		root, err := canonicalDirectory(config.MigrationRoot)
@@ -361,6 +379,14 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			}
 			checks = append(checks, runService)
 		}
+		if catalogOwns(catalogClosure, "P19") {
+			dispatchService, err := composeDispatch(ctx, db, migrate.DialectPostgres, uow.Transaction, uow, store, clock, ids, config.DispatchIssuer)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, dispatchService)
+		}
 		return uow, store, checks, cleanup, nil
 	default:
 		return nil, nil, nil, nil, errors.New("unsupported storage mode")
@@ -409,9 +435,17 @@ func schemaVerifier(catalog migrate.CatalogClosure, dialect migrate.Dialect) mig
 			return err
 		}
 		if dialect == migrate.DialectSQLite {
-			return runsqlite.VerifySchema()(ctx, query)
+			err = runsqlite.VerifySchema()(ctx, query)
+		} else {
+			err = runpostgres.VerifySchema()(ctx, query)
 		}
-		return runpostgres.VerifySchema()(ctx, query)
+		if err != nil || !catalogOwns(catalog, "P19") {
+			return err
+		}
+		if dialect == migrate.DialectSQLite {
+			return dispatchsqlite.VerifySchema()(ctx, query)
+		}
+		return dispatchpostgres.VerifySchema()(ctx, query)
 	}
 }
 
@@ -422,7 +456,7 @@ func composeIdentity(db *sql.DB, dialect migrate.Dialect, lookup durable.Transac
 	}
 	service, err := identity.New(identity.Dependencies{
 		Clock: clock, IDs: ids, Faults: faults, UoW: uow, Observability: observations, Repository: repository,
-		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent:publish", "agent:read", "asset:exchange", "registry:discover", "registry:operate", "registry:register", "registry:write", "run:command", "run:create", "run:read", "secret.read"}, AllowedTenants: []string{"reference-dev"},
+		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent:publish", "agent:read", "asset:exchange", "registry:discover", "registry:operate", "registry:register", "registry:write", "run:command", "run:create", "run:dispatch", "run:read", "secret.read"}, AllowedTenants: []string{"reference-dev"},
 	})
 	if err != nil {
 		return nil, errors.New("initialize identity service")
@@ -646,6 +680,88 @@ func composeRun(db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionL
 	return service, nil
 }
 
+type referenceDispatchAuthorizer struct{}
+
+func (referenceDispatchAuthorizer) Authorize(_ context.Context, caller dispatch.Caller, operation dispatch.Operation, agent domainrun.AgentBinding) error {
+	if caller.Validate() != nil || agent.Validate() != nil || operation != dispatch.OperationIssue || !slices.Contains(caller.Scopes, "run:dispatch") {
+		return dispatch.NewError(dispatch.CategoryAuthorization, dispatch.ReasonDispatchForbidden)
+	}
+	return nil
+}
+
+type dispatchIDSource struct{ source platformports.IDSource }
+
+func (source dispatchIDSource) event(ctx context.Context, prefix string) (string, error) {
+	identifier, err := source.source.NewID(ctx, platformports.IDEvent)
+	if err != nil || !strings.HasPrefix(identifier, "evt_") {
+		return "", errors.New("generate dispatch identifier")
+	}
+	return prefix + strings.TrimPrefix(identifier, "evt_"), nil
+}
+
+func (source dispatchIDSource) NewAttemptID(ctx context.Context) (string, error) {
+	return source.event(ctx, "att_")
+}
+
+func (source dispatchIDSource) NewDeploymentID(ctx context.Context) (string, error) {
+	return source.event(ctx, "dep_")
+}
+
+func (source dispatchIDSource) NewTokenID(ctx context.Context) (string, error) {
+	return source.event(ctx, "tok_")
+}
+
+func (source dispatchIDSource) NewAuditID(ctx context.Context) (string, error) {
+	return source.source.NewID(ctx, platformports.IDAudit)
+}
+
+func composeDispatch(ctx context.Context, db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, observations observability.Store, clock platformports.Clock, ids platformports.IDSource, issuer string) (*dispatch.Service, error) {
+	var repository dispatch.Repository
+	var runs dispatch.RunReader
+	var registryRepository registry.Repository
+	var err error
+	if dialect == migrate.DialectSQLite {
+		store, storeErr := dispatchsqlite.New(db, lookup, issuer)
+		if storeErr != nil {
+			return nil, errors.New("initialize SQLite dispatch repository")
+		}
+		repository, runs = store, store
+		registryRepository, err = registrysqlite.New(db, lookup)
+	} else {
+		store, storeErr := dispatchpostgres.New(db, lookup, issuer)
+		if storeErr != nil {
+			return nil, errors.New("initialize PostgreSQL dispatch repository")
+		}
+		repository, runs = store, store
+		registryRepository, err = registrypostgres.New(db, lookup)
+	}
+	if err != nil {
+		return nil, errors.New("initialize dispatch registry reader")
+	}
+	registryCore, err := registry.New(registry.Dependencies{Clock: clock, IDs: registryIDSource{source: ids}, Repository: registryRepository, LeaseTTL: registry.DefaultLeaseTTL, KeepaliveInterval: registry.DefaultKeepaliveInterval})
+	if err != nil {
+		return nil, errors.New("initialize dispatch candidate source")
+	}
+	rawKeyID, err := ids.NewID(ctx, platformports.IDEvent)
+	if err != nil || !strings.HasPrefix(rawKeyID, "evt_") {
+		return nil, errors.New("generate dispatch signing key identifier")
+	}
+	const maxTokenTTL = 5 * time.Minute
+	signer, err := dispatch.NewProcessSigner(clock.Now(), "key_"+strings.TrimPrefix(rawKeyID, "evt_"), 24*time.Hour, maxTokenTTL)
+	if err != nil {
+		return nil, errors.New("initialize dispatch ticket signer")
+	}
+	service, err := dispatch.New(dispatch.Dependencies{
+		Clock: clock, IDs: dispatchIDSource{source: ids}, UoW: uow, Observability: observations,
+		Runs: runs, Candidates: dispatch.RegistryCandidateSource{Registry: registryCore}, Authorizer: referenceDispatchAuthorizer{}, Repository: repository, Signer: signer,
+		Issuer: issuer, TicketTTL: 2 * time.Minute, AttemptLease: 5 * time.Minute, MaxTokenTTL: maxTokenTTL,
+	})
+	if err != nil {
+		return nil, errors.New("initialize dispatch service")
+	}
+	return service, nil
+}
+
 func identityServiceFromChecks(checks []platformports.ReadinessCheck) *identity.Service {
 	for _, check := range checks {
 		if service, ok := check.(*identity.Service); ok {
@@ -694,6 +810,15 @@ func registryWatchServiceFromChecks(checks []platformports.ReadinessCheck) *regi
 func runServiceFromChecks(checks []platformports.ReadinessCheck) *domainrun.Service {
 	for _, check := range checks {
 		if service, ok := check.(*domainrun.Service); ok {
+			return service
+		}
+	}
+	return nil
+}
+
+func dispatchServiceFromChecks(checks []platformports.ReadinessCheck) *dispatch.Service {
+	for _, check := range checks {
+		if service, ok := check.(*dispatch.Service); ok {
 			return service
 		}
 	}

@@ -107,6 +107,9 @@ func TestConfigValidationFailsClosed(t *testing.T) {
 		{"unequal-observability-capacity-rejected", []string{"--audit-capacity=2", "--trace-capacity=3"}, nil},
 		{"unsafe-listen", []string{"--listen=0.0.0.0:8080"}, nil},
 		{"unsupported-mode", []string{"--mode=production"}, nil},
+		{"dispatch-issuer-http", []string{"--dispatch-issuer=http://control.example"}, nil},
+		{"dispatch-issuer-path", nil, []string{"AROP_CP_DISPATCH_ISSUER=https://control.example/path"}},
+		{"dispatch-issuer-trailing-slash", []string{"--dispatch-issuer=https://control.example/"}, nil},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

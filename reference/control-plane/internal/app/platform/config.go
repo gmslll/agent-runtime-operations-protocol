@@ -29,6 +29,7 @@ type Config struct {
 	BackupDirectory       string
 	AssetTokenKeyFile     string
 	AssetTokenKeyID       string
+	DispatchIssuer        string
 	ListenAddress         string
 	AllowNonLoopback      bool
 	ReadHeaderTimeout     time.Duration
@@ -48,6 +49,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		Mode: ModeDevelopmentMemory, ListenAddress: "127.0.0.1:8080",
+		DispatchIssuer:    "https://control-plane.invalid",
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second,
 		WriteTimeout: 35 * time.Second, IdleTimeout: 60 * time.Second,
 		RequestTimeout: 15 * time.Second, ShutdownTimeout: 10 * time.Second,
@@ -67,6 +69,7 @@ var configBindings = []configBinding{
 	{"AROP_CP_DATABASE_DSN", "database-dsn"}, {"AROP_CP_MIGRATION_ROOT", "migration-root"},
 	{"AROP_CP_BACKUP_DIRECTORY", "backup-directory"},
 	{"AROP_CP_ASSET_TOKEN_KEY_FILE", "asset-token-key-file"}, {"AROP_CP_ASSET_TOKEN_KEY_ID", "asset-token-key-id"},
+	{"AROP_CP_DISPATCH_ISSUER", "dispatch-issuer"},
 	{"AROP_CP_ALLOW_NON_LOOPBACK", "allow-non-loopback"},
 	{"AROP_CP_READ_HEADER_TIMEOUT", "read-header-timeout"},
 	{"AROP_CP_READ_TIMEOUT", "read-timeout"}, {"AROP_CP_WRITE_TIMEOUT", "write-timeout"},
@@ -119,6 +122,7 @@ func ParseConfig(args, environment []string) (Config, error) {
 	flags.StringVar(&config.BackupDirectory, "backup-directory", config.BackupDirectory, "private durable backup directory")
 	flags.StringVar(&config.AssetTokenKeyFile, "asset-token-key-file", config.AssetTokenKeyFile, "absolute private 32-byte asset token key file")
 	flags.StringVar(&config.AssetTokenKeyID, "asset-token-key-id", config.AssetTokenKeyID, "asset token key identifier")
+	flags.StringVar(&config.DispatchIssuer, "dispatch-issuer", config.DispatchIssuer, "canonical HTTPS issuer origin for dispatch tickets")
 	flags.StringVar(&config.ListenAddress, "listen", config.ListenAddress, "HTTP listen address")
 	flags.BoolVar(&config.AllowNonLoopback, "allow-non-loopback", config.AllowNonLoopback, "allow an explicit non-loopback bind")
 	flags.DurationVar(&config.ReadHeaderTimeout, "read-header-timeout", config.ReadHeaderTimeout, "HTTP read-header timeout")
@@ -158,6 +162,10 @@ func (config Config) Validate() error {
 		if !matched {
 			return errors.New("asset token key id is invalid")
 		}
+	}
+	issuer, err := url.Parse(config.DispatchIssuer)
+	if err != nil || len(config.DispatchIssuer) > 2048 || issuer.Scheme != "https" || issuer.Host == "" || issuer.User != nil || issuer.Path != "" || issuer.RawQuery != "" || issuer.Fragment != "" || strings.HasSuffix(config.DispatchIssuer, "/") {
+		return errors.New("dispatch issuer must be a canonical HTTPS origin")
 	}
 	if config.Mode != ModeDevelopmentMemory && config.Mode != ModeSQLite && config.Mode != ModePostgres {
 		return errors.New("unsupported Control Plane mode")
@@ -286,6 +294,9 @@ func applyEnvironment(config *Config, values map[string]string) error {
 	}
 	if value, ok := values["AROP_CP_LISTEN"]; ok {
 		config.ListenAddress = value
+	}
+	if value, ok := values["AROP_CP_DISPATCH_ISSUER"]; ok {
+		config.DispatchIssuer = value
 	}
 	if value, ok := values["AROP_CP_ALLOW_NON_LOOPBACK"]; ok {
 		parsed, err := strconv.ParseBool(value)
