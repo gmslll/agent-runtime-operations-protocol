@@ -1,4 +1,4 @@
-.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier test-evidence-lineage planning-audit gate-check test-go test-go-workspace test-protocol-foundation test-codegen-pipeline test-control-plane-platform test-storage-migrations test-identity-secrets test-publication-contracts test-publication-service test-asset-broker manifest-digest
+.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier test-evidence-lineage planning-audit gate-check test-go test-go-workspace test-protocol-foundation test-codegen-pipeline test-control-plane-platform test-storage-migrations test-identity-secrets test-publication-contracts test-publication-service test-asset-broker test-registry-core manifest-digest
 
 install:
 	npm ci
@@ -57,6 +57,9 @@ test-publication-service:
 
 test-asset-broker:
 	AROP_CHECK_COMMAND="make test-asset-broker" env -u GOFLAGS -u GOENV -u GOWORK -u GOCACHE -u GOCACHEPROG -u GOMODCACHE -u GOTMPDIR -u GOROOT -u GOTOOLCHAIN -u GOEXPERIMENT -u NODE_OPTIONS -u NODE_PATH -u NPM_CONFIG_NODE_OPTIONS -u PYTHONHOME -u PYTHONPATH -u PYTHONSTARTUP -u PYTHONINSPECT -u PYTHONWARNINGS -u PYTHONUSERBASE -u PGHOST -u PGHOSTADDR -u PGPORT -u PGDATABASE -u PGUSER -u PGPASSWORD -u PGSERVICE -u PGSERVICEFILE -u PGPASSFILE -u PGOPTIONS GOENV=off GOFLAGS=-mod=readonly GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go run -modfile="$(CURDIR)/go.mod" "$(CURDIR)/reference/control-plane/internal/domain/assets/testdata/harness/main.go"
+
+test-registry-core:
+	AROP_CHECK_COMMAND="make test-registry-core" env -u GOFLAGS -u GOENV -u GOWORK -u GOCACHE -u GOCACHEPROG -u GOMODCACHE -u GOTMPDIR -u GOROOT -u GOTOOLCHAIN -u GOEXPERIMENT -u NODE_OPTIONS -u NODE_PATH -u NPM_CONFIG_NODE_OPTIONS -u PYTHONHOME -u PYTHONPATH -u PYTHONSTARTUP -u PYTHONINSPECT -u PYTHONWARNINGS -u PYTHONUSERBASE -u PGHOST -u PGHOSTADDR -u PGPORT -u PGDATABASE -u PGUSER -u PGPASSWORD -u PGSERVICE -u PGSERVICEFILE -u PGPASSFILE -u PGOPTIONS GOENV=off GOFLAGS=-mod=readonly GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go run -modfile="$(CURDIR)/go.mod" "$(CURDIR)/reference/control-plane/internal/domain/registry/testdata/harness/main.go"
 
 manifest-digest: export AROP_MANIFEST_FILE := $(value FILE)
 manifest-digest:
