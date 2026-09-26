@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "waiver_id": "P14-REGISTRY-CORE-TRANSITION-001",
+  "status": "declared",
+  "policy": {
+    "owner_phase_semantics": "first-introduction-and-accountability",
+    "ownership_transferred": false
+  },
+  "baseline": {
+    "rule": "parent-of-unique-waiver-introduction-commit",
+    "commit": "958d1d42bb7b4a3f6c015ad97004b434ba07d2d3"
+  },
+  "transition": {
+    "from_phases": ["P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13"],
+    "to_phase": "P14",
+    "reason": "P14 introduces the signed Registry schemas, behavioral fixtures, lease and fencing domain core, append-only revision ledger, compaction watermark, and paired 0030 persistence while preserving every earlier owner and historical acceptance boundary."
+  },
+  "affected_artifacts": [],
+  "source_closure": [
+    "reference/control-plane/internal/domain/registry/testdata/transition/p14-baseline-transition-waiver.json"
+  ],
+  "acceptance": [
+    {"phase":"P14","command":"make test-registry-core","report":"build/reports/P14/report.json"}
+  ],
+  "constraints": [
+    "registry-time-and-lease-expiry-use-only-the-server-clock",
+    "revision-event-watermark-and-state-mutate-in-one-uow",
+    "stale-session-lease-or-generation-is-fenced",
+    "session-identifiers-are-never-reused",
+    "draining-remains-latched-across-reregistration",
+    "discovery-is-fail-closed-and-conjunctive",
+    "public-integers-never-exceed-the-js-safe-maximum",
+    "p09-p10-p12-and-p13-catalog-snapshots-remain-immutable",
+    "production-catalog-ends-at-0030",
+    "owner-phase-accountability-does-not-transfer",
+    "p14-report-runtime-inputs-remain-empty"
+  ]
+}
