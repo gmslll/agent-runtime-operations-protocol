@@ -133,7 +133,7 @@ func main() {
 		{Kind: "p15-contract-validation", SHA256: report.Hash(contractEvidence), Bytes: int64(len(contractEvidence))},
 		{Kind: "p15-generated-models", SHA256: report.Hash(generatedEvidence), Bytes: int64(len(generatedEvidence))},
 		{Kind: "p15-go-tests", SHA256: report.Hash(goEvidence), Bytes: int64(len(goEvidence))},
-		{Kind: "p14-regression", SHA256: report.Hash(p14.output), Bytes: int64(len(p14.output))},
+		{Kind: "p14-execution", SHA256: report.Hash(p14.output), Bytes: int64(len(p14.output))},
 	}
 	for _, phase := range []string{"P01", "P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14"} {
 		verified := run(root, nil, "make", "verify-report", "REPORT=build/reports/"+phase+"/report.json")
