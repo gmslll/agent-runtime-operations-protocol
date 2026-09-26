@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+var carrierGradeNAT = &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}
+
 // ClassifyAllowedHost performs syntax-only classification. It deliberately
 // does not resolve DNS, open sockets, follow redirects, or consult ambient
 // resolver configuration; those connection-time checks belong to later
@@ -30,7 +32,7 @@ func ClassifyAllowedHost(declared string) AllowedHost {
 			host.Class = HostLoopback
 		case ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast():
 			host.Class = HostLinkLocal
-		case ip.IsPrivate() || !ip.IsGlobalUnicast():
+		case deniedIPLiteral(ip):
 			host.Class = HostPrivate
 		case ip.To4() != nil:
 			host.Class = HostGlobalIPLiteral
@@ -49,6 +51,10 @@ func ClassifyAllowedHost(declared string) AllowedHost {
 		host.Class = HostPublicName
 	}
 	return host
+}
+
+func deniedIPLiteral(ip net.IP) bool {
+	return ip == nil || ip.IsPrivate() || carrierGradeNAT.Contains(ip) || !ip.IsGlobalUnicast()
 }
 
 func ambiguousIPName(value string) bool {

@@ -223,6 +223,32 @@ func TestIssueGrantNeverDowngradesReadyAssetAndReplayRequiresUsableGrant(t *test
 }
 
 func TestIssueGrantConflictReplayReauthorizes(t *testing.T) {
+	authorizer := &allowThenDeny{}
+	service, request := newConflictReplayService(t, authorizer, validatingAudit{})
+	if _, err := service.IssueGrant(context.Background(), request); err == nil {
+		t.Fatal("conflict replay bypassed second authorization")
+	} else {
+		requireReason(t, err, ReasonGrantForbidden)
+	}
+	if authorizer.calls != 2 {
+		t.Fatalf("authorization calls=%d want=2", authorizer.calls)
+	}
+}
+
+func TestIssueGrantConflictReplayAuditsSuccessfulOutcome(t *testing.T) {
+	audit := &recordingAudit{}
+	service, request := newConflictReplayService(t, allowAll{}, audit)
+	issued, err := service.IssueGrant(context.Background(), request)
+	if err != nil || !issued.Replay {
+		t.Fatalf("conflict replay = %+v, %v", issued, err)
+	}
+	if len(audit.statuses) != 2 || audit.statuses[0] != 409 || audit.statuses[1] != 200 {
+		t.Fatalf("conflict replay audit statuses=%v want=[409 200]", audit.statuses)
+	}
+}
+
+func newConflictReplayService(t *testing.T, authorizer RunGrantAuthorizer, audit observability.ObservationWriter) (*Service, IssueRequest) {
+	t.Helper()
 	now := time.Date(2026, 9, 26, 12, 0, 0, 0, time.UTC)
 	request := testIssue(OperationUpload)
 	request.NotBefore, request.ExpiresAt = now, now.Add(time.Minute)
@@ -242,22 +268,13 @@ func TestIssueGrantConflictReplayReauthorizes(t *testing.T) {
 	store.grants[testTenant+"/"+grant.GrantID] = grant
 	store.idem[testTenant+"/"+grant.IdempotencyKeyDigest] = grant.GrantID
 	store.opaque[grant.OpaqueDigest] = testTenant + "/" + grant.GrantID
-	racing := &raceReplayStore{memStore: store}
-	authorizer := &allowThenDeny{}
 	deps := testDeps(t, authorizer)
-	deps.Clock, deps.Assets, deps.Grants, deps.Tokens = &frozenClock{now: now}, store, racing, issuer
+	deps.Clock, deps.Assets, deps.Grants, deps.Tokens, deps.Audit = &frozenClock{now: now}, store, &raceReplayStore{memStore: store}, issuer, audit
 	service, err := New(deps)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = service.IssueGrant(context.Background(), request); err == nil {
-		t.Fatal("conflict replay bypassed second authorization")
-	} else {
-		requireReason(t, err, ReasonGrantForbidden)
-	}
-	if authorizer.calls != 2 {
-		t.Fatalf("authorization calls=%d want=2", authorizer.calls)
-	}
+	return service, request
 }
 
 func TestNetworkClassification(t *testing.T) {
@@ -566,6 +583,16 @@ type validatingAudit struct{}
 
 func (validatingAudit) AppendObservation(_ context.Context, audit observability.AuditEntry, span observability.SpanRecord) error {
 	return observability.ValidateObservationPair(audit, span)
+}
+
+type recordingAudit struct{ statuses []int }
+
+func (writer *recordingAudit) AppendObservation(_ context.Context, audit observability.AuditEntry, span observability.SpanRecord) error {
+	if err := observability.ValidateObservationPair(audit, span); err != nil {
+		return err
+	}
+	writer.statuses = append(writer.statuses, audit.HTTPStatus)
+	return nil
 }
 
 func requireReason(t *testing.T, err error, reason ErrorReason) {

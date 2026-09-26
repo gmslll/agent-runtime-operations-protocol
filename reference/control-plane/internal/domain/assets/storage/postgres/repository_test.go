@@ -100,6 +100,16 @@ func TestPostgresAssetRepository(t *testing.T) {
 	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) { return repository.CreateGrant(ctx, grant) }); err != nil {
 		t.Fatal(err)
 	}
+	for name, statement := range map[string]string{
+		"malformed-principal": `UPDATE arop_assets SET principal_id='prn_-2345678-1234-7123-a123-123456789abc' WHERE asset_id='` + assetID + `'`,
+		"empty-media-subtype": `UPDATE arop_assets SET media_type='ab/' WHERE asset_id='` + assetID + `'`,
+		"malformed-audience":  `UPDATE arop_asset_grants SET audience='a..b' WHERE grant_id='` + grantID + `'`,
+		"grant-backslash":     `UPDATE arop_asset_grants SET name=E'a\\b' WHERE grant_id='` + grantID + `'`,
+	} {
+		if _, err := db.Exec(statement); err == nil {
+			t.Fatalf("%s bypassed PostgreSQL schema", name)
+		}
+	}
 	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.ConsumeGrant(ctx, grant.TenantID, grant.GrantID, 1, grant.NotBeforeNs-1)
 	}); !assets.HasStorageReason(err, assets.StorageReasonNotYetValid) {

@@ -15,6 +15,9 @@ func TestClassifyAllowedHostIsStaticAndFailClosed(t *testing.T) {
 		{"127.0.0.1", HostLoopback, false},
 		{"169.254.169.254", HostMetadata, false},
 		{"10.0.0.1", HostPrivate, false},
+		{"100.64.0.1", HostPrivate, false},
+		{"100.127.255.254", HostPrivate, false},
+		{"100.128.0.1", HostGlobalIPLiteral, true},
 		{"metadata.google.internal", HostMetadata, false},
 		{"user@example.invalid", HostInvalid, false},
 		{"https://example.invalid", HostInvalid, false},
@@ -45,5 +48,8 @@ func TestAllowedHostsRejectCanonicalDuplicatesAndDeniedClasses(t *testing.T) {
 	}
 	if _, err := classifyAllowedHosts([]string{"api.example.invalid", "192.168.1.1"}); err == nil {
 		t.Fatal("private allowed host accepted")
+	}
+	if _, err := classifyAllowedHosts([]string{"100.64.0.1"}); err == nil {
+		t.Fatal("carrier-grade NAT allowed host accepted")
 	}
 }

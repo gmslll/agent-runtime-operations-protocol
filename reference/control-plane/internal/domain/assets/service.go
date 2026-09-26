@@ -151,6 +151,9 @@ func (service *Service) IssueGrant(ctx context.Context, request IssueRequest) (I
 			if issueErr != nil || replayToken.Digest != existing.OpaqueDigest {
 				return IssuedGrant{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
 			}
+			if auditErr := service.audit(ctx, request.Metadata, string(existing.Binding.Operation), started, 200); auditErr != nil {
+				return IssuedGrant{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
+			}
 			return IssuedGrant{Grant: existing, Token: replayToken.Value, Replay: true}, nil
 		}
 		return IssuedGrant{}, err

@@ -299,7 +299,7 @@ func (host AllowedHost) Validate() error {
 		}
 	case HostGlobalIPLiteral:
 		ip := net.ParseIP(host.Declared)
-		if ip == nil || ip.To4() == nil || ip.String() != host.Canonical || !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		if ip == nil || ip.To4() == nil || ip.String() != host.Canonical || deniedIPLiteral(ip) || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
 			return errors.New("global IP host classification is invalid")
 		}
 	}
