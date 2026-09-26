@@ -41,7 +41,7 @@ type DeregisterCommand struct {
 
 type ExpireCommand struct {
 	TenantID string
-	EventID  string
+	EventIDs []string
 	Now      time.Time
 	Limit    uint64
 }

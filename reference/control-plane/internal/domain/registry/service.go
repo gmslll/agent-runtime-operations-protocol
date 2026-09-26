@@ -122,11 +122,14 @@ func (service *Service) Expire(ctx context.Context, tenantID string, limit uint6
 	if err != nil {
 		return nil, err
 	}
-	eventID, err := service.eventID(ctx)
-	if err != nil {
-		return nil, err
+	eventIDs := make([]string, limit)
+	for index := range eventIDs {
+		eventIDs[index], err = service.eventID(ctx)
+		if err != nil {
+			return nil, err
+		}
 	}
-	instances, err := service.dependencies.Repository.Expire(ctx, ExpireCommand{TenantID: tenantID, EventID: eventID, Now: now, Limit: limit})
+	instances, err := service.dependencies.Repository.Expire(ctx, ExpireCommand{TenantID: tenantID, EventIDs: eventIDs, Now: now, Limit: limit})
 	if err != nil {
 		return nil, normalize(err)
 	}

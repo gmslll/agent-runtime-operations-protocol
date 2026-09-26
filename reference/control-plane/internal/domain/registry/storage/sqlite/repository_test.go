@@ -1,0 +1,49 @@
+package sqlite_test
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	sqliteadapter "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/storage/sqlite"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/registry/storage/internaltest"
+	registrystore "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/registry/storage/sqlite"
+)
+
+func TestSQLiteRegistryRepository(t *testing.T) {
+	directory, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := sqliteadapter.Open(filepath.Join(directory, "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	root := os.Getenv("AROP_P14_MIGRATION_ROOT")
+	if root == "" {
+		root = filepath.Join("..", "..", "..", "..", "..", "migrations")
+	}
+	for _, name := range []string{"0001_base.sql", "0005_identity.sql", "0010_publication.sql", "0020_asset.sql", "0030_registry.sql"} {
+		contents, readErr := os.ReadFile(filepath.Join(root, "sqlite", name))
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		for _, statement := range strings.Split(string(contents), "\n-- arop:statement\n") {
+			if _, execErr := db.ExecContext(context.Background(), statement); execErr != nil {
+				t.Fatalf("apply %s: %v", name, execErr)
+			}
+		}
+	}
+	unit, err := sqliteadapter.NewUnitOfWork(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repository, err := registrystore.New(db, unit.Transaction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	internaltest.RunRepositoryMatrix(t, unit, repository)
+}
