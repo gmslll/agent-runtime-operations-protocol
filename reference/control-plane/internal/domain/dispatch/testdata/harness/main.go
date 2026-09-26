@@ -172,8 +172,8 @@ func main() {
 	evidence = append(evidence, report.RuntimeEvidence{Kind: "p18-regression", SHA256: report.Hash(p18.output), Bytes: int64(len(p18.output))})
 	for _, phase := range []string{"P01", "P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18"} {
 		verified := run(root, nil, "make", "verify-report", "REPORT=build/reports/"+phase+"/report.json")
-		add("p19-"+strings.ToLower(phase)+"-regression", verified.err, phase+" current report verified after P18")
-		evidence = append(evidence, report.RuntimeEvidence{Kind: strings.ToLower(phase) + "-regression", SHA256: report.Hash(verified.output), Bytes: int64(len(verified.output))})
+		add("p19-"+strings.ToLower(phase)+"-report", verified.err, phase+" current report verified after P18")
+		evidence = append(evidence, report.RuntimeEvidence{Kind: strings.ToLower(phase) + "-report-verification", SHA256: report.Hash(verified.output), Bytes: int64(len(verified.output))})
 	}
 	if pg != nil {
 		err = pg.stop()
