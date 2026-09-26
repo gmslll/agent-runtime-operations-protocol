@@ -157,11 +157,11 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 		if err := os.WriteFile(keyPath, []byte("0123456789abcdef0123456789abcdef"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		application, _, cleanup, err := compose([]string{
+		application, _, cleanup, err := composeWithCatalog([]string{
 			"--listen=127.0.0.1:0", "--mode=sqlite", "--database-dsn=" + filepath.Join(root, "p13.db"),
 			"--migration-root=" + migrationRoot, "--backup-directory=" + backup,
 			"--asset-token-key-file=" + keyPath, "--asset-token-key-id=atk_reference_test",
-		}, nil)
+		}, nil, migrate.P13ProductionCatalog())
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -30,6 +30,8 @@ import (
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication"
 	publicationpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication/storage/postgres"
 	publicationsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication/storage/sqlite"
+	registrypostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/registry/storage/postgres"
+	registrysqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/registry/storage/sqlite"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/identity"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/ports/observability"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/storage/migrate"
@@ -330,9 +332,17 @@ func schemaVerifier(catalog migrate.CatalogClosure, dialect migrate.Dialect) mig
 			return err
 		}
 		if dialect == migrate.DialectSQLite {
-			return assetsqlite.VerifySchema()(ctx, query)
+			err = assetsqlite.VerifySchema()(ctx, query)
+		} else {
+			err = assetpostgres.VerifySchema()(ctx, query)
 		}
-		return assetpostgres.VerifySchema()(ctx, query)
+		if err != nil || !catalogOwns(catalog, "P14") {
+			return err
+		}
+		if dialect == migrate.DialectSQLite {
+			return registrysqlite.VerifySchema()(ctx, query)
+		}
+		return registrypostgres.VerifySchema()(ctx, query)
 	}
 }
 

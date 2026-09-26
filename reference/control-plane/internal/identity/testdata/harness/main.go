@@ -557,7 +557,7 @@ func verifyCatalogSource(root string) error {
 		return err
 	}
 	text := string(data)
-	for _, required := range []string{"func P09ProductionCatalog()", `ReportPhase: "P09"`, "func P10ProductionCatalog()", `ReportPhase: "P10"`, "func P12ProductionCatalog()", `ReportPhase: "P12"`, "func CurrentProductionCatalog()", `ReportPhase: "P13"`, "0005_identity.sql", "0010_publication.sql", "0020_asset.sql"} {
+	for _, required := range []string{"func P09ProductionCatalog()", `ReportPhase: "P09"`, "func P10ProductionCatalog()", `ReportPhase: "P10"`, "func P12ProductionCatalog()", `ReportPhase: "P12"`, "func CurrentProductionCatalog()", "0005_identity.sql"} {
 		if !strings.Contains(text, required) {
 			return errors.New("catalog source misses " + required)
 		}

@@ -33,7 +33,7 @@ func TestProductionMigration0020Conformance(t *testing.T) {
 			t.Run("empty-and-idempotent", func(t *testing.T) {
 				database := openDatabase(t, dialect)
 				defer database.close()
-				runner := newRunner(t, database, loadCatalog(t, migrate.CurrentProductionCatalog(), dialect), currentVerifier(dialect), nil)
+				runner := newRunner(t, database, loadCatalog(t, migrate.P13ProductionCatalog(), dialect), currentVerifier(dialect), nil)
 				result, err := runner.Migrate(context.Background())
 				requireNoError(t, err)
 				if result.FromVersion != 0 || result.ToVersion != 20 || !reflect.DeepEqual(result.Applied, []int64{1, 5, 10, 20}) || result.Snapshot != nil {
@@ -56,7 +56,7 @@ func TestProductionMigration0020Conformance(t *testing.T) {
 				if setup.ToVersion != 10 || !reflect.DeepEqual(setup.Applied, []int64{1, 5, 10}) {
 					t.Fatalf("P12 setup result: %#v", setup)
 				}
-				current := newRunner(t, database, loadCatalog(t, migrate.CurrentProductionCatalog(), dialect), currentVerifier(dialect), database.backup)
+				current := newRunner(t, database, loadCatalog(t, migrate.P13ProductionCatalog(), dialect), currentVerifier(dialect), database.backup)
 				result, err := current.Migrate(context.Background())
 				requireNoError(t, err)
 				if result.FromVersion != 10 || result.ToVersion != 20 || !reflect.DeepEqual(result.Applied, []int64{20}) || result.Snapshot == nil {
@@ -68,7 +68,7 @@ func TestProductionMigration0020Conformance(t *testing.T) {
 			t.Run("dirty-history-fails-closed", func(t *testing.T) {
 				database := openDatabase(t, dialect)
 				defer database.close()
-				runner := newRunner(t, database, loadCatalog(t, migrate.CurrentProductionCatalog(), dialect), currentVerifier(dialect), nil)
+				runner := newRunner(t, database, loadCatalog(t, migrate.P13ProductionCatalog(), dialect), currentVerifier(dialect), nil)
 				_, err := runner.Migrate(context.Background())
 				requireNoError(t, err)
 				statement := `UPDATE arop_schema_migrations SET dirty=1,applied_at_ns=NULL WHERE version=20`

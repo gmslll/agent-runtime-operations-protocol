@@ -734,7 +734,7 @@ func validateCatalog(root string) error {
 		return err
 	}
 	s := string(b)
-	for _, needle := range []string{"func P09ProductionCatalog()", `ReportPhase: "P09"`, "func P10ProductionCatalog()", `ReportPhase: "P10"`, "func P12ProductionCatalog()", `ReportPhase: "P12"`, "func CurrentProductionCatalog()", `ReportPhase: "P13"`, "0001_base.sql", "0005_identity.sql", "0010_publication.sql"} {
+	for _, needle := range []string{"func P09ProductionCatalog()", `ReportPhase: "P09"`, "func P10ProductionCatalog()", `ReportPhase: "P10"`, "func P12ProductionCatalog()", `ReportPhase: "P12"`, "func CurrentProductionCatalog()", "0001_base.sql", "0005_identity.sql", "0010_publication.sql"} {
 		if !strings.Contains(s, needle) {
 			return fmt.Errorf("catalog missing %s", needle)
 		}
@@ -748,7 +748,7 @@ func rejectProduction0020(root string) error {
 	}
 	text := string(b)
 	start := strings.Index(text, "func P12ProductionCatalog()")
-	end := strings.Index(text, "func CurrentProductionCatalog()")
+	end := strings.Index(text, "func P13ProductionCatalog()")
 	if start < 0 || end <= start {
 		return errors.New("P12 catalog snapshot is missing")
 	}

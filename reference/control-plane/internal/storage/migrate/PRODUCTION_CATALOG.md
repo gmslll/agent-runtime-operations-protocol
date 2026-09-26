@@ -8,7 +8,8 @@ For P09, the declaration contains only the two P09 base migrations and points
 to the P09 report. The P09 composition acceptance copies those two digest-bound
 files into an isolated catalog root before invoking the real composition. Files
 added to the repository by a later phase therefore cannot retroactively enter
-the P09 runtime or its report.
+the P09 runtime or its report. P10, P12, and P13 follow the same immutable
+snapshot rule; only `CurrentProductionCatalog` advances with P14.
 
 Every later Control Plane persistence phase must update the declaration in the
 same change that adds its paired SQLite/PostgreSQL migration:

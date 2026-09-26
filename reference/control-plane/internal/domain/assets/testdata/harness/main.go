@@ -404,10 +404,14 @@ func validateCatalog(root string) error {
 		return err
 	}
 	text := string(data)
-	for _, required := range []string{"func P09ProductionCatalog()", "func P10ProductionCatalog()", "func P12ProductionCatalog()", "func CurrentProductionCatalog()", `ReportPhase: "P13"`, "0020_asset.sql"} {
+	for _, required := range []string{"func P09ProductionCatalog()", "func P10ProductionCatalog()", "func P12ProductionCatalog()", "func P13ProductionCatalog()", "func CurrentProductionCatalog()", `ReportPhase: "P13"`, "0020_asset.sql"} {
 		if !strings.Contains(text, required) {
 			return fmt.Errorf("catalog missing %s", required)
 		}
+	}
+	start, end := strings.Index(text, "func P13ProductionCatalog()"), strings.Index(text, "func CurrentProductionCatalog()")
+	if start < 0 || end <= start || strings.Count(text[start:end], "0020_asset.sql") != 2 || strings.Contains(text[start:end], "0030_registry.sql") {
+		return errors.New("P13 catalog snapshot is not exactly complete through 0020")
 	}
 	return nil
 }

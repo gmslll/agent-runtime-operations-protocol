@@ -107,15 +107,19 @@ func TestProductionCatalogSnapshots(t *testing.T) {
 	if p12.ReportPhase != "P12" || p12.ReportPath != "build/reports/P12/report.json" || len(p12.Migrations) != 6 {
 		t.Fatalf("P12 snapshot drifted: %+v", p12)
 	}
+	p13 := P13ProductionCatalog()
+	if p13.ReportPhase != "P13" || p13.ReportPath != "build/reports/P13/report.json" || len(p13.Migrations) != 8 {
+		t.Fatalf("P13 snapshot drifted: %+v", p13)
+	}
 	current := CurrentProductionCatalog()
-	if current.ReportPhase != "P13" || current.ReportPath != "build/reports/P13/report.json" || len(current.Migrations) != 8 {
-		t.Fatalf("current catalog is not P13 complete: %+v", current)
+	if current.ReportPhase != "P14" || current.ReportPath != "build/reports/P14/report.json" || len(current.Migrations) != 10 {
+		t.Fatalf("current catalog is not P14 complete: %+v", current)
 	}
 	for _, item := range current.Migrations {
 		if item.Path == "" || item.OwnerPhase == "" || item.SHA256 == "" {
 			t.Fatalf("incomplete current declaration: %+v", item)
 		}
-		if item.Path == "sqlite/0030_future.sql" || item.Path == "postgres/0030_future.sql" {
+		if item.Path == "sqlite/0040_future.sql" || item.Path == "postgres/0040_future.sql" {
 			t.Fatalf("test-only future migration admitted: %s", item.Path)
 		}
 	}
