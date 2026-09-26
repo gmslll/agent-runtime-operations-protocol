@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "waiver_id": "P19-DISPATCH-SECURITY-TRANSITION-001",
+  "status": "draft",
+  "policy": {
+    "owner_phase_semantics": "first-introduction-and-accountability",
+    "ownership_transferred": false
+  },
+  "baseline": {
+    "rule": "parent-of-unique-waiver-introduction-commit",
+    "commit": "9a092c363c90f6b13f3873990a569fbe24653c2a"
+  },
+  "transition": {
+    "from_phases": ["P01", "P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18"],
+    "to_phase": "P19",
+    "reason": "P19 introduces durable dispatch selection, monotonically fenced Attempts, short-lived ES256 Dispatch Tickets and public JWKS rotation metadata while preserving all earlier ownership and historical acceptance boundaries."
+  },
+  "affected_artifacts": [],
+  "source_closure": [],
+  "acceptance": [],
+  "constraints": []
+}
