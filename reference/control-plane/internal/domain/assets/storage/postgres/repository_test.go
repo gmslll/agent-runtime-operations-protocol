@@ -96,9 +96,23 @@ func TestPostgresAssetRepository(t *testing.T) {
 	}); !assets.HasStorageReason(err, assets.StorageReasonConflict) {
 		t.Fatalf("stale CAS = %v", err)
 	}
-	grant := sampleGrant(asset.TenantID, strings.Repeat("c", 64), 1)
-	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) { return repository.CreateGrant(ctx, grant) }); err != nil {
-		t.Fatal(err)
+	if _, err := within(t, unit, func(ctx context.Context) (assets.AssetRecord, error) {
+		return repository.UpdateAsset(ctx, "tenant-b", asset.AssetID, 2, assets.AssetUpdate{
+			Name: "photo.png", MediaType: "image/png", SizeBytes: 12, ContentDigest: asset.ContentDigest,
+			ObjectKey: "tenant-b/photo.png", Status: assets.AssetIsolated, UpdatedAtNs: asset.CreatedAtNs + 7,
+		})
+	}); !assets.HasStorageReason(err, assets.StorageReasonNotFound) {
+		t.Fatalf("cross-tenant update = %v", err)
+	}
+	stored, err := repository.GetAsset(context.Background(), asset.TenantID, asset.AssetID)
+	if err != nil || stored.Status != assets.AssetAvailable || stored.Revision != 2 {
+		t.Fatalf("stored asset changed across tenants: %+v, %v", stored, err)
+	}
+
+	grant := sampleGrant(asset.TenantID, strings.Repeat("c", 64), 2)
+	created, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) { return repository.CreateGrant(ctx, grant) })
+	if err != nil || created.Status != assets.GrantActive {
+		t.Fatalf("create grant = %+v, %v", created, err)
 	}
 	for name, statement := range map[string]string{
 		"malformed-principal": `UPDATE arop_assets SET principal_id='prn_-2345678-1234-7123-a123-123456789abc' WHERE asset_id='` + assetID + `'`,
@@ -115,8 +129,9 @@ func TestPostgresAssetRepository(t *testing.T) {
 	}); !assets.HasStorageReason(err, assets.StorageReasonNotYetValid) {
 		t.Fatalf("not-yet-valid consume = %v", err)
 	}
-	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) { return repository.CreateGrant(ctx, grant) }); err != nil {
-		t.Fatal(err)
+	replayed, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) { return repository.CreateGrant(ctx, grant) })
+	if err != nil || replayed.GrantID != grant.GrantID {
+		t.Fatalf("grant replay = %+v, %v", replayed, err)
 	}
 	other := grant
 	other.IdempotencyRequestDigest = strings.Repeat("d", 64)
@@ -131,21 +146,56 @@ func TestPostgresAssetRepository(t *testing.T) {
 	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) { return repository.CreateGrant(ctx, missing) }); !assets.HasStorageReason(err, assets.StorageReasonValidation) {
 		t.Fatalf("grant without asset = %v", err)
 	}
-	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
-		return repository.ConsumeGrant(ctx, grant.TenantID, grant.GrantID, 1, grant.ExpiresAtNs)
-	}); !assets.HasStorageReason(err, assets.StorageReasonExpired) {
-		t.Fatalf("expired consume = %v", err)
-	}
-	revoked, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
-		return repository.RevokeGrant(ctx, grant.TenantID, grant.GrantID, 1, grant.CreatedAtNs+1)
+	consumed, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
+		return repository.ConsumeGrant(ctx, grant.TenantID, grant.GrantID, 1, grant.CreatedAtNs+1)
 	})
-	if err != nil || revoked.Status != assets.GrantRevoked {
-		t.Fatalf("revoke = %+v, %v", revoked, err)
+	if err != nil || consumed.UseCount != 1 || consumed.Status != assets.GrantActive || consumed.Revision != 2 {
+		t.Fatalf("first consume = %+v, %v", consumed, err)
+	}
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
+		return repository.ConsumeGrant(ctx, grant.TenantID, grant.GrantID, 1, grant.CreatedAtNs+1)
+	}); !assets.HasStorageReason(err, assets.StorageReasonConflict) {
+		t.Fatalf("stale consume = %v", err)
 	}
 	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
 		return repository.ConsumeGrant(ctx, "tenant-b", grant.GrantID, 2, grant.CreatedAtNs+1)
 	}); !assets.HasStorageReason(err, assets.StorageReasonNotFound) {
 		t.Fatalf("cross-tenant consume = %v", err)
+	}
+	finished, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
+		return repository.ConsumeGrant(ctx, grant.TenantID, grant.GrantID, 2, grant.CreatedAtNs+2)
+	})
+	if err != nil || finished.Status != assets.GrantConsumed || finished.UseCount != 2 || finished.Revision != 3 {
+		t.Fatalf("final consume = %+v, %v", finished, err)
+	}
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
+		return repository.RevokeGrant(ctx, grant.TenantID, grant.GrantID, 3, grant.CreatedAtNs+3)
+	}); !assets.HasStorageReason(err, assets.StorageReasonConflict) {
+		t.Fatalf("revoke consumed = %v", err)
+	}
+
+	expiring := sampleGrant(asset.TenantID, strings.Repeat("9", 64), 1)
+	expiring.GrantID = "grant_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5e"
+	expiring.TokenDigest = strings.Repeat("8", 64)
+	expiring.ExpiresAtNs = expiring.CreatedAtNs + 10
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) { return repository.CreateGrant(ctx, expiring) }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
+		return repository.ConsumeGrant(ctx, expiring.TenantID, expiring.GrantID, 1, expiring.ExpiresAtNs)
+	}); !assets.HasStorageReason(err, assets.StorageReasonExpired) {
+		t.Fatalf("expired consume = %v", err)
+	}
+	revoked, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
+		return repository.RevokeGrant(ctx, expiring.TenantID, expiring.GrantID, 1, expiring.CreatedAtNs+1)
+	})
+	if err != nil || revoked.Status != assets.GrantRevoked || revoked.Revision != 2 {
+		t.Fatalf("revoke = %+v, %v", revoked, err)
+	}
+	if _, err := withinGrant(t, unit, func(ctx context.Context) (assets.GrantRecord, error) {
+		return repository.ConsumeGrant(ctx, expiring.TenantID, expiring.GrantID, 2, expiring.CreatedAtNs+1)
+	}); !assets.HasStorageReason(err, assets.StorageReasonConflict) {
+		t.Fatalf("consume revoked = %v", err)
 	}
 	var references int
 	if err := db.QueryRow(`SELECT count(*) FROM pg_constraint fk JOIN pg_class c ON c.oid=fk.confrelid JOIN pg_class t ON t.oid=fk.conrelid WHERE t.relname IN ('arop_assets','arop_asset_grants') AND c.relname='arop_runs'`).Scan(&references); err != nil || references != 0 {

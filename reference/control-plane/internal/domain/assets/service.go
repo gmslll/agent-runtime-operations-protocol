@@ -142,9 +142,15 @@ func (service *Service) IssueGrant(ctx context.Context, request IssueRequest) (I
 				return IssuedGrant{}, NewError(CategoryConflict, ReasonIdempotencyConflict)
 			}
 			if authorizeErr := service.authorize(ctx, existing.Binding); authorizeErr != nil {
+				if auditErr := service.auditRecoveryOutcome(ctx, request.Metadata, string(existing.Binding.Operation), started, authorizeErr); auditErr != nil {
+					return IssuedGrant{}, auditErr
+				}
 				return IssuedGrant{}, authorizeErr
 			}
 			if usableErr := existing.UsableAt(service.now()); usableErr != nil {
+				if auditErr := service.auditRecoveryOutcome(ctx, request.Metadata, string(existing.Binding.Operation), started, usableErr); auditErr != nil {
+					return IssuedGrant{}, auditErr
+				}
 				return IssuedGrant{}, usableErr
 			}
 			replayToken, issueErr := service.deps.Tokens.IssueToken(ctx, existing)
@@ -159,6 +165,17 @@ func (service *Service) IssueGrant(ctx context.Context, request IssueRequest) (I
 		return IssuedGrant{}, err
 	}
 	return IssuedGrant{Grant: grant, Token: token.Value}, nil
+}
+
+func (service *Service) auditRecoveryOutcome(ctx context.Context, metadata platform.RequestMetadata, operation string, started time.Time, outcome error) error {
+	typed, ok := AsError(outcome)
+	if !ok {
+		return NewError(CategoryDependency, ReasonDependencyUnavailable)
+	}
+	if err := service.audit(ctx, metadata, operation, started, statusForAssetError(typed)); err != nil {
+		return NewError(CategoryDependency, ReasonDependencyUnavailable)
+	}
+	return nil
 }
 
 // ReceiveUpload accepts bytes metadata only. The object stays in quarantine

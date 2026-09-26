@@ -224,7 +224,8 @@ func TestIssueGrantNeverDowngradesReadyAssetAndReplayRequiresUsableGrant(t *test
 
 func TestIssueGrantConflictReplayReauthorizes(t *testing.T) {
 	authorizer := &allowThenDeny{}
-	service, request := newConflictReplayService(t, authorizer, validatingAudit{})
+	audit := &recordingAudit{}
+	service, request := newConflictReplayService(t, authorizer, audit)
 	if _, err := service.IssueGrant(context.Background(), request); err == nil {
 		t.Fatal("conflict replay bypassed second authorization")
 	} else {
@@ -232,6 +233,9 @@ func TestIssueGrantConflictReplayReauthorizes(t *testing.T) {
 	}
 	if authorizer.calls != 2 {
 		t.Fatalf("authorization calls=%d want=2", authorizer.calls)
+	}
+	if len(audit.statuses) != 2 || audit.statuses[0] != 409 || audit.statuses[1] != 403 {
+		t.Fatalf("conflict replay denial audit statuses=%v want=[409 403]", audit.statuses)
 	}
 }
 
