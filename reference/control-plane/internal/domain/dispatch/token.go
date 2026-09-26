@@ -79,7 +79,8 @@ func issueToken(ctx context.Context, signer Signer, key KeyMetadata, claims Toke
 	encoding := base64.RawURLEncoding
 	input := encoding.EncodeToString(headerBytes) + "." + encoding.EncodeToString(claimsBytes)
 	signature, err := signer.Sign(ctx, key.KeyID, []byte(input))
-	if err != nil || len(signature) != 64 {
+	public, publicErr := key.PublicKey()
+	if err != nil || publicErr != nil || len(signature) != 64 || !verifyES256(public, []byte(input), signature) {
 		return "", NewError(CategoryDependency, ReasonDependencyUnavailable)
 	}
 	return input + "." + encoding.EncodeToString(signature), nil

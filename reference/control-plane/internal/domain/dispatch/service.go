@@ -16,9 +16,10 @@ import (
 )
 
 type Service struct {
-	deps      Dependencies
-	healthMu  sync.Mutex
-	unhealthy bool
+	deps                 Dependencies
+	healthMu             sync.Mutex
+	dependencyUnhealthy  bool
+	observationUnhealthy bool
 }
 
 func New(dependencies Dependencies) (*Service, error) {
@@ -53,6 +54,15 @@ func (service *Service) Dispatch(ctx context.Context, request DispatchRequest) (
 	if existing, stored, lookupErr := service.deps.Repository.GetByIdempotency(ctx, request.Caller.TenantID, keyDigest); lookupErr == nil {
 		if stored != requestDigest || existing.RunID != view.RunID {
 			return Ticket{}, Attempt{}, service.reject(ctx, request.Metadata, started, 409, NewError(CategoryConflict, ReasonIdempotencyConflict))
+		}
+		switch existing.State {
+		case StateIssued, StateAccepted:
+		case StateExpired:
+			return Ticket{}, Attempt{}, service.reject(ctx, request.Metadata, started, 409, NewError(CategoryConflict, ReasonTicketExpired))
+		case StateFenced:
+			return Ticket{}, Attempt{}, service.reject(ctx, request.Metadata, started, 409, NewError(CategoryConflict, ReasonAttemptFenced))
+		default:
+			return Ticket{}, Attempt{}, service.reject(ctx, request.Metadata, started, 409, NewError(CategoryConflict, ReasonRunNotDispatchable))
 		}
 		if !started.Before(existing.TicketExpiresAt) {
 			return Ticket{}, Attempt{}, service.reject(ctx, request.Metadata, started, 409, NewError(CategoryConflict, ReasonTicketExpired))
@@ -130,21 +140,21 @@ func (service *Service) JWKS(ctx context.Context) (JWKS, error) {
 	publicKeys, err := service.deps.Signer.VerificationKeys(ctx, now)
 	active, activeErr := service.deps.Signer.ActiveKey(ctx, now)
 	if err != nil || activeErr != nil || validateSigningSet(publicKeys, active.KeyID, now, service.deps.MaxTokenTTL) != nil {
-		service.unhealthyState()
+		service.markDependencyUnhealthy()
 		return JWKS{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
 	}
 	if err = service.deps.UoW.Within(ctx, func(txctx context.Context) error { return service.deps.Repository.SyncKeys(txctx, publicKeys, now) }); err != nil {
-		service.unhealthyState()
+		service.markDependencyUnhealthy()
 		return JWKS{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
 	}
 	keys, err := service.deps.Repository.Keys(ctx, now)
 	if err != nil {
-		service.unhealthyState()
+		service.markDependencyUnhealthy()
 		return JWKS{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
 	}
 	keys, err = normalizeKeys(keys)
 	if err != nil {
-		service.unhealthyState()
+		service.markDependencyUnhealthy()
 		return JWKS{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
 	}
 	cacheUntil := now.Add(time.Minute)
@@ -155,10 +165,10 @@ func (service *Service) JWKS(ctx context.Context) (JWKS, error) {
 	}
 	result := JWKS{Issuer: service.deps.Issuer, CacheUntil: cacheUntil, Keys: keys}
 	if result.Validate(now, service.deps.MaxTokenTTL) != nil {
-		service.unhealthyState()
+		service.markDependencyUnhealthy()
 		return JWKS{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
 	}
-	service.healthyState()
+	service.markDependencyHealthy()
 	return result, nil
 }
 
@@ -189,6 +199,11 @@ func (service *Service) Name() string { return "dispatch-service" }
 
 func (service *Service) Check(ctx context.Context) error {
 	if _, err := service.JWKS(ctx); err != nil {
+		return errors.New("dispatch service unhealthy")
+	}
+	service.healthMu.Lock()
+	defer service.healthMu.Unlock()
+	if service.dependencyUnhealthy || service.observationUnhealthy {
 		return errors.New("dispatch service unhealthy")
 	}
 	return nil
@@ -258,8 +273,7 @@ func eligibleCandidates(values []Candidate, now time.Time) []Candidate {
 func dispatchRequestDigest(request DispatchRequest, view RunView) string {
 	value := struct {
 		TenantID, PrincipalID, CredentialID, RunID, AgentID, AgentVersion, SkillID, ManifestDigest, AuthorizationSnapshotHash string
-		StateVersion                                                                                                          uint64
-	}{request.Caller.TenantID, request.Caller.PrincipalID, request.Caller.CredentialID, request.RunID, view.Agent.ID, view.Agent.Version, view.Agent.SkillID, view.Agent.ManifestDigest, view.AuthorizationSnapshotHash, view.StateVersion}
+	}{request.Caller.TenantID, request.Caller.PrincipalID, request.Caller.CredentialID, request.RunID, view.Agent.ID, view.Agent.Version, view.Agent.SkillID, view.Agent.ManifestDigest, view.AuthorizationSnapshotHash}
 	encoded, _ := json.Marshal(value)
 	digest := sha256.Sum256(encoded)
 	return "sha256:" + hex.EncodeToString(digest[:])
@@ -279,15 +293,20 @@ func (service *Service) now() time.Time { return service.deps.Clock.Now() }
 
 func (service *Service) reject(ctx context.Context, metadata platform.RequestMetadata, started time.Time, status int, failure error) error {
 	if service.audit(ctx, metadata, started, status) != nil {
-		service.unhealthyState()
+		service.markObservationUnhealthy()
 		return NewError(CategoryDependency, ReasonDependencyUnavailable)
 	}
+	service.markObservationHealthy()
 	return failure
 }
 
 func (service *Service) fail(ctx context.Context, metadata platform.RequestMetadata, started time.Time) error {
-	service.unhealthyState()
-	_ = service.audit(ctx, metadata, started, 503)
+	service.markDependencyUnhealthy()
+	if service.audit(ctx, metadata, started, 503) != nil {
+		service.markObservationUnhealthy()
+	} else {
+		service.markObservationHealthy()
+	}
 	return NewError(CategoryDependency, ReasonDependencyUnavailable)
 }
 
@@ -312,13 +331,32 @@ func (service *Service) observe(ctx context.Context, metadata platform.RequestMe
 
 func (service *Service) healthyState() {
 	service.healthMu.Lock()
-	service.unhealthy = false
+	service.dependencyUnhealthy = false
+	service.observationUnhealthy = false
 	service.healthMu.Unlock()
 }
 
-func (service *Service) unhealthyState() {
+func (service *Service) markDependencyUnhealthy() {
 	service.healthMu.Lock()
-	service.unhealthy = true
+	service.dependencyUnhealthy = true
+	service.healthMu.Unlock()
+}
+
+func (service *Service) markDependencyHealthy() {
+	service.healthMu.Lock()
+	service.dependencyUnhealthy = false
+	service.healthMu.Unlock()
+}
+
+func (service *Service) markObservationUnhealthy() {
+	service.healthMu.Lock()
+	service.observationUnhealthy = true
+	service.healthMu.Unlock()
+}
+
+func (service *Service) markObservationHealthy() {
+	service.healthMu.Lock()
+	service.observationUnhealthy = false
 	service.healthMu.Unlock()
 }
 

@@ -33,6 +33,12 @@ func TestDispatchBindsAttemptTicketAuditAndReplay(t *testing.T) {
 	if err != nil || claims.TokenID != attempt.TokenID || claims.AgentID != "image.generate" || claims.SkillID != "default" {
 		t.Fatalf("claims mismatch: %#v %v", claims, err)
 	}
+	// Reserving the Attempt moves the durable Run from queued/version 1 to
+	// dispatching/version 2. That service-owned transition must not turn an
+	// otherwise identical idempotent retry into a request conflict.
+	view := service.deps.Runs.(fakeRuns).view
+	view.State, view.StateVersion = run.StateDispatching, 2
+	service.deps.Runs = fakeRuns{view: view}
 	replayTicket, replayAttempt, err := service.Dispatch(context.Background(), request)
 	if err != nil || replayAttempt.AttemptID != attempt.AttemptID || replayTicket.AttemptID != attempt.AttemptID || repository.reserveCalls != 1 {
 		t.Fatalf("idempotent replay failed: %#v %#v calls=%d err=%v", replayTicket, replayAttempt, repository.reserveCalls, err)
@@ -61,6 +67,57 @@ func TestDispatchBindsAttemptTicketAuditAndReplay(t *testing.T) {
 	keys, err := repository.Keys(context.Background(), testNow)
 	if err != nil || len(keys) != 2 {
 		t.Fatalf("public signing metadata missing: %#v %v", keys, err)
+	}
+}
+
+func TestDispatchDoesNotReplayClosedAttemptCapability(t *testing.T) {
+	service, repository, _, observations := testService(t)
+	request := validDispatchRequest()
+	_, attempt, err := service.Dispatch(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view := service.deps.Runs.(fakeRuns).view
+	view.State, view.StateVersion = run.StateDispatching, 2
+	service.deps.Runs = fakeRuns{view: view}
+	closed := testNow.Add(time.Second)
+	repository.mutex.Lock()
+	for key, stored := range repository.attempts {
+		if stored.AttemptID == attempt.AttemptID {
+			stored.State = StateFenced
+			stored.ClosedAt = &closed
+			stored.FailureCode = "INSTANCE_GENERATION_FENCED"
+			repository.attempts[key] = stored
+		}
+	}
+	repository.mutex.Unlock()
+	if _, _, err = service.Dispatch(context.Background(), request); err == nil {
+		t.Fatal("fenced Attempt replay minted a new capability")
+	} else if failure, ok := AsError(err); !ok || failure.Category != CategoryConflict || failure.Reason != ReasonAttemptFenced {
+		t.Fatalf("fenced replay error=%#v", err)
+	}
+	if observations.count != 2 {
+		t.Fatalf("durable observations=%d want=2", observations.count)
+	}
+}
+
+func TestDispatchObservationFailureLatchesReadinessUntilAuditedRecovery(t *testing.T) {
+	service, _, _, observations := testService(t)
+	observations.failure = true
+	invalid := validDispatchRequest()
+	invalid.RunID = "invalid"
+	if _, _, err := service.Dispatch(context.Background(), invalid); err == nil {
+		t.Fatal("observation failure accepted")
+	}
+	observations.failure = false
+	if err := service.Check(context.Background()); err == nil {
+		t.Fatal("JWKS success erased the durable observation failure latch")
+	}
+	if _, _, err := service.Dispatch(context.Background(), validDispatchRequest()); err != nil {
+		t.Fatalf("audited recovery dispatch failed: %v", err)
+	}
+	if err := service.Check(context.Background()); err != nil {
+		t.Fatalf("readiness did not recover after a successful audited dispatch: %v", err)
 	}
 }
 
@@ -101,6 +158,9 @@ func TestSignerRotationOverlapAndTokenVerification(t *testing.T) {
 	token, err := issueToken(context.Background(), signer, old, claims)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if _, err = issueToken(context.Background(), invalidSignatureSigner{Signer: signer}, old, claims); err == nil {
+		t.Fatal("Signer metadata/private-key mismatch issued an unverifiable ticket")
 	}
 	if _, err = signer.Rotate(testNow.Add(time.Second), "key-after", time.Hour, 5*time.Minute); err != nil {
 		t.Fatal(err)
@@ -144,6 +204,12 @@ func TestSignerRotationOverlapAndTokenVerification(t *testing.T) {
 	if _, err = VerifyToken(tampered, old, expected); err == nil {
 		t.Fatal("tampered token accepted")
 	}
+}
+
+type invalidSignatureSigner struct{ Signer }
+
+func (invalidSignatureSigner) Sign(context.Context, string, []byte) ([]byte, error) {
+	return make([]byte, 64), nil
 }
 
 func TestJWKSContainsOnlyPublicMetadataAndReadinessFailsClosed(t *testing.T) {
@@ -190,9 +256,15 @@ func (fakeUoW) Within(ctx context.Context, callback func(context.Context) error)
 	return callback(ctx)
 }
 
-type fakeObservations struct{ count int }
+type fakeObservations struct {
+	count   int
+	failure bool
+}
 
 func (store *fakeObservations) AppendObservation(_ context.Context, audit observability.AuditEntry, span observability.SpanRecord) error {
+	if store.failure {
+		return errors.New("observation unavailable")
+	}
 	if err := observability.ValidateObservationPair(audit, span); err != nil {
 		return err
 	}
