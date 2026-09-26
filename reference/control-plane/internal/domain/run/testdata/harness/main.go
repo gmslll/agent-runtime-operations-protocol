@@ -406,6 +406,7 @@ func discoverCompiledClosure(root string) (map[string]bool, error) {
 	}
 	listed := runStdout(filepath.Join(root, "reference/control-plane"), map[string]string{"GOWORK": work, "GOENV": "off", "GOFLAGS": "-mod=readonly", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "TMPDIR": temporary}, "go", "list", "-deps", "-test", "-json",
 		"./cmd/aropd", "./internal/domain/run/...", "./internal/domain/run/testdata/acceptance", "./internal/domain/run/testdata/harness",
+		"./internal/domain/registry/...",
 		"./internal/domain/assets/testdata/acceptance", "./internal/domain/assets/testdata/harness",
 		"./internal/domain/publication/testdata/harness",
 		"./internal/identity/testdata/acceptance", "./internal/identity/testdata/harness", "./internal/storage/migrate/...", "./internal/storage/migrate/testdata/engine-versions/harness")
