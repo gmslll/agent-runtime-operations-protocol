@@ -280,7 +280,7 @@ func discoverTransition(root string) (discoveredTransition, error) {
 	if err != nil {
 		return discoveredTransition{}, err
 	}
-	compiled, err := compiledClosure(root)
+	compiled, err := compiledClosure(root, sources)
 	if err != nil {
 		return discoveredTransition{}, err
 	}
@@ -328,7 +328,7 @@ func changedSources(data []byte) ([]string, error) {
 	return result, nil
 }
 
-func compiledClosure(root string) (map[string]bool, error) {
+func compiledClosure(root string, changed []string) (map[string]bool, error) {
 	result := map[string]bool{}
 	consume := func(output []byte) error {
 		decoder := json.NewDecoder(bytes.NewReader(output))
@@ -369,11 +369,36 @@ func compiledClosure(root string) (map[string]bool, error) {
 	if err := os.WriteFile(work, body, 0o600); err != nil {
 		return nil, err
 	}
-	nested := run(filepath.Join(root, "reference/control-plane"), map[string]string{"GOWORK": work, "TMPDIR": temporary}, "go", "list", "-deps", "-test", "-json", "./...", "./internal/app/registrywatch/testdata/harness")
+	nestedRoot := filepath.Join(root, "reference/control-plane")
+	nestedEnv := map[string]string{"GOWORK": work, "TMPDIR": temporary}
+	nested := run(nestedRoot, nestedEnv, "go", "list", "-deps", "-test", "-json", "./...", "./internal/app/registrywatch/testdata/harness")
 	if nested.err != nil {
 		return nil, nested.err
 	}
-	return result, consume(nested.output)
+	if err := consume(nested.output); err != nil {
+		return nil, err
+	}
+	// Each changed Go source also gets a direct package query. This closes the
+	// inventory for command/testdata packages that broad ./... patterns may
+	// legitimately omit while still deriving membership from go list itself.
+	for _, source := range changed {
+		if !strings.HasSuffix(source, ".go") || result[source] {
+			continue
+		}
+		directory, environment, relative := root, map[string]string(nil), source
+		if strings.HasPrefix(source, "reference/control-plane/") {
+			directory, environment, relative = nestedRoot, nestedEnv, strings.TrimPrefix(source, "reference/control-plane/")
+		}
+		pattern := "./" + filepath.ToSlash(filepath.Dir(relative))
+		direct := run(directory, environment, "go", "list", "-deps", "-test", "-json", pattern)
+		if direct.err != nil {
+			return nil, direct.err
+		}
+		if err := consume(direct.output); err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
 }
 
 func affectedArtifacts(manifest blueprint.Manifest, sources []string) ([]string, error) {
