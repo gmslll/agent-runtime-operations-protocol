@@ -25,10 +25,11 @@ import (
 )
 
 const (
-	command  = "make test-run-lifecycle"
-	checker  = "reference/control-plane/internal/domain/run/testdata/harness/main.go"
-	waiver   = "reference/control-plane/internal/domain/run/testdata/transition/p18-baseline-transition-waiver.json"
-	baseline = "e2cc6266530d462d968e6f9a35dd80a045ddc533"
+	command    = "make test-run-lifecycle"
+	checker    = "reference/control-plane/internal/domain/run/testdata/harness/main.go"
+	waiver     = "reference/control-plane/internal/domain/run/testdata/transition/p18-baseline-transition-waiver.json"
+	nextWaiver = "reference/control-plane/internal/domain/dispatch/testdata/transition/p19-baseline-transition-waiver.json"
+	baseline   = "e2cc6266530d462d968e6f9a35dd80a045ddc533"
 )
 
 var requiredOwnedArtifacts = []string{
@@ -344,13 +345,21 @@ func discoverTransition(root string) (discoveredTransition, error) {
 }
 
 func transitionEndpoint(root string) (string, error) {
-	resolved := run(root, nil, "git", "rev-parse", "HEAD")
-	if resolved.err != nil {
-		return "", resolved.err
+	introduction := run(root, nil, "git", "log", "--format=%H", "--diff-filter=A", "--", nextWaiver)
+	commits := lines(introduction.output)
+	if introduction.err != nil || len(commits) != 1 {
+		return "", errors.New("P19 transition carrier must have one introduction commit")
 	}
-	endpoint := strings.TrimSpace(string(resolved.output))
+	parent := run(root, nil, "git", "rev-parse", commits[0]+"^")
+	if parent.err != nil {
+		return "", parent.err
+	}
+	endpoint := strings.TrimSpace(string(parent.output))
+	if endpoint != "9a092c363c90f6b13f3873990a569fbe24653c2a" {
+		return "", fmt.Errorf("P18 historical endpoint=%s", endpoint)
+	}
 	if ancestor := run(root, nil, "git", "merge-base", "--is-ancestor", endpoint, "HEAD"); ancestor.err != nil {
-		return "", errors.New("P18 endpoint is not the current HEAD")
+		return "", errors.New("P18 historical endpoint is not an ancestor of HEAD")
 	}
 	return endpoint, nil
 }
