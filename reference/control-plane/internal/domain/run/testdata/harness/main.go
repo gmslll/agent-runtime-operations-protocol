@@ -175,7 +175,7 @@ func main() {
 	}
 	add("p18-p17-regression", p17.err, "P17 and its P14-P16 black-box chain pass on the current head")
 	evidence = append(evidence, report.RuntimeEvidence{Kind: "p17-regression", SHA256: report.Hash(p17.output), Bytes: int64(len(p17.output))})
-	for _, phase := range []string{"P01", "P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16", "P17"} {
+	for _, phase := range []string{"P01", "P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16"} {
 		verified := run(root, nil, "make", "verify-report", "REPORT=build/reports/"+phase+"/report.json")
 		add("p18-"+strings.ToLower(phase)+"-regression", verified.err, phase+" current report verified after P17")
 		evidence = append(evidence, report.RuntimeEvidence{Kind: strings.ToLower(phase) + "-regression", SHA256: report.Hash(verified.output), Bytes: int64(len(verified.output))})
@@ -197,6 +197,7 @@ func main() {
 		err = errors.New("private scratch was not created")
 	}
 	add("p18-scratch-cleanup", err, "scratch removed")
+	sort.Slice(evidence, func(left, right int) bool { return evidence[left].Kind < evidence[right].Kind })
 
 	written, err := report.Write(report.WriteOptions{
 		Root: root, Directory: "build/reports/P18", Suite: "AROP P18 run lifecycle", Class: "p18.run",
