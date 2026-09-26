@@ -172,16 +172,12 @@ func main() {
 
 	p08 := run(root, nil, "make", "test-control-plane-platform")
 	if p08.Err == nil {
-		p08verify := run(root, nil, "make", "verify-report", "REPORT=build/reports/P08/report.json")
-		p08.Output = append(p08.Output, p08verify.Output...)
-		p08.Err = p08verify.Err
+		p08.Err = verifyCurrentReport(root, "build/reports/P08/report.json")
 	}
 	add("p10-p08-regression", p08.Err, "P08 acceptance and current report verification pass on the P10 head")
 	p09 := run(root, nil, "make", "test-storage-migrations")
 	if p09.Err == nil {
-		p09verify := run(root, nil, "make", "verify-report", "REPORT=build/reports/P09/report.json")
-		p09.Output = append(p09.Output, p09verify.Output...)
-		p09.Err = p09verify.Err
+		p09.Err = verifyCurrentReport(root, "build/reports/P09/report.json")
 	}
 	add("p10-p09-regression", p09.Err, "P09 dual-database acceptance and current report verification pass on the P10 head")
 
@@ -549,6 +545,17 @@ func (cluster *postgresCluster) stop() error {
 		<-done
 		return errors.New("PostgreSQL shutdown timeout")
 	}
+}
+
+func verifyCurrentReport(root, path string) error {
+	verified, mode, err := report.Verify(report.VerifyOptions{Root: root, ReportPath: path})
+	if err != nil {
+		return err
+	}
+	if mode != "current-worktree" || !verified.Success {
+		return fmt.Errorf("report %s mode=%s success=%t", path, mode, verified.Success)
+	}
+	return nil
 }
 
 func verifyCatalogSource(root string) error {
