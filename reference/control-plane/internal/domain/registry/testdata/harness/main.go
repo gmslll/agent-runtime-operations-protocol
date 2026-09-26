@@ -763,7 +763,7 @@ func validateCatalog(root string) error {
 	if start < 0 || end <= start || strings.Count(text[start:end], "0020_asset.sql") != 2 || strings.Contains(text[start:end], "0030_registry.sql") {
 		return errors.New("P13 catalog snapshot is not exactly complete through 0020")
 	}
-	p14End := strings.Index(text, "func CurrentProductionCatalog()")
+	p14End := strings.Index(text, "func P18ProductionCatalog()")
 	if p14End <= end || strings.Count(text[end:p14End], "0030_registry.sql") != 2 || strings.Contains(text[end:p14End], "0040_run.sql") {
 		return errors.New("P14 catalog snapshot is not exactly complete through 0030")
 	}

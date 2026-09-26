@@ -946,11 +946,12 @@ func validateCatalog(root string) error {
 			return fmt.Errorf("catalog missing %s", required)
 		}
 	}
-	start, end := strings.Index(text, "func P14ProductionCatalog()"), strings.Index(text, "func CurrentProductionCatalog()")
+	start, end := strings.Index(text, "func P14ProductionCatalog()"), strings.Index(text, "func P18ProductionCatalog()")
 	if start < 0 || end <= start || strings.Count(text[start:end], "0030_registry.sql") != 2 || strings.Contains(text[start:end], "0040_run.sql") {
 		return errors.New("P14 catalog snapshot is not exactly complete through 0030")
 	}
-	if strings.Count(text[end:], "0040_run.sql") != 2 || !strings.Contains(text[end:], `ReportPhase: "P18"`) {
+	current := strings.Index(text, "func CurrentProductionCatalog()")
+	if current <= end || strings.Count(text[end:current], "0040_run.sql") != 2 || strings.Contains(text[end:current], "0050_dispatch.sql") || !strings.Contains(text[end:current], `ReportPhase: "P18"`) {
 		return errors.New("P18 production catalog is not exactly complete through 0040")
 	}
 	return nil
