@@ -11,7 +11,12 @@
     "instance_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/instanceId"},
     "session_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/sessionId"},
     "service_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/serviceId"},
-    "environment": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/slug"},
+    "environment": {
+      "allOf": [
+        {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/slug"},
+        {"maxLength": 64}
+      ]
+    },
     "generation": {"$ref": "#/$defs/positiveSafeInteger"},
     "resource_version": {"$ref": "#/$defs/positiveSafeInteger"},
     "registry_revision": {"$ref": "#/$defs/positiveSafeInteger"},

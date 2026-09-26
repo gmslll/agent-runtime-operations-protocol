@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"reflect"
 	"time"
 )
 
@@ -47,6 +48,13 @@ func (service *Service) Register(ctx context.Context, request RegisterRequest) (
 	if err := result.Validate(); err != nil {
 		return Registration{}, NewError(ReasonDependencyUnavailable)
 	}
+	instance := result.Instance
+	if instance.TenantID != request.TenantID || instance.InstanceID != request.InstanceID || instance.SessionID != request.SessionID || instance.ServiceID != request.ServiceID || instance.Environment != request.Environment || !reflect.DeepEqual(instance.Endpoint, request.Endpoint) || !reflect.DeepEqual(instance.Bindings, request.Bindings) || !reflect.DeepEqual(instance.Runtime, request.Runtime) || instance.Status != StatusRegistered || result.LeaseTTLSeconds != uint64(service.dependencies.LeaseTTL/time.Second) || result.KeepaliveIntervalSeconds != uint64(service.dependencies.KeepaliveInterval/time.Second) {
+		return Registration{}, NewError(ReasonDependencyUnavailable)
+	}
+	if !result.Replay && (instance.LeaseID != leaseID || !instance.LeaseExpiresAt.Equal(now.Add(service.dependencies.LeaseTTL))) {
+		return Registration{}, NewError(ReasonDependencyUnavailable)
+	}
 	return result, nil
 }
 
@@ -63,7 +71,14 @@ func (service *Service) Keepalive(ctx context.Context, request KeepaliveRequest)
 		return Instance{}, err
 	}
 	instance, err := service.dependencies.Repository.Keepalive(ctx, KeepaliveCommand{Request: request, EventID: eventID, Now: now, TTL: service.dependencies.LeaseTTL})
-	return service.checked(instance, err)
+	instance, err = service.checked(instance, err)
+	if err != nil {
+		return Instance{}, err
+	}
+	if !matchesFence(instance, request.Fence()) || instance.HeartbeatSequence != request.HeartbeatSequence || instance.Runtime.Healthy != request.Healthy || instance.Runtime.Ready != request.Ready || instance.Runtime.Capacity.ActiveRuns != request.ActiveRuns || instance.Runtime.Capacity.AvailableSlots != request.AvailableSlots || instance.Runtime.Capacity.QueueDepth != request.QueueDepth || !instance.LeaseExpiresAt.Equal(now.Add(service.dependencies.LeaseTTL)) || instance.Status != StatusRegistered {
+		return Instance{}, NewError(ReasonDependencyUnavailable)
+	}
+	return instance, nil
 }
 
 func (service *Service) CompareAndSwap(ctx context.Context, request CASRequest) (Instance, error) {
@@ -79,7 +94,15 @@ func (service *Service) CompareAndSwap(ctx context.Context, request CASRequest) 
 		return Instance{}, err
 	}
 	instance, err := service.dependencies.Repository.CompareAndSwap(ctx, CASCommand{Request: request, EventID: eventID, Now: now})
-	return service.checked(instance, err)
+	instance, err = service.checked(instance, err)
+	if err != nil {
+		return Instance{}, err
+	}
+	want := OperatorState{Enabled: request.Enabled, Weight: request.Weight, Priority: request.Priority, MaintenanceReason: request.MaintenanceReason}
+	if instance.TenantID != request.TenantID || instance.InstanceID != request.InstanceID || instance.ResourceVersion != request.ExpectedResourceVersion+1 || !reflect.DeepEqual(instance.Operator, want) {
+		return Instance{}, NewError(ReasonDependencyUnavailable)
+	}
+	return instance, nil
 }
 
 func (service *Service) Drain(ctx context.Context, request DrainRequest) (Instance, error) {
@@ -95,7 +118,14 @@ func (service *Service) Drain(ctx context.Context, request DrainRequest) (Instan
 		return Instance{}, err
 	}
 	instance, err := service.dependencies.Repository.Drain(ctx, DrainCommand{Request: request, EventID: eventID, Now: now})
-	return service.checked(instance, err)
+	instance, err = service.checked(instance, err)
+	if err != nil {
+		return Instance{}, err
+	}
+	if !matchesFence(instance, request.Fence) || !instance.Draining || instance.DrainDeadlineAt == nil || !instance.DrainDeadlineAt.Equal(request.DeadlineAt) || instance.Status != StatusRegistered {
+		return Instance{}, NewError(ReasonDependencyUnavailable)
+	}
+	return instance, nil
 }
 
 func (service *Service) Deregister(ctx context.Context, fence Fence) (Instance, error) {
@@ -111,11 +141,18 @@ func (service *Service) Deregister(ctx context.Context, fence Fence) (Instance, 
 		return Instance{}, err
 	}
 	instance, err := service.dependencies.Repository.Deregister(ctx, DeregisterCommand{Fence: fence, EventID: eventID, Now: now})
-	return service.checked(instance, err)
+	instance, err = service.checked(instance, err)
+	if err != nil {
+		return Instance{}, err
+	}
+	if !matchesFence(instance, fence) || instance.Status != StatusDeregistered || instance.Draining || instance.DrainDeadlineAt != nil || !instance.LeaseExpiresAt.Equal(now) {
+		return Instance{}, NewError(ReasonDependencyUnavailable)
+	}
+	return instance, nil
 }
 
 func (service *Service) Expire(ctx context.Context, tenantID string, limit uint64) ([]Instance, error) {
-	if !tenantPattern.MatchString(tenantID) || limit == 0 || limit > 1000 {
+	if !tenantPattern.MatchString(tenantID) || len(tenantID) > 128 || limit == 0 || limit > 1000 {
 		return nil, NewError(ReasonInvalidRequest)
 	}
 	now, err := service.now()
@@ -134,7 +171,7 @@ func (service *Service) Expire(ctx context.Context, tenantID string, limit uint6
 		return nil, normalize(err)
 	}
 	for _, instance := range instances {
-		if instance.Validate() != nil || instance.Status != StatusExpired {
+		if instance.Validate() != nil || instance.TenantID != tenantID || instance.Status != StatusExpired || !instance.LeaseExpiresAt.Equal(now) {
 			return nil, NewError(ReasonDependencyUnavailable)
 		}
 	}
@@ -188,6 +225,10 @@ func (service *Service) checked(instance Instance, err error) (Instance, error) 
 		return Instance{}, NewError(ReasonDependencyUnavailable)
 	}
 	return instance, nil
+}
+
+func matchesFence(instance Instance, fence Fence) bool {
+	return instance.TenantID == fence.TenantID && instance.InstanceID == fence.InstanceID && instance.SessionID == fence.SessionID && instance.LeaseID == fence.LeaseID && instance.Generation == fence.Generation
 }
 
 func normalize(err error) error {

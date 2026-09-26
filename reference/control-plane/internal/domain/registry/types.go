@@ -17,6 +17,7 @@ const (
 	MaxLeaseTTL                     = 10 * time.Minute
 	MaxBindings                     = 256
 	MaxLabels                       = 128
+	MaxEnvironmentLength            = 64
 )
 
 var (
@@ -66,7 +67,7 @@ func (binding Binding) Validate() error {
 		return NewError(ReasonInvalidRequest)
 	}
 	for index, skill := range binding.SkillIDs {
-		if !skillPattern.MatchString(skill) || index > 0 && skill == binding.SkillIDs[index-1] {
+		if !skillPattern.MatchString(skill) || len(skill) > 128 || index > 0 && skill == binding.SkillIDs[index-1] {
 			return NewError(ReasonInvalidRequest)
 		}
 	}
@@ -110,7 +111,7 @@ type Endpoint struct {
 
 func (endpoint Endpoint) Validate() error {
 	parsed, err := url.Parse(endpoint.BaseURL)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "" && parsed.Path != "/" || !strings.HasPrefix(endpoint.HealthPath, "/") || strings.Contains(endpoint.HealthPath, "..") || strings.ContainsAny(endpoint.HealthPath, "?#") {
+	if err != nil || len(endpoint.BaseURL) > 2048 || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "" && parsed.Path != "/" || len(endpoint.HealthPath) > 512 || !strings.HasPrefix(endpoint.HealthPath, "/") || strings.Contains(endpoint.HealthPath, "..") || strings.ContainsAny(endpoint.HealthPath, "?#") {
 		return NewError(ReasonInvalidRequest)
 	}
 	return nil
@@ -186,7 +187,7 @@ type Instance struct {
 }
 
 func (instance Instance) Validate() error {
-	if !tenantPattern.MatchString(instance.TenantID) || len(instance.TenantID) > 128 || !instancePattern.MatchString(instance.InstanceID) || len(instance.InstanceID) > 128 || !validPrefixedUUID(instance.SessionID, "ses_") || !servicePattern.MatchString(instance.ServiceID) || len(instance.ServiceID) > 128 || !labelPattern.MatchString(instance.Environment) || instance.Generation == 0 || instance.Generation > MaxSafeInteger || instance.ResourceVersion == 0 || instance.ResourceVersion > MaxSafeInteger || instance.RegistryRevision == 0 || instance.RegistryRevision > MaxSafeInteger || !validPrefixedUUID(instance.LeaseID, "lease_") || !utc(instance.LeaseExpiresAt) || instance.HeartbeatSequence > MaxSafeInteger || len(instance.Bindings) == 0 || len(instance.Bindings) > MaxBindings || !utc(instance.CreatedAt) || !utc(instance.UpdatedAt) || instance.UpdatedAt.Before(instance.CreatedAt) {
+	if !tenantPattern.MatchString(instance.TenantID) || len(instance.TenantID) > 128 || !instancePattern.MatchString(instance.InstanceID) || len(instance.InstanceID) > 128 || !validPrefixedUUID(instance.SessionID, "ses_") || !servicePattern.MatchString(instance.ServiceID) || len(instance.ServiceID) > 128 || !labelPattern.MatchString(instance.Environment) || len(instance.Environment) > MaxEnvironmentLength || instance.Generation == 0 || instance.Generation > MaxSafeInteger || instance.ResourceVersion == 0 || instance.ResourceVersion > MaxSafeInteger || instance.RegistryRevision == 0 || instance.RegistryRevision > MaxSafeInteger || !validPrefixedUUID(instance.LeaseID, "lease_") || !utc(instance.LeaseExpiresAt) || instance.HeartbeatSequence > MaxSafeInteger || len(instance.Bindings) == 0 || len(instance.Bindings) > MaxBindings || !utc(instance.CreatedAt) || !utc(instance.UpdatedAt) || instance.UpdatedAt.Before(instance.CreatedAt) {
 		return NewError(ReasonInvalidRequest)
 	}
 	if instance.Status != StatusRegistered && instance.Status != StatusExpired && instance.Status != StatusDeregistered {
@@ -212,7 +213,7 @@ func (instance Instance) Validate() error {
 		}
 		previous = key
 	}
-	if instance.DrainDeadlineAt != nil && !utc(*instance.DrainDeadlineAt) {
+	if instance.DrainDeadlineAt != nil && !utc(*instance.DrainDeadlineAt) || instance.Draining != (instance.DrainDeadlineAt != nil) {
 		return NewError(ReasonInvalidRequest)
 	}
 	return nil
@@ -230,7 +231,7 @@ type Event struct {
 }
 
 func (event Event) Validate() error {
-	if !validPrefixedUUID(event.EventID, "evt_") || !tenantPattern.MatchString(event.TenantID) || event.Revision == 0 || event.Revision > MaxSafeInteger || !validEventType(event.Type) || !instancePattern.MatchString(event.InstanceID) || !validPrefixedUUID(event.SessionID, "ses_") || event.Generation == 0 || event.Generation > MaxSafeInteger || !utc(event.OccurredAt) {
+	if !validPrefixedUUID(event.EventID, "evt_") || !tenantPattern.MatchString(event.TenantID) || len(event.TenantID) > 128 || event.Revision == 0 || event.Revision > MaxSafeInteger || !validEventType(event.Type) || !instancePattern.MatchString(event.InstanceID) || len(event.InstanceID) > 128 || !validPrefixedUUID(event.SessionID, "ses_") || event.Generation == 0 || event.Generation > MaxSafeInteger || !utc(event.OccurredAt) {
 		return NewError(ReasonInvalidRequest)
 	}
 	return nil
@@ -267,7 +268,7 @@ type RegisterRequest struct {
 }
 
 func (request RegisterRequest) Validate() error {
-	if !tenantPattern.MatchString(request.TenantID) || len(request.TenantID) > 128 || !instancePattern.MatchString(request.InstanceID) || len(request.InstanceID) > 128 || !validPrefixedUUID(request.SessionID, "ses_") || !servicePattern.MatchString(request.ServiceID) || !labelPattern.MatchString(request.Environment) || !hexDigest.MatchString(request.IdempotencyKeyDigest) || !hexDigest.MatchString(request.IdempotencyRequestDigest) || len(request.Bindings) == 0 || len(request.Bindings) > MaxBindings {
+	if !tenantPattern.MatchString(request.TenantID) || len(request.TenantID) > 128 || !instancePattern.MatchString(request.InstanceID) || len(request.InstanceID) > 128 || !validPrefixedUUID(request.SessionID, "ses_") || !servicePattern.MatchString(request.ServiceID) || len(request.ServiceID) > 128 || !labelPattern.MatchString(request.Environment) || len(request.Environment) > MaxEnvironmentLength || !hexDigest.MatchString(request.IdempotencyKeyDigest) || !hexDigest.MatchString(request.IdempotencyRequestDigest) || len(request.Bindings) == 0 || len(request.Bindings) > MaxBindings {
 		return NewError(ReasonInvalidRequest)
 	}
 	if err := request.Endpoint.Validate(); err != nil {
@@ -305,8 +306,12 @@ type KeepaliveRequest struct {
 	QueueDepth        uint64
 }
 
+func (request KeepaliveRequest) Fence() Fence {
+	return Fence{TenantID: request.TenantID, InstanceID: request.InstanceID, SessionID: request.SessionID, LeaseID: request.LeaseID, Generation: request.Generation}
+}
+
 func (request KeepaliveRequest) Validate() error {
-	if !tenantPattern.MatchString(request.TenantID) || !instancePattern.MatchString(request.InstanceID) || !validPrefixedUUID(request.SessionID, "ses_") || !validPrefixedUUID(request.LeaseID, "lease_") || request.Generation == 0 || request.Generation > MaxSafeInteger || request.HeartbeatSequence == 0 || request.HeartbeatSequence > MaxSafeInteger || !utc(request.ReportedAt) || request.ActiveRuns > MaxSafeInteger || request.AvailableSlots > MaxSafeInteger || request.QueueDepth > MaxSafeInteger {
+	if !tenantPattern.MatchString(request.TenantID) || len(request.TenantID) > 128 || !instancePattern.MatchString(request.InstanceID) || len(request.InstanceID) > 128 || !validPrefixedUUID(request.SessionID, "ses_") || !validPrefixedUUID(request.LeaseID, "lease_") || request.Generation == 0 || request.Generation > MaxSafeInteger || request.HeartbeatSequence == 0 || request.HeartbeatSequence > MaxSafeInteger || !utc(request.ReportedAt) || request.ActiveRuns > MaxSafeInteger || request.AvailableSlots > MaxSafeInteger || request.QueueDepth > MaxSafeInteger {
 		return NewError(ReasonInvalidRequest)
 	}
 	return nil
@@ -323,7 +328,7 @@ type CASRequest struct {
 }
 
 func (request CASRequest) Validate() error {
-	if !tenantPattern.MatchString(request.TenantID) || !instancePattern.MatchString(request.InstanceID) || request.ExpectedResourceVersion == 0 || request.ExpectedResourceVersion > MaxSafeInteger {
+	if !tenantPattern.MatchString(request.TenantID) || len(request.TenantID) > 128 || !instancePattern.MatchString(request.InstanceID) || len(request.InstanceID) > 128 || request.ExpectedResourceVersion == 0 || request.ExpectedResourceVersion > MaxSafeInteger {
 		return NewError(ReasonInvalidRequest)
 	}
 	return (OperatorState{Enabled: request.Enabled, Weight: request.Weight, Priority: request.Priority, MaintenanceReason: request.MaintenanceReason}).Validate()
@@ -338,7 +343,7 @@ type Fence struct {
 }
 
 func (fence Fence) Validate() error {
-	if !tenantPattern.MatchString(fence.TenantID) || !instancePattern.MatchString(fence.InstanceID) || !validPrefixedUUID(fence.SessionID, "ses_") || !validPrefixedUUID(fence.LeaseID, "lease_") || fence.Generation == 0 || fence.Generation > MaxSafeInteger {
+	if !tenantPattern.MatchString(fence.TenantID) || len(fence.TenantID) > 128 || !instancePattern.MatchString(fence.InstanceID) || len(fence.InstanceID) > 128 || !validPrefixedUUID(fence.SessionID, "ses_") || !validPrefixedUUID(fence.LeaseID, "lease_") || fence.Generation == 0 || fence.Generation > MaxSafeInteger {
 		return NewError(ReasonInvalidRequest)
 	}
 	return nil
@@ -365,7 +370,7 @@ type DiscoveryQuery struct {
 }
 
 func (query DiscoveryQuery) Validate() error {
-	if !tenantPattern.MatchString(query.TenantID) || !agentPattern.MatchString(query.AgentID) || !versionPattern.MatchString(query.AgentVersion) || !skillPattern.MatchString(query.SkillID) || strings.TrimSpace(query.ProtocolVersion) == "" {
+	if !tenantPattern.MatchString(query.TenantID) || len(query.TenantID) > 128 || !agentPattern.MatchString(query.AgentID) || len(query.AgentID) > 128 || !versionPattern.MatchString(query.AgentVersion) || !skillPattern.MatchString(query.SkillID) || len(query.SkillID) > 128 || strings.TrimSpace(query.ProtocolVersion) == "" || len(query.ProtocolVersion) > 64 {
 		return NewError(ReasonInvalidRequest)
 	}
 	return nil

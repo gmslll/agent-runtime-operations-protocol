@@ -48,6 +48,11 @@ func TestKeepaliveNeverTrustsReportedAtForServerTime(t *testing.T) {
 		instance.HeartbeatSequence = 2
 		instance.RegistryRevision = 2
 		instance.ResourceVersion = 2
+		instance.Runtime.Capacity.ActiveRuns = command.Request.ActiveRuns
+		instance.Runtime.Capacity.AvailableSlots = command.Request.AvailableSlots
+		instance.Runtime.Capacity.QueueDepth = command.Request.QueueDepth
+		instance.Runtime.Healthy = command.Request.Healthy
+		instance.Runtime.Ready = command.Request.Ready
 		return instance, nil
 	}
 	_, err = service.Keepalive(context.Background(), KeepaliveRequest{TenantID: "tenant-a", InstanceID: "runtime-a", SessionID: testSession, LeaseID: testLease, Generation: 1, HeartbeatSequence: 2, ReportedAt: reported, Healthy: true, Ready: true, AvailableSlots: 1})
