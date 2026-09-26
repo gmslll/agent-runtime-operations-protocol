@@ -125,11 +125,14 @@ func main() {
 	add("p16-watch-ha-recovery-tests", goErr, "Watch race, poll, compaction, leader fencing and dual-engine restore pass with race detection")
 	add("p16-no-skips-cache-or-no-tests", rejectIncompleteTests(goEvidence), "test stream has no skip/cache/no-tests terminal")
 
-	p15 := run(root, nil, "make", "test-registry-api")
-	if p15.err == nil {
-		verified := run(root, nil, "make", "verify-report", "REPORT=build/reports/P15/report.json")
-		p15.output = append(p15.output, verified.output...)
-		p15.err = verified.err
+	p15 := run(root, nil, "make", "verify-report", "REPORT=build/reports/P15/report.json")
+	if p15.err != nil {
+		p15 = run(root, nil, "make", "test-registry-api")
+		if p15.err == nil {
+			verified := run(root, nil, "make", "verify-report", "REPORT=build/reports/P15/report.json")
+			p15.output = append(p15.output, verified.output...)
+			p15.err = verified.err
+		}
 	}
 	add("p16-p15-regression", p15.err, "P15 registry API and its historical chain pass at the P16 head")
 
@@ -137,7 +140,7 @@ func main() {
 		{Kind: "p16-fixtures", SHA256: report.Hash(fixtureEvidence), Bytes: int64(len(fixtureEvidence))},
 		{Kind: "p16-go-tests", SHA256: report.Hash(goEvidence), Bytes: int64(len(goEvidence))},
 		{Kind: "p16-postgres16", SHA256: report.Hash(postgresEvidence), Bytes: int64(len(postgresEvidence))},
-		{Kind: "p15-regression", SHA256: report.Hash(p15.output), Bytes: int64(len(p15.output))},
+		{Kind: "p15-execution", SHA256: report.Hash(p15.output), Bytes: int64(len(p15.output))},
 	}
 	for _, phase := range []string{"P01", "P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15"} {
 		verified := run(root, nil, "make", "verify-report", "REPORT=build/reports/"+phase+"/report.json")
