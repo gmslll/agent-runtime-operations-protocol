@@ -206,6 +206,33 @@ func TestSignerRotationOverlapAndTokenVerification(t *testing.T) {
 	}
 }
 
+func TestProcessSignerAutomaticallyRotatesBeforeExpiry(t *testing.T) {
+	signer, err := NewProcessSigner(testNow, "key-initial", 20*time.Minute, 5*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial, err := signer.ActiveKey(context.Background(), testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rotatedAt := testNow.Add(16 * time.Minute)
+	rotated, err := signer.ActiveKey(context.Background(), rotatedAt)
+	if err != nil || rotated.KeyID == initial.KeyID || rotated.Status != KeyActive || rotated.NotBefore != rotatedAt {
+		t.Fatalf("automatic rotation=%#v initial=%#v err=%v", rotated, initial, err)
+	}
+	keys, err := signer.VerificationKeys(context.Background(), rotatedAt)
+	if err != nil || len(keys) != 2 {
+		t.Fatalf("rotation verification set=%#v err=%v", keys, err)
+	}
+	old := keys[keyIndex(keys, initial.KeyID)]
+	if old.Status != KeyRetiring || old.SignUntil != rotatedAt || old.VerifyUntil.Before(rotatedAt.Add(10*time.Minute)) {
+		t.Fatalf("retiring key overlap=%#v", old)
+	}
+	if _, err = signer.Sign(context.Background(), initial.KeyID, []byte("retired-key-signature")); err == nil {
+		t.Fatal("retired key remained usable for signing")
+	}
+}
+
 type invalidSignatureSigner struct{ Signer }
 
 func (invalidSignatureSigner) Sign(context.Context, string, []byte) ([]byte, error) {

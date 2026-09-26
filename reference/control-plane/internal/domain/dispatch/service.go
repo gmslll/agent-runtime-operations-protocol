@@ -137,8 +137,8 @@ func (service *Service) Dispatch(ctx context.Context, request DispatchRequest) (
 
 func (service *Service) JWKS(ctx context.Context) (JWKS, error) {
 	now := service.now()
-	publicKeys, err := service.deps.Signer.VerificationKeys(ctx, now)
 	active, activeErr := service.deps.Signer.ActiveKey(ctx, now)
+	publicKeys, err := service.deps.Signer.VerificationKeys(ctx, now)
 	if err != nil || activeErr != nil || validateSigningSet(publicKeys, active.KeyID, now, service.deps.MaxTokenTTL) != nil {
 		service.markDependencyUnhealthy()
 		return JWKS{}, NewError(CategoryDependency, ReasonDependencyUnavailable)

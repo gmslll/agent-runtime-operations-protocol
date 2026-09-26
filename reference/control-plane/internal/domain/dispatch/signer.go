@@ -17,10 +17,12 @@ import (
 // encapsulated in this process-only adapter and are never returned or stored.
 // Production deployments can replace it with a KMS/HSM-backed implementation.
 type ProcessSigner struct {
-	mutex  sync.RWMutex
-	keys   map[string]*ecdsa.PrivateKey
-	meta   map[string]KeyMetadata
-	active string
+	mutex    sync.RWMutex
+	keys     map[string]*ecdsa.PrivateKey
+	meta     map[string]KeyMetadata
+	active   string
+	lifetime time.Duration
+	maxTTL   time.Duration
 }
 
 func NewProcessSigner(now time.Time, keyID string, lifetime, maxTTL time.Duration) (*ProcessSigner, error) {
@@ -32,17 +34,38 @@ func NewProcessSigner(now time.Time, keyID string, lifetime, maxTTL time.Duratio
 		return nil, errors.New("generate ES256 key")
 	}
 	metadata := metadataFromPrivate(keyID, KeyActive, private, now, now.Add(lifetime), now.Add(lifetime+2*maxTTL))
-	return &ProcessSigner{keys: map[string]*ecdsa.PrivateKey{keyID: private}, meta: map[string]KeyMetadata{keyID: metadata}, active: keyID}, nil
+	return &ProcessSigner{keys: map[string]*ecdsa.PrivateKey{keyID: private}, meta: map[string]KeyMetadata{keyID: metadata}, active: keyID, lifetime: lifetime, maxTTL: maxTTL}, nil
 }
 
 func (signer *ProcessSigner) ActiveKey(ctx context.Context, now time.Time) (KeyMetadata, error) {
 	if err := ctx.Err(); err != nil || !utc(now) {
 		return KeyMetadata{}, errors.New("signer unavailable")
 	}
-	signer.mutex.RLock()
-	defer signer.mutex.RUnlock()
+	signer.mutex.Lock()
+	defer signer.mutex.Unlock()
 	metadata, ok := signer.meta[signer.active]
-	if !ok || metadata.Status != KeyActive || now.Before(metadata.NotBefore) || !now.Before(metadata.SignUntil) {
+	if !ok || metadata.Status != KeyActive || now.Before(metadata.NotBefore) {
+		return KeyMetadata{}, errors.New("active signer unavailable")
+	}
+	// The reference process adapter owns its lifecycle: rotate before the
+	// current key can expire so a long-lived server never silently stops
+	// dispatching. Production KMS/HSM adapters can implement the same Signer
+	// contract with their own coordinated rotation policy.
+	if !now.Before(metadata.SignUntil.Add(-signer.maxTTL)) {
+		keyID, err := randomKeyID()
+		if err != nil {
+			return KeyMetadata{}, errors.New("rotate ES256 key")
+		}
+		private, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return KeyMetadata{}, errors.New("rotate ES256 key")
+		}
+		if _, exists := signer.keys[keyID]; exists {
+			return KeyMetadata{}, errors.New("rotate ES256 key")
+		}
+		metadata = signer.applyRotationLocked(now, keyID, private, signer.lifetime, signer.maxTTL)
+	}
+	if !now.Before(metadata.SignUntil) {
 		return KeyMetadata{}, errors.New("active signer unavailable")
 	}
 	return metadata, nil
@@ -68,9 +91,9 @@ func (signer *ProcessSigner) Sign(ctx context.Context, keyID string, input []byt
 		return nil, errors.New("signer unavailable")
 	}
 	signer.mutex.RLock()
-	private := signer.keys[keyID]
+	private, metadata := signer.keys[keyID], signer.meta[keyID]
 	signer.mutex.RUnlock()
-	if private == nil {
+	if private == nil || metadata.Status != KeyActive {
 		return nil, errors.New("unknown signing key")
 	}
 	digest := sha256.Sum256(input)
@@ -94,6 +117,12 @@ func (signer *ProcessSigner) Rotate(now time.Time, keyID string, lifetime, maxTT
 	if _, exists := signer.keys[keyID]; exists {
 		return KeyMetadata{}, errors.New("duplicate signing key")
 	}
+	metadata := signer.applyRotationLocked(now, keyID, private, lifetime, maxTTL)
+	signer.lifetime, signer.maxTTL = lifetime, maxTTL
+	return metadata, nil
+}
+
+func (signer *ProcessSigner) applyRotationLocked(now time.Time, keyID string, private *ecdsa.PrivateKey, lifetime, maxTTL time.Duration) KeyMetadata {
 	if old, exists := signer.meta[signer.active]; exists {
 		old.Status = KeyRetiring
 		old.SignUntil = now
@@ -105,7 +134,15 @@ func (signer *ProcessSigner) Rotate(now time.Time, keyID string, lifetime, maxTT
 	}
 	metadata := metadataFromPrivate(keyID, KeyActive, private, now, now.Add(lifetime), now.Add(lifetime+2*maxTTL))
 	signer.keys[keyID], signer.meta[keyID], signer.active = private, metadata, keyID
-	return metadata, nil
+	return metadata
+}
+
+func randomKeyID() (string, error) {
+	value := make([]byte, 18)
+	if _, err := rand.Read(value); err != nil {
+		return "", err
+	}
+	return "key_" + base64.RawURLEncoding.EncodeToString(value), nil
 }
 
 func metadataFromPrivate(keyID string, status KeyStatus, private *ecdsa.PrivateKey, notBefore, signUntil, verifyUntil time.Time) KeyMetadata {
