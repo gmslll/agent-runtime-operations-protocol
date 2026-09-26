@@ -8,247 +8,128 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"strings"
+	"unicode/utf8"
 	"net/url"
 	"regexp"
-	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 var strictDateTime = regexp.MustCompile(`^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\.[0-9]+)?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])$`)
 
 type DateTime string
-
-func (value *DateTime) UnmarshalJSON(data []byte) error {
-	var wire string
-	if err := json.Unmarshal(data, &wire); err != nil {
-		return err
-	}
-	if !strictDateTime.MatchString(wire) || strings.HasPrefix(wire, "0000-") {
-		return fmt.Errorf("invalid RFC3339 date-time")
-	}
-	if _, err := time.Parse(time.RFC3339Nano, wire); err != nil {
-		return err
-	}
-	*value = DateTime(wire)
-	return nil
-}
-func validURIReference(wire string) bool {
-	for index := 0; index < len(wire); index++ {
-		value := wire[index]
-		if value > 127 || value < 33 {
-			return false
-		}
-		if value == '%' {
-			if index+2 >= len(wire) {
-				return false
-			}
-			if _, ok := hexValue(valueAt(wire, index+1)); !ok {
-				return false
-			}
-			if _, ok := hexValue(valueAt(wire, index+2)); !ok {
-				return false
-			}
-			index += 2
-			continue
-		}
-		if !strings.ContainsRune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._~!$&'()*+,;=:@/?#[]-", rune(value)) {
-			return false
-		}
-	}
-	open, close := strings.IndexByte(wire, '['), strings.IndexByte(wire, ']')
-	if open < 0 && close < 0 {
-		return true
-	}
-	if open < 0 || close < 0 || close < open || strings.ContainsAny(wire[open+1:close], "[]") {
-		return false
-	}
-	authority := strings.Index(wire, "//")
-	if authority < 0 || open < authority+2 {
-		return false
-	}
-	end := len(wire)
-	if relative := strings.IndexAny(wire[authority+2:], "/?#"); relative >= 0 {
-		end = authority + 2 + relative
-	}
-	if close >= end {
-		return false
-	}
-	return regexp.MustCompile(`^[0-9A-Fa-f:.]+$`).MatchString(wire[open+1 : close])
-}
+func (value *DateTime) UnmarshalJSON(data []byte) error { var wire string; if err := json.Unmarshal(data, &wire); err != nil { return err }; if !strictDateTime.MatchString(wire) || strings.HasPrefix(wire, "0000-") { return fmt.Errorf("invalid RFC3339 date-time") }; if _, err := time.Parse(time.RFC3339Nano, wire); err != nil { return err }; *value = DateTime(wire); return nil }
+func validURIReference(wire string) bool { for index := 0; index < len(wire); index++ { value := wire[index]; if value > 127 || value < 33 { return false }; if value == '%' { if index+2 >= len(wire) { return false }; if _, ok := hexValue(valueAt(wire, index+1)); !ok { return false }; if _, ok := hexValue(valueAt(wire, index+2)); !ok { return false }; index += 2; continue }; if !strings.ContainsRune("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._~!$&'()*+,;=:@/?#[]-", rune(value)) { return false } }; open, close := strings.IndexByte(wire, '['), strings.IndexByte(wire, ']'); if open < 0 && close < 0 { return true }; if open < 0 || close < 0 || close < open || strings.ContainsAny(wire[open+1:close], "[]") { return false }; authority := strings.Index(wire, "//"); if authority < 0 || open < authority+2 { return false }; end := len(wire); if relative := strings.IndexAny(wire[authority+2:], "/?#"); relative >= 0 { end = authority + 2 + relative }; if close >= end { return false }; return regexp.MustCompile(`^[0-9A-Fa-f:.]+$`).MatchString(wire[open+1:close]) }
 func valueAt(wire string, index int) byte { return wire[index] }
-
 type URIReference string
-
-func (value *URIReference) UnmarshalJSON(data []byte) error {
-	var wire string
-	if err := json.Unmarshal(data, &wire); err != nil {
-		return err
-	}
-	parsed, err := url.Parse(wire)
-	if err != nil || parsed.String() != wire || !validURIReference(wire) {
-		return fmt.Errorf("invalid URI-reference")
-	}
-	*value = URIReference(wire)
-	return nil
-}
+func (value *URIReference) UnmarshalJSON(data []byte) error { var wire string; if err := json.Unmarshal(data, &wire); err != nil { return err }; parsed, err := url.Parse(wire); if err != nil || parsed.String() != wire || !validURIReference(wire) { return fmt.Errorf("invalid URI-reference") }; *value = URIReference(wire); return nil }
 
 type SafeInteger int64
+func (value *SafeInteger) UnmarshalJSON(data []byte) error { var number json.Number; if err := decodeJSON(data, &number); err != nil { return err }; rational, ok := new(big.Rat).SetString(number.String()); if !ok || !rational.IsInt() { return fmt.Errorf("expected mathematical integer") }; limit := big.NewInt(9007199254740991); negativeLimit := new(big.Int).Neg(new(big.Int).Set(limit)); if rational.Num().Cmp(limit) > 0 || rational.Num().Cmp(negativeLimit) < 0 { return fmt.Errorf("integer outside safe bounds") }; *value = SafeInteger(rational.Num().Int64()); return nil }
 
-func (value *SafeInteger) UnmarshalJSON(data []byte) error {
-	var number json.Number
-	if err := decodeJSON(data, &number); err != nil {
-		return err
-	}
-	rational, ok := new(big.Rat).SetString(number.String())
-	if !ok || !rational.IsInt() {
-		return fmt.Errorf("expected mathematical integer")
-	}
-	limit := big.NewInt(9007199254740991)
-	negativeLimit := new(big.Int).Neg(new(big.Int).Set(limit))
-	if rational.Num().Cmp(limit) > 0 || rational.Num().Cmp(negativeLimit) < 0 {
-		return fmt.Errorf("integer outside safe bounds")
-	}
-	*value = SafeInteger(rational.Num().Int64())
-	return nil
-}
-
-type Nullable[T any] struct {
-	Set   bool
-	Null  bool
-	Value T
-}
-
+type Nullable[T any] struct { Set bool; Null bool; Value T }
 func (value Nullable[T]) IsZero() bool { return !value.Set }
 func (value *Nullable[T]) UnmarshalJSON(data []byte) error {
 	value.Set = true
-	if bytes.Equal(data, []byte("null")) {
-		value.Null = true
-		var zero T
-		value.Value = zero
-		return nil
-	}
+	if bytes.Equal(data, []byte("null")) { value.Null = true; var zero T; value.Value = zero; return nil }
 	value.Null = false
 	return decodeExact(data, &value.Value)
 }
 func (value Nullable[T]) MarshalJSON() ([]byte, error) {
-	if !value.Set || value.Null {
-		return []byte("null"), nil
-	}
+	if !value.Set || value.Null { return []byte("null"), nil }
 	return json.Marshal(value.Value)
 }
 
 type AROPV1W3CTraceContext struct {
-	Traceparent string  `json:"traceparent"`
-	Tracestate  *string `json:"tracestate,omitempty"`
+	Traceparent string `json:"traceparent"`
+	Tracestate *string `json:"tracestate,omitempty"`
 }
 
 type AgentBinding struct {
-	ID             AgentId         `json:"id"`
-	ManifestDigest Sha256Digest    `json:"manifest_digest"`
-	SkillID        SkillId         `json:"skill_id"`
-	Version        SemanticVersion `json:"version"`
+	ID AgentId `json:"id"`
+	ManifestDigest Sha256Digest `json:"manifest_digest"`
+	SkillID SkillId `json:"skill_id"`
+	Version SemanticVersion `json:"version"`
 }
 
 type AgentId = Slug
 
 type Attempt struct {
-	AcceptedAt       *DateTime           `json:"accepted_at,omitempty"`
-	AttemptID        AttemptId           `json:"attempt_id"`
-	AttemptNumber    PositiveSafeInteger `json:"attempt_number"`
-	Audience         URIReference        `json:"audience"`
-	ClosedAt         *DateTime           `json:"closed_at,omitempty"`
-	CreatedAt        DateTime            `json:"created_at"`
-	DeploymentID     DeploymentId        `json:"deployment_id"`
-	Endpoint         URIReference        `json:"endpoint"`
-	FailureCode      *string             `json:"failure_code,omitempty"`
-	FencingToken     PositiveSafeInteger `json:"fencing_token"`
-	Generation       PositiveSafeInteger `json:"generation"`
-	InstanceID       InstanceId          `json:"instance_id"`
-	LeaseExpiresAt   DateTime            `json:"lease_expires_at"`
-	RunID            RunId               `json:"run_id"`
-	SchemaVersion    int64               `json:"schema_version"`
-	SessionID        SessionId           `json:"session_id"`
-	State            string              `json:"state"`
-	Traceparent      Traceparent         `json:"traceparent"`
-	TransportProfile string              `json:"transport_profile"`
-	forwardWire      json.RawMessage
+	AcceptedAt *DateTime `json:"accepted_at,omitempty"`
+	AttemptID AttemptId `json:"attempt_id"`
+	AttemptNumber PositiveSafeInteger `json:"attempt_number"`
+	Audience URIReference `json:"audience"`
+	ClosedAt *DateTime `json:"closed_at,omitempty"`
+	CreatedAt DateTime `json:"created_at"`
+	DeploymentID DeploymentId `json:"deployment_id"`
+	Endpoint URIReference `json:"endpoint"`
+	FailureCode *string `json:"failure_code,omitempty"`
+	FencingToken PositiveSafeInteger `json:"fencing_token"`
+	Generation PositiveSafeInteger `json:"generation"`
+	InstanceID InstanceId `json:"instance_id"`
+	LeaseExpiresAt DateTime `json:"lease_expires_at"`
+	RunID RunId `json:"run_id"`
+	SchemaVersion int64 `json:"schema_version"`
+	SessionID SessionId `json:"session_id"`
+	State string `json:"state"`
+	Traceparent Traceparent `json:"traceparent"`
+	TransportProfile string `json:"transport_profile"`
+	forwardWire json.RawMessage
 }
-
-func (value Attempt) MarshalJSON() ([]byte, error) {
-	if value.forwardWire != nil {
-		return append([]byte(nil), value.forwardWire...), nil
-	}
-	type wire Attempt
-	return json.Marshal(wire(value))
-}
+func (value Attempt) MarshalJSON() ([]byte, error) { if value.forwardWire != nil { return append([]byte(nil), value.forwardWire...), nil }; type wire Attempt; return json.Marshal(wire(value)) }
 
 type AttemptId string
 
 type Delivery struct {
-	Audience       URIReference  `json:"audience"`
-	DeploymentID   DeploymentId  `json:"deployment_id"`
-	Endpoint       URIReference  `json:"endpoint"`
-	ExpiresAt      DateTime      `json:"expires_at"`
-	Generation     SafeInteger   `json:"generation"`
-	InstanceID     InstanceId    `json:"instance_id"`
-	Mode           string        `json:"mode"`
+	Audience URIReference `json:"audience"`
+	DeploymentID DeploymentId `json:"deployment_id"`
+	Endpoint URIReference `json:"endpoint"`
+	ExpiresAt DateTime `json:"expires_at"`
+	Generation SafeInteger `json:"generation"`
+	InstanceID InstanceId `json:"instance_id"`
+	Mode string `json:"mode"`
 	StreamEndpoint *URIReference `json:"stream_endpoint,omitempty"`
 }
 
 type DeploymentId string
 
 type DispatchTicket struct {
-	Agent         AgentBinding          `json:"agent"`
-	AttemptID     AttemptId             `json:"attempt_id"`
-	Delivery      Delivery              `json:"delivery"`
-	FencingToken  SafeInteger           `json:"fencing_token"`
-	RunID         RunId                 `json:"run_id"`
-	RunToken      string                `json:"run_token"`
-	SchemaVersion int64                 `json:"schema_version"`
-	Trace         AROPV1W3CTraceContext `json:"trace"`
-	forwardWire   json.RawMessage
+	Agent AgentBinding `json:"agent"`
+	AttemptID AttemptId `json:"attempt_id"`
+	Delivery Delivery `json:"delivery"`
+	FencingToken SafeInteger `json:"fencing_token"`
+	RunID RunId `json:"run_id"`
+	RunToken string `json:"run_token"`
+	SchemaVersion int64 `json:"schema_version"`
+	Trace AROPV1W3CTraceContext `json:"trace"`
+	forwardWire json.RawMessage
 }
-
-func (value DispatchTicket) MarshalJSON() ([]byte, error) {
-	if value.forwardWire != nil {
-		return append([]byte(nil), value.forwardWire...), nil
-	}
-	type wire DispatchTicket
-	return json.Marshal(wire(value))
-}
+func (value DispatchTicket) MarshalJSON() ([]byte, error) { if value.forwardWire != nil { return append([]byte(nil), value.forwardWire...), nil }; type wire DispatchTicket; return json.Marshal(wire(value)) }
 
 type InstanceId = Slug
 
 type JWKSMetadata struct {
-	CacheUntil    DateTime     `json:"cache_until"`
-	Issuer        URIReference `json:"issuer"`
-	Keys          []Key        `json:"keys"`
-	SchemaVersion int64        `json:"schema_version"`
-	forwardWire   json.RawMessage
+	CacheUntil DateTime `json:"cache_until"`
+	Issuer URIReference `json:"issuer"`
+	Keys []Key `json:"keys"`
+	SchemaVersion int64 `json:"schema_version"`
+	forwardWire json.RawMessage
 }
-
-func (value JWKSMetadata) MarshalJSON() ([]byte, error) {
-	if value.forwardWire != nil {
-		return append([]byte(nil), value.forwardWire...), nil
-	}
-	type wire JWKSMetadata
-	return json.Marshal(wire(value))
-}
+func (value JWKSMetadata) MarshalJSON() ([]byte, error) { if value.forwardWire != nil { return append([]byte(nil), value.forwardWire...), nil }; type wire JWKSMetadata; return json.Marshal(wire(value)) }
 
 type Key struct {
-	Alg         string   `json:"alg"`
-	CreatedAt   DateTime `json:"created_at"`
-	Crv         string   `json:"crv"`
-	Kid         string   `json:"kid"`
-	Kty         string   `json:"kty"`
-	NotBefore   DateTime `json:"not_before"`
-	SignUntil   DateTime `json:"sign_until"`
-	Status      string   `json:"status"`
-	Use         string   `json:"use"`
+	Alg string `json:"alg"`
+	CreatedAt DateTime `json:"created_at"`
+	Crv string `json:"crv"`
+	Kid string `json:"kid"`
+	Kty string `json:"kty"`
+	NotBefore DateTime `json:"not_before"`
+	SignUntil DateTime `json:"sign_until"`
+	Status string `json:"status"`
+	Use string `json:"use"`
 	VerifyUntil DateTime `json:"verify_until"`
-	X           string   `json:"x"`
-	Y           string   `json:"y"`
+	X string `json:"x"`
+	Y string `json:"y"`
 }
 
 type PositiveSafeInteger SafeInteger
@@ -268,1555 +149,221 @@ type Slug string
 type Traceparent string
 
 func decodeExact(data []byte, destination any) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(destination); err != nil {
-		return err
-	}
+	decoder := json.NewDecoder(bytes.NewReader(data)); decoder.DisallowUnknownFields()
+	if err := decoder.Decode(destination); err != nil { return err }
 	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		if err == nil {
-			return fmt.Errorf("trailing JSON value")
-		}
-		return err
-	}
+	if err := decoder.Decode(&trailing); err != io.EOF { if err == nil { return fmt.Errorf("trailing JSON value") }; return err }
 	return nil
 }
-func sanitizeAROPV1W3CTraceContextTraceparent0(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeAROPV1W3CTraceContextTracestate1(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeAttemptAcceptedAt2(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeAttemptAudience3(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeAttemptClosedAt4(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeAttemptCreatedAt5(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeAttemptEndpoint6(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeAttemptFailureCode7(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeAttemptLeaseExpiresAt8(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeAttemptSchemaVersion9(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeAttemptState10(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeAttemptTransportProfile11(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeDeliveryAudience12(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeDeliveryEndpoint13(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeDeliveryExpiresAt14(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeDeliveryGeneration15(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeDeliveryMode16(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeDeliveryStreamEndpoint17(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeDispatchTicketFencingToken18(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeDispatchTicketRunToken19(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeDispatchTicketSchemaVersion20(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeJWKSMetadataCacheUntil21(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeJWKSMetadataIssuer22(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeJWKSMetadataKeys23(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable array is null")
-	}
-	var items []json.RawMessage
-	if err := decodeJSON(data, &items); err != nil {
-		return nil, err
-	}
-	for index, raw := range items {
-		clean, err := sanitizeKey(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		items[index] = clean
-	}
-	return json.Marshal(items)
-}
-func sanitizeJWKSMetadataSchemaVersion24(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeKeyAlg25(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeKeyCreatedAt26(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeKeyCrv27(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeKeyKid28(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeKeyKty29(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeKeyNotBefore30(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeKeySignUntil31(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeKeyStatus32(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeKeyUse33(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeKeyVerifyUntil34(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeKeyX35(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeKeyY36(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable value is null")
-	}
-	return data, nil
-}
-func sanitizeAROPV1W3CTraceContext(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable AROPV1W3CTraceContext is null")
-	}
-	var object map[string]json.RawMessage
-	if err := decodeJSON(data, &object); err != nil {
-		return nil, err
-	}
-	if _, ok := object["traceparent"]; !ok {
-		return nil, fmt.Errorf("AROPV1W3CTraceContext.traceparent is required")
-	}
-	known := map[string]bool{"traceparent": true, "tracestate": true}
-	for key := range object {
-		if !known[key] {
-			if !forward {
-				return nil, fmt.Errorf("AROPV1W3CTraceContext has unknown field %s", key)
-			}
-			delete(object, key)
-		}
-	}
-	if raw, ok := object["traceparent"]; ok {
-		clean, err := sanitizeAROPV1W3CTraceContextTraceparent0(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["traceparent"] = clean
-	}
-	if raw, ok := object["tracestate"]; ok {
-		clean, err := sanitizeAROPV1W3CTraceContextTracestate1(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["tracestate"] = clean
-	}
-	return json.Marshal(object)
-}
-func sanitizeAgentBinding(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable AgentBinding is null")
-	}
-	var object map[string]json.RawMessage
-	if err := decodeJSON(data, &object); err != nil {
-		return nil, err
-	}
-	if _, ok := object["id"]; !ok {
-		return nil, fmt.Errorf("AgentBinding.id is required")
-	}
-	if _, ok := object["manifest_digest"]; !ok {
-		return nil, fmt.Errorf("AgentBinding.manifest_digest is required")
-	}
-	if _, ok := object["skill_id"]; !ok {
-		return nil, fmt.Errorf("AgentBinding.skill_id is required")
-	}
-	if _, ok := object["version"]; !ok {
-		return nil, fmt.Errorf("AgentBinding.version is required")
-	}
-	known := map[string]bool{"id": true, "manifest_digest": true, "skill_id": true, "version": true}
-	for key := range object {
-		if !known[key] {
-			if !forward {
-				return nil, fmt.Errorf("AgentBinding has unknown field %s", key)
-			}
-			delete(object, key)
-		}
-	}
-	if raw, ok := object["id"]; ok {
-		clean, err := sanitizeAgentId(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["id"] = clean
-	}
-	if raw, ok := object["manifest_digest"]; ok {
-		clean, err := sanitizeSha256Digest(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["manifest_digest"] = clean
-	}
-	if raw, ok := object["skill_id"]; ok {
-		clean, err := sanitizeSkillId(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["skill_id"] = clean
-	}
-	if raw, ok := object["version"]; ok {
-		clean, err := sanitizeSemanticVersion(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["version"] = clean
-	}
-	return json.Marshal(object)
-}
+func sanitizeAROPV1W3CTraceContextTraceparent0(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeAROPV1W3CTraceContextTracestate1(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeAttemptAcceptedAt2(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeAttemptAudience3(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeAttemptClosedAt4(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeAttemptCreatedAt5(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeAttemptEndpoint6(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeAttemptFailureCode7(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeAttemptLeaseExpiresAt8(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeAttemptSchemaVersion9(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeAttemptState10(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeAttemptTransportProfile11(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeDeliveryAudience12(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeDeliveryEndpoint13(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeDeliveryExpiresAt14(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeDeliveryGeneration15(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeDeliveryMode16(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeDeliveryStreamEndpoint17(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeDispatchTicketFencingToken18(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeDispatchTicketRunToken19(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeDispatchTicketSchemaVersion20(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeJWKSMetadataCacheUntil21(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeJWKSMetadataIssuer22(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeJWKSMetadataKeys23(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable array is null") }; var items []json.RawMessage; if err := decodeJSON(data, &items); err != nil { return nil, err }; for index, raw := range items { clean, err := sanitizeKey(raw, forward); if err != nil { return nil, err }; items[index] = clean }; return json.Marshal(items) }
+func sanitizeJWKSMetadataSchemaVersion24(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeKeyAlg25(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeKeyCreatedAt26(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeKeyCrv27(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeKeyKid28(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeKeyKty29(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeKeyNotBefore30(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeKeySignUntil31(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeKeyStatus32(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeKeyUse33(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeKeyVerifyUntil34(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeKeyX35(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeKeyY36(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable value is null") }; return data, nil }
+func sanitizeAROPV1W3CTraceContext(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable AROPV1W3CTraceContext is null") }; var object map[string]json.RawMessage; if err := decodeJSON(data, &object); err != nil { return nil, err }; if _, ok := object["traceparent"]; !ok { return nil, fmt.Errorf("AROPV1W3CTraceContext.traceparent is required") }; known := map[string]bool{"traceparent": true, "tracestate": true}; for key := range object { if !known[key] { if !forward { return nil, fmt.Errorf("AROPV1W3CTraceContext has unknown field %s", key) }; delete(object, key) } }; if raw, ok := object["traceparent"]; ok { clean, err := sanitizeAROPV1W3CTraceContextTraceparent0(raw, forward); if err != nil { return nil, err }; object["traceparent"] = clean }; if raw, ok := object["tracestate"]; ok { clean, err := sanitizeAROPV1W3CTraceContextTracestate1(raw, forward); if err != nil { return nil, err }; object["tracestate"] = clean }; return json.Marshal(object) }
+func sanitizeAgentBinding(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable AgentBinding is null") }; var object map[string]json.RawMessage; if err := decodeJSON(data, &object); err != nil { return nil, err }; if _, ok := object["id"]; !ok { return nil, fmt.Errorf("AgentBinding.id is required") }; if _, ok := object["manifest_digest"]; !ok { return nil, fmt.Errorf("AgentBinding.manifest_digest is required") }; if _, ok := object["skill_id"]; !ok { return nil, fmt.Errorf("AgentBinding.skill_id is required") }; if _, ok := object["version"]; !ok { return nil, fmt.Errorf("AgentBinding.version is required") }; known := map[string]bool{"id": true, "manifest_digest": true, "skill_id": true, "version": true}; for key := range object { if !known[key] { if !forward { return nil, fmt.Errorf("AgentBinding has unknown field %s", key) }; delete(object, key) } }; if raw, ok := object["id"]; ok { clean, err := sanitizeAgentId(raw, forward); if err != nil { return nil, err }; object["id"] = clean }; if raw, ok := object["manifest_digest"]; ok { clean, err := sanitizeSha256Digest(raw, forward); if err != nil { return nil, err }; object["manifest_digest"] = clean }; if raw, ok := object["skill_id"]; ok { clean, err := sanitizeSkillId(raw, forward); if err != nil { return nil, err }; object["skill_id"] = clean }; if raw, ok := object["version"]; ok { clean, err := sanitizeSemanticVersion(raw, forward); if err != nil { return nil, err }; object["version"] = clean }; return json.Marshal(object) }
 func sanitizeAgentId(data []byte, forward bool) ([]byte, error) { return sanitizeSlug(data, forward) }
-func sanitizeAttempt(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable Attempt is null")
-	}
-	var object map[string]json.RawMessage
-	if err := decodeJSON(data, &object); err != nil {
-		return nil, err
-	}
-	if _, ok := object["attempt_id"]; !ok {
-		return nil, fmt.Errorf("Attempt.attempt_id is required")
-	}
-	if _, ok := object["attempt_number"]; !ok {
-		return nil, fmt.Errorf("Attempt.attempt_number is required")
-	}
-	if _, ok := object["audience"]; !ok {
-		return nil, fmt.Errorf("Attempt.audience is required")
-	}
-	if _, ok := object["created_at"]; !ok {
-		return nil, fmt.Errorf("Attempt.created_at is required")
-	}
-	if _, ok := object["deployment_id"]; !ok {
-		return nil, fmt.Errorf("Attempt.deployment_id is required")
-	}
-	if _, ok := object["endpoint"]; !ok {
-		return nil, fmt.Errorf("Attempt.endpoint is required")
-	}
-	if _, ok := object["fencing_token"]; !ok {
-		return nil, fmt.Errorf("Attempt.fencing_token is required")
-	}
-	if _, ok := object["generation"]; !ok {
-		return nil, fmt.Errorf("Attempt.generation is required")
-	}
-	if _, ok := object["instance_id"]; !ok {
-		return nil, fmt.Errorf("Attempt.instance_id is required")
-	}
-	if _, ok := object["lease_expires_at"]; !ok {
-		return nil, fmt.Errorf("Attempt.lease_expires_at is required")
-	}
-	if _, ok := object["run_id"]; !ok {
-		return nil, fmt.Errorf("Attempt.run_id is required")
-	}
-	if _, ok := object["schema_version"]; !ok {
-		return nil, fmt.Errorf("Attempt.schema_version is required")
-	}
-	if _, ok := object["session_id"]; !ok {
-		return nil, fmt.Errorf("Attempt.session_id is required")
-	}
-	if _, ok := object["state"]; !ok {
-		return nil, fmt.Errorf("Attempt.state is required")
-	}
-	if _, ok := object["traceparent"]; !ok {
-		return nil, fmt.Errorf("Attempt.traceparent is required")
-	}
-	if _, ok := object["transport_profile"]; !ok {
-		return nil, fmt.Errorf("Attempt.transport_profile is required")
-	}
-	known := map[string]bool{"accepted_at": true, "attempt_id": true, "attempt_number": true, "audience": true, "closed_at": true, "created_at": true, "deployment_id": true, "endpoint": true, "failure_code": true, "fencing_token": true, "generation": true, "instance_id": true, "lease_expires_at": true, "run_id": true, "schema_version": true, "session_id": true, "state": true, "traceparent": true, "transport_profile": true}
-	for key := range object {
-		if !known[key] {
-			if !forward {
-				return nil, fmt.Errorf("Attempt has unknown field %s", key)
-			}
-			delete(object, key)
-		}
-	}
-	if raw, ok := object["accepted_at"]; ok {
-		clean, err := sanitizeAttemptAcceptedAt2(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["accepted_at"] = clean
-	}
-	if raw, ok := object["attempt_id"]; ok {
-		clean, err := sanitizeAttemptId(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["attempt_id"] = clean
-	}
-	if raw, ok := object["attempt_number"]; ok {
-		clean, err := sanitizePositiveSafeInteger(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["attempt_number"] = clean
-	}
-	if raw, ok := object["audience"]; ok {
-		clean, err := sanitizeAttemptAudience3(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["audience"] = clean
-	}
-	if raw, ok := object["closed_at"]; ok {
-		clean, err := sanitizeAttemptClosedAt4(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["closed_at"] = clean
-	}
-	if raw, ok := object["created_at"]; ok {
-		clean, err := sanitizeAttemptCreatedAt5(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["created_at"] = clean
-	}
-	if raw, ok := object["deployment_id"]; ok {
-		clean, err := sanitizeDeploymentId(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["deployment_id"] = clean
-	}
-	if raw, ok := object["endpoint"]; ok {
-		clean, err := sanitizeAttemptEndpoint6(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["endpoint"] = clean
-	}
-	if raw, ok := object["failure_code"]; ok {
-		clean, err := sanitizeAttemptFailureCode7(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["failure_code"] = clean
-	}
-	if raw, ok := object["fencing_token"]; ok {
-		clean, err := sanitizePositiveSafeInteger(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["fencing_token"] = clean
-	}
-	if raw, ok := object["generation"]; ok {
-		clean, err := sanitizePositiveSafeInteger(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["generation"] = clean
-	}
-	if raw, ok := object["instance_id"]; ok {
-		clean, err := sanitizeInstanceId(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["instance_id"] = clean
-	}
-	if raw, ok := object["lease_expires_at"]; ok {
-		clean, err := sanitizeAttemptLeaseExpiresAt8(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["lease_expires_at"] = clean
-	}
-	if raw, ok := object["run_id"]; ok {
-		clean, err := sanitizeRunId(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["run_id"] = clean
-	}
-	if raw, ok := object["schema_version"]; ok {
-		clean, err := sanitizeAttemptSchemaVersion9(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["schema_version"] = clean
-	}
-	if raw, ok := object["session_id"]; ok {
-		clean, err := sanitizeSessionId(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["session_id"] = clean
-	}
-	if raw, ok := object["state"]; ok {
-		clean, err := sanitizeAttemptState10(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["state"] = clean
-	}
-	if raw, ok := object["traceparent"]; ok {
-		clean, err := sanitizeTraceparent(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["traceparent"] = clean
-	}
-	if raw, ok := object["transport_profile"]; ok {
-		clean, err := sanitizeAttemptTransportProfile11(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["transport_profile"] = clean
-	}
-	return json.Marshal(object)
-}
+func sanitizeAttempt(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable Attempt is null") }; var object map[string]json.RawMessage; if err := decodeJSON(data, &object); err != nil { return nil, err }; if _, ok := object["attempt_id"]; !ok { return nil, fmt.Errorf("Attempt.attempt_id is required") }; if _, ok := object["attempt_number"]; !ok { return nil, fmt.Errorf("Attempt.attempt_number is required") }; if _, ok := object["audience"]; !ok { return nil, fmt.Errorf("Attempt.audience is required") }; if _, ok := object["created_at"]; !ok { return nil, fmt.Errorf("Attempt.created_at is required") }; if _, ok := object["deployment_id"]; !ok { return nil, fmt.Errorf("Attempt.deployment_id is required") }; if _, ok := object["endpoint"]; !ok { return nil, fmt.Errorf("Attempt.endpoint is required") }; if _, ok := object["fencing_token"]; !ok { return nil, fmt.Errorf("Attempt.fencing_token is required") }; if _, ok := object["generation"]; !ok { return nil, fmt.Errorf("Attempt.generation is required") }; if _, ok := object["instance_id"]; !ok { return nil, fmt.Errorf("Attempt.instance_id is required") }; if _, ok := object["lease_expires_at"]; !ok { return nil, fmt.Errorf("Attempt.lease_expires_at is required") }; if _, ok := object["run_id"]; !ok { return nil, fmt.Errorf("Attempt.run_id is required") }; if _, ok := object["schema_version"]; !ok { return nil, fmt.Errorf("Attempt.schema_version is required") }; if _, ok := object["session_id"]; !ok { return nil, fmt.Errorf("Attempt.session_id is required") }; if _, ok := object["state"]; !ok { return nil, fmt.Errorf("Attempt.state is required") }; if _, ok := object["traceparent"]; !ok { return nil, fmt.Errorf("Attempt.traceparent is required") }; if _, ok := object["transport_profile"]; !ok { return nil, fmt.Errorf("Attempt.transport_profile is required") }; known := map[string]bool{"accepted_at": true, "attempt_id": true, "attempt_number": true, "audience": true, "closed_at": true, "created_at": true, "deployment_id": true, "endpoint": true, "failure_code": true, "fencing_token": true, "generation": true, "instance_id": true, "lease_expires_at": true, "run_id": true, "schema_version": true, "session_id": true, "state": true, "traceparent": true, "transport_profile": true}; for key := range object { if !known[key] { if !forward { return nil, fmt.Errorf("Attempt has unknown field %s", key) }; delete(object, key) } }; if raw, ok := object["accepted_at"]; ok { clean, err := sanitizeAttemptAcceptedAt2(raw, forward); if err != nil { return nil, err }; object["accepted_at"] = clean }; if raw, ok := object["attempt_id"]; ok { clean, err := sanitizeAttemptId(raw, forward); if err != nil { return nil, err }; object["attempt_id"] = clean }; if raw, ok := object["attempt_number"]; ok { clean, err := sanitizePositiveSafeInteger(raw, forward); if err != nil { return nil, err }; object["attempt_number"] = clean }; if raw, ok := object["audience"]; ok { clean, err := sanitizeAttemptAudience3(raw, forward); if err != nil { return nil, err }; object["audience"] = clean }; if raw, ok := object["closed_at"]; ok { clean, err := sanitizeAttemptClosedAt4(raw, forward); if err != nil { return nil, err }; object["closed_at"] = clean }; if raw, ok := object["created_at"]; ok { clean, err := sanitizeAttemptCreatedAt5(raw, forward); if err != nil { return nil, err }; object["created_at"] = clean }; if raw, ok := object["deployment_id"]; ok { clean, err := sanitizeDeploymentId(raw, forward); if err != nil { return nil, err }; object["deployment_id"] = clean }; if raw, ok := object["endpoint"]; ok { clean, err := sanitizeAttemptEndpoint6(raw, forward); if err != nil { return nil, err }; object["endpoint"] = clean }; if raw, ok := object["failure_code"]; ok { clean, err := sanitizeAttemptFailureCode7(raw, forward); if err != nil { return nil, err }; object["failure_code"] = clean }; if raw, ok := object["fencing_token"]; ok { clean, err := sanitizePositiveSafeInteger(raw, forward); if err != nil { return nil, err }; object["fencing_token"] = clean }; if raw, ok := object["generation"]; ok { clean, err := sanitizePositiveSafeInteger(raw, forward); if err != nil { return nil, err }; object["generation"] = clean }; if raw, ok := object["instance_id"]; ok { clean, err := sanitizeInstanceId(raw, forward); if err != nil { return nil, err }; object["instance_id"] = clean }; if raw, ok := object["lease_expires_at"]; ok { clean, err := sanitizeAttemptLeaseExpiresAt8(raw, forward); if err != nil { return nil, err }; object["lease_expires_at"] = clean }; if raw, ok := object["run_id"]; ok { clean, err := sanitizeRunId(raw, forward); if err != nil { return nil, err }; object["run_id"] = clean }; if raw, ok := object["schema_version"]; ok { clean, err := sanitizeAttemptSchemaVersion9(raw, forward); if err != nil { return nil, err }; object["schema_version"] = clean }; if raw, ok := object["session_id"]; ok { clean, err := sanitizeSessionId(raw, forward); if err != nil { return nil, err }; object["session_id"] = clean }; if raw, ok := object["state"]; ok { clean, err := sanitizeAttemptState10(raw, forward); if err != nil { return nil, err }; object["state"] = clean }; if raw, ok := object["traceparent"]; ok { clean, err := sanitizeTraceparent(raw, forward); if err != nil { return nil, err }; object["traceparent"] = clean }; if raw, ok := object["transport_profile"]; ok { clean, err := sanitizeAttemptTransportProfile11(raw, forward); if err != nil { return nil, err }; object["transport_profile"] = clean }; return json.Marshal(object) }
 func sanitizeAttemptId(data []byte, forward bool) ([]byte, error) { return data, nil }
-func sanitizeDelivery(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable Delivery is null")
-	}
-	var object map[string]json.RawMessage
-	if err := decodeJSON(data, &object); err != nil {
-		return nil, err
-	}
-	if _, ok := object["audience"]; !ok {
-		return nil, fmt.Errorf("Delivery.audience is required")
-	}
-	if _, ok := object["deployment_id"]; !ok {
-		return nil, fmt.Errorf("Delivery.deployment_id is required")
-	}
-	if _, ok := object["endpoint"]; !ok {
-		return nil, fmt.Errorf("Delivery.endpoint is required")
-	}
-	if _, ok := object["expires_at"]; !ok {
-		return nil, fmt.Errorf("Delivery.expires_at is required")
-	}
-	if _, ok := object["generation"]; !ok {
-		return nil, fmt.Errorf("Delivery.generation is required")
-	}
-	if _, ok := object["instance_id"]; !ok {
-		return nil, fmt.Errorf("Delivery.instance_id is required")
-	}
-	if _, ok := object["mode"]; !ok {
-		return nil, fmt.Errorf("Delivery.mode is required")
-	}
-	known := map[string]bool{"audience": true, "deployment_id": true, "endpoint": true, "expires_at": true, "generation": true, "instance_id": true, "mode": true, "stream_endpoint": true}
-	for key := range object {
-		if !known[key] {
-			if !forward {
-				return nil, fmt.Errorf("Delivery has unknown field %s", key)
-			}
-			delete(object, key)
-		}
-	}
-	if raw, ok := object["audience"]; ok {
-		clean, err := sanitizeDeliveryAudience12(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["audience"] = clean
-	}
-	if raw, ok := object["deployment_id"]; ok {
-		clean, err := sanitizeDeploymentId(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["deployment_id"] = clean
-	}
-	if raw, ok := object["endpoint"]; ok {
-		clean, err := sanitizeDeliveryEndpoint13(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["endpoint"] = clean
-	}
-	if raw, ok := object["expires_at"]; ok {
-		clean, err := sanitizeDeliveryExpiresAt14(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["expires_at"] = clean
-	}
-	if raw, ok := object["generation"]; ok {
-		clean, err := sanitizeDeliveryGeneration15(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["generation"] = clean
-	}
-	if raw, ok := object["instance_id"]; ok {
-		clean, err := sanitizeInstanceId(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["instance_id"] = clean
-	}
-	if raw, ok := object["mode"]; ok {
-		clean, err := sanitizeDeliveryMode16(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["mode"] = clean
-	}
-	if raw, ok := object["stream_endpoint"]; ok {
-		clean, err := sanitizeDeliveryStreamEndpoint17(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["stream_endpoint"] = clean
-	}
-	return json.Marshal(object)
-}
+func sanitizeDelivery(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable Delivery is null") }; var object map[string]json.RawMessage; if err := decodeJSON(data, &object); err != nil { return nil, err }; if _, ok := object["audience"]; !ok { return nil, fmt.Errorf("Delivery.audience is required") }; if _, ok := object["deployment_id"]; !ok { return nil, fmt.Errorf("Delivery.deployment_id is required") }; if _, ok := object["endpoint"]; !ok { return nil, fmt.Errorf("Delivery.endpoint is required") }; if _, ok := object["expires_at"]; !ok { return nil, fmt.Errorf("Delivery.expires_at is required") }; if _, ok := object["generation"]; !ok { return nil, fmt.Errorf("Delivery.generation is required") }; if _, ok := object["instance_id"]; !ok { return nil, fmt.Errorf("Delivery.instance_id is required") }; if _, ok := object["mode"]; !ok { return nil, fmt.Errorf("Delivery.mode is required") }; known := map[string]bool{"audience": true, "deployment_id": true, "endpoint": true, "expires_at": true, "generation": true, "instance_id": true, "mode": true, "stream_endpoint": true}; for key := range object { if !known[key] { if !forward { return nil, fmt.Errorf("Delivery has unknown field %s", key) }; delete(object, key) } }; if raw, ok := object["audience"]; ok { clean, err := sanitizeDeliveryAudience12(raw, forward); if err != nil { return nil, err }; object["audience"] = clean }; if raw, ok := object["deployment_id"]; ok { clean, err := sanitizeDeploymentId(raw, forward); if err != nil { return nil, err }; object["deployment_id"] = clean }; if raw, ok := object["endpoint"]; ok { clean, err := sanitizeDeliveryEndpoint13(raw, forward); if err != nil { return nil, err }; object["endpoint"] = clean }; if raw, ok := object["expires_at"]; ok { clean, err := sanitizeDeliveryExpiresAt14(raw, forward); if err != nil { return nil, err }; object["expires_at"] = clean }; if raw, ok := object["generation"]; ok { clean, err := sanitizeDeliveryGeneration15(raw, forward); if err != nil { return nil, err }; object["generation"] = clean }; if raw, ok := object["instance_id"]; ok { clean, err := sanitizeInstanceId(raw, forward); if err != nil { return nil, err }; object["instance_id"] = clean }; if raw, ok := object["mode"]; ok { clean, err := sanitizeDeliveryMode16(raw, forward); if err != nil { return nil, err }; object["mode"] = clean }; if raw, ok := object["stream_endpoint"]; ok { clean, err := sanitizeDeliveryStreamEndpoint17(raw, forward); if err != nil { return nil, err }; object["stream_endpoint"] = clean }; return json.Marshal(object) }
 func sanitizeDeploymentId(data []byte, forward bool) ([]byte, error) { return data, nil }
-func sanitizeDispatchTicket(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable DispatchTicket is null")
-	}
-	var object map[string]json.RawMessage
-	if err := decodeJSON(data, &object); err != nil {
-		return nil, err
-	}
-	if _, ok := object["agent"]; !ok {
-		return nil, fmt.Errorf("DispatchTicket.agent is required")
-	}
-	if _, ok := object["attempt_id"]; !ok {
-		return nil, fmt.Errorf("DispatchTicket.attempt_id is required")
-	}
-	if _, ok := object["delivery"]; !ok {
-		return nil, fmt.Errorf("DispatchTicket.delivery is required")
-	}
-	if _, ok := object["fencing_token"]; !ok {
-		return nil, fmt.Errorf("DispatchTicket.fencing_token is required")
-	}
-	if _, ok := object["run_id"]; !ok {
-		return nil, fmt.Errorf("DispatchTicket.run_id is required")
-	}
-	if _, ok := object["run_token"]; !ok {
-		return nil, fmt.Errorf("DispatchTicket.run_token is required")
-	}
-	if _, ok := object["schema_version"]; !ok {
-		return nil, fmt.Errorf("DispatchTicket.schema_version is required")
-	}
-	if _, ok := object["trace"]; !ok {
-		return nil, fmt.Errorf("DispatchTicket.trace is required")
-	}
-	known := map[string]bool{"agent": true, "attempt_id": true, "delivery": true, "fencing_token": true, "run_id": true, "run_token": true, "schema_version": true, "trace": true}
-	for key := range object {
-		if !known[key] {
-			if !forward {
-				return nil, fmt.Errorf("DispatchTicket has unknown field %s", key)
-			}
-			delete(object, key)
-		}
-	}
-	if raw, ok := object["agent"]; ok {
-		clean, err := sanitizeAgentBinding(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["agent"] = clean
-	}
-	if raw, ok := object["attempt_id"]; ok {
-		clean, err := sanitizeAttemptId(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["attempt_id"] = clean
-	}
-	if raw, ok := object["delivery"]; ok {
-		clean, err := sanitizeDelivery(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["delivery"] = clean
-	}
-	if raw, ok := object["fencing_token"]; ok {
-		clean, err := sanitizeDispatchTicketFencingToken18(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["fencing_token"] = clean
-	}
-	if raw, ok := object["run_id"]; ok {
-		clean, err := sanitizeRunId(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["run_id"] = clean
-	}
-	if raw, ok := object["run_token"]; ok {
-		clean, err := sanitizeDispatchTicketRunToken19(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["run_token"] = clean
-	}
-	if raw, ok := object["schema_version"]; ok {
-		clean, err := sanitizeDispatchTicketSchemaVersion20(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["schema_version"] = clean
-	}
-	if raw, ok := object["trace"]; ok {
-		clean, err := sanitizeAROPV1W3CTraceContext(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["trace"] = clean
-	}
-	return json.Marshal(object)
-}
-func sanitizeInstanceId(data []byte, forward bool) ([]byte, error) {
-	return sanitizeSlug(data, forward)
-}
-func sanitizeJWKSMetadata(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable JWKSMetadata is null")
-	}
-	var object map[string]json.RawMessage
-	if err := decodeJSON(data, &object); err != nil {
-		return nil, err
-	}
-	if _, ok := object["cache_until"]; !ok {
-		return nil, fmt.Errorf("JWKSMetadata.cache_until is required")
-	}
-	if _, ok := object["issuer"]; !ok {
-		return nil, fmt.Errorf("JWKSMetadata.issuer is required")
-	}
-	if _, ok := object["keys"]; !ok {
-		return nil, fmt.Errorf("JWKSMetadata.keys is required")
-	}
-	if _, ok := object["schema_version"]; !ok {
-		return nil, fmt.Errorf("JWKSMetadata.schema_version is required")
-	}
-	known := map[string]bool{"cache_until": true, "issuer": true, "keys": true, "schema_version": true}
-	for key := range object {
-		if !known[key] {
-			if !forward {
-				return nil, fmt.Errorf("JWKSMetadata has unknown field %s", key)
-			}
-			delete(object, key)
-		}
-	}
-	if raw, ok := object["cache_until"]; ok {
-		clean, err := sanitizeJWKSMetadataCacheUntil21(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["cache_until"] = clean
-	}
-	if raw, ok := object["issuer"]; ok {
-		clean, err := sanitizeJWKSMetadataIssuer22(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["issuer"] = clean
-	}
-	if raw, ok := object["keys"]; ok {
-		clean, err := sanitizeJWKSMetadataKeys23(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["keys"] = clean
-	}
-	if raw, ok := object["schema_version"]; ok {
-		clean, err := sanitizeJWKSMetadataSchemaVersion24(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["schema_version"] = clean
-	}
-	return json.Marshal(object)
-}
-func sanitizeKey(data []byte, forward bool) ([]byte, error) {
-	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
-		return nil, fmt.Errorf("non-nullable Key is null")
-	}
-	var object map[string]json.RawMessage
-	if err := decodeJSON(data, &object); err != nil {
-		return nil, err
-	}
-	if _, ok := object["alg"]; !ok {
-		return nil, fmt.Errorf("Key.alg is required")
-	}
-	if _, ok := object["created_at"]; !ok {
-		return nil, fmt.Errorf("Key.created_at is required")
-	}
-	if _, ok := object["crv"]; !ok {
-		return nil, fmt.Errorf("Key.crv is required")
-	}
-	if _, ok := object["kid"]; !ok {
-		return nil, fmt.Errorf("Key.kid is required")
-	}
-	if _, ok := object["kty"]; !ok {
-		return nil, fmt.Errorf("Key.kty is required")
-	}
-	if _, ok := object["not_before"]; !ok {
-		return nil, fmt.Errorf("Key.not_before is required")
-	}
-	if _, ok := object["sign_until"]; !ok {
-		return nil, fmt.Errorf("Key.sign_until is required")
-	}
-	if _, ok := object["status"]; !ok {
-		return nil, fmt.Errorf("Key.status is required")
-	}
-	if _, ok := object["use"]; !ok {
-		return nil, fmt.Errorf("Key.use is required")
-	}
-	if _, ok := object["verify_until"]; !ok {
-		return nil, fmt.Errorf("Key.verify_until is required")
-	}
-	if _, ok := object["x"]; !ok {
-		return nil, fmt.Errorf("Key.x is required")
-	}
-	if _, ok := object["y"]; !ok {
-		return nil, fmt.Errorf("Key.y is required")
-	}
-	known := map[string]bool{"alg": true, "created_at": true, "crv": true, "kid": true, "kty": true, "not_before": true, "sign_until": true, "status": true, "use": true, "verify_until": true, "x": true, "y": true}
-	for key := range object {
-		if !known[key] {
-			if !forward {
-				return nil, fmt.Errorf("Key has unknown field %s", key)
-			}
-			delete(object, key)
-		}
-	}
-	if raw, ok := object["alg"]; ok {
-		clean, err := sanitizeKeyAlg25(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["alg"] = clean
-	}
-	if raw, ok := object["created_at"]; ok {
-		clean, err := sanitizeKeyCreatedAt26(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["created_at"] = clean
-	}
-	if raw, ok := object["crv"]; ok {
-		clean, err := sanitizeKeyCrv27(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["crv"] = clean
-	}
-	if raw, ok := object["kid"]; ok {
-		clean, err := sanitizeKeyKid28(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["kid"] = clean
-	}
-	if raw, ok := object["kty"]; ok {
-		clean, err := sanitizeKeyKty29(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["kty"] = clean
-	}
-	if raw, ok := object["not_before"]; ok {
-		clean, err := sanitizeKeyNotBefore30(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["not_before"] = clean
-	}
-	if raw, ok := object["sign_until"]; ok {
-		clean, err := sanitizeKeySignUntil31(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["sign_until"] = clean
-	}
-	if raw, ok := object["status"]; ok {
-		clean, err := sanitizeKeyStatus32(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["status"] = clean
-	}
-	if raw, ok := object["use"]; ok {
-		clean, err := sanitizeKeyUse33(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["use"] = clean
-	}
-	if raw, ok := object["verify_until"]; ok {
-		clean, err := sanitizeKeyVerifyUntil34(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["verify_until"] = clean
-	}
-	if raw, ok := object["x"]; ok {
-		clean, err := sanitizeKeyX35(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["x"] = clean
-	}
-	if raw, ok := object["y"]; ok {
-		clean, err := sanitizeKeyY36(raw, forward)
-		if err != nil {
-			return nil, err
-		}
-		object["y"] = clean
-	}
-	return json.Marshal(object)
-}
+func sanitizeDispatchTicket(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable DispatchTicket is null") }; var object map[string]json.RawMessage; if err := decodeJSON(data, &object); err != nil { return nil, err }; if _, ok := object["agent"]; !ok { return nil, fmt.Errorf("DispatchTicket.agent is required") }; if _, ok := object["attempt_id"]; !ok { return nil, fmt.Errorf("DispatchTicket.attempt_id is required") }; if _, ok := object["delivery"]; !ok { return nil, fmt.Errorf("DispatchTicket.delivery is required") }; if _, ok := object["fencing_token"]; !ok { return nil, fmt.Errorf("DispatchTicket.fencing_token is required") }; if _, ok := object["run_id"]; !ok { return nil, fmt.Errorf("DispatchTicket.run_id is required") }; if _, ok := object["run_token"]; !ok { return nil, fmt.Errorf("DispatchTicket.run_token is required") }; if _, ok := object["schema_version"]; !ok { return nil, fmt.Errorf("DispatchTicket.schema_version is required") }; if _, ok := object["trace"]; !ok { return nil, fmt.Errorf("DispatchTicket.trace is required") }; known := map[string]bool{"agent": true, "attempt_id": true, "delivery": true, "fencing_token": true, "run_id": true, "run_token": true, "schema_version": true, "trace": true}; for key := range object { if !known[key] { if !forward { return nil, fmt.Errorf("DispatchTicket has unknown field %s", key) }; delete(object, key) } }; if raw, ok := object["agent"]; ok { clean, err := sanitizeAgentBinding(raw, forward); if err != nil { return nil, err }; object["agent"] = clean }; if raw, ok := object["attempt_id"]; ok { clean, err := sanitizeAttemptId(raw, forward); if err != nil { return nil, err }; object["attempt_id"] = clean }; if raw, ok := object["delivery"]; ok { clean, err := sanitizeDelivery(raw, forward); if err != nil { return nil, err }; object["delivery"] = clean }; if raw, ok := object["fencing_token"]; ok { clean, err := sanitizeDispatchTicketFencingToken18(raw, forward); if err != nil { return nil, err }; object["fencing_token"] = clean }; if raw, ok := object["run_id"]; ok { clean, err := sanitizeRunId(raw, forward); if err != nil { return nil, err }; object["run_id"] = clean }; if raw, ok := object["run_token"]; ok { clean, err := sanitizeDispatchTicketRunToken19(raw, forward); if err != nil { return nil, err }; object["run_token"] = clean }; if raw, ok := object["schema_version"]; ok { clean, err := sanitizeDispatchTicketSchemaVersion20(raw, forward); if err != nil { return nil, err }; object["schema_version"] = clean }; if raw, ok := object["trace"]; ok { clean, err := sanitizeAROPV1W3CTraceContext(raw, forward); if err != nil { return nil, err }; object["trace"] = clean }; return json.Marshal(object) }
+func sanitizeInstanceId(data []byte, forward bool) ([]byte, error) { return sanitizeSlug(data, forward) }
+func sanitizeJWKSMetadata(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable JWKSMetadata is null") }; var object map[string]json.RawMessage; if err := decodeJSON(data, &object); err != nil { return nil, err }; if _, ok := object["cache_until"]; !ok { return nil, fmt.Errorf("JWKSMetadata.cache_until is required") }; if _, ok := object["issuer"]; !ok { return nil, fmt.Errorf("JWKSMetadata.issuer is required") }; if _, ok := object["keys"]; !ok { return nil, fmt.Errorf("JWKSMetadata.keys is required") }; if _, ok := object["schema_version"]; !ok { return nil, fmt.Errorf("JWKSMetadata.schema_version is required") }; known := map[string]bool{"cache_until": true, "issuer": true, "keys": true, "schema_version": true}; for key := range object { if !known[key] { if !forward { return nil, fmt.Errorf("JWKSMetadata has unknown field %s", key) }; delete(object, key) } }; if raw, ok := object["cache_until"]; ok { clean, err := sanitizeJWKSMetadataCacheUntil21(raw, forward); if err != nil { return nil, err }; object["cache_until"] = clean }; if raw, ok := object["issuer"]; ok { clean, err := sanitizeJWKSMetadataIssuer22(raw, forward); if err != nil { return nil, err }; object["issuer"] = clean }; if raw, ok := object["keys"]; ok { clean, err := sanitizeJWKSMetadataKeys23(raw, forward); if err != nil { return nil, err }; object["keys"] = clean }; if raw, ok := object["schema_version"]; ok { clean, err := sanitizeJWKSMetadataSchemaVersion24(raw, forward); if err != nil { return nil, err }; object["schema_version"] = clean }; return json.Marshal(object) }
+func sanitizeKey(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable Key is null") }; var object map[string]json.RawMessage; if err := decodeJSON(data, &object); err != nil { return nil, err }; if _, ok := object["alg"]; !ok { return nil, fmt.Errorf("Key.alg is required") }; if _, ok := object["created_at"]; !ok { return nil, fmt.Errorf("Key.created_at is required") }; if _, ok := object["crv"]; !ok { return nil, fmt.Errorf("Key.crv is required") }; if _, ok := object["kid"]; !ok { return nil, fmt.Errorf("Key.kid is required") }; if _, ok := object["kty"]; !ok { return nil, fmt.Errorf("Key.kty is required") }; if _, ok := object["not_before"]; !ok { return nil, fmt.Errorf("Key.not_before is required") }; if _, ok := object["sign_until"]; !ok { return nil, fmt.Errorf("Key.sign_until is required") }; if _, ok := object["status"]; !ok { return nil, fmt.Errorf("Key.status is required") }; if _, ok := object["use"]; !ok { return nil, fmt.Errorf("Key.use is required") }; if _, ok := object["verify_until"]; !ok { return nil, fmt.Errorf("Key.verify_until is required") }; if _, ok := object["x"]; !ok { return nil, fmt.Errorf("Key.x is required") }; if _, ok := object["y"]; !ok { return nil, fmt.Errorf("Key.y is required") }; known := map[string]bool{"alg": true, "created_at": true, "crv": true, "kid": true, "kty": true, "not_before": true, "sign_until": true, "status": true, "use": true, "verify_until": true, "x": true, "y": true}; for key := range object { if !known[key] { if !forward { return nil, fmt.Errorf("Key has unknown field %s", key) }; delete(object, key) } }; if raw, ok := object["alg"]; ok { clean, err := sanitizeKeyAlg25(raw, forward); if err != nil { return nil, err }; object["alg"] = clean }; if raw, ok := object["created_at"]; ok { clean, err := sanitizeKeyCreatedAt26(raw, forward); if err != nil { return nil, err }; object["created_at"] = clean }; if raw, ok := object["crv"]; ok { clean, err := sanitizeKeyCrv27(raw, forward); if err != nil { return nil, err }; object["crv"] = clean }; if raw, ok := object["kid"]; ok { clean, err := sanitizeKeyKid28(raw, forward); if err != nil { return nil, err }; object["kid"] = clean }; if raw, ok := object["kty"]; ok { clean, err := sanitizeKeyKty29(raw, forward); if err != nil { return nil, err }; object["kty"] = clean }; if raw, ok := object["not_before"]; ok { clean, err := sanitizeKeyNotBefore30(raw, forward); if err != nil { return nil, err }; object["not_before"] = clean }; if raw, ok := object["sign_until"]; ok { clean, err := sanitizeKeySignUntil31(raw, forward); if err != nil { return nil, err }; object["sign_until"] = clean }; if raw, ok := object["status"]; ok { clean, err := sanitizeKeyStatus32(raw, forward); if err != nil { return nil, err }; object["status"] = clean }; if raw, ok := object["use"]; ok { clean, err := sanitizeKeyUse33(raw, forward); if err != nil { return nil, err }; object["use"] = clean }; if raw, ok := object["verify_until"]; ok { clean, err := sanitizeKeyVerifyUntil34(raw, forward); if err != nil { return nil, err }; object["verify_until"] = clean }; if raw, ok := object["x"]; ok { clean, err := sanitizeKeyX35(raw, forward); if err != nil { return nil, err }; object["x"] = clean }; if raw, ok := object["y"]; ok { clean, err := sanitizeKeyY36(raw, forward); if err != nil { return nil, err }; object["y"] = clean }; return json.Marshal(object) }
 func sanitizePositiveSafeInteger(data []byte, forward bool) ([]byte, error) { return data, nil }
-func sanitizeRunId(data []byte, forward bool) ([]byte, error)               { return data, nil }
-func sanitizeSemanticVersion(data []byte, forward bool) ([]byte, error)     { return data, nil }
-func sanitizeSessionId(data []byte, forward bool) ([]byte, error)           { return data, nil }
-func sanitizeSha256Digest(data []byte, forward bool) ([]byte, error)        { return data, nil }
-func sanitizeSkillId(data []byte, forward bool) ([]byte, error)             { return sanitizeSlug(data, forward) }
-func sanitizeSlug(data []byte, forward bool) ([]byte, error)                { return data, nil }
-func sanitizeTraceparent(data []byte, forward bool) ([]byte, error)         { return data, nil }
+func sanitizeRunId(data []byte, forward bool) ([]byte, error) { return data, nil }
+func sanitizeSemanticVersion(data []byte, forward bool) ([]byte, error) { return data, nil }
+func sanitizeSessionId(data []byte, forward bool) ([]byte, error) { return data, nil }
+func sanitizeSha256Digest(data []byte, forward bool) ([]byte, error) { return data, nil }
+func sanitizeSkillId(data []byte, forward bool) ([]byte, error) { return sanitizeSlug(data, forward) }
+func sanitizeSlug(data []byte, forward bool) ([]byte, error) { return data, nil }
+func sanitizeTraceparent(data []byte, forward bool) ([]byte, error) { return data, nil }
 func (value AROPV1W3CTraceContext) validate() error {
-	if matched, err := regexp.MatchString("^(00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}|(0[1-9a-f]|[1-9a-e][0-9a-f]|f[0-9a-e])-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}(-[!-~]+)?)$", string(value.Traceparent)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
+	if matched, err := regexp.MatchString("^(00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}|(0[1-9a-f]|[1-9a-e][0-9a-f]|f[0-9a-e])-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}(-[!-~]+)?)$", string(value.Traceparent)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	if value.Tracestate != nil {
-		if utf8.RuneCountInString(string(*value.Tracestate)) > 512 {
-			return fmt.Errorf("string longer than maxLength")
-		}
+		if utf8.RuneCountInString(string(*value.Tracestate)) > 512 { return fmt.Errorf("string longer than maxLength") }
 	}
 	return nil
 }
 func (value AgentBinding) validate() error {
-	if err := (value.ID).validate(); err != nil {
-		return err
-	}
-	if err := (value.ManifestDigest).validate(); err != nil {
-		return err
-	}
-	if err := (value.SkillID).validate(); err != nil {
-		return err
-	}
-	if err := (value.Version).validate(); err != nil {
-		return err
-	}
+	if err := (value.ID).validate(); err != nil { return err }
+	if err := (value.ManifestDigest).validate(); err != nil { return err }
+	if err := (value.SkillID).validate(); err != nil { return err }
+	if err := (value.Version).validate(); err != nil { return err }
 	return nil
 }
 func (value Attempt) validate() error {
 	if value.AcceptedAt != nil {
 	}
-	if err := (value.AttemptID).validate(); err != nil {
-		return err
-	}
-	if err := (value.AttemptNumber).validate(); err != nil {
-		return err
-	}
-	if utf8.RuneCountInString(string(value.Audience)) > 2048 {
-		return fmt.Errorf("string longer than maxLength")
-	}
-	if matched, err := regexp.MatchString("^https://[^?#]+$", string(value.Audience)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
+	if err := (value.AttemptID).validate(); err != nil { return err }
+	if err := (value.AttemptNumber).validate(); err != nil { return err }
+	if utf8.RuneCountInString(string(value.Audience)) > 2048 { return fmt.Errorf("string longer than maxLength") }
+	if matched, err := regexp.MatchString("^https://[^?#]+$", string(value.Audience)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	if value.ClosedAt != nil {
 	}
-	if err := (value.DeploymentID).validate(); err != nil {
-		return err
-	}
-	if utf8.RuneCountInString(string(value.Endpoint)) > 2048 {
-		return fmt.Errorf("string longer than maxLength")
-	}
-	if matched, err := regexp.MatchString("^https://[^?#]+$", string(value.Endpoint)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
+	if err := (value.DeploymentID).validate(); err != nil { return err }
+	if utf8.RuneCountInString(string(value.Endpoint)) > 2048 { return fmt.Errorf("string longer than maxLength") }
+	if matched, err := regexp.MatchString("^https://[^?#]+$", string(value.Endpoint)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	if value.FailureCode != nil {
-		if utf8.RuneCountInString(string(*value.FailureCode)) < 1 {
-			return fmt.Errorf("string shorter than minLength")
-		}
-		if utf8.RuneCountInString(string(*value.FailureCode)) > 128 {
-			return fmt.Errorf("string longer than maxLength")
-		}
-		if matched, err := regexp.MatchString("^[A-Z][A-Z0-9_]*$", string(*value.FailureCode)); err != nil || !matched {
-			return fmt.Errorf("string does not match pattern")
-		}
+		if utf8.RuneCountInString(string(*value.FailureCode)) < 1 { return fmt.Errorf("string shorter than minLength") }
+		if utf8.RuneCountInString(string(*value.FailureCode)) > 128 { return fmt.Errorf("string longer than maxLength") }
+		if matched, err := regexp.MatchString("^[A-Z][A-Z0-9_]*$", string(*value.FailureCode)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	}
-	if err := (value.FencingToken).validate(); err != nil {
-		return err
-	}
-	if err := (value.Generation).validate(); err != nil {
-		return err
-	}
-	if err := (value.InstanceID).validate(); err != nil {
-		return err
-	}
-	if err := (value.RunID).validate(); err != nil {
-		return err
-	}
-	if value.SchemaVersion != 1 {
-		return fmt.Errorf("unexpected const value")
-	}
-	if err := (value.SessionID).validate(); err != nil {
-		return err
-	}
-	switch value.State {
-	case "issued", "accepted", "failed", "expired", "fenced", "cancelled":
-	default:
-		return fmt.Errorf("unexpected enum value")
-	}
-	if err := (value.Traceparent).validate(); err != nil {
-		return err
-	}
-	switch value.TransportProfile {
-	case "direct", "proxy", "worker_pull":
-	default:
-		return fmt.Errorf("unexpected enum value")
-	}
+	if err := (value.FencingToken).validate(); err != nil { return err }
+	if err := (value.Generation).validate(); err != nil { return err }
+	if err := (value.InstanceID).validate(); err != nil { return err }
+	if err := (value.RunID).validate(); err != nil { return err }
+	if value.SchemaVersion != 1 { return fmt.Errorf("unexpected const value") }
+	if err := (value.SessionID).validate(); err != nil { return err }
+	switch value.State { case "issued", "accepted", "failed", "expired", "fenced", "cancelled": default: return fmt.Errorf("unexpected enum value") }
+	if err := (value.Traceparent).validate(); err != nil { return err }
+	switch value.TransportProfile { case "direct", "proxy", "worker_pull": default: return fmt.Errorf("unexpected enum value") }
 	return nil
 }
 func (value AttemptId) validate() error {
-	if matched, err := regexp.MatchString("^att_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", string(value)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
+	if matched, err := regexp.MatchString("^att_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", string(value)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	return nil
 }
 func (value Delivery) validate() error {
-	if utf8.RuneCountInString(string(value.Audience)) > 2048 {
-		return fmt.Errorf("string longer than maxLength")
-	}
-	if matched, err := regexp.MatchString("^https://[^?#]+$", string(value.Audience)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
-	if err := (value.DeploymentID).validate(); err != nil {
-		return err
-	}
-	if utf8.RuneCountInString(string(value.Endpoint)) > 2048 {
-		return fmt.Errorf("string longer than maxLength")
-	}
-	if matched, err := regexp.MatchString("^https://[^?#]+/v1/runs$", string(value.Endpoint)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
-	if SafeInteger(value.Generation) < SafeInteger(1) || SafeInteger(value.Generation) > SafeInteger(9007199254740991) {
-		return fmt.Errorf("integer outside declared safe bounds")
-	}
-	if err := (value.InstanceID).validate(); err != nil {
-		return err
-	}
-	switch value.Mode {
-	case "direct", "proxy", "worker_pull":
-	default:
-		return fmt.Errorf("unexpected enum value")
-	}
+	if utf8.RuneCountInString(string(value.Audience)) > 2048 { return fmt.Errorf("string longer than maxLength") }
+	if matched, err := regexp.MatchString("^https://[^?#]+$", string(value.Audience)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
+	if err := (value.DeploymentID).validate(); err != nil { return err }
+	if utf8.RuneCountInString(string(value.Endpoint)) > 2048 { return fmt.Errorf("string longer than maxLength") }
+	if matched, err := regexp.MatchString("^https://[^?#]+/v1/runs$", string(value.Endpoint)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
+	if SafeInteger(value.Generation) < SafeInteger(1) || SafeInteger(value.Generation) > SafeInteger(9007199254740991) { return fmt.Errorf("integer outside declared safe bounds") }
+	if err := (value.InstanceID).validate(); err != nil { return err }
+	switch value.Mode { case "direct", "proxy", "worker_pull": default: return fmt.Errorf("unexpected enum value") }
 	if value.StreamEndpoint != nil {
-		if utf8.RuneCountInString(string(*value.StreamEndpoint)) > 2048 {
-			return fmt.Errorf("string longer than maxLength")
-		}
-		if matched, err := regexp.MatchString("^https://[^?#]+/v1/runs/run_[0-9a-f-]+/events$", string(*value.StreamEndpoint)); err != nil || !matched {
-			return fmt.Errorf("string does not match pattern")
-		}
+		if utf8.RuneCountInString(string(*value.StreamEndpoint)) > 2048 { return fmt.Errorf("string longer than maxLength") }
+		if matched, err := regexp.MatchString("^https://[^?#]+/v1/runs/run_[0-9a-f-]+/events$", string(*value.StreamEndpoint)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	}
 	return nil
 }
 func (value DeploymentId) validate() error {
-	if matched, err := regexp.MatchString("^dep_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", string(value)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
+	if matched, err := regexp.MatchString("^dep_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", string(value)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	return nil
 }
 func (value DispatchTicket) validate() error {
-	if err := (value.Agent).validate(); err != nil {
-		return err
-	}
-	if err := (value.AttemptID).validate(); err != nil {
-		return err
-	}
-	if err := (value.Delivery).validate(); err != nil {
-		return err
-	}
-	if SafeInteger(value.FencingToken) < SafeInteger(1) || SafeInteger(value.FencingToken) > SafeInteger(9007199254740991) {
-		return fmt.Errorf("integer outside declared safe bounds")
-	}
-	if err := (value.RunID).validate(); err != nil {
-		return err
-	}
-	if utf8.RuneCountInString(string(value.RunToken)) < 96 {
-		return fmt.Errorf("string shorter than minLength")
-	}
-	if utf8.RuneCountInString(string(value.RunToken)) > 8192 {
-		return fmt.Errorf("string longer than maxLength")
-	}
-	if matched, err := regexp.MatchString("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$", string(value.RunToken)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
-	if value.SchemaVersion != 1 {
-		return fmt.Errorf("unexpected const value")
-	}
-	if err := (value.Trace).validate(); err != nil {
-		return err
-	}
+	if err := (value.Agent).validate(); err != nil { return err }
+	if err := (value.AttemptID).validate(); err != nil { return err }
+	if err := (value.Delivery).validate(); err != nil { return err }
+	if SafeInteger(value.FencingToken) < SafeInteger(1) || SafeInteger(value.FencingToken) > SafeInteger(9007199254740991) { return fmt.Errorf("integer outside declared safe bounds") }
+	if err := (value.RunID).validate(); err != nil { return err }
+	if utf8.RuneCountInString(string(value.RunToken)) < 96 { return fmt.Errorf("string shorter than minLength") }
+	if utf8.RuneCountInString(string(value.RunToken)) > 8192 { return fmt.Errorf("string longer than maxLength") }
+	if matched, err := regexp.MatchString("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$", string(value.RunToken)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
+	if value.SchemaVersion != 1 { return fmt.Errorf("unexpected const value") }
+	if err := (value.Trace).validate(); err != nil { return err }
 	return nil
 }
 func (value JWKSMetadata) validate() error {
-	if utf8.RuneCountInString(string(value.Issuer)) > 2048 {
-		return fmt.Errorf("string longer than maxLength")
-	}
-	if matched, err := regexp.MatchString("^https://[^?#]+$", string(value.Issuer)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
-	if len(value.Keys) < 1 {
-		return fmt.Errorf("array shorter than minItems")
-	}
-	if len(value.Keys) > 32 {
-		return fmt.Errorf("array longer than maxItems")
-	}
+	if utf8.RuneCountInString(string(value.Issuer)) > 2048 { return fmt.Errorf("string longer than maxLength") }
+	if matched, err := regexp.MatchString("^https://[^?#]+$", string(value.Issuer)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
+	if len(value.Keys) < 1 { return fmt.Errorf("array shorter than minItems") }
+	if len(value.Keys) > 32 { return fmt.Errorf("array longer than maxItems") }
 	for _, item0 := range value.Keys {
-		if err := (item0).validate(); err != nil {
-			return err
-		}
+		if err := (item0).validate(); err != nil { return err }
 	}
-	if value.SchemaVersion != 1 {
-		return fmt.Errorf("unexpected const value")
-	}
+	if value.SchemaVersion != 1 { return fmt.Errorf("unexpected const value") }
 	return nil
 }
 func (value Key) validate() error {
-	if value.Alg != "ES256" {
-		return fmt.Errorf("unexpected const value")
-	}
-	if value.Crv != "P-256" {
-		return fmt.Errorf("unexpected const value")
-	}
-	if utf8.RuneCountInString(string(value.Kid)) < 8 {
-		return fmt.Errorf("string shorter than minLength")
-	}
-	if utf8.RuneCountInString(string(value.Kid)) > 128 {
-		return fmt.Errorf("string longer than maxLength")
-	}
-	if matched, err := regexp.MatchString("^[A-Za-z0-9._-]+$", string(value.Kid)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
-	if value.Kty != "EC" {
-		return fmt.Errorf("unexpected const value")
-	}
-	switch value.Status {
-	case "active", "retiring":
-	default:
-		return fmt.Errorf("unexpected enum value")
-	}
-	if value.Use != "sig" {
-		return fmt.Errorf("unexpected const value")
-	}
-	if utf8.RuneCountInString(string(value.X)) < 43 {
-		return fmt.Errorf("string shorter than minLength")
-	}
-	if utf8.RuneCountInString(string(value.X)) > 43 {
-		return fmt.Errorf("string longer than maxLength")
-	}
-	if matched, err := regexp.MatchString("^[A-Za-z0-9_-]+$", string(value.X)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
-	if utf8.RuneCountInString(string(value.Y)) < 43 {
-		return fmt.Errorf("string shorter than minLength")
-	}
-	if utf8.RuneCountInString(string(value.Y)) > 43 {
-		return fmt.Errorf("string longer than maxLength")
-	}
-	if matched, err := regexp.MatchString("^[A-Za-z0-9_-]+$", string(value.Y)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
+	if value.Alg != "ES256" { return fmt.Errorf("unexpected const value") }
+	if value.Crv != "P-256" { return fmt.Errorf("unexpected const value") }
+	if utf8.RuneCountInString(string(value.Kid)) < 8 { return fmt.Errorf("string shorter than minLength") }
+	if utf8.RuneCountInString(string(value.Kid)) > 128 { return fmt.Errorf("string longer than maxLength") }
+	if matched, err := regexp.MatchString("^[A-Za-z0-9._-]+$", string(value.Kid)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
+	if value.Kty != "EC" { return fmt.Errorf("unexpected const value") }
+	switch value.Status { case "active", "retiring": default: return fmt.Errorf("unexpected enum value") }
+	if value.Use != "sig" { return fmt.Errorf("unexpected const value") }
+	if utf8.RuneCountInString(string(value.X)) < 43 { return fmt.Errorf("string shorter than minLength") }
+	if utf8.RuneCountInString(string(value.X)) > 43 { return fmt.Errorf("string longer than maxLength") }
+	if matched, err := regexp.MatchString("^[A-Za-z0-9_-]+$", string(value.X)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
+	if utf8.RuneCountInString(string(value.Y)) < 43 { return fmt.Errorf("string shorter than minLength") }
+	if utf8.RuneCountInString(string(value.Y)) > 43 { return fmt.Errorf("string longer than maxLength") }
+	if matched, err := regexp.MatchString("^[A-Za-z0-9_-]+$", string(value.Y)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	return nil
 }
 func (value PositiveSafeInteger) validate() error {
-	if SafeInteger(value) < SafeInteger(1) || SafeInteger(value) > SafeInteger(9007199254740991) {
-		return fmt.Errorf("integer outside declared safe bounds")
-	}
+	if SafeInteger(value) < SafeInteger(1) || SafeInteger(value) > SafeInteger(9007199254740991) { return fmt.Errorf("integer outside declared safe bounds") }
 	return nil
 }
 func (value RunId) validate() error {
-	if matched, err := regexp.MatchString("^run_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", string(value)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
+	if matched, err := regexp.MatchString("^run_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", string(value)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	return nil
 }
 func (value SemanticVersion) validate() error {
-	if utf8.RuneCountInString(string(value)) > 128 {
-		return fmt.Errorf("string longer than maxLength")
-	}
-	if matched, err := regexp.MatchString("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$", string(value)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
+	if utf8.RuneCountInString(string(value)) > 128 { return fmt.Errorf("string longer than maxLength") }
+	if matched, err := regexp.MatchString("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$", string(value)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	return nil
 }
 func (value SessionId) validate() error {
-	if matched, err := regexp.MatchString("^ses_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", string(value)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
+	if matched, err := regexp.MatchString("^ses_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$", string(value)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	return nil
 }
 func (value Sha256Digest) validate() error {
-	if matched, err := regexp.MatchString("^sha256:[0-9a-f]{64}$", string(value)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
+	if matched, err := regexp.MatchString("^sha256:[0-9a-f]{64}$", string(value)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	return nil
 }
 func (value Slug) validate() error {
-	if utf8.RuneCountInString(string(value)) < 1 {
-		return fmt.Errorf("string shorter than minLength")
-	}
-	if utf8.RuneCountInString(string(value)) > 128 {
-		return fmt.Errorf("string longer than maxLength")
-	}
-	if matched, err := regexp.MatchString("^[a-z][a-z0-9]*([._-][a-z0-9]+)*$", string(value)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
+	if utf8.RuneCountInString(string(value)) < 1 { return fmt.Errorf("string shorter than minLength") }
+	if utf8.RuneCountInString(string(value)) > 128 { return fmt.Errorf("string longer than maxLength") }
+	if matched, err := regexp.MatchString("^[a-z][a-z0-9]*([._-][a-z0-9]+)*$", string(value)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	return nil
 }
 func (value Traceparent) validate() error {
-	if matched, err := regexp.MatchString("^(00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}|(0[1-9a-f]|[1-9a-e][0-9a-f]|f[0-9a-e])-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}(-[!-~]+)?)$", string(value)); err != nil || !matched {
-		return fmt.Errorf("string does not match pattern")
-	}
+	if matched, err := regexp.MatchString("^(00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}|(0[1-9a-f]|[1-9a-e][0-9a-f]|f[0-9a-e])-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}(-[!-~]+)?)$", string(value)); err != nil || !matched { return fmt.Errorf("string does not match pattern") }
 	return nil
 }
-func hexValue(value byte) (int, bool) {
-	switch {
-	case value >= '0' && value <= '9':
-		return int(value - '0'), true
-	case value >= 'a' && value <= 'f':
-		return int(value - 'a' + 10), true
-	case value >= 'A' && value <= 'F':
-		return int(value - 'A' + 10), true
-	default:
-		return 0, false
-	}
-}
-func escapedCodeUnit(data []byte, offset int) (int, bool) {
-	if offset+4 > len(data) {
-		return 0, false
-	}
-	value := 0
-	for index := offset; index < offset+4; index++ {
-		digit, ok := hexValue(data[index])
-		if !ok {
-			return 0, false
-		}
-		value = value*16 + digit
-	}
-	return value, true
-}
-func validateSurrogateEscapes(data []byte) error {
-	inString := false
-	for index := 0; index < len(data); index++ {
-		if data[index] == '"' {
-			inString = !inString
-			continue
-		}
-		if !inString || data[index] != '\\' {
-			continue
-		}
-		index++
-		if index >= len(data) {
-			return fmt.Errorf("truncated JSON escape")
-		}
-		if data[index] != 'u' {
-			continue
-		}
-		first, ok := escapedCodeUnit(data, index+1)
-		if !ok {
-			return fmt.Errorf("invalid Unicode escape")
-		}
-		index += 4
-		if first >= 0xD800 && first <= 0xDBFF {
-			if index+6 >= len(data) || data[index+1] != '\\' || data[index+2] != 'u' {
-				return fmt.Errorf("unpaired high surrogate")
-			}
-			second, ok := escapedCodeUnit(data, index+3)
-			if !ok || second < 0xDC00 || second > 0xDFFF {
-				return fmt.Errorf("unpaired high surrogate")
-			}
-			index += 6
-		} else if first >= 0xDC00 && first <= 0xDFFF {
-			return fmt.Errorf("unpaired low surrogate")
-		}
-	}
-	return nil
-}
-func walkStrictJSON(decoder *json.Decoder) error {
-	token, err := decoder.Token()
-	if err != nil {
-		return err
-	}
-	delimiter, compound := token.(json.Delim)
-	if !compound {
-		return nil
-	}
-	switch delimiter {
-	case '{':
-		seen := map[string]bool{}
-		for decoder.More() {
-			keyToken, err := decoder.Token()
-			if err != nil {
-				return err
-			}
-			key, ok := keyToken.(string)
-			if !ok {
-				return fmt.Errorf("object key is not a string")
-			}
-			if seen[key] {
-				return fmt.Errorf("duplicate JSON key %s", key)
-			}
-			seen[key] = true
-			if err := walkStrictJSON(decoder); err != nil {
-				return err
-			}
-		}
-		closing, err := decoder.Token()
-		if err != nil || closing != json.Delim('}') {
-			return fmt.Errorf("invalid object close")
-		}
-	case '[':
-		for decoder.More() {
-			if err := walkStrictJSON(decoder); err != nil {
-				return err
-			}
-		}
-		closing, err := decoder.Token()
-		if err != nil || closing != json.Delim(']') {
-			return fmt.Errorf("invalid array close")
-		}
-	default:
-		return fmt.Errorf("unexpected JSON delimiter")
-	}
-	return nil
-}
-func validateStrictJSON(data []byte) error {
-	if !utf8.Valid(data) {
-		return fmt.Errorf("JSON is not valid UTF-8")
-	}
-	if err := validateSurrogateEscapes(data); err != nil {
-		return err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if err := walkStrictJSON(decoder); err != nil {
-		return err
-	}
-	if _, err := decoder.Token(); err != io.EOF {
-		if err == nil {
-			return fmt.Errorf("trailing JSON value")
-		}
-		return err
-	}
-	return nil
-}
-func DecodeAttempt(data []byte) (Attempt, error) {
-	var value Attempt
-	if err := validateStrictJSON(data); err != nil {
-		return value, err
-	}
-	clean, err := sanitizeAttempt(data, false)
-	if err != nil {
-		return value, err
-	}
-	if err := decodeExact(clean, &value); err != nil {
-		return value, err
-	}
-	if err := value.validate(); err != nil {
-		return value, err
-	}
-	return value, nil
-}
-func DecodeAttemptForward(data []byte) (Attempt, error) {
-	var value Attempt
-	if err := validateStrictJSON(data); err != nil {
-		return value, err
-	}
-	clean, err := sanitizeAttempt(data, true)
-	if err != nil {
-		return value, err
-	}
-	if err := decodeExact(clean, &value); err != nil {
-		return value, err
-	}
-	if err := value.validate(); err != nil {
-		return value, err
-	}
-	value.forwardWire = append([]byte(nil), data...)
-	return value, nil
-}
-func EncodeAttempt(value Attempt) ([]byte, error) {
-	if err := value.validate(); err != nil {
-		return nil, err
-	}
-	return json.Marshal(value)
-}
-func DecodeDispatchTicket(data []byte) (DispatchTicket, error) {
-	var value DispatchTicket
-	if err := validateStrictJSON(data); err != nil {
-		return value, err
-	}
-	clean, err := sanitizeDispatchTicket(data, false)
-	if err != nil {
-		return value, err
-	}
-	if err := decodeExact(clean, &value); err != nil {
-		return value, err
-	}
-	if err := value.validate(); err != nil {
-		return value, err
-	}
-	return value, nil
-}
-func DecodeDispatchTicketForward(data []byte) (DispatchTicket, error) {
-	var value DispatchTicket
-	if err := validateStrictJSON(data); err != nil {
-		return value, err
-	}
-	clean, err := sanitizeDispatchTicket(data, true)
-	if err != nil {
-		return value, err
-	}
-	if err := decodeExact(clean, &value); err != nil {
-		return value, err
-	}
-	if err := value.validate(); err != nil {
-		return value, err
-	}
-	value.forwardWire = append([]byte(nil), data...)
-	return value, nil
-}
-func EncodeDispatchTicket(value DispatchTicket) ([]byte, error) {
-	if err := value.validate(); err != nil {
-		return nil, err
-	}
-	return json.Marshal(value)
-}
-func DecodeJWKSMetadata(data []byte) (JWKSMetadata, error) {
-	var value JWKSMetadata
-	if err := validateStrictJSON(data); err != nil {
-		return value, err
-	}
-	clean, err := sanitizeJWKSMetadata(data, false)
-	if err != nil {
-		return value, err
-	}
-	if err := decodeExact(clean, &value); err != nil {
-		return value, err
-	}
-	if err := value.validate(); err != nil {
-		return value, err
-	}
-	return value, nil
-}
-func DecodeJWKSMetadataForward(data []byte) (JWKSMetadata, error) {
-	var value JWKSMetadata
-	if err := validateStrictJSON(data); err != nil {
-		return value, err
-	}
-	clean, err := sanitizeJWKSMetadata(data, true)
-	if err != nil {
-		return value, err
-	}
-	if err := decodeExact(clean, &value); err != nil {
-		return value, err
-	}
-	if err := value.validate(); err != nil {
-		return value, err
-	}
-	value.forwardWire = append([]byte(nil), data...)
-	return value, nil
-}
-func EncodeJWKSMetadata(value JWKSMetadata) ([]byte, error) {
-	if err := value.validate(); err != nil {
-		return nil, err
-	}
-	return json.Marshal(value)
-}
+func hexValue(value byte) (int, bool) { switch { case value >= '0' && value <= '9': return int(value - '0'), true; case value >= 'a' && value <= 'f': return int(value - 'a' + 10), true; case value >= 'A' && value <= 'F': return int(value - 'A' + 10), true; default: return 0, false } }
+func escapedCodeUnit(data []byte, offset int) (int, bool) { if offset+4 > len(data) { return 0, false }; value := 0; for index := offset; index < offset+4; index++ { digit, ok := hexValue(data[index]); if !ok { return 0, false }; value = value*16 + digit }; return value, true }
+func validateSurrogateEscapes(data []byte) error { inString := false; for index := 0; index < len(data); index++ { if data[index] == '"' { inString = !inString; continue }; if !inString || data[index] != '\\' { continue }; index++; if index >= len(data) { return fmt.Errorf("truncated JSON escape") }; if data[index] != 'u' { continue }; first, ok := escapedCodeUnit(data, index+1); if !ok { return fmt.Errorf("invalid Unicode escape") }; index += 4; if first >= 0xD800 && first <= 0xDBFF { if index+6 >= len(data) || data[index+1] != '\\' || data[index+2] != 'u' { return fmt.Errorf("unpaired high surrogate") }; second, ok := escapedCodeUnit(data, index+3); if !ok || second < 0xDC00 || second > 0xDFFF { return fmt.Errorf("unpaired high surrogate") }; index += 6 } else if first >= 0xDC00 && first <= 0xDFFF { return fmt.Errorf("unpaired low surrogate") } }; return nil }
+func walkStrictJSON(decoder *json.Decoder) error { token, err := decoder.Token(); if err != nil { return err }; delimiter, compound := token.(json.Delim); if !compound { return nil }; switch delimiter { case '{': seen := map[string]bool{}; for decoder.More() { keyToken, err := decoder.Token(); if err != nil { return err }; key, ok := keyToken.(string); if !ok { return fmt.Errorf("object key is not a string") }; if seen[key] { return fmt.Errorf("duplicate JSON key %s", key) }; seen[key] = true; if err := walkStrictJSON(decoder); err != nil { return err } }; closing, err := decoder.Token(); if err != nil || closing != json.Delim('}') { return fmt.Errorf("invalid object close") }; case '[': for decoder.More() { if err := walkStrictJSON(decoder); err != nil { return err } }; closing, err := decoder.Token(); if err != nil || closing != json.Delim(']') { return fmt.Errorf("invalid array close") }; default: return fmt.Errorf("unexpected JSON delimiter") }; return nil }
+func validateStrictJSON(data []byte) error { if !utf8.Valid(data) { return fmt.Errorf("JSON is not valid UTF-8") }; if err := validateSurrogateEscapes(data); err != nil { return err }; decoder := json.NewDecoder(bytes.NewReader(data)); decoder.UseNumber(); if err := walkStrictJSON(decoder); err != nil { return err }; if _, err := decoder.Token(); err != io.EOF { if err == nil { return fmt.Errorf("trailing JSON value") }; return err }; return nil }
+func DecodeAttempt(data []byte) (Attempt, error) { var value Attempt; if err := validateStrictJSON(data); err != nil { return value, err }; clean, err := sanitizeAttempt(data, false); if err != nil { return value, err }; if err := decodeExact(clean, &value); err != nil { return value, err }; if err := value.validate(); err != nil { return value, err }; return value, nil }
+func DecodeAttemptForward(data []byte) (Attempt, error) { var value Attempt; if err := validateStrictJSON(data); err != nil { return value, err }; clean, err := sanitizeAttempt(data, true); if err != nil { return value, err }; if err := decodeExact(clean, &value); err != nil { return value, err }; if err := value.validate(); err != nil { return value, err }; value.forwardWire = append([]byte(nil), data...); return value, nil }
+func EncodeAttempt(value Attempt) ([]byte, error) { if err := value.validate(); err != nil { return nil, err }; return json.Marshal(value) }
+func DecodeDispatchTicket(data []byte) (DispatchTicket, error) { var value DispatchTicket; if err := validateStrictJSON(data); err != nil { return value, err }; clean, err := sanitizeDispatchTicket(data, false); if err != nil { return value, err }; if err := decodeExact(clean, &value); err != nil { return value, err }; if err := value.validate(); err != nil { return value, err }; return value, nil }
+func DecodeDispatchTicketForward(data []byte) (DispatchTicket, error) { var value DispatchTicket; if err := validateStrictJSON(data); err != nil { return value, err }; clean, err := sanitizeDispatchTicket(data, true); if err != nil { return value, err }; if err := decodeExact(clean, &value); err != nil { return value, err }; if err := value.validate(); err != nil { return value, err }; value.forwardWire = append([]byte(nil), data...); return value, nil }
+func EncodeDispatchTicket(value DispatchTicket) ([]byte, error) { if err := value.validate(); err != nil { return nil, err }; return json.Marshal(value) }
+func DecodeJWKSMetadata(data []byte) (JWKSMetadata, error) { var value JWKSMetadata; if err := validateStrictJSON(data); err != nil { return value, err }; clean, err := sanitizeJWKSMetadata(data, false); if err != nil { return value, err }; if err := decodeExact(clean, &value); err != nil { return value, err }; if err := value.validate(); err != nil { return value, err }; return value, nil }
+func DecodeJWKSMetadataForward(data []byte) (JWKSMetadata, error) { var value JWKSMetadata; if err := validateStrictJSON(data); err != nil { return value, err }; clean, err := sanitizeJWKSMetadata(data, true); if err != nil { return value, err }; if err := decodeExact(clean, &value); err != nil { return value, err }; if err := value.validate(); err != nil { return value, err }; value.forwardWire = append([]byte(nil), data...); return value, nil }
+func EncodeJWKSMetadata(value JWKSMetadata) ([]byte, error) { if err := value.validate(); err != nil { return nil, err }; return json.Marshal(value) }
 func DecodeAuthoring(data []byte) (Attempt, error) { return DecodeAttempt(data) }
-func validateRawJSON(data []byte) error {
-	var value any
-	if err := decodeJSON(data, &value); err != nil {
-		return err
-	}
-	return validateJSONValue(value)
-}
-func validateJSONValue(value any) error {
-	switch item := value.(type) {
-	case json.Number:
-		rational, ok := new(big.Rat).SetString(item.String())
-		if !ok {
-			return fmt.Errorf("invalid JSON number")
-		}
-		if rational.IsInt() {
-			limit := big.NewInt(9007199254740991)
-			negativeLimit := new(big.Int).Neg(new(big.Int).Set(limit))
-			if rational.Num().Cmp(limit) > 0 || rational.Num().Cmp(negativeLimit) < 0 {
-				return fmt.Errorf("JSON integer outside safe range")
-			}
-		}
-	case []any:
-		for _, child := range item {
-			if err := validateJSONValue(child); err != nil {
-				return err
-			}
-		}
-	case map[string]any:
-		for _, child := range item {
-			if err := validateJSONValue(child); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
+func validateRawJSON(data []byte) error { var value any; if err := decodeJSON(data, &value); err != nil { return err }; return validateJSONValue(value) }
+func validateJSONValue(value any) error { switch item := value.(type) { case json.Number: rational, ok := new(big.Rat).SetString(item.String()); if !ok { return fmt.Errorf("invalid JSON number") }; if rational.IsInt() { limit := big.NewInt(9007199254740991); negativeLimit := new(big.Int).Neg(new(big.Int).Set(limit)); if rational.Num().Cmp(limit) > 0 || rational.Num().Cmp(negativeLimit) < 0 { return fmt.Errorf("JSON integer outside safe range") } }; case []any: for _, child := range item { if err := validateJSONValue(child); err != nil { return err } }; case map[string]any: for _, child := range item { if err := validateJSONValue(child); err != nil { return err } } }; return nil }
 func DecodeForward(data []byte) (Attempt, error) { return DecodeAttemptForward(data) }
-func decodeJSON(data []byte, destination any) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	if err := decoder.Decode(destination); err != nil {
-		return err
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		return fmt.Errorf("trailing JSON value")
-	}
-	return nil
-}
+func decodeJSON(data []byte, destination any) error { decoder := json.NewDecoder(bytes.NewReader(data)); decoder.UseNumber(); if err := decoder.Decode(destination); err != nil { return err }; var trailing any; if err := decoder.Decode(&trailing); err != io.EOF { return fmt.Errorf("trailing JSON value") }; return nil }
