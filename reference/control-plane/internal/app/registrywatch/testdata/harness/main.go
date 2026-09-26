@@ -352,7 +352,7 @@ func compiledClosure(root string) (map[string]bool, error) {
 			}
 		}
 	}
-	rootList := run(root, nil, "go", "list", "-deps", "-test", "-json", "./...")
+	rootList := run(root, nil, "go", "list", "-deps", "-test", "-json", "./...", "./conformance/fixtures/registry-watch/testdata/verification")
 	if rootList.err != nil {
 		return nil, rootList.err
 	}
@@ -369,7 +369,7 @@ func compiledClosure(root string) (map[string]bool, error) {
 	if err := os.WriteFile(work, body, 0o600); err != nil {
 		return nil, err
 	}
-	nested := run(filepath.Join(root, "reference/control-plane"), map[string]string{"GOWORK": work, "TMPDIR": temporary}, "go", "list", "-deps", "-test", "-json", "./...")
+	nested := run(filepath.Join(root, "reference/control-plane"), map[string]string{"GOWORK": work, "TMPDIR": temporary}, "go", "list", "-deps", "-test", "-json", "./...", "./internal/app/registrywatch/testdata/harness")
 	if nested.err != nil {
 		return nil, nested.err
 	}
