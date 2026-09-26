@@ -597,8 +597,16 @@ func runGoTests(root, scratch, dsn, postgresBin string) ([]byte, error) {
 		return nil, err
 	}
 	overrides := map[string]string{"GOWORK": work, "TMPDIR": scratch, "AROP_P16_POSTGRES_URL": dsn, "AROP_P16_POSTGRES_BIN": postgresBin, "AROP_P16_SCRATCH": scratch}
-	result := run(filepath.Join(root, "reference/control-plane"), overrides, "go", "test", "-count=1", "-race", "-json", "./internal/app/registrywatch", "./internal/app/registryapi", "./internal/app/platform/httpadapter", "./internal/domain/registry/storage/sqlite", "./internal/domain/registry/storage/postgres", "./cmd/aropd")
-	return result.output, result.err
+	directory := filepath.Join(root, "reference/control-plane")
+	primary := run(directory, overrides, "go", "test", "-count=1", "-race", "-json", "./internal/app/registrywatch", "./internal/app/registryapi", "./internal/app/platform/httpadapter", "./internal/domain/registry/storage/sqlite", "./cmd/aropd")
+	// The P14 repository test and the P16 coordinator test both rebuild the
+	// registry tables. Run them serially against the private cluster so package
+	// parallelism cannot turn independent destructive fixtures into a race.
+	overrides["AROP_P14_POSTGRES_URL"] = dsn
+	overrides["AROP_P14_MIGRATION_ROOT"] = filepath.Join(root, "reference/control-plane/migrations")
+	postgres := run(directory, overrides, "go", "test", "-count=1", "-race", "-json", "./internal/domain/registry/storage/postgres")
+	output := append(append([]byte(nil), primary.output...), postgres.output...)
+	return output, errors.Join(primary.err, postgres.err)
 }
 
 func rejectIncompleteTests(output []byte) error {

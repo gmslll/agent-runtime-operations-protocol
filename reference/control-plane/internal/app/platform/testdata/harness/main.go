@@ -39,6 +39,7 @@ const (
 	p10WaiverPath   = "reference/control-plane/internal/identity/testdata/transition/p10-baseline-transition-waiver.json"
 	p14WaiverPath   = "reference/control-plane/internal/domain/registry/testdata/transition/p14-baseline-transition-waiver.json"
 	p15WaiverPath   = "reference/control-plane/internal/app/registryapi/testdata/transition/p15-baseline-transition-waiver.json"
+	p16WaiverPath   = "reference/control-plane/internal/app/registrywatch/testdata/transition/p16-baseline-transition-waiver.json"
 	nestedModule    = "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane"
 	rootModule      = "github.com/gmslll/agent-runtime-operations-protocol"
 	p13WaiverPath   = "reference/control-plane/internal/domain/assets/testdata/transition/p13-baseline-transition-waiver.json"
@@ -126,6 +127,7 @@ var expectedTests = map[string][]string{
 		"TestAssetRoutesSeparateIdentityFromGrantAuthentication",
 		"TestHandlerChainPropagatesCorrelatesAndRedacts",
 		"TestPublicationRoutesEnforceScopeUoWBoundaryAndBodyLimit",
+		"TestRegistryRecoveryRouteIsAuthenticatedScopedAndOutsideGenericUoW",
 		"TestRegistryRoutesEnforceAuthenticationScopeTenantAndWatchBoundary",
 	},
 	nestedModule + "/internal/ports/observability": {
@@ -363,6 +365,15 @@ func p15AllowsPackage(root, importPath string) bool {
 	return importPath == base || strings.HasPrefix(importPath, base+"/")
 }
 
+func p16AllowsPackage(root, importPath string) bool {
+	data, err := os.ReadFile(filepath.Join(root, p16WaiverPath))
+	if err != nil || !bytes.Contains(data, []byte(`"status": "validated"`)) || !bytes.Contains(data, []byte(`"commit": "1f8ebc05d503292149a344f3e4c606262a242e8e"`)) {
+		return false
+	}
+	base := nestedModule + "/internal/app/registrywatch"
+	return importPath == base || strings.HasPrefix(importPath, base+"/")
+}
+
 func runP10TransitionChecker(root, mode string) ([]byte, error) {
 	path := filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go")
 	cmd := exec.Command("go", "run", "-modfile="+filepath.Join(root, "go.mod"), path, mode)
@@ -574,7 +585,7 @@ func verifyProductionImports(root string) error {
 					continue
 				}
 				if !allowedByDirectory[relativeRoot][value] {
-					if (relativeRoot == "reference/control-plane/cmd/aropd" && p10AllowsPackage(root, value)) || p12AllowsPackage(root, value) || p13AllowsPackage(root, value) || p14AllowsPackage(root, value) || p15AllowsPackage(root, value) {
+					if (relativeRoot == "reference/control-plane/cmd/aropd" && p10AllowsPackage(root, value)) || p12AllowsPackage(root, value) || p13AllowsPackage(root, value) || p14AllowsPackage(root, value) || p15AllowsPackage(root, value) || p16AllowsPackage(root, value) {
 						continue
 					}
 					relative, _ := filepath.Rel(root, path)
@@ -1447,6 +1458,10 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 			continue
 		}
 		if p15AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) {
+			seen[item.ImportPath] = true
+			continue
+		}
+		if p16AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) {
 			seen[item.ImportPath] = true
 			continue
 		}
