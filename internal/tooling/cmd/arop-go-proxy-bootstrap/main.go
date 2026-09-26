@@ -50,9 +50,9 @@ const (
 	p05GoModH1        = "h1:ov6WTouj8Qdfs+WL7KgViSYyf6mbrYLBDM8N2EvrxxY="
 	p08Commit         = "e92c2f5fc82ad7d1f0b2ac9c59d004db6419ec29"
 	p09Commit         = "fcfa827482a5379c17c13edaefedc8a54a6f850c"
-	currentPin        = "013439d2752edd4b1e4ec1f315625a7b973e16a3"
-	currentVersion    = "v0.0.0-20260926182258-013439d2752e"
-	currentZipH1      = "h1:8w/Tk/1EReaE7Hx4oKAV9lJcZHMTwi5gtsxWUhEb/rk="
+	currentPin        = "f2174bb7a8248b184b688910406ce72e2515dbc0"
+	currentVersion    = "v0.0.0-20260926201824-f2174bb7a824"
+	currentZipH1      = "h1:gtjTkHIRuFhffueZtJtJCfbYrCblUAXkcCisaARCZ0U="
 	currentGoModH1    = "h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk="
 )
 
@@ -61,6 +61,7 @@ var transitionPaths = []string{
 	"conformance/harness/base/testdata/transition/p06-p05-transition.json",
 	"reference/control-plane/internal/app/platform/testdata/transition/p08-p05-transition.json",
 	"reference/control-plane/internal/domain/assets/testdata/transition/p13-p05-transition.json",
+	"reference/control-plane/internal/domain/dispatch/testdata/transition/p19-p05-transition.json",
 	"reference/control-plane/internal/domain/run/testdata/transition/p18-p05-transition.json",
 	"reference/control-plane/internal/storage/migrate/testdata/engine-versions/p09-p05-transition.json",
 }
@@ -1738,14 +1739,22 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 	}
 	p13.RootPin = &pinTransition{p12Pin, p13Pin}
 	p18Result := "f5c25889ad74a9fa4268fa5eac5a64401499da16"
-	p18, err := expectedTransition(root, "P18-P05-MODULE-TRANSITION-001", "P18", currentPin, p18Result,
-		[]string{nestedDirectory + "/go.mod", nestedDirectory + "/go.sum"}, []string{p18Result}, []string{"nested-control-plane-go-module"}, &pinTransition{p13Pin, activePin},
+	p18Pin := activePinBeforeP19()
+	p18, err := expectedTransition(root, "P18-P05-MODULE-TRANSITION-001", "P18", p18Pin.Commit, p18Result,
+		[]string{nestedDirectory + "/go.mod", nestedDirectory + "/go.sum"}, []string{p18Result}, []string{"nested-control-plane-go-module"}, &pinTransition{p13Pin, p18Pin},
 		"P18 repins the nested Control Plane to the clean committed root snapshot that contains the accepted Run lifecycle models consumed by production composition.", "make test-run-lifecycle", "build/reports/P18/report.json")
 	if err != nil {
 		return replay, err
 	}
-	expected := []transitionRecord{p06, p08, p09, p12, p13, p18}
-	expectedByPath := []transitionRecord{p12, p06, p08, p13, p18, p09}
+	p19Result := "28d4247ba27daae784e2b0b18b3b7193499d9bac"
+	p19, err := expectedTransition(root, "P19-P05-MODULE-TRANSITION-001", "P19", currentPin, p19Result,
+		[]string{nestedDirectory + "/go.mod", nestedDirectory + "/go.sum"}, []string{p19Result}, []string{"nested-control-plane-go-module"}, &pinTransition{p18Pin, activePin},
+		"P19 repins the nested Control Plane to the clean committed root snapshot that contains the accepted Dispatch Ticket models consumed by production composition.", "make test-dispatch-ticket", "build/reports/P19/report.json")
+	if err != nil {
+		return replay, err
+	}
+	expected := []transitionRecord{p06, p08, p09, p12, p13, p18, p19}
+	expectedByPath := []transitionRecord{p12, p06, p08, p13, p19, p18, p09}
 	manifest, err := loadArtifactManifest(root)
 	if err != nil {
 		return replay, err
@@ -1757,11 +1766,12 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 	if err := validateExactSet(discoveredRecords, transitionPaths, "transition record set"); err != nil {
 		return replay, err
 	}
-	expectedCarrierArtifacts := []string{"arop-cli-publication-command", "conformance-harness-base", "control-plane-platform-foundation", "asset-broker-service", "run-lifecycle-service", "migration-engine-fixture-versions"}
+	expectedCarrierArtifacts := []string{"arop-cli-publication-command", "conformance-harness-base", "control-plane-platform-foundation", "asset-broker-service", "dispatcher-ticket-service", "run-lifecycle-service", "migration-engine-fixture-versions"}
 	expectedAffectedOwners := []map[string]string{
 		{"nested-control-plane-go-module": "P05"},
 		{"root-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05", "reference-control-plane-server": "P08"},
+		{"nested-control-plane-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05", "reference-control-plane-server": "P08"},
@@ -1827,7 +1837,7 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 		return replay, errors.New("transition ledger did not finish at the active root pin")
 	}
 	replay.Items = append(replay.Items,
-		evidenceValue("active-root-pin-chain", []byte(p05Version+"\n"+activePinBeforeP12().Version+"\n"+p12Pin.Version+"\n"+p13Pin.Version+"\n"+currentVersion+"\n")),
+		evidenceValue("active-root-pin-chain", []byte(p05Version+"\n"+activePinBeforeP12().Version+"\n"+p12Pin.Version+"\n"+p13Pin.Version+"\n"+p18Pin.Version+"\n"+currentVersion+"\n")),
 		evidenceValue("recorded-transition-paths", []byte(strings.Join(replay.RecordedTransitionPaths, "\x00"))),
 	)
 	return replay, nil
@@ -1843,6 +1853,10 @@ func activePinBeforeP13() rootPin {
 
 func activePinBeforeP18() rootPin {
 	return rootPin{"dff156e5d35444175485c0a589ff7077ba48bb61", "v0.0.0-20260925200248-dff156e5d354", "h1:U5jw6DhVxZKC1mJPuQh8a35IRN/edvxZpKHGAOqrilU=", "h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk="}
+}
+
+func activePinBeforeP19() rootPin {
+	return rootPin{"013439d2752edd4b1e4ec1f315625a7b973e16a3", "v0.0.0-20260926182258-013439d2752e", "h1:8w/Tk/1EReaE7Hx4oKAV9lJcZHMTwi5gtsxWUhEb/rk=", "h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk="}
 }
 
 func expectedTransition(root, id, toPhase, baseline, result string, pathspecs, commits, artifacts []string, pin *pinTransition, reason, command, reportPath string) (transitionRecord, error) {
