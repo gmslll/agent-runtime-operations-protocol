@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"snapshot-watch-race","after_revision":7,"wait_seconds":30,"expect":"event-or-newer-empty-window"},
+    {"id":"duplicate-notification","after_revision":8,"wait_seconds":30,"expect":"strictly-increasing-events"},
+    {"id":"cross-node-poll","after_revision":9,"wait_seconds":30,"expect":"durable-ledger-wakeup"},
+    {"id":"compacted-cursor","after_revision":4,"wait_seconds":1,"expect":"REGISTRY_REVISION_COMPACTED"},
+    {"id":"cancelled-wait","after_revision":10,"wait_seconds":30,"expect":"waiter-released"},
+    {"id":"restored-ledger","after_revision":5,"wait_seconds":1,"expect":"exact-revision-event-watermark"}
+  ]
+}

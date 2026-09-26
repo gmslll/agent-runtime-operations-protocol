@@ -84,6 +84,9 @@ func (leadership *postgresLeadership) Close() error {
 	defer cancel()
 	var released bool
 	err := leadership.connection.QueryRowContext(ctx, `SELECT pg_advisory_unlock($1)`, postgresLeaderLockKey).Scan(&released)
+	if err == nil && !released {
+		err = ErrDependencyUnavailable
+	}
 	return errors.Join(err, leadership.connection.Close())
 }
 

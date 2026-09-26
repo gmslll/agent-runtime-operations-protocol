@@ -146,6 +146,15 @@ func TestWatchNotificationPollingCancellationAndTenantIsolation(t *testing.T) {
 	}
 }
 
+func TestWatchPollsAcrossNodesWithoutLocalNotification(t *testing.T) {
+	reader := &sequenceReader{windows: []registry.EventWindow{{Revision: 1}, {Revision: 1}, {Revision: 2, Events: []registry.Event{validEvent(2)}}}}
+	hub := NewHub()
+	result, err := newTestService(t, reader, hub).Watch(context.Background(), validCaller(), WatchInput{AfterRevision: 1, Wait: time.Second})
+	if err != nil || result.Revision != 2 || len(result.Events) != 1 || reader.calls < 3 || hub.Subscribers("tenant-a") != 0 {
+		t.Fatalf("result=%+v calls=%d subscribers=%d err=%v", result, reader.calls, hub.Subscribers("tenant-a"), err)
+	}
+}
+
 func TestWatchHTTPContract(t *testing.T) {
 	event := validEvent(2)
 	reader := &sequenceReader{windows: []registry.EventWindow{{Revision: 2, Events: []registry.Event{event}}}}
@@ -181,5 +190,41 @@ func TestWatchHTTPContract(t *testing.T) {
 		if response.Code != http.StatusBadRequest {
 			t.Fatalf("target=%s status=%d body=%s", target, response.Code, response.Body.String())
 		}
+	}
+}
+
+func TestWatchHTTPCompactionAndDependencyErrorsAreTypedAndRedacted(t *testing.T) {
+	secret := "postgres://user:password@example.invalid/db"
+	for name, reader := range map[string]*sequenceReader{
+		"compacted":  {windows: []registry.EventWindow{{Revision: 9, CompactionWatermark: 5}}},
+		"dependency": {err: errors.New(secret)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			handler, err := NewHTTPHandler(newTestService(t, reader, NewHub()), func(*http.Request) (registryapi.Caller, platform.RequestMetadata, bool) {
+				return validCaller(), platform.RequestMetadata{}, true
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			after := "4"
+			if name == "dependency" {
+				after = "0"
+			}
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/discovery/changes?after_revision="+after+"&wait_seconds=1", nil))
+			want := http.StatusGone
+			if name == "dependency" {
+				want = http.StatusServiceUnavailable
+			}
+			if response.Code != want || strings.Contains(response.Body.String(), secret) {
+				t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+			}
+			if name == "compacted" && !strings.Contains(response.Body.String(), `"code":"REGISTRY_REVISION_COMPACTED"`) {
+				t.Fatalf("body=%s", response.Body.String())
+			}
+			if name == "dependency" && (response.Header().Get("Retry-After") != "1" || !strings.Contains(response.Body.String(), `"retry_after_seconds":1`)) {
+				t.Fatalf("headers=%v body=%s", response.Header(), response.Body.String())
+			}
+		})
 	}
 }

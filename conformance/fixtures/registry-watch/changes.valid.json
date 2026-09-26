@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "revision": 8,
+  "compaction_watermark": 4,
+  "events": [
+    {
+      "schema_version": 1,
+      "event_id": "evt_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c",
+      "revision": 8,
+      "type": "registered",
+      "instance_id": "runtime-a",
+      "session_id": "ses_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c",
+      "generation": 1,
+      "occurred_at": "2026-09-26T08:00:00Z"
+    }
+  ]
+}
