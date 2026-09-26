@@ -204,6 +204,7 @@ packages:
       - TestPlanningAndGateSummarySchemasAreStrict/result_extra
       - TestPlanningAndGateSummarySchemasAreStrict/subject_extra
       - TestPlanningAndGateSummarySchemasAreStrict/top_extra
+      - TestRepositorySchemaLoaderResolvesOnlyLocalCanonicalIDs
   - path: ./internal/tooling/specindex
     package: github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/specindex
     artifact_ids:
