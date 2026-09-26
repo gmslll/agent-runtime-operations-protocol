@@ -14,6 +14,7 @@ const (
 	ReasonResourceConflict      ErrorReason = "RESOURCE_VERSION_CONFLICT"
 	ReasonIdempotencyConflict   ErrorReason = "IDEMPOTENCY_KEY_CONFLICT"
 	ReasonRevisionOverflow      ErrorReason = "REGISTRY_REVISION_OVERFLOW"
+	ReasonResourceOverflow      ErrorReason = "REGISTRY_RESOURCE_VERSION_OVERFLOW"
 	ReasonGenerationOverflow    ErrorReason = "REGISTRY_GENERATION_OVERFLOW"
 	ReasonDependencyUnavailable ErrorReason = "REGISTRY_DEPENDENCY_UNAVAILABLE"
 )

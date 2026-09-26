@@ -37,7 +37,7 @@ var registryTables = map[string]tableExpectation{
 			{"heartbeat_sequence", "INTEGER", 0}, {"endpoint_base_url", "TEXT", 0}, {"endpoint_health_path", "TEXT", 0}, {"bindings_json", "TEXT", 0}, {"runtime_json", "TEXT", 0},
 			{"operator_json", "TEXT", 0}, {"draining", "INTEGER", 0}, {"drain_deadline_at", "TEXT", 0}, {"status", "TEXT", 0}, {"created_at", "TEXT", 0}, {"updated_at", "TEXT", 0},
 		},
-		digest: "330838fe11c52e0526000205bcf7131ab3b19be165a845253b89000fbc34e4cd",
+		digest: "6091d7790b7fffffa938945c8ab57a268cdde058e885da9d11fea210888b3e0d",
 		indexes: map[string]int{
 			"pk|1|0|tenant_id,instance_id": 1,
 			"u|1|0|lease_id":               1,
@@ -46,19 +46,24 @@ var registryTables = map[string]tableExpectation{
 	},
 	"arop_registry_sessions": {
 		columns: []columnExpectation{{"tenant_id", "TEXT", 1}, {"instance_id", "TEXT", 2}, {"session_id", "TEXT", 3}, {"generation", "INTEGER", 0}, {"created_at", "TEXT", 0}},
-		digest:  "6fcc718ee602dc58c4154290b00032b800da43b870d852a790fa2bd0829644e9",
+		digest:  "951a75028f6fba1eb615dd5bf7c9138a26541e40ba56bcee5d995bcc773ef872",
 		indexes: map[string]int{"pk|1|0|tenant_id,instance_id,session_id": 1},
 	},
 	"arop_registry_events": {
 		columns: []columnExpectation{{"revision", "INTEGER", 1}, {"event_id", "TEXT", 0}, {"tenant_id", "TEXT", 0}, {"event_type", "TEXT", 0}, {"instance_id", "TEXT", 0}, {"session_id", "TEXT", 0}, {"generation", "INTEGER", 0}, {"occurred_at", "TEXT", 0}},
-		digest:  "c023a4af644a3025bb916256afede041a608b238af72d2fdee2e74004e0bd3c4",
+		digest:  "b4e34e2b8e7ae82852c0d0fdf799b079a1edaa19c035f5c16db67f862eeaba4a",
 		indexes: map[string]int{"u|1|0|event_id": 1, "c|0|0|arop_registry_events_tenant_revision_idx|tenant_id,revision": 1},
 	},
 	"arop_registry_idempotency": {
 		columns: []columnExpectation{{"tenant_id", "TEXT", 1}, {"operation", "TEXT", 2}, {"key_digest", "TEXT", 3}, {"request_digest", "TEXT", 0}, {"result_json", "TEXT", 0}, {"result_revision", "INTEGER", 0}, {"created_at", "TEXT", 0}},
-		digest:  "98ad706c27c473cd621075a6d3030df72bc534ee268f9b374f1d83bbd478c04f",
+		digest:  "8925585cb1f94861d0a48032bfba723cc5361def4ae4633699340302e3ae707d",
 		indexes: map[string]int{"pk|1|0|tenant_id,operation,key_digest": 1},
 	},
+}
+
+var registryTriggers = map[string]string{
+	"arop_registry_events_no_update": compact(`CREATE TRIGGER arop_registry_events_no_update BEFORE UPDATE ON arop_registry_events BEGIN SELECT RAISE(ABORT, 'arop_registry_events is append-only'); END`),
+	"arop_registry_events_no_delete": compact(`CREATE TRIGGER arop_registry_events_no_delete BEFORE DELETE ON arop_registry_events BEGIN SELECT RAISE(ABORT, 'arop_registry_events is append-only'); END`),
 }
 
 // VerifySchema rejects any missing, added, reordered, weakened, or rewritten
@@ -91,8 +96,37 @@ func VerifySchema() migrate.Verifier {
 				return err
 			}
 		}
-		return nil
+		return verifyTriggers(ctx, queryer)
 	}
+}
+
+func verifyTriggers(ctx context.Context, queryer migrate.Queryer) error {
+	rows, err := queryer.QueryContext(ctx, `SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='arop_registry_events' ORDER BY name`)
+	if err != nil {
+		return errors.New("inspect SQLite registry triggers")
+	}
+	found := map[string]string{}
+	for rows.Next() {
+		var name, ddl string
+		if rows.Scan(&name, &ddl) != nil {
+			rows.Close()
+			return errors.New("scan SQLite registry triggers")
+		}
+		if _, duplicate := found[name]; duplicate {
+			rows.Close()
+			return errors.New("SQLite registry triggers are not exact")
+		}
+		found[name] = compact(ddl)
+	}
+	if rows.Err() != nil || rows.Close() != nil || len(found) != len(registryTriggers) {
+		return errors.New("SQLite registry triggers are not exact")
+	}
+	for name, expected := range registryTriggers {
+		if found[name] != expected {
+			return errors.New("SQLite registry triggers are not exact")
+		}
+	}
+	return nil
 }
 
 func verifyTable(ctx context.Context, queryer migrate.Queryer, table string, expected tableExpectation) error {

@@ -34,22 +34,22 @@ CREATE TABLE arop_registry_instances (
   updated_at TEXT NOT NULL,
   CONSTRAINT arop_registry_instances_pkey PRIMARY KEY(tenant_id, instance_id),
   CONSTRAINT arop_registry_instances_lease_unique UNIQUE(lease_id),
-  CONSTRAINT arop_registry_instances_tenant_check CHECK(tenant_id ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(tenant_id) <= 128),
-  CONSTRAINT arop_registry_instances_instance_check CHECK(instance_id ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(instance_id) <= 128),
-  CONSTRAINT arop_registry_instances_session_check CHECK(session_id ~ '^ses_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
-  CONSTRAINT arop_registry_instances_service_check CHECK(service_id ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(service_id) <= 128),
-  CONSTRAINT arop_registry_instances_environment_check CHECK(environment ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(environment) <= 64),
+  CONSTRAINT arop_registry_instances_tenant_check CHECK(tenant_id COLLATE "C" ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(tenant_id) <= 128),
+  CONSTRAINT arop_registry_instances_instance_check CHECK(instance_id COLLATE "C" ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(instance_id) <= 128),
+  CONSTRAINT arop_registry_instances_session_check CHECK(session_id COLLATE "C" ~ '^ses_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+  CONSTRAINT arop_registry_instances_service_check CHECK(service_id COLLATE "C" ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(service_id) <= 128),
+  CONSTRAINT arop_registry_instances_environment_check CHECK(environment COLLATE "C" ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(environment) <= 64),
   CONSTRAINT arop_registry_instances_generation_check CHECK(generation BETWEEN 1 AND 9007199254740991),
   CONSTRAINT arop_registry_instances_resource_check CHECK(resource_version BETWEEN 1 AND 9007199254740991),
   CONSTRAINT arop_registry_instances_revision_check CHECK(registry_revision BETWEEN 1 AND 9007199254740991),
-  CONSTRAINT arop_registry_instances_lease_check CHECK(lease_id ~ '^lease_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+  CONSTRAINT arop_registry_instances_lease_check CHECK(lease_id COLLATE "C" ~ '^lease_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
   CONSTRAINT arop_registry_instances_heartbeat_check CHECK(heartbeat_sequence BETWEEN 0 AND 9007199254740991),
-  CONSTRAINT arop_registry_instances_endpoint_check CHECK(length(endpoint_base_url) BETWEEN 9 AND 2048 AND endpoint_base_url ~ '^https://[^?#]+$' AND length(endpoint_health_path) BETWEEN 1 AND 512 AND endpoint_health_path ~ '^/[^?#]*$' AND endpoint_health_path !~ '\.\.'),
+  CONSTRAINT arop_registry_instances_endpoint_check CHECK(length(endpoint_base_url) BETWEEN 9 AND 2048 AND endpoint_base_url COLLATE "C" ~ '^https://[^?#]+$' AND length(endpoint_health_path) BETWEEN 1 AND 512 AND endpoint_health_path COLLATE "C" ~ '^/[^?#]*$' AND endpoint_health_path COLLATE "C" !~ '\.\.'),
   CONSTRAINT arop_registry_instances_bindings_check CHECK(bindings_json::jsonb IS NOT NULL AND jsonb_typeof(bindings_json::jsonb)='array' AND jsonb_array_length(bindings_json::jsonb) BETWEEN 1 AND 256),
   CONSTRAINT arop_registry_instances_runtime_check CHECK(jsonb_typeof(runtime_json::jsonb)='object'),
   CONSTRAINT arop_registry_instances_operator_check CHECK(jsonb_typeof(operator_json::jsonb)='object'),
   CONSTRAINT arop_registry_instances_status_check CHECK(status IN ('registered','expired','deregistered')),
-  CONSTRAINT arop_registry_instances_time_check CHECK(lease_expires_at ~ '^.{19,34}Z$' AND created_at ~ '^.{19,34}Z$' AND updated_at ~ '^.{19,34}Z$' AND (drain_deadline_at IS NULL OR drain_deadline_at ~ '^.{19,34}Z$'))
+  CONSTRAINT arop_registry_instances_time_check CHECK(lease_expires_at COLLATE "C" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$' AND created_at COLLATE "C" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$' AND updated_at COLLATE "C" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$' AND (drain_deadline_at IS NULL OR drain_deadline_at COLLATE "C" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$'))
 )
 -- arop:statement
 CREATE INDEX arop_registry_instances_discovery_idx ON arop_registry_instances(tenant_id, status, lease_expires_at, draining, instance_id)
@@ -62,11 +62,11 @@ CREATE TABLE arop_registry_sessions (
   created_at TEXT NOT NULL,
   CONSTRAINT arop_registry_sessions_pkey PRIMARY KEY(tenant_id, instance_id, session_id),
   CONSTRAINT arop_registry_sessions_instance_fkey FOREIGN KEY(tenant_id, instance_id) REFERENCES arop_registry_instances(tenant_id, instance_id) ON UPDATE RESTRICT ON DELETE RESTRICT,
-  CONSTRAINT arop_registry_sessions_tenant_check CHECK(tenant_id ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(tenant_id) <= 128),
-  CONSTRAINT arop_registry_sessions_instance_check CHECK(instance_id ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(instance_id) <= 128),
-  CONSTRAINT arop_registry_sessions_session_check CHECK(session_id ~ '^ses_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+  CONSTRAINT arop_registry_sessions_tenant_check CHECK(tenant_id COLLATE "C" ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(tenant_id) <= 128),
+  CONSTRAINT arop_registry_sessions_instance_check CHECK(instance_id COLLATE "C" ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(instance_id) <= 128),
+  CONSTRAINT arop_registry_sessions_session_check CHECK(session_id COLLATE "C" ~ '^ses_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
   CONSTRAINT arop_registry_sessions_generation_check CHECK(generation BETWEEN 1 AND 9007199254740991),
-  CONSTRAINT arop_registry_sessions_time_check CHECK(created_at ~ '^.{19,34}Z$')
+  CONSTRAINT arop_registry_sessions_time_check CHECK(created_at COLLATE "C" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$')
 )
 -- arop:statement
 CREATE TABLE arop_registry_events (
@@ -81,16 +81,22 @@ CREATE TABLE arop_registry_events (
   CONSTRAINT arop_registry_events_pkey PRIMARY KEY(revision),
   CONSTRAINT arop_registry_events_event_unique UNIQUE(event_id),
   CONSTRAINT arop_registry_events_revision_check CHECK(revision BETWEEN 1 AND 9007199254740991),
-  CONSTRAINT arop_registry_events_event_check CHECK(event_id ~ '^evt_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
-  CONSTRAINT arop_registry_events_tenant_check CHECK(tenant_id ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(tenant_id) <= 128),
+  CONSTRAINT arop_registry_events_event_check CHECK(event_id COLLATE "C" ~ '^evt_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+  CONSTRAINT arop_registry_events_tenant_check CHECK(tenant_id COLLATE "C" ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(tenant_id) <= 128),
   CONSTRAINT arop_registry_events_type_check CHECK(event_type IN ('registered','keepalive','updated','draining','deregistered','expired')),
-  CONSTRAINT arop_registry_events_instance_check CHECK(instance_id ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(instance_id) <= 128),
-  CONSTRAINT arop_registry_events_session_check CHECK(session_id ~ '^ses_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+  CONSTRAINT arop_registry_events_instance_check CHECK(instance_id COLLATE "C" ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(instance_id) <= 128),
+  CONSTRAINT arop_registry_events_session_check CHECK(session_id COLLATE "C" ~ '^ses_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
   CONSTRAINT arop_registry_events_generation_check CHECK(generation BETWEEN 1 AND 9007199254740991),
-  CONSTRAINT arop_registry_events_time_check CHECK(occurred_at ~ '^.{19,34}Z$')
+  CONSTRAINT arop_registry_events_time_check CHECK(occurred_at COLLATE "C" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$')
 )
 -- arop:statement
 CREATE INDEX arop_registry_events_tenant_revision_idx ON arop_registry_events(tenant_id, revision)
+-- arop:statement
+CREATE FUNCTION arop_registry_events_immutable() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'arop_registry_events is append-only'; END; $$
+-- arop:statement
+CREATE TRIGGER arop_registry_events_no_update BEFORE UPDATE ON arop_registry_events FOR EACH ROW EXECUTE FUNCTION arop_registry_events_immutable()
+-- arop:statement
+CREATE TRIGGER arop_registry_events_no_delete BEFORE DELETE ON arop_registry_events FOR EACH ROW EXECUTE FUNCTION arop_registry_events_immutable()
 -- arop:statement
 CREATE TABLE arop_registry_idempotency (
   tenant_id TEXT NOT NULL,
@@ -101,11 +107,11 @@ CREATE TABLE arop_registry_idempotency (
   result_revision BIGINT NOT NULL,
   created_at TEXT NOT NULL,
   CONSTRAINT arop_registry_idempotency_pkey PRIMARY KEY(tenant_id, operation, key_digest),
-  CONSTRAINT arop_registry_idempotency_tenant_check CHECK(tenant_id ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(tenant_id) <= 128),
+  CONSTRAINT arop_registry_idempotency_tenant_check CHECK(tenant_id COLLATE "C" ~ '^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$' AND length(tenant_id) <= 128),
   CONSTRAINT arop_registry_idempotency_operation_check CHECK(operation = 'register'),
-  CONSTRAINT arop_registry_idempotency_key_check CHECK(key_digest ~ '^[0-9a-f]{64}$'),
-  CONSTRAINT arop_registry_idempotency_request_check CHECK(request_digest ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT arop_registry_idempotency_key_check CHECK(key_digest COLLATE "C" ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT arop_registry_idempotency_request_check CHECK(request_digest COLLATE "C" ~ '^[0-9a-f]{64}$'),
   CONSTRAINT arop_registry_idempotency_result_check CHECK(jsonb_typeof(result_json::jsonb)='object'),
   CONSTRAINT arop_registry_idempotency_revision_check CHECK(result_revision BETWEEN 1 AND 9007199254740991),
-  CONSTRAINT arop_registry_idempotency_time_check CHECK(created_at ~ '^.{19,34}Z$')
+  CONSTRAINT arop_registry_idempotency_time_check CHECK(created_at COLLATE "C" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{9}Z$')
 )

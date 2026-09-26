@@ -50,7 +50,7 @@ CREATE TABLE arop_registry_instances (
   CONSTRAINT arop_registry_instances_operator_check CHECK(json_valid(operator_json) AND json_type(operator_json) = 'object'),
   CONSTRAINT arop_registry_instances_draining_check CHECK(draining IN (0,1)),
   CONSTRAINT arop_registry_instances_status_check CHECK(status IN ('registered','expired','deregistered')),
-  CONSTRAINT arop_registry_instances_time_check CHECK(length(lease_expires_at) BETWEEN 20 AND 35 AND substr(lease_expires_at,-1)='Z' AND length(created_at) BETWEEN 20 AND 35 AND substr(created_at,-1)='Z' AND length(updated_at) BETWEEN 20 AND 35 AND substr(updated_at,-1)='Z' AND (drain_deadline_at IS NULL OR length(drain_deadline_at) BETWEEN 20 AND 35 AND substr(drain_deadline_at,-1)='Z'))
+  CONSTRAINT arop_registry_instances_time_check CHECK(length(lease_expires_at)=30 AND substr(lease_expires_at,5,1)='-' AND substr(lease_expires_at,8,1)='-' AND substr(lease_expires_at,11,1)='T' AND substr(lease_expires_at,14,1)=':' AND substr(lease_expires_at,17,1)=':' AND substr(lease_expires_at,20,1)='.' AND substr(lease_expires_at,30,1)='Z' AND lease_expires_at NOT GLOB '*[^0-9TZ:.-]*' AND length(created_at)=30 AND substr(created_at,5,1)='-' AND substr(created_at,8,1)='-' AND substr(created_at,11,1)='T' AND substr(created_at,14,1)=':' AND substr(created_at,17,1)=':' AND substr(created_at,20,1)='.' AND substr(created_at,30,1)='Z' AND created_at NOT GLOB '*[^0-9TZ:.-]*' AND length(updated_at)=30 AND substr(updated_at,5,1)='-' AND substr(updated_at,8,1)='-' AND substr(updated_at,11,1)='T' AND substr(updated_at,14,1)=':' AND substr(updated_at,17,1)=':' AND substr(updated_at,20,1)='.' AND substr(updated_at,30,1)='Z' AND updated_at NOT GLOB '*[^0-9TZ:.-]*' AND (drain_deadline_at IS NULL OR length(drain_deadline_at)=30 AND substr(drain_deadline_at,5,1)='-' AND substr(drain_deadline_at,8,1)='-' AND substr(drain_deadline_at,11,1)='T' AND substr(drain_deadline_at,14,1)=':' AND substr(drain_deadline_at,17,1)=':' AND substr(drain_deadline_at,20,1)='.' AND substr(drain_deadline_at,30,1)='Z' AND drain_deadline_at NOT GLOB '*[^0-9TZ:.-]*'))
 )
 -- arop:statement
 CREATE INDEX arop_registry_instances_discovery_idx ON arop_registry_instances(tenant_id, status, lease_expires_at, draining, instance_id)
@@ -67,7 +67,7 @@ CREATE TABLE arop_registry_sessions (
   CONSTRAINT arop_registry_sessions_instance_check CHECK(length(instance_id) BETWEEN 1 AND 128 AND instance_id NOT GLOB '*[^a-z0-9._-]*' AND substr(instance_id,1,1) GLOB '[a-z]' AND substr(instance_id,-1,1) GLOB '[a-z0-9]' AND instance_id NOT GLOB '*[._-][._-]*'),
   CONSTRAINT arop_registry_sessions_session_check CHECK(length(session_id) = 40 AND substr(session_id,1,4) = 'ses_' AND substr(session_id,5,8) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,13,1)='-' AND substr(session_id,14,4) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,18,2)='-7' AND substr(session_id,20,3) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,23,1)='-' AND substr(session_id,24,1) IN ('8','9','a','b') AND substr(session_id,25,3) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,28,1)='-' AND substr(session_id,29,12) NOT GLOB '*[^0-9a-f]*'),
   CONSTRAINT arop_registry_sessions_generation_check CHECK(generation BETWEEN 1 AND 9007199254740991),
-  CONSTRAINT arop_registry_sessions_time_check CHECK(length(created_at) BETWEEN 20 AND 35 AND substr(created_at,-1)='Z')
+  CONSTRAINT arop_registry_sessions_time_check CHECK(length(created_at)=30 AND substr(created_at,5,1)='-' AND substr(created_at,8,1)='-' AND substr(created_at,11,1)='T' AND substr(created_at,14,1)=':' AND substr(created_at,17,1)=':' AND substr(created_at,20,1)='.' AND substr(created_at,30,1)='Z' AND created_at NOT GLOB '*[^0-9TZ:.-]*')
 )
 -- arop:statement
 CREATE TABLE arop_registry_events (
@@ -88,10 +88,14 @@ CREATE TABLE arop_registry_events (
   CONSTRAINT arop_registry_events_instance_check CHECK(length(instance_id) BETWEEN 1 AND 128 AND instance_id NOT GLOB '*[^a-z0-9._-]*' AND substr(instance_id,1,1) GLOB '[a-z]' AND substr(instance_id,-1,1) GLOB '[a-z0-9]' AND instance_id NOT GLOB '*[._-][._-]*'),
   CONSTRAINT arop_registry_events_session_check CHECK(length(session_id) = 40 AND substr(session_id,1,4) = 'ses_' AND substr(session_id,5,8) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,13,1)='-' AND substr(session_id,14,4) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,18,2)='-7' AND substr(session_id,20,3) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,23,1)='-' AND substr(session_id,24,1) IN ('8','9','a','b') AND substr(session_id,25,3) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,28,1)='-' AND substr(session_id,29,12) NOT GLOB '*[^0-9a-f]*'),
   CONSTRAINT arop_registry_events_generation_check CHECK(generation BETWEEN 1 AND 9007199254740991),
-  CONSTRAINT arop_registry_events_time_check CHECK(length(occurred_at) BETWEEN 20 AND 35 AND substr(occurred_at,-1)='Z')
+  CONSTRAINT arop_registry_events_time_check CHECK(length(occurred_at)=30 AND substr(occurred_at,5,1)='-' AND substr(occurred_at,8,1)='-' AND substr(occurred_at,11,1)='T' AND substr(occurred_at,14,1)=':' AND substr(occurred_at,17,1)=':' AND substr(occurred_at,20,1)='.' AND substr(occurred_at,30,1)='Z' AND occurred_at NOT GLOB '*[^0-9TZ:.-]*')
 )
 -- arop:statement
 CREATE INDEX arop_registry_events_tenant_revision_idx ON arop_registry_events(tenant_id, revision)
+-- arop:statement
+CREATE TRIGGER arop_registry_events_no_update BEFORE UPDATE ON arop_registry_events BEGIN SELECT RAISE(ABORT, 'arop_registry_events is append-only'); END
+-- arop:statement
+CREATE TRIGGER arop_registry_events_no_delete BEFORE DELETE ON arop_registry_events BEGIN SELECT RAISE(ABORT, 'arop_registry_events is append-only'); END
 -- arop:statement
 CREATE TABLE arop_registry_idempotency (
   tenant_id TEXT NOT NULL,
@@ -108,5 +112,5 @@ CREATE TABLE arop_registry_idempotency (
   CONSTRAINT arop_registry_idempotency_request_check CHECK(length(request_digest)=64 AND request_digest NOT GLOB '*[^0-9a-f]*'),
   CONSTRAINT arop_registry_idempotency_result_check CHECK(json_valid(result_json) AND json_type(result_json)='object'),
   CONSTRAINT arop_registry_idempotency_revision_check CHECK(result_revision BETWEEN 1 AND 9007199254740991),
-  CONSTRAINT arop_registry_idempotency_time_check CHECK(length(created_at) BETWEEN 20 AND 35 AND substr(created_at,-1)='Z')
+  CONSTRAINT arop_registry_idempotency_time_check CHECK(length(created_at)=30 AND substr(created_at,5,1)='-' AND substr(created_at,8,1)='-' AND substr(created_at,11,1)='T' AND substr(created_at,14,1)=':' AND substr(created_at,17,1)=':' AND substr(created_at,20,1)='.' AND substr(created_at,30,1)='Z' AND created_at NOT GLOB '*[^0-9TZ:.-]*')
 )

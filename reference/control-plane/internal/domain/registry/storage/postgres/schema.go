@@ -11,7 +11,7 @@ import (
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/storage/migrate"
 )
 
-const registrySchemaDigest = "14b08212df513a352bb4c7938810bad496f66d83ecb2b3537d8bc04f61e07f1c"
+const registrySchemaDigest = "86865032f608541f68bf50c128565b5210def6a9472b47b9bcd9b327b4c7a9bb"
 
 // VerifySchema binds the complete PostgreSQL 16 catalog surface owned by P14:
 // table/column order and types, every constraint definition, and every index.
@@ -33,6 +33,14 @@ func VerifySchema() migrate.Verifier {
   UNION ALL
   SELECT format('index|%s|%s|%s|%s|%s|%s|%s|%s|%s', t.relname,ci.relname,i.indisunique,i.indisprimary,i.indisvalid,i.indisready,(i.indpred IS NOT NULL),(i.indexprs IS NOT NULL),pg_get_indexdef(i.indexrelid))
   FROM pg_index i JOIN registry_tables t ON t.oid=i.indrelid JOIN pg_class ci ON ci.oid=i.indexrelid
+  UNION ALL
+  SELECT format('trigger|%s|%s|%s', t.relname,g.tgname,pg_get_triggerdef(g.oid,false))
+  FROM pg_trigger g JOIN registry_tables t ON t.oid=g.tgrelid
+  WHERE NOT g.tgisinternal
+  UNION ALL
+  SELECT format('function|%s|%s|%s|%s', p.proname,l.lanname,p.provolatile,p.prosrc)
+  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_language l ON l.oid=p.prolang
+  WHERE n.nspname=current_schema() AND p.proname='arop_registry_events_immutable'
 )
 SELECT line FROM catalog_lines ORDER BY line`)
 		if err != nil {

@@ -49,6 +49,12 @@ func TestSQLiteRegistryRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	internaltest.RunRepositoryMatrix(t, unit, repository)
+	if _, err := db.Exec(`UPDATE arop_registry_events SET event_type='updated' WHERE revision=1`); err == nil {
+		t.Fatal("append-only event ledger accepted UPDATE")
+	}
+	if _, err := db.Exec(`DELETE FROM arop_registry_events WHERE revision=1`); err == nil {
+		t.Fatal("append-only event ledger accepted DELETE")
+	}
 	if _, err := db.Exec(`CREATE INDEX arop_registry_events_unexpected_idx ON arop_registry_events(instance_id)`); err != nil {
 		t.Fatal(err)
 	}

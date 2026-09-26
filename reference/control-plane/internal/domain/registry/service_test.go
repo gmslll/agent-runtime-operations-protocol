@@ -40,7 +40,7 @@ func TestKeepaliveNeverTrustsReportedAtForServerTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	reported := now.Add(-24 * time.Hour)
-	repository.keepalive = func(command KeepaliveCommand) (Instance, error) {
+	repository.keepalive = func(command KeepaliveCommand) (KeepaliveResult, error) {
 		if command.Now != now || command.Request.ReportedAt != reported {
 			t.Fatalf("keepalive used caller time: %+v", command)
 		}
@@ -51,13 +51,68 @@ func TestKeepaliveNeverTrustsReportedAtForServerTime(t *testing.T) {
 		instance.Runtime.Capacity.ActiveRuns = command.Request.ActiveRuns
 		instance.Runtime.Capacity.AvailableSlots = command.Request.AvailableSlots
 		instance.Runtime.Capacity.QueueDepth = command.Request.QueueDepth
-		instance.Runtime.Healthy = command.Request.Healthy
 		instance.Runtime.Ready = command.Request.Ready
-		return instance, nil
+		return KeepaliveResult{Instance: instance}, nil
 	}
-	_, err = service.Keepalive(context.Background(), KeepaliveRequest{TenantID: "tenant-a", InstanceID: "runtime-a", SessionID: testSession, LeaseID: testLease, Generation: 1, HeartbeatSequence: 2, ReportedAt: reported, Healthy: true, Ready: true, AvailableSlots: 1})
+	_, err = service.Keepalive(context.Background(), KeepaliveRequest{TenantID: "tenant-a", InstanceID: "runtime-a", SessionID: testSession, LeaseID: testLease, Generation: 1, HeartbeatSequence: 2, ReportedAt: reported, Ready: true, AvailableSlots: 1})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestServiceAcceptsOnlyLiveExactKeepaliveReplay(t *testing.T) {
+	now := time.Date(2026, 9, 26, 8, 0, 0, 0, time.UTC)
+	repository := &fakeRepository{}
+	service, err := New(Dependencies{Clock: fixedClock{now}, IDs: fixedIDs{}, Repository: repository})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := KeepaliveRequest{TenantID: "tenant-a", InstanceID: "runtime-a", SessionID: testSession, LeaseID: testLease, Generation: 1, HeartbeatSequence: 2, ReportedAt: now.Add(-time.Hour), Ready: true, AvailableSlots: 1}
+	repository.keepalive = func(command KeepaliveCommand) (KeepaliveResult, error) {
+		instance := validInstance(now)
+		instance.HeartbeatSequence = command.Request.HeartbeatSequence
+		instance.Runtime.Ready = command.Request.Ready
+		instance.Runtime.Capacity.ActiveRuns = command.Request.ActiveRuns
+		instance.Runtime.Capacity.AvailableSlots = command.Request.AvailableSlots
+		instance.Runtime.Capacity.QueueDepth = command.Request.QueueDepth
+		return KeepaliveResult{Instance: instance, Replay: true}, nil
+	}
+	if _, err := service.Keepalive(context.Background(), request); err != nil {
+		t.Fatalf("live keepalive replay = %v", err)
+	}
+	repository.keepalive = func(command KeepaliveCommand) (KeepaliveResult, error) {
+		instance := validInstance(now)
+		instance.HeartbeatSequence = command.Request.HeartbeatSequence
+		instance.Runtime.Ready = command.Request.Ready
+		instance.Runtime.Capacity.ActiveRuns = command.Request.ActiveRuns
+		instance.Runtime.Capacity.AvailableSlots = command.Request.AvailableSlots
+		instance.Runtime.Capacity.QueueDepth = command.Request.QueueDepth
+		instance.LeaseExpiresAt = now
+		return KeepaliveResult{Instance: instance, Replay: true}, nil
+	}
+	if _, err := service.Keepalive(context.Background(), request); !HasReason(err, ReasonDependencyUnavailable) {
+		t.Fatalf("expired keepalive replay = %v", err)
+	}
+}
+
+func TestServiceAcceptsExactDeregisterReplay(t *testing.T) {
+	now := time.Date(2026, 9, 26, 8, 0, 0, 0, time.UTC)
+	repository := &fakeRepository{}
+	service, err := New(Dependencies{Clock: fixedClock{now}, IDs: fixedIDs{}, Repository: repository})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fence := Fence{TenantID: "tenant-a", InstanceID: "runtime-a", SessionID: testSession, LeaseID: testLease, Generation: 1}
+	repository.deregister = func(command DeregisterCommand) (DeregisterResult, error) {
+		instance := validInstance(now.Add(-time.Minute))
+		instance.Status = StatusDeregistered
+		instance.Draining = false
+		instance.DrainDeadlineAt = nil
+		instance.LeaseExpiresAt = now.Add(-time.Second)
+		return DeregisterResult{Instance: instance, Replay: true}, nil
+	}
+	if _, err := service.Deregister(context.Background(), fence); err != nil {
+		t.Fatalf("deregister replay = %v", err)
 	}
 }
 
@@ -78,6 +133,7 @@ func TestDiscoveryEligibilityIsExactConjunction(t *testing.T) {
 		"protocol": func(value *Instance) { value.Runtime.ProtocolVersions = []string{"2.0"} },
 		"binding":  func(value *Instance) { value.Bindings[0].AgentVersion = "2.0.0" },
 		"status":   func(value *Instance) { value.Status = StatusExpired },
+		"tenant":   func(value *Instance) { value.TenantID = "tenant-b" },
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -89,6 +145,19 @@ func TestDiscoveryEligibilityIsExactConjunction(t *testing.T) {
 				t.Fatal("ineligible instance was discoverable")
 			}
 		})
+	}
+}
+
+func TestDrainClassifiesClockFailureAsDependencyUnavailable(t *testing.T) {
+	repository := &fakeRepository{}
+	clock := &sequenceClock{values: []time.Time{time.Date(2026, 9, 26, 8, 0, 0, 0, time.UTC), {}}}
+	service, err := New(Dependencies{Clock: clock, IDs: fixedIDs{}, Repository: repository})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := DrainRequest{Fence: Fence{TenantID: "tenant-a", InstanceID: "runtime-a", SessionID: testSession, LeaseID: testLease, Generation: 1}, DeadlineAt: time.Date(2026, 9, 26, 8, 1, 0, 0, time.UTC)}
+	if _, err := service.Drain(context.Background(), request); !HasReason(err, ReasonDependencyUnavailable) {
+		t.Fatalf("Drain clock failure = %v", err)
 	}
 }
 
@@ -128,20 +197,35 @@ type fixedClock struct{ now time.Time }
 
 func (clock fixedClock) Now() time.Time { return clock.now }
 
+type sequenceClock struct {
+	values []time.Time
+	index  int
+}
+
+func (clock *sequenceClock) Now() time.Time {
+	if clock.index >= len(clock.values) {
+		return time.Time{}
+	}
+	value := clock.values[clock.index]
+	clock.index++
+	return value
+}
+
 type fixedIDs struct{}
 
 func (fixedIDs) NewLeaseID(context.Context) (string, error) { return testLease, nil }
 func (fixedIDs) NewEventID(context.Context) (string, error) { return testEvent, nil }
 
 type fakeRepository struct {
-	register  func(RegisterCommand) (Registration, error)
-	keepalive func(KeepaliveCommand) (Instance, error)
+	register   func(RegisterCommand) (Registration, error)
+	keepalive  func(KeepaliveCommand) (KeepaliveResult, error)
+	deregister func(DeregisterCommand) (DeregisterResult, error)
 }
 
 func (repository *fakeRepository) Register(_ context.Context, command RegisterCommand) (Registration, error) {
 	return repository.register(command)
 }
-func (repository *fakeRepository) Keepalive(_ context.Context, command KeepaliveCommand) (Instance, error) {
+func (repository *fakeRepository) Keepalive(_ context.Context, command KeepaliveCommand) (KeepaliveResult, error) {
 	return repository.keepalive(command)
 }
 func (*fakeRepository) CompareAndSwap(context.Context, CASCommand) (Instance, error) {
@@ -150,8 +234,11 @@ func (*fakeRepository) CompareAndSwap(context.Context, CASCommand) (Instance, er
 func (*fakeRepository) Drain(context.Context, DrainCommand) (Instance, error) {
 	return Instance{}, NewError(ReasonDependencyUnavailable)
 }
-func (*fakeRepository) Deregister(context.Context, DeregisterCommand) (Instance, error) {
-	return Instance{}, NewError(ReasonDependencyUnavailable)
+func (repository *fakeRepository) Deregister(_ context.Context, command DeregisterCommand) (DeregisterResult, error) {
+	if repository.deregister == nil {
+		return DeregisterResult{}, NewError(ReasonDependencyUnavailable)
+	}
+	return repository.deregister(command)
 }
 func (*fakeRepository) Expire(context.Context, ExpireCommand) ([]Instance, error) {
 	return nil, NewError(ReasonDependencyUnavailable)

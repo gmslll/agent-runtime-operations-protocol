@@ -70,12 +70,15 @@ func (service *Service) Keepalive(ctx context.Context, request KeepaliveRequest)
 	if err != nil {
 		return Instance{}, err
 	}
-	instance, err := service.dependencies.Repository.Keepalive(ctx, KeepaliveCommand{Request: request, EventID: eventID, Now: now, TTL: service.dependencies.LeaseTTL})
-	instance, err = service.checked(instance, err)
+	result, err := service.dependencies.Repository.Keepalive(ctx, KeepaliveCommand{Request: request, EventID: eventID, Now: now, TTL: service.dependencies.LeaseTTL})
+	instance, err := service.checked(result.Instance, err)
 	if err != nil {
 		return Instance{}, err
 	}
-	if !matchesFence(instance, request.Fence()) || instance.HeartbeatSequence != request.HeartbeatSequence || instance.Runtime.Healthy != request.Healthy || instance.Runtime.Ready != request.Ready || instance.Runtime.Capacity.ActiveRuns != request.ActiveRuns || instance.Runtime.Capacity.AvailableSlots != request.AvailableSlots || instance.Runtime.Capacity.QueueDepth != request.QueueDepth || !instance.LeaseExpiresAt.Equal(now.Add(service.dependencies.LeaseTTL)) || instance.Status != StatusRegistered {
+	wantExpiry := now.Add(service.dependencies.LeaseTTL)
+	validExpiry := (!result.Replay && instance.LeaseExpiresAt.Equal(wantExpiry)) ||
+		(result.Replay && instance.LeaseExpiresAt.After(now) && !instance.LeaseExpiresAt.After(wantExpiry))
+	if !matchesFence(instance, request.Fence()) || instance.HeartbeatSequence != request.HeartbeatSequence || instance.Runtime.Ready != request.Ready || instance.Runtime.Capacity.ActiveRuns != request.ActiveRuns || instance.Runtime.Capacity.AvailableSlots != request.AvailableSlots || instance.Runtime.Capacity.QueueDepth != request.QueueDepth || !validExpiry || instance.Status != StatusRegistered {
 		return Instance{}, NewError(ReasonDependencyUnavailable)
 	}
 	return instance, nil
@@ -110,7 +113,10 @@ func (service *Service) Drain(ctx context.Context, request DrainRequest) (Instan
 		return Instance{}, err
 	}
 	now, err := service.now()
-	if err != nil || !request.DeadlineAt.After(now) {
+	if err != nil {
+		return Instance{}, err
+	}
+	if !request.DeadlineAt.After(now) {
 		return Instance{}, NewError(ReasonInvalidRequest)
 	}
 	eventID, err := service.eventID(ctx)
@@ -140,12 +146,14 @@ func (service *Service) Deregister(ctx context.Context, fence Fence) (Instance, 
 	if err != nil {
 		return Instance{}, err
 	}
-	instance, err := service.dependencies.Repository.Deregister(ctx, DeregisterCommand{Fence: fence, EventID: eventID, Now: now})
-	instance, err = service.checked(instance, err)
+	result, err := service.dependencies.Repository.Deregister(ctx, DeregisterCommand{Fence: fence, EventID: eventID, Now: now})
+	instance, err := service.checked(result.Instance, err)
 	if err != nil {
 		return Instance{}, err
 	}
-	if !matchesFence(instance, fence) || instance.Status != StatusDeregistered || instance.Draining || instance.DrainDeadlineAt != nil || !instance.LeaseExpiresAt.Equal(now) {
+	validExpiry := (!result.Replay && instance.LeaseExpiresAt.Equal(now)) ||
+		(result.Replay && !instance.LeaseExpiresAt.After(now))
+	if !matchesFence(instance, fence) || instance.Status != StatusDeregistered || instance.Draining || instance.DrainDeadlineAt != nil || !validExpiry {
 		return Instance{}, NewError(ReasonDependencyUnavailable)
 	}
 	return instance, nil
@@ -190,7 +198,7 @@ func (service *Service) Snapshot(ctx context.Context, query DiscoveryQuery) (Sna
 	if err != nil {
 		return Snapshot{}, normalize(err)
 	}
-	if snapshot.Revision > MaxSafeInteger {
+	if snapshot.Revision > MaxSafeInteger || snapshot.CompactionWatermark > snapshot.Revision {
 		return Snapshot{}, NewError(ReasonDependencyUnavailable)
 	}
 	for _, instance := range snapshot.Instances {
@@ -235,7 +243,7 @@ func normalize(err error) error {
 	if err == nil {
 		return nil
 	}
-	for _, reason := range []ErrorReason{ReasonInvalidRequest, ReasonNotFound, ReasonSessionReused, ReasonGenerationFenced, ReasonLeaseExpired, ReasonHeartbeatStale, ReasonResourceConflict, ReasonIdempotencyConflict, ReasonRevisionOverflow, ReasonGenerationOverflow, ReasonDependencyUnavailable} {
+	for _, reason := range []ErrorReason{ReasonInvalidRequest, ReasonNotFound, ReasonSessionReused, ReasonGenerationFenced, ReasonLeaseExpired, ReasonHeartbeatStale, ReasonResourceConflict, ReasonIdempotencyConflict, ReasonRevisionOverflow, ReasonResourceOverflow, ReasonGenerationOverflow, ReasonDependencyUnavailable} {
 		if HasReason(err, reason) {
 			return Error{Reason: reason}
 		}

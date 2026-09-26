@@ -47,16 +47,27 @@ type ExpireCommand struct {
 }
 
 type Snapshot struct {
-	Revision  uint64
-	Instances []Instance
+	Revision            uint64
+	CompactionWatermark uint64
+	Instances           []Instance
+}
+
+type KeepaliveResult struct {
+	Instance Instance
+	Replay   bool
+}
+
+type DeregisterResult struct {
+	Instance Instance
+	Replay   bool
 }
 
 type Repository interface {
 	Register(context.Context, RegisterCommand) (Registration, error)
-	Keepalive(context.Context, KeepaliveCommand) (Instance, error)
+	Keepalive(context.Context, KeepaliveCommand) (KeepaliveResult, error)
 	CompareAndSwap(context.Context, CASCommand) (Instance, error)
 	Drain(context.Context, DrainCommand) (Instance, error)
-	Deregister(context.Context, DeregisterCommand) (Instance, error)
+	Deregister(context.Context, DeregisterCommand) (DeregisterResult, error)
 	Expire(context.Context, ExpireCommand) ([]Instance, error)
 	Snapshot(context.Context, DiscoveryQuery, time.Time) (Snapshot, error)
 	Events(context.Context, string, uint64, uint64) ([]Event, error)

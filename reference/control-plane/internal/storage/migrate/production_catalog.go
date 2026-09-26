@@ -80,12 +80,12 @@ func CurrentProductionCatalog() CatalogClosure {
 			{Dialect: DialectPostgres, Path: "postgres/0005_identity.sql", OwnerPhase: "P10", SHA256: "5d0211ac031d98dd3760701bc19dddd2d96d67cfc74dc5140db6b18ddda75dde"},
 			{Dialect: DialectPostgres, Path: "postgres/0010_publication.sql", OwnerPhase: "P12", SHA256: "4d09c8ea3744a805c111d8c6942a6ee128aa374cc249cb818f0327ea13927a13"},
 			{Dialect: DialectPostgres, Path: "postgres/0020_asset.sql", OwnerPhase: "P13", SHA256: "e6e57df2db19bb1fc95885de9ac39abb5389a239fd7ad139394832491a0411ed"},
-			{Dialect: DialectPostgres, Path: "postgres/0030_registry.sql", OwnerPhase: "P14", SHA256: "e41884b60422fc57f09eddf8f612fe017d32cc47f1866445c6c6fe4797670b48"},
+			{Dialect: DialectPostgres, Path: "postgres/0030_registry.sql", OwnerPhase: "P14", SHA256: "cb85370a58ef5cfabbf5205430c667cbda5d1a3cbfb2a7a6da4c2a6d7245ffe0"},
 			{Dialect: DialectSQLite, Path: "sqlite/0001_base.sql", OwnerPhase: "P09", SHA256: "e7873b3f504595272913eb66b4656cbcb157ce901b1fd823bf9967ea64c5b348"},
 			{Dialect: DialectSQLite, Path: "sqlite/0005_identity.sql", OwnerPhase: "P10", SHA256: "192ce590834794c68be040237a7611eed2631edf166d6c9fbd9930e63a1cf6ce"},
 			{Dialect: DialectSQLite, Path: "sqlite/0010_publication.sql", OwnerPhase: "P12", SHA256: "524364c706ca6e336f5de0dd42058772699b7255f53cf099e96bef10e4973df8"},
 			{Dialect: DialectSQLite, Path: "sqlite/0020_asset.sql", OwnerPhase: "P13", SHA256: "069fce12fa53bebd186c01be6adb6466348dfd0a387e4bf9c2ad253c78c828b2"},
-			{Dialect: DialectSQLite, Path: "sqlite/0030_registry.sql", OwnerPhase: "P14", SHA256: "8c49cf588a046ff2b51539f5dd20d74f5264ac266a83ad382eaa2089a87c92cb"},
+			{Dialect: DialectSQLite, Path: "sqlite/0030_registry.sql", OwnerPhase: "P14", SHA256: "50d2d3c448062ab537e98b9399205bf02b39f9c5319995fa77df16b7a0d6f51d"},
 		},
 	}
 }

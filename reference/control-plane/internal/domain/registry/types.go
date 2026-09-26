@@ -299,7 +299,6 @@ type KeepaliveRequest struct {
 	Generation        uint64
 	HeartbeatSequence uint64
 	ReportedAt        time.Time
-	Healthy           bool
 	Ready             bool
 	ActiveRuns        uint64
 	AvailableSlots    uint64
@@ -377,7 +376,7 @@ func (query DiscoveryQuery) Validate() error {
 }
 
 func (instance Instance) DiscoverableAt(now time.Time, query DiscoveryQuery) bool {
-	if query.Validate() != nil || !utc(now) || instance.Status != StatusRegistered || !now.Before(instance.LeaseExpiresAt) || !instance.Runtime.Healthy || !instance.Runtime.Ready || !instance.Operator.Enabled || instance.Draining || instance.Runtime.Capacity.AvailableSlots == 0 || !slices.Contains(instance.Runtime.ProtocolVersions, query.ProtocolVersion) {
+	if query.Validate() != nil || !utc(now) || instance.TenantID != query.TenantID || instance.Status != StatusRegistered || !now.Before(instance.LeaseExpiresAt) || !instance.Runtime.Healthy || !instance.Runtime.Ready || !instance.Operator.Enabled || instance.Draining || instance.Runtime.Capacity.AvailableSlots == 0 || !slices.Contains(instance.Runtime.ProtocolVersions, query.ProtocolVersion) {
 		return false
 	}
 	for _, binding := range instance.Bindings {

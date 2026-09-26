@@ -79,13 +79,14 @@ func (repository *Repository) Register(ctx context.Context, command registry.Reg
 		}
 		generation = current.Generation + 1
 		if current.ResourceVersion >= registry.MaxSafeInteger {
-			return registry.Registration{}, registry.NewError(registry.ReasonRevisionOverflow)
+			return registry.Registration{}, registry.NewError(registry.ReasonResourceOverflow)
 		}
 		resourceVersion = current.ResourceVersion + 1
 		operator, createdAt = current.Operator, current.CreatedAt
-		if current.Status == registry.StatusRegistered {
-			draining, deadline = current.Draining, current.DrainDeadlineAt
-		}
+		// Drain is an operator latch, not a lease property. Expiry and a new
+		// runtime session must not make an instance routable again. Deregister
+		// explicitly clears both fields before a later registration reaches here.
+		draining, deadline = current.Draining, current.DrainDeadlineAt
 	}
 	used, err := repository.sessionUsed(ctx, tx, command.Request.TenantID, command.Request.InstanceID, command.Request.SessionID)
 	if err != nil {
@@ -128,33 +129,41 @@ func (repository *Repository) Register(ctx context.Context, command registry.Reg
 	return result, nil
 }
 
-func (repository *Repository) Keepalive(ctx context.Context, command registry.KeepaliveCommand) (registry.Instance, error) {
+func (repository *Repository) Keepalive(ctx context.Context, command registry.KeepaliveCommand) (registry.KeepaliveResult, error) {
 	if err := command.Request.Validate(); err != nil || !utc(command.Now) || command.TTL <= 0 {
-		return registry.Instance{}, registry.NewError(registry.ReasonInvalidRequest)
+		return registry.KeepaliveResult{}, registry.NewError(registry.ReasonInvalidRequest)
 	}
 	tx, err := repository.writeTx(ctx)
 	if err != nil {
-		return registry.Instance{}, err
+		return registry.KeepaliveResult{}, err
 	}
 	if err := repository.lockKeys(ctx, tx, "registry/instance/"+command.Request.TenantID+"/"+command.Request.InstanceID); err != nil {
-		return registry.Instance{}, err
+		return registry.KeepaliveResult{}, err
 	}
 	instance, err := repository.loadFenced(ctx, tx, registry.Fence{TenantID: command.Request.TenantID, InstanceID: command.Request.InstanceID, SessionID: command.Request.SessionID, LeaseID: command.Request.LeaseID, Generation: command.Request.Generation}, command.Now)
 	if err != nil {
-		return registry.Instance{}, err
+		return registry.KeepaliveResult{}, err
 	}
-	if command.Request.HeartbeatSequence <= instance.HeartbeatSequence {
-		return registry.Instance{}, registry.NewError(registry.ReasonHeartbeatStale)
+	if command.Request.HeartbeatSequence < instance.HeartbeatSequence {
+		return registry.KeepaliveResult{}, registry.NewError(registry.ReasonHeartbeatStale)
+	}
+	if command.Request.HeartbeatSequence == instance.HeartbeatSequence {
+		capacity := instance.Runtime.Capacity
+		if instance.Runtime.Ready != command.Request.Ready || capacity.ActiveRuns != command.Request.ActiveRuns || capacity.AvailableSlots != command.Request.AvailableSlots || capacity.QueueDepth != command.Request.QueueDepth {
+			return registry.KeepaliveResult{}, registry.NewError(registry.ReasonHeartbeatStale)
+		}
+		return registry.KeepaliveResult{Instance: instance, Replay: true}, nil
 	}
 	capacity := instance.Runtime.Capacity
 	capacity.ActiveRuns, capacity.AvailableSlots, capacity.QueueDepth = command.Request.ActiveRuns, command.Request.AvailableSlots, command.Request.QueueDepth
 	if err := capacity.Validate(); err != nil {
-		return registry.Instance{}, err
+		return registry.KeepaliveResult{}, err
 	}
-	instance.Runtime.Healthy, instance.Runtime.Ready, instance.Runtime.Capacity = command.Request.Healthy, command.Request.Ready, capacity
+	instance.Runtime.Ready, instance.Runtime.Capacity = command.Request.Ready, capacity
 	instance.HeartbeatSequence = command.Request.HeartbeatSequence
 	instance.LeaseExpiresAt = command.Now.Add(command.TTL)
-	return repository.commitMutation(ctx, tx, instance, command.EventID, registry.EventKeepalive, command.Now)
+	updated, err := repository.commitMutation(ctx, tx, instance, command.EventID, registry.EventKeepalive, command.Now)
+	return registry.KeepaliveResult{Instance: updated}, err
 }
 
 func (repository *Repository) CompareAndSwap(ctx context.Context, command registry.CASCommand) (registry.Instance, error) {
@@ -203,23 +212,36 @@ func (repository *Repository) Drain(ctx context.Context, command registry.DrainC
 	return repository.commitMutation(ctx, tx, instance, command.EventID, registry.EventDraining, command.Now)
 }
 
-func (repository *Repository) Deregister(ctx context.Context, command registry.DeregisterCommand) (registry.Instance, error) {
+func (repository *Repository) Deregister(ctx context.Context, command registry.DeregisterCommand) (registry.DeregisterResult, error) {
 	if err := command.Fence.Validate(); err != nil || !utc(command.Now) {
-		return registry.Instance{}, registry.NewError(registry.ReasonInvalidRequest)
+		return registry.DeregisterResult{}, registry.NewError(registry.ReasonInvalidRequest)
 	}
 	tx, err := repository.writeTx(ctx)
 	if err != nil {
-		return registry.Instance{}, err
+		return registry.DeregisterResult{}, err
 	}
 	if err := repository.lockKeys(ctx, tx, "registry/instance/"+command.Fence.TenantID+"/"+command.Fence.InstanceID); err != nil {
-		return registry.Instance{}, err
+		return registry.DeregisterResult{}, err
 	}
-	instance, err := repository.loadFenced(ctx, tx, command.Fence, command.Now)
+	instance, exists, err := repository.loadInstance(ctx, tx, command.Fence.TenantID, command.Fence.InstanceID, true)
 	if err != nil {
-		return registry.Instance{}, err
+		return registry.DeregisterResult{}, err
+	}
+	if !exists {
+		return registry.DeregisterResult{}, registry.NewError(registry.ReasonNotFound)
+	}
+	if instance.Generation != command.Fence.Generation || instance.SessionID != command.Fence.SessionID || instance.LeaseID != command.Fence.LeaseID {
+		return registry.DeregisterResult{}, registry.NewError(registry.ReasonGenerationFenced)
+	}
+	if instance.Status == registry.StatusDeregistered {
+		return registry.DeregisterResult{Instance: instance, Replay: true}, nil
+	}
+	if instance.Status != registry.StatusRegistered || !command.Now.Before(instance.LeaseExpiresAt) {
+		return registry.DeregisterResult{}, registry.NewError(registry.ReasonLeaseExpired)
 	}
 	instance.Status, instance.Draining, instance.DrainDeadlineAt, instance.LeaseExpiresAt = registry.StatusDeregistered, false, nil, command.Now
-	return repository.commitMutation(ctx, tx, instance, command.EventID, registry.EventDeregistered, command.Now)
+	updated, err := repository.commitMutation(ctx, tx, instance, command.EventID, registry.EventDeregistered, command.Now)
+	return registry.DeregisterResult{Instance: updated}, err
 }
 
 func (repository *Repository) Expire(ctx context.Context, command registry.ExpireCommand) ([]registry.Instance, error) {
@@ -269,27 +291,40 @@ func (repository *Repository) Snapshot(ctx context.Context, query registry.Disco
 	if err := query.Validate(); err != nil || !utc(now) {
 		return registry.Snapshot{}, registry.NewError(registry.ReasonInvalidRequest)
 	}
-	var revision uint64
-	if err := repository.queryer(ctx).QueryRowContext(ctx, `SELECT revision FROM arop_registry_meta WHERE singleton=1`).Scan(&revision); err != nil || revision > registry.MaxSafeInteger {
+	queryer, owned, err := repository.snapshotQueryer(ctx)
+	if err != nil {
+		return registry.Snapshot{}, err
+	}
+	if owned != nil {
+		defer owned.Rollback()
+	}
+	var revision, watermark uint64
+	if err := queryer.QueryRowContext(ctx, `SELECT revision,compaction_watermark FROM arop_registry_meta WHERE singleton=1`).Scan(&revision, &watermark); err != nil || revision > registry.MaxSafeInteger || watermark > revision {
 		return registry.Snapshot{}, registry.NewError(registry.ReasonDependencyUnavailable)
 	}
-	rows, err := repository.queryer(ctx).QueryContext(ctx, repository.query(`SELECT `+instanceColumns+` FROM arop_registry_instances WHERE tenant_id=? AND status='registered' AND lease_expires_at>? ORDER BY instance_id`), query.TenantID, formatTime(now))
+	rows, err := queryer.QueryContext(ctx, repository.query(`SELECT `+instanceColumns+` FROM arop_registry_instances WHERE tenant_id=? AND status='registered' AND lease_expires_at>? ORDER BY instance_id`), query.TenantID, formatTime(now))
 	if err != nil {
 		return registry.Snapshot{}, registry.NewError(registry.ReasonDependencyUnavailable)
 	}
-	defer rows.Close()
-	result := registry.Snapshot{Revision: revision, Instances: []registry.Instance{}}
+	result := registry.Snapshot{Revision: revision, CompactionWatermark: watermark, Instances: []registry.Instance{}}
 	for rows.Next() {
 		instance, scanErr := scanInstance(rows)
 		if scanErr != nil {
+			_ = rows.Close()
 			return registry.Snapshot{}, scanErr
 		}
 		if instance.DiscoverableAt(now, query) {
 			result.Instances = append(result.Instances, instance)
 		}
 	}
-	if rows.Err() != nil {
+	if err := errors.Join(rows.Err(), rows.Close()); err != nil {
 		return registry.Snapshot{}, registry.NewError(registry.ReasonDependencyUnavailable)
+	}
+	if owned != nil {
+		if err := owned.Commit(); err != nil {
+			return registry.Snapshot{}, registry.NewError(registry.ReasonDependencyUnavailable)
+		}
+		owned = nil
 	}
 	return result, nil
 }
@@ -404,7 +439,7 @@ func (repository *Repository) loadFenced(ctx context.Context, tx *sql.Tx, fence 
 
 func (repository *Repository) commitMutation(ctx context.Context, tx *sql.Tx, instance registry.Instance, eventID string, eventType registry.EventType, now time.Time) (registry.Instance, error) {
 	if instance.ResourceVersion >= registry.MaxSafeInteger {
-		return registry.Instance{}, registry.NewError(registry.ReasonRevisionOverflow)
+		return registry.Instance{}, registry.NewError(registry.ReasonResourceOverflow)
 	}
 	revision, err := repository.allocateRevision(ctx, tx)
 	if err != nil {
@@ -462,7 +497,7 @@ func (repository *Repository) saveInstance(ctx context.Context, tx *sql.Tx, inst
 
 func (repository *Repository) insertSession(ctx context.Context, tx *sql.Tx, instance registry.Instance) error {
 	if _, err := tx.ExecContext(ctx, repository.query(`INSERT INTO arop_registry_sessions(tenant_id,instance_id,session_id,generation,created_at) VALUES(?,?,?,?,?)`), instance.TenantID, instance.InstanceID, instance.SessionID, instance.Generation, formatTime(instance.UpdatedAt)); err != nil {
-		return registry.NewError(registry.ReasonSessionReused)
+		return registry.NewError(registry.ReasonDependencyUnavailable)
 	}
 	return nil
 }
@@ -541,6 +576,24 @@ func (repository *Repository) queryer(ctx context.Context) interface {
 	return repository.db
 }
 
+func (repository *Repository) snapshotQueryer(ctx context.Context) (interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}, *sql.Tx, error) {
+	if tx, ok := repository.lookup(ctx); ok && tx != nil {
+		return tx, nil, nil
+	}
+	options := &sql.TxOptions{ReadOnly: true}
+	if repository.dialect == Postgres {
+		options.Isolation = sql.LevelRepeatableRead
+	}
+	tx, err := repository.db.BeginTx(ctx, options)
+	if err != nil {
+		return nil, nil, registry.NewError(registry.ReasonDependencyUnavailable)
+	}
+	return tx, tx, nil
+}
+
 func (repository *Repository) lockKeys(ctx context.Context, tx *sql.Tx, keys ...string) error {
 	if repository.dialect != Postgres {
 		return nil
@@ -571,10 +624,12 @@ func (repository *Repository) query(query string) string {
 	return builder.String()
 }
 
-func formatTime(value time.Time) string { return value.UTC().Format(time.RFC3339Nano) }
+const timestampLayout = "2006-01-02T15:04:05.000000000Z"
+
+func formatTime(value time.Time) string { return value.UTC().Format(timestampLayout) }
 
 func parseTime(value string) (time.Time, error) {
-	parsed, err := time.Parse(time.RFC3339Nano, value)
+	parsed, err := time.Parse(timestampLayout, value)
 	if err != nil || parsed.Location() != time.UTC || formatTime(parsed) != value {
 		return time.Time{}, errors.New("invalid registry timestamp")
 	}

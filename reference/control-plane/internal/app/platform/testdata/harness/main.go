@@ -348,7 +348,8 @@ func p14AllowsPackage(root, importPath string) bool {
 	if err != nil || !bytes.Contains(data, []byte(`"status": "validated"`)) || !bytes.Contains(data, []byte(`"commit": "958d1d42bb7b4a3f6c015ad97004b434ba07d2d3"`)) {
 		return false
 	}
-	return strings.HasPrefix(importPath, nestedModule+"/internal/domain/registry")
+	base := nestedModule + "/internal/domain/registry"
+	return importPath == base || strings.HasPrefix(importPath, base+"/")
 }
 
 func runP10TransitionChecker(root, mode string) ([]byte, error) {
