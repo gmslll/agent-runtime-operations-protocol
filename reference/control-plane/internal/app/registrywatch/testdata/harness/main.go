@@ -662,6 +662,10 @@ func startPostgres(scratch string) (*cluster, []byte, error) {
 		if err != nil {
 			return nil, evidence.Bytes(), err
 		}
+		path, err = filepath.EvalSymlinks(path)
+		if err != nil || !filepath.IsAbs(path) {
+			return nil, evidence.Bytes(), fmt.Errorf("resolve %s executable", name)
+		}
 		version := run("/", nil, path, "--version")
 		if version.err != nil || !strings.Contains(string(version.output), "16.") {
 			return nil, evidence.Bytes(), fmt.Errorf("%s is not PostgreSQL 16", name)
