@@ -49,7 +49,7 @@ func DefaultConfig() Config {
 	return Config{
 		Mode: ModeDevelopmentMemory, ListenAddress: "127.0.0.1:8080",
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 30 * time.Second,
-		WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second,
+		WriteTimeout: 35 * time.Second, IdleTimeout: 60 * time.Second,
 		RequestTimeout: 15 * time.Second, ShutdownTimeout: 10 * time.Second,
 		StorageStartupTimeout: 15 * time.Second, MigrationTimeout: 2 * time.Minute,
 		MaxHeaderBytes: 1 << 20, MaxBodyBytes: 1 << 20,

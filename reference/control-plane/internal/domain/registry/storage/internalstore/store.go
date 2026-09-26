@@ -366,6 +366,60 @@ func (repository *Repository) CompactionWatermark(ctx context.Context, _ string)
 	return watermark, nil
 }
 
+// EventWindow returns registry metadata and tenant events from one read-only
+// transaction. It is intentionally an additional concrete-repository method:
+// the P14 Repository contract remains frozen while P16 can require this
+// stronger atomic read capability from durable adapters.
+func (repository *Repository) EventWindow(ctx context.Context, tenantID string, afterRevision, limit uint64) (registry.EventWindow, error) {
+	if tenantID == "" || len(tenantID) > 128 || afterRevision > registry.MaxSafeInteger || limit == 0 || limit > 10000 {
+		return registry.EventWindow{}, registry.NewError(registry.ReasonInvalidRequest)
+	}
+	queryer, owned, err := repository.snapshotQueryer(ctx)
+	if err != nil {
+		return registry.EventWindow{}, err
+	}
+	if owned != nil {
+		defer owned.Rollback()
+	}
+	result := registry.EventWindow{Events: []registry.Event{}}
+	if err := queryer.QueryRowContext(ctx, `SELECT revision,compaction_watermark FROM arop_registry_meta WHERE singleton=1`).Scan(&result.Revision, &result.CompactionWatermark); err != nil || result.Revision > registry.MaxSafeInteger || result.CompactionWatermark > result.Revision {
+		return registry.EventWindow{}, registry.NewError(registry.ReasonDependencyUnavailable)
+	}
+	if afterRevision >= result.CompactionWatermark {
+		rows, queryErr := queryer.QueryContext(ctx, repository.query(`SELECT event_id,tenant_id,revision,event_type,instance_id,session_id,generation,occurred_at FROM arop_registry_events WHERE tenant_id=? AND revision>? ORDER BY revision LIMIT ?`), tenantID, afterRevision, limit)
+		if queryErr != nil {
+			return registry.EventWindow{}, registry.NewError(registry.ReasonDependencyUnavailable)
+		}
+		var previous uint64
+		for rows.Next() {
+			var event registry.Event
+			var eventType, occurred string
+			if rows.Scan(&event.EventID, &event.TenantID, &event.Revision, &eventType, &event.InstanceID, &event.SessionID, &event.Generation, &occurred) != nil {
+				_ = rows.Close()
+				return registry.EventWindow{}, registry.NewError(registry.ReasonDependencyUnavailable)
+			}
+			event.Type = registry.EventType(eventType)
+			event.OccurredAt, err = parseTime(occurred)
+			if err != nil || event.Validate() != nil || event.TenantID != tenantID || event.Revision <= afterRevision || event.Revision <= previous || event.Revision > result.Revision {
+				_ = rows.Close()
+				return registry.EventWindow{}, registry.NewError(registry.ReasonDependencyUnavailable)
+			}
+			previous = event.Revision
+			result.Events = append(result.Events, event)
+		}
+		if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+			return registry.EventWindow{}, registry.NewError(registry.ReasonDependencyUnavailable)
+		}
+	}
+	if owned != nil {
+		if err := owned.Commit(); err != nil {
+			return registry.EventWindow{}, registry.NewError(registry.ReasonDependencyUnavailable)
+		}
+		owned = nil
+	}
+	return result, nil
+}
+
 const instanceColumns = `tenant_id,instance_id,session_id,service_id,environment,generation,resource_version,registry_revision,lease_id,lease_expires_at,heartbeat_sequence,endpoint_base_url,endpoint_health_path,bindings_json,runtime_json,operator_json,draining,drain_deadline_at,status,created_at,updated_at`
 
 type scanner interface{ Scan(...any) error }

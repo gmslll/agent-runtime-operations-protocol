@@ -28,6 +28,14 @@ type Dependencies struct {
 	Authorizer        Authorizer
 	LeaseTTL          time.Duration
 	KeepaliveInterval time.Duration
+	RevisionNotifier  RevisionNotifier
+}
+
+// RevisionNotifier is an optional after-commit latency hint for P16 Watch.
+// Durable ledger polling remains authoritative, so notification has no error
+// channel and can never roll back a committed mutation.
+type RevisionNotifier interface {
+	Notify(string, uint64)
 }
 
 type Service struct{ dependencies Dependencies }
@@ -65,6 +73,9 @@ func (service *Service) Register(ctx context.Context, caller Caller, input Regis
 		result, callErr = service.dependencies.Core.Register(transactionContext, request)
 		return callErr
 	})
+	if err == nil && !result.Replay {
+		service.notify(caller.TenantID, result.Instance.RegistryRevision)
+	}
 	return result, normalize(err)
 }
 
@@ -73,7 +84,7 @@ func (service *Service) Keepalive(ctx context.Context, caller Caller, input Keep
 		return registry.Instance{}, err
 	}
 	request := registry.KeepaliveRequest{TenantID: caller.TenantID, InstanceID: input.InstanceID, SessionID: input.SessionID, LeaseID: input.LeaseID, Generation: input.Generation, HeartbeatSequence: input.HeartbeatSequence, ReportedAt: input.ReportedAt, Ready: input.Ready, ActiveRuns: input.ActiveRuns, AvailableSlots: input.AvailableSlots, QueueDepth: input.QueueDepth}
-	return service.mutate(ctx, func(transactionContext context.Context) (registry.Instance, error) {
+	return service.mutate(ctx, caller.TenantID, func(transactionContext context.Context) (registry.Instance, error) {
 		return service.dependencies.Core.Keepalive(transactionContext, request)
 	})
 }
@@ -83,7 +94,7 @@ func (service *Service) Operate(ctx context.Context, caller Caller, input Operat
 		return registry.Instance{}, err
 	}
 	request := registry.CASRequest{TenantID: caller.TenantID, InstanceID: input.InstanceID, ExpectedResourceVersion: input.ExpectedResourceVersion, Enabled: input.Enabled, Weight: input.Weight, Priority: input.Priority, MaintenanceReason: input.MaintenanceReason}
-	return service.mutate(ctx, func(transactionContext context.Context) (registry.Instance, error) {
+	return service.mutate(ctx, caller.TenantID, func(transactionContext context.Context) (registry.Instance, error) {
 		return service.dependencies.Core.CompareAndSwap(transactionContext, request)
 	})
 }
@@ -93,7 +104,7 @@ func (service *Service) Drain(ctx context.Context, caller Caller, input DrainInp
 		return registry.Instance{}, err
 	}
 	request := registry.DrainRequest{Fence: registry.Fence{TenantID: caller.TenantID, InstanceID: input.InstanceID, SessionID: input.SessionID, LeaseID: input.LeaseID, Generation: input.Generation}, DeadlineAt: input.DeadlineAt}
-	return service.mutate(ctx, func(transactionContext context.Context) (registry.Instance, error) {
+	return service.mutate(ctx, caller.TenantID, func(transactionContext context.Context) (registry.Instance, error) {
 		return service.dependencies.Core.Drain(transactionContext, request)
 	})
 }
@@ -103,7 +114,7 @@ func (service *Service) Deregister(ctx context.Context, caller Caller, input Der
 		return registry.Instance{}, err
 	}
 	fence := registry.Fence{TenantID: caller.TenantID, InstanceID: input.InstanceID, SessionID: input.SessionID, LeaseID: input.LeaseID, Generation: input.Generation}
-	return service.mutate(ctx, func(transactionContext context.Context) (registry.Instance, error) {
+	return service.mutate(ctx, caller.TenantID, func(transactionContext context.Context) (registry.Instance, error) {
 		return service.dependencies.Core.Deregister(transactionContext, fence)
 	})
 }
@@ -151,14 +162,23 @@ func (service *Service) authorize(ctx context.Context, caller Caller, operation 
 	return nil
 }
 
-func (service *Service) mutate(ctx context.Context, callback func(context.Context) (registry.Instance, error)) (registry.Instance, error) {
+func (service *Service) mutate(ctx context.Context, tenantID string, callback func(context.Context) (registry.Instance, error)) (registry.Instance, error) {
 	var result registry.Instance
 	err := service.dependencies.UoW.Within(ctx, func(transactionContext context.Context) error {
 		var callErr error
 		result, callErr = callback(transactionContext)
 		return callErr
 	})
+	if err == nil {
+		service.notify(tenantID, result.RegistryRevision)
+	}
 	return result, normalize(err)
+}
+
+func (service *Service) notify(tenantID string, revision uint64) {
+	if service.dependencies.RevisionNotifier != nil && revision > 0 {
+		service.dependencies.RevisionNotifier.Notify(tenantID, revision)
+	}
 }
 
 func semanticDigest(value any) (string, error) {

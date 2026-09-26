@@ -52,6 +52,15 @@ type Snapshot struct {
 	Instances           []Instance
 }
 
+// EventWindow is an atomic view of the registry revision ledger. Revision and
+// CompactionWatermark are read in the same database snapshot as Events so a
+// Watch implementation never joins values observed at different instants.
+type EventWindow struct {
+	Revision            uint64
+	CompactionWatermark uint64
+	Events              []Event
+}
+
 type KeepaliveResult struct {
 	Instance Instance
 	Replay   bool

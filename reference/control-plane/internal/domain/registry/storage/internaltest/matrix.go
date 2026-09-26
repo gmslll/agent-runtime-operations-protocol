@@ -168,6 +168,16 @@ func RunRepositoryMatrix(t *testing.T, unit UnitOfWork, repository registry.Repo
 			t.Fatalf("event revisions are not contiguous: %+v", events)
 		}
 	}
+	windowRepository, ok := repository.(interface {
+		EventWindow(context.Context, string, uint64, uint64) (registry.EventWindow, error)
+	})
+	if !ok {
+		t.Fatal("durable repository does not expose the P16 atomic event window")
+	}
+	window, err := windowRepository.EventWindow(context.Background(), "tenant-a", 4, 100)
+	if err != nil || window.Revision != 8 || window.CompactionWatermark != 0 || len(window.Events) != 4 || window.Events[0].Revision != 5 || window.Events[3].Revision != 8 {
+		t.Fatalf("event window = %+v, %v", window, err)
+	}
 	watermark, err := repository.CompactionWatermark(context.Background(), "tenant-a")
 	if err != nil || watermark != 0 {
 		t.Fatalf("watermark = %d, %v", watermark, err)

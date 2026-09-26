@@ -49,6 +49,7 @@ func (registryAuthorizerStub) Authorize(_ context.Context, request registryapi.A
 		registryapi.OperationRegister: "registry:register", registryapi.OperationOperate: "registry:operate",
 		registryapi.OperationKeepalive: "registry:write", registryapi.OperationDrain: "registry:write",
 		registryapi.OperationDeregister: "registry:write", registryapi.OperationDiscover: "registry:discover",
+		registryapi.OperationWatch: "registry:discover",
 	}[request.Operation]
 	if want == "" || !request.Caller.HasScope(want) {
 		return registryapi.ErrForbidden

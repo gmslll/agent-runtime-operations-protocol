@@ -25,6 +25,7 @@ import (
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/httpadapter"
 	platformports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/ports"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/registryapi"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/registrywatch"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets"
 	assetpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets/storage/postgres"
 	assetsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets/storage/sqlite"
@@ -87,7 +88,11 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 		if publicationService := publicationServiceFromChecks(checks); publicationService != nil {
 			if assetService := assetServiceFromChecks(checks); assetService != nil {
 				if registryService := registryAPIServiceFromChecks(checks); registryService != nil {
-					handler, err = httpadapter.NewRegistryApplicationHandler(application, referenceAuthenticate(identityService, ids), publicationService, assetService, registryService)
+					if watchService := registryWatchServiceFromChecks(checks); watchService != nil {
+						handler, err = httpadapter.NewRegistryRecoveryApplicationHandler(application, referenceAuthenticate(identityService, ids), publicationService, assetService, registryService, watchService)
+					} else {
+						handler, err = httpadapter.NewRegistryApplicationHandler(application, referenceAuthenticate(identityService, ids), publicationService, assetService, registryService)
+					}
 				} else {
 					handler, err = httpadapter.NewApplicationHandler(application, referenceAuthenticate(identityService, ids), publicationService, assetService)
 				}
@@ -102,7 +107,15 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 		_ = cleanup()
 		return nil, nil, nil, errors.New("assemble Control Plane HTTP handler")
 	}
-	return application, httpadapter.NewServer(application, handler), cleanup, nil
+	httpServer := httpadapter.NewServer(application, handler)
+	if registryWatchServiceFromChecks(checks) != nil {
+		httpServer, err = httpadapter.NewRegistryRecoveryServer(application, handler)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, errors.New("assemble registry recovery HTTP server")
+		}
+	}
+	return application, httpServer, cleanup, nil
 }
 
 func run(args, environment []string) error {
@@ -217,12 +230,12 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			checks = append(checks, assetService)
 		}
 		if catalogOwns(catalogClosure, "P14") {
-			registryService, err := composeRegistry(db, migrate.DialectSQLite, uow.Transaction, uow, clock, ids)
+			registryService, watchService, err := composeRegistry(db, migrate.DialectSQLite, uow.Transaction, uow, clock, ids, config.DatabaseDSN+".registry-recovery.lock")
 			if err != nil {
 				_ = cleanup()
 				return nil, nil, nil, nil, err
 			}
-			checks = append(checks, registryService)
+			checks = append(checks, registryService, watchService)
 		}
 		return uow, store, checks, cleanup, nil
 	case platform.ModePostgres:
@@ -315,12 +328,12 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			checks = append(checks, assetService)
 		}
 		if catalogOwns(catalogClosure, "P14") {
-			registryService, err := composeRegistry(db, migrate.DialectPostgres, uow.Transaction, uow, clock, ids)
+			registryService, watchService, err := composeRegistry(db, migrate.DialectPostgres, uow.Transaction, uow, clock, ids)
 			if err != nil {
 				_ = cleanup()
 				return nil, nil, nil, nil, err
 			}
-			checks = append(checks, registryService)
+			checks = append(checks, registryService, watchService)
 		}
 		return uow, store, checks, cleanup, nil
 	default:
@@ -475,6 +488,8 @@ func (referenceRegistryAuthorizer) Authorize(_ context.Context, request registry
 		want = "registry:operate"
 	case registryapi.OperationDiscover:
 		want = "registry:discover"
+	case registryapi.OperationWatch:
+		want = "registry:discover"
 	case registryapi.OperationKeepalive, registryapi.OperationDrain, registryapi.OperationDeregister:
 	default:
 		return registryapi.ErrForbidden
@@ -495,26 +510,47 @@ func (source registryIDSource) NewEventID(ctx context.Context) (string, error) {
 	return source.source.NewID(ctx, platformports.IDEvent)
 }
 
-func composeRegistry(db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, clock platformports.Clock, ids platformports.IDSource) (*registryapi.Service, error) {
-	var repository registry.Repository
+func composeRegistry(db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, clock platformports.Clock, ids platformports.IDSource, sqliteLockPath ...string) (*registryapi.Service, *registrywatch.Service, error) {
+	type recoveryRepository interface {
+		registry.Repository
+		registrywatch.Reader
+	}
+	var repository recoveryRepository
+	var coordinator registrywatch.Coordinator
 	var err error
 	if dialect == migrate.DialectSQLite {
 		repository, err = registrysqlite.New(db, lookup)
+		if err != nil {
+			return nil, nil, errors.New("initialize registry repository")
+		}
+		if len(sqliteLockPath) != 1 {
+			return nil, nil, errors.New("initialize SQLite registry recovery lock")
+		}
+		coordinator, err = registrywatch.NewSQLiteCoordinator(db, sqliteLockPath[0])
 	} else {
 		repository, err = registrypostgres.New(db, lookup)
+		if err != nil {
+			return nil, nil, errors.New("initialize registry repository")
+		}
+		coordinator, err = registrywatch.NewPostgresCoordinator(db)
 	}
 	if err != nil {
-		return nil, errors.New("initialize registry repository")
+		return nil, nil, errors.New("initialize registry recovery coordinator")
 	}
 	core, err := registry.New(registry.Dependencies{Clock: clock, IDs: registryIDSource{source: ids}, Repository: repository, LeaseTTL: registry.DefaultLeaseTTL, KeepaliveInterval: registry.DefaultKeepaliveInterval})
 	if err != nil {
-		return nil, errors.New("initialize registry core service")
+		return nil, nil, errors.New("initialize registry core service")
 	}
-	service, err := registryapi.New(registryapi.Dependencies{Core: core, UoW: uow, Clock: clock, Authorizer: referenceRegistryAuthorizer{}, LeaseTTL: registry.DefaultLeaseTTL, KeepaliveInterval: registry.DefaultKeepaliveInterval})
+	hub := registrywatch.NewHub()
+	service, err := registryapi.New(registryapi.Dependencies{Core: core, UoW: uow, Clock: clock, Authorizer: referenceRegistryAuthorizer{}, LeaseTTL: registry.DefaultLeaseTTL, KeepaliveInterval: registry.DefaultKeepaliveInterval, RevisionNotifier: hub})
 	if err != nil {
-		return nil, errors.New("initialize registry API service")
+		return nil, nil, errors.New("initialize registry API service")
 	}
-	return service, nil
+	watchService, err := registrywatch.New(registrywatch.Dependencies{Reader: repository, Authorizer: referenceRegistryAuthorizer{}, Notifier: hub, Coordinator: coordinator})
+	if err != nil {
+		return nil, nil, errors.New("initialize registry recovery service")
+	}
+	return service, watchService, nil
 }
 
 func identityServiceFromChecks(checks []platformports.ReadinessCheck) *identity.Service {
@@ -547,6 +583,15 @@ func assetServiceFromChecks(checks []platformports.ReadinessCheck) *assets.Servi
 func registryAPIServiceFromChecks(checks []platformports.ReadinessCheck) *registryapi.Service {
 	for _, check := range checks {
 		if service, ok := check.(*registryapi.Service); ok {
+			return service
+		}
+	}
+	return nil
+}
+
+func registryWatchServiceFromChecks(checks []platformports.ReadinessCheck) *registrywatch.Service {
+	for _, check := range checks {
+		if service, ok := check.(*registrywatch.Service); ok {
 			return service
 		}
 	}

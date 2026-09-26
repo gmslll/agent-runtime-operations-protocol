@@ -22,6 +22,7 @@ const (
 	OperationDrain      Operation = "registry.drain"
 	OperationDeregister Operation = "registry.deregister"
 	OperationDiscover   Operation = "registry.discover"
+	OperationWatch      Operation = "registry.watch"
 )
 
 var (
@@ -56,6 +57,10 @@ func (caller Caller) Validate() error {
 	}
 	return nil
 }
+
+// Valid exposes the already-frozen caller validation to later internal
+// application phases without duplicating the identity grammar.
+func (caller Caller) Valid() bool { return caller.Validate() == nil }
 
 func (caller Caller) HasScope(scope string) bool { return slices.Contains(caller.Scopes, scope) }
 

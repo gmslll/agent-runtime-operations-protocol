@@ -16,6 +16,7 @@ import (
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
 	platformports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/ports"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/registryapi"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/registrywatch"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication"
 	assetwire "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/generated/asset"
@@ -98,7 +99,14 @@ func NewRegistryApplicationHandler(application *platform.Platform, authenticate 
 	if authenticate == nil || publicationService == nil || assetService == nil || registryService == nil {
 		return nil, errors.New("authentication and all application services are required")
 	}
-	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService)
+	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, nil)
+}
+
+func NewRegistryRecoveryApplicationHandler(application *platform.Platform, authenticate AuthenticateFunc, publicationService publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service) (http.Handler, error) {
+	if authenticate == nil || publicationService == nil || assetService == nil || registryService == nil || watchService == nil {
+		return nil, errors.New("authentication and all registry recovery services are required")
+	}
+	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService)
 }
 
 func newHandler(application *platform.Platform, authenticate AuthenticateFunc) (http.Handler, error) {
@@ -110,10 +118,10 @@ func newHandlerWithPublication(application *platform.Platform, authenticate Auth
 }
 
 func newHandlerWithServices(application *platform.Platform, authenticate AuthenticateFunc, service publication.PublicationService, assetService assets.AssetBrokerService) (http.Handler, error) {
-	return newHandlerWithAllServices(application, authenticate, service, assetService, nil)
+	return newHandlerWithAllServices(application, authenticate, service, assetService, nil, nil)
 }
 
-func newHandlerWithAllServices(application *platform.Platform, authenticate AuthenticateFunc, service publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service) (http.Handler, error) {
+func newHandlerWithAllServices(application *platform.Platform, authenticate AuthenticateFunc, service publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service) (http.Handler, error) {
 	if application == nil {
 		return nil, errors.New("platform application is required")
 	}
@@ -141,19 +149,27 @@ func newHandlerWithAllServices(application *platform.Platform, authenticate Auth
 		mux.HandleFunc("GET /v1/asset-content/{grant_id}", assetDownload(application, assetService))
 	}
 	if registryService != nil {
-		registryHandler, err := registryapi.NewHTTPHandler(registryService, func(request *http.Request) (registryapi.Caller, platform.RequestMetadata, bool) {
+		callerProvider := func(request *http.Request) (registryapi.Caller, platform.RequestMetadata, bool) {
 			principal, principalOK := PrincipalFromContext(request.Context())
 			metadata, metadataOK := MetadataFromContext(request.Context())
 			if !principalOK || !metadataOK {
 				return registryapi.Caller{}, platform.RequestMetadata{}, false
 			}
 			return registryapi.Caller{TenantID: principal.TenantID, PrincipalID: principal.PrincipalID, CredentialID: principal.CredentialID, Scopes: slices.Clone(principal.Scopes)}, metadata, true
-		})
+		}
+		registryHandler, err := registryapi.NewHTTPHandler(registryService, callerProvider)
 		if err != nil {
 			return nil, err
 		}
 		mux.Handle("/v1/registry/", registryHandler)
 		mux.Handle("/v1/discovery/", registryHandler)
+		if watchService != nil {
+			watchHandler, watchErr := registrywatch.NewHTTPHandler(watchService, callerProvider)
+			if watchErr != nil {
+				return nil, watchErr
+			}
+			mux.Handle("GET /v1/discovery/changes", watchHandler)
+		}
 	}
 	return instrument(application, mux, authenticate), nil
 }
@@ -480,15 +496,27 @@ func NewServer(application *platform.Platform, handler http.Handler) *http.Serve
 	}
 }
 
+func NewRegistryRecoveryServer(application *platform.Platform, handler http.Handler) (*http.Server, error) {
+	server := NewServer(application, handler)
+	if server.WriteTimeout <= registrywatch.MaxWait {
+		return nil, errors.New("registry recovery write timeout must exceed maximum watch wait")
+	}
+	return server, nil
+}
+
 func instrument(application *platform.Platform, next http.Handler, authenticate AuthenticateFunc) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		config := application.Config()
-		ctx, cancel := context.WithTimeout(request.Context(), config.RequestTimeout)
+		operation := classifyOperation(request.Method, request.URL.Path)
+		requestTimeout := config.RequestTimeout
+		if operation == "registry.watch" && requestTimeout <= registrywatch.MaxWait {
+			requestTimeout = registrywatch.MaxWait + time.Second
+		}
+		ctx, cancel := context.WithTimeout(request.Context(), requestTimeout)
 		defer cancel()
 		request = request.WithContext(ctx)
 		request.Body = http.MaxBytesReader(writer, request.Body, config.MaxBodyBytes)
 
-		operation := classifyOperation(request.Method, request.URL.Path)
 		startedAt := application.Now()
 		metadata, metadataErr := application.BeginRequest(ctx, request.Header.Values(requestIDHeader), request.Header.Values(traceparentHeader), request.Header.Values(tracestateHeader))
 		if metadataErr == nil {
