@@ -890,7 +890,12 @@ func validateGeneratedContracts(root string) ([]byte, error) {
 	if goCompile.err != nil {
 		return evidence, goCompile.err
 	}
-	pythonCompile := run(root, map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "PYTHONPYCACHEPREFIX": output, "PYTHONNOUSERSITE": "1", "PYTHONSAFEPATH": "1"}, "python3", "-I", "-B", "-m", "py_compile", "sdk/python/src/arop/generated/run/run_gen.py")
+	// Do not use `python -m py_compile` here. py_compile explicitly writes a
+	// bytecode file even with -B, while -I ignores PYTHONPYCACHEPREFIX.  That
+	// combination used to dirty the repository during the acceptance run and
+	// invalidated every report produced after this check.  Compiling the source
+	// bytes exercises the same syntax boundary without a filesystem side effect.
+	pythonCompile := run(root, map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "PYTHONNOUSERSITE": "1", "PYTHONSAFEPATH": "1"}, "python3", "-I", "-B", "-c", `import pathlib,sys; path=sys.argv[1]; compile(pathlib.Path(path).read_bytes(), path, "exec")`, "sdk/python/src/arop/generated/run/run_gen.py")
 	evidence = append(evidence, pythonCompile.output...)
 	if pythonCompile.err != nil {
 		return evidence, pythonCompile.err
