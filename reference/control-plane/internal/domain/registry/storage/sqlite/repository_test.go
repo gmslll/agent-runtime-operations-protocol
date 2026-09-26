@@ -45,5 +45,14 @@ func TestSQLiteRegistryRepository(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := registrystore.VerifySchema()(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
 	internaltest.RunRepositoryMatrix(t, unit, repository)
+	if _, err := db.Exec(`CREATE INDEX arop_registry_events_unexpected_idx ON arop_registry_events(instance_id)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := registrystore.VerifySchema()(context.Background(), db); err == nil {
+		t.Fatal("VerifySchema accepted an unexpected registry index")
+	}
 }

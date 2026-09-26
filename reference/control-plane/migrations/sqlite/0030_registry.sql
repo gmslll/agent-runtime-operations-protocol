@@ -44,6 +44,7 @@ CREATE TABLE arop_registry_instances (
   CONSTRAINT arop_registry_instances_revision_check CHECK(registry_revision BETWEEN 1 AND 9007199254740991),
   CONSTRAINT arop_registry_instances_lease_check CHECK(length(lease_id) = 42 AND substr(lease_id,1,6) = 'lease_' AND substr(lease_id,7,8) NOT GLOB '*[^0-9a-f]*' AND substr(lease_id,15,1)='-' AND substr(lease_id,16,4) NOT GLOB '*[^0-9a-f]*' AND substr(lease_id,20,2)='-7' AND substr(lease_id,22,3) NOT GLOB '*[^0-9a-f]*' AND substr(lease_id,25,1)='-' AND substr(lease_id,26,1) IN ('8','9','a','b') AND substr(lease_id,27,3) NOT GLOB '*[^0-9a-f]*' AND substr(lease_id,30,1)='-' AND substr(lease_id,31,12) NOT GLOB '*[^0-9a-f]*'),
   CONSTRAINT arop_registry_instances_heartbeat_check CHECK(heartbeat_sequence BETWEEN 0 AND 9007199254740991),
+  CONSTRAINT arop_registry_instances_endpoint_check CHECK(length(endpoint_base_url) BETWEEN 9 AND 2048 AND substr(endpoint_base_url,1,8)='https://' AND endpoint_base_url NOT GLOB '*[?#]*' AND length(endpoint_health_path) BETWEEN 1 AND 512 AND substr(endpoint_health_path,1,1)='/' AND endpoint_health_path NOT GLOB '*[?#]*' AND instr(endpoint_health_path,'..')=0),
   CONSTRAINT arop_registry_instances_bindings_check CHECK(json_valid(bindings_json) AND json_type(bindings_json) = 'array' AND json_array_length(bindings_json) BETWEEN 1 AND 256),
   CONSTRAINT arop_registry_instances_runtime_check CHECK(json_valid(runtime_json) AND json_type(runtime_json) = 'object'),
   CONSTRAINT arop_registry_instances_operator_check CHECK(json_valid(operator_json) AND json_type(operator_json) = 'object'),
@@ -62,7 +63,11 @@ CREATE TABLE arop_registry_sessions (
   created_at TEXT NOT NULL,
   CONSTRAINT arop_registry_sessions_pkey PRIMARY KEY(tenant_id, instance_id, session_id),
   CONSTRAINT arop_registry_sessions_instance_fkey FOREIGN KEY(tenant_id, instance_id) REFERENCES arop_registry_instances(tenant_id, instance_id) ON UPDATE RESTRICT ON DELETE RESTRICT,
-  CONSTRAINT arop_registry_sessions_generation_check CHECK(generation BETWEEN 1 AND 9007199254740991)
+  CONSTRAINT arop_registry_sessions_tenant_check CHECK(length(tenant_id) BETWEEN 1 AND 128 AND tenant_id NOT GLOB '*[^a-z0-9._-]*' AND substr(tenant_id,1,1) GLOB '[a-z]' AND substr(tenant_id,-1,1) GLOB '[a-z0-9]' AND tenant_id NOT GLOB '*[._-][._-]*'),
+  CONSTRAINT arop_registry_sessions_instance_check CHECK(length(instance_id) BETWEEN 1 AND 128 AND instance_id NOT GLOB '*[^a-z0-9._-]*' AND substr(instance_id,1,1) GLOB '[a-z]' AND substr(instance_id,-1,1) GLOB '[a-z0-9]' AND instance_id NOT GLOB '*[._-][._-]*'),
+  CONSTRAINT arop_registry_sessions_session_check CHECK(length(session_id) = 40 AND substr(session_id,1,4) = 'ses_' AND substr(session_id,5,8) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,13,1)='-' AND substr(session_id,14,4) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,18,2)='-7' AND substr(session_id,20,3) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,23,1)='-' AND substr(session_id,24,1) IN ('8','9','a','b') AND substr(session_id,25,3) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,28,1)='-' AND substr(session_id,29,12) NOT GLOB '*[^0-9a-f]*'),
+  CONSTRAINT arop_registry_sessions_generation_check CHECK(generation BETWEEN 1 AND 9007199254740991),
+  CONSTRAINT arop_registry_sessions_time_check CHECK(length(created_at) BETWEEN 20 AND 35 AND substr(created_at,-1)='Z')
 )
 -- arop:statement
 CREATE TABLE arop_registry_events (
@@ -77,9 +82,13 @@ CREATE TABLE arop_registry_events (
   CONSTRAINT arop_registry_events_pkey PRIMARY KEY(revision),
   CONSTRAINT arop_registry_events_event_unique UNIQUE(event_id),
   CONSTRAINT arop_registry_events_revision_check CHECK(revision BETWEEN 1 AND 9007199254740991),
-  CONSTRAINT arop_registry_events_event_check CHECK(length(event_id) = 40 AND substr(event_id,1,4) = 'evt_'),
+  CONSTRAINT arop_registry_events_event_check CHECK(length(event_id) = 40 AND substr(event_id,1,4) = 'evt_' AND substr(event_id,5,8) NOT GLOB '*[^0-9a-f]*' AND substr(event_id,13,1)='-' AND substr(event_id,14,4) NOT GLOB '*[^0-9a-f]*' AND substr(event_id,18,2)='-7' AND substr(event_id,20,3) NOT GLOB '*[^0-9a-f]*' AND substr(event_id,23,1)='-' AND substr(event_id,24,1) IN ('8','9','a','b') AND substr(event_id,25,3) NOT GLOB '*[^0-9a-f]*' AND substr(event_id,28,1)='-' AND substr(event_id,29,12) NOT GLOB '*[^0-9a-f]*'),
+  CONSTRAINT arop_registry_events_tenant_check CHECK(length(tenant_id) BETWEEN 1 AND 128 AND tenant_id NOT GLOB '*[^a-z0-9._-]*' AND substr(tenant_id,1,1) GLOB '[a-z]' AND substr(tenant_id,-1,1) GLOB '[a-z0-9]' AND tenant_id NOT GLOB '*[._-][._-]*'),
   CONSTRAINT arop_registry_events_type_check CHECK(event_type IN ('registered','keepalive','updated','draining','deregistered','expired')),
-  CONSTRAINT arop_registry_events_generation_check CHECK(generation BETWEEN 1 AND 9007199254740991)
+  CONSTRAINT arop_registry_events_instance_check CHECK(length(instance_id) BETWEEN 1 AND 128 AND instance_id NOT GLOB '*[^a-z0-9._-]*' AND substr(instance_id,1,1) GLOB '[a-z]' AND substr(instance_id,-1,1) GLOB '[a-z0-9]' AND instance_id NOT GLOB '*[._-][._-]*'),
+  CONSTRAINT arop_registry_events_session_check CHECK(length(session_id) = 40 AND substr(session_id,1,4) = 'ses_' AND substr(session_id,5,8) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,13,1)='-' AND substr(session_id,14,4) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,18,2)='-7' AND substr(session_id,20,3) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,23,1)='-' AND substr(session_id,24,1) IN ('8','9','a','b') AND substr(session_id,25,3) NOT GLOB '*[^0-9a-f]*' AND substr(session_id,28,1)='-' AND substr(session_id,29,12) NOT GLOB '*[^0-9a-f]*'),
+  CONSTRAINT arop_registry_events_generation_check CHECK(generation BETWEEN 1 AND 9007199254740991),
+  CONSTRAINT arop_registry_events_time_check CHECK(length(occurred_at) BETWEEN 20 AND 35 AND substr(occurred_at,-1)='Z')
 )
 -- arop:statement
 CREATE INDEX arop_registry_events_tenant_revision_idx ON arop_registry_events(tenant_id, revision)
@@ -93,9 +102,11 @@ CREATE TABLE arop_registry_idempotency (
   result_revision INTEGER NOT NULL,
   created_at TEXT NOT NULL,
   CONSTRAINT arop_registry_idempotency_pkey PRIMARY KEY(tenant_id, operation, key_digest),
+  CONSTRAINT arop_registry_idempotency_tenant_check CHECK(length(tenant_id) BETWEEN 1 AND 128 AND tenant_id NOT GLOB '*[^a-z0-9._-]*' AND substr(tenant_id,1,1) GLOB '[a-z]' AND substr(tenant_id,-1,1) GLOB '[a-z0-9]' AND tenant_id NOT GLOB '*[._-][._-]*'),
   CONSTRAINT arop_registry_idempotency_operation_check CHECK(operation = 'register'),
   CONSTRAINT arop_registry_idempotency_key_check CHECK(length(key_digest)=64 AND key_digest NOT GLOB '*[^0-9a-f]*'),
   CONSTRAINT arop_registry_idempotency_request_check CHECK(length(request_digest)=64 AND request_digest NOT GLOB '*[^0-9a-f]*'),
   CONSTRAINT arop_registry_idempotency_result_check CHECK(json_valid(result_json) AND json_type(result_json)='object'),
-  CONSTRAINT arop_registry_idempotency_revision_check CHECK(result_revision BETWEEN 1 AND 9007199254740991)
+  CONSTRAINT arop_registry_idempotency_revision_check CHECK(result_revision BETWEEN 1 AND 9007199254740991),
+  CONSTRAINT arop_registry_idempotency_time_check CHECK(length(created_at) BETWEEN 20 AND 35 AND substr(created_at,-1)='Z')
 )
