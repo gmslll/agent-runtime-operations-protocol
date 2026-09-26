@@ -24,12 +24,14 @@ import (
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/httpadapter"
 	platformports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/ports"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/registryapi"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets"
 	assetpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets/storage/postgres"
 	assetsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets/storage/sqlite"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication"
 	publicationpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication/storage/postgres"
 	publicationsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication/storage/sqlite"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/registry"
 	registrypostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/registry/storage/postgres"
 	registrysqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/registry/storage/sqlite"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/identity"
@@ -84,7 +86,11 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 	if identityService := identityServiceFromChecks(checks); identityService != nil {
 		if publicationService := publicationServiceFromChecks(checks); publicationService != nil {
 			if assetService := assetServiceFromChecks(checks); assetService != nil {
-				handler, err = httpadapter.NewApplicationHandler(application, referenceAuthenticate(identityService, ids), publicationService, assetService)
+				if registryService := registryAPIServiceFromChecks(checks); registryService != nil {
+					handler, err = httpadapter.NewRegistryApplicationHandler(application, referenceAuthenticate(identityService, ids), publicationService, assetService, registryService)
+				} else {
+					handler, err = httpadapter.NewApplicationHandler(application, referenceAuthenticate(identityService, ids), publicationService, assetService)
+				}
 			} else {
 				handler, err = httpadapter.NewPublicationHandler(application, referenceAuthenticate(identityService, ids), publicationService)
 			}
@@ -210,6 +216,14 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			}
 			checks = append(checks, assetService)
 		}
+		if catalogOwns(catalogClosure, "P14") {
+			registryService, err := composeRegistry(db, migrate.DialectSQLite, uow.Transaction, uow, clock, ids)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, registryService)
+		}
 		return uow, store, checks, cleanup, nil
 	case platform.ModePostgres:
 		root, err := canonicalDirectory(config.MigrationRoot)
@@ -300,6 +314,14 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			}
 			checks = append(checks, assetService)
 		}
+		if catalogOwns(catalogClosure, "P14") {
+			registryService, err := composeRegistry(db, migrate.DialectPostgres, uow.Transaction, uow, clock, ids)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, registryService)
+		}
 		return uow, store, checks, cleanup, nil
 	default:
 		return nil, nil, nil, nil, errors.New("unsupported storage mode")
@@ -353,7 +375,7 @@ func composeIdentity(db *sql.DB, dialect migrate.Dialect, lookup durable.Transac
 	}
 	service, err := identity.New(identity.Dependencies{
 		Clock: clock, IDs: ids, Faults: faults, UoW: uow, Observability: observations, Repository: repository,
-		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent:publish", "agent:read", "asset:exchange", "secret.read"}, AllowedTenants: []string{"reference-dev"},
+		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent:publish", "agent:read", "asset:exchange", "registry:discover", "registry:operate", "registry:register", "registry:write", "secret.read"}, AllowedTenants: []string{"reference-dev"},
 	})
 	if err != nil {
 		return nil, errors.New("initialize identity service")
@@ -442,6 +464,59 @@ func composeAssets(db *sql.DB, dialect migrate.Dialect, lookup durable.Transacti
 	return service, nil
 }
 
+type referenceRegistryAuthorizer struct{}
+
+func (referenceRegistryAuthorizer) Authorize(_ context.Context, request registryapi.AuthorizationRequest) error {
+	want := "registry:write"
+	switch request.Operation {
+	case registryapi.OperationRegister:
+		want = "registry:register"
+	case registryapi.OperationOperate:
+		want = "registry:operate"
+	case registryapi.OperationDiscover:
+		want = "registry:discover"
+	case registryapi.OperationKeepalive, registryapi.OperationDrain, registryapi.OperationDeregister:
+	default:
+		return registryapi.ErrForbidden
+	}
+	if !request.Caller.HasScope(want) {
+		return registryapi.ErrForbidden
+	}
+	return nil
+}
+
+type registryIDSource struct{ source platformports.IDSource }
+
+func (source registryIDSource) NewLeaseID(ctx context.Context) (string, error) {
+	return source.source.NewID(ctx, platformports.IDLease)
+}
+
+func (source registryIDSource) NewEventID(ctx context.Context) (string, error) {
+	return source.source.NewID(ctx, platformports.IDEvent)
+}
+
+func composeRegistry(db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, clock platformports.Clock, ids platformports.IDSource) (*registryapi.Service, error) {
+	var repository registry.Repository
+	var err error
+	if dialect == migrate.DialectSQLite {
+		repository, err = registrysqlite.New(db, lookup)
+	} else {
+		repository, err = registrypostgres.New(db, lookup)
+	}
+	if err != nil {
+		return nil, errors.New("initialize registry repository")
+	}
+	core, err := registry.New(registry.Dependencies{Clock: clock, IDs: registryIDSource{source: ids}, Repository: repository, LeaseTTL: registry.DefaultLeaseTTL, KeepaliveInterval: registry.DefaultKeepaliveInterval})
+	if err != nil {
+		return nil, errors.New("initialize registry core service")
+	}
+	service, err := registryapi.New(registryapi.Dependencies{Core: core, UoW: uow, Clock: clock, Authorizer: referenceRegistryAuthorizer{}, LeaseTTL: registry.DefaultLeaseTTL, KeepaliveInterval: registry.DefaultKeepaliveInterval})
+	if err != nil {
+		return nil, errors.New("initialize registry API service")
+	}
+	return service, nil
+}
+
 func identityServiceFromChecks(checks []platformports.ReadinessCheck) *identity.Service {
 	for _, check := range checks {
 		if service, ok := check.(*identity.Service); ok {
@@ -463,6 +538,15 @@ func publicationServiceFromChecks(checks []platformports.ReadinessCheck) *public
 func assetServiceFromChecks(checks []platformports.ReadinessCheck) *assets.Service {
 	for _, check := range checks {
 		if service, ok := check.(*assets.Service); ok {
+			return service
+		}
+	}
+	return nil
+}
+
+func registryAPIServiceFromChecks(checks []platformports.ReadinessCheck) *registryapi.Service {
+	for _, check := range checks {
+		if service, ok := check.(*registryapi.Service); ok {
 			return service
 		}
 	}

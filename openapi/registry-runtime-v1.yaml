@@ -1,0 +1,242 @@
+openapi: 3.1.0
+info:
+  title: AROP Runtime Registry API v1
+  version: 1.0.0
+  description: >-
+    Authenticated registration, lease keepalive, operator CAS, drain, and
+    deregistration. Runtime credentials are Control Plane credentials and are
+    never interchangeable with dispatch, asset, or user-session tokens.
+servers:
+  - url: https://control-plane.example.invalid
+security:
+  - ControlPlaneBearer: []
+paths:
+  /v1/registry/instances/{instance_id}:
+    put:
+      operationId: registerRuntimeInstance
+      x-arop-required-scopes: [registry:register]
+      parameters:
+        - $ref: '#/components/parameters/InstanceId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: A new runtime session was registered.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Registration'}
+        '200':
+          description: An idempotent registration replay.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Registration'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+    patch:
+      operationId: compareAndSwapRuntimeOperatorState
+      x-arop-required-scopes: [registry:operate]
+      parameters:
+        - $ref: '#/components/parameters/InstanceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OperatorCASRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/RuntimeInstance'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+    delete:
+      operationId: deregisterRuntimeInstance
+      x-arop-required-scopes: [registry:write]
+      parameters:
+        - $ref: '#/components/parameters/InstanceId'
+        - $ref: '#/components/parameters/SessionIdQuery'
+        - $ref: '#/components/parameters/LeaseIdQuery'
+        - $ref: '#/components/parameters/GenerationQuery'
+      responses:
+        '200': {$ref: '#/components/responses/RuntimeInstance'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+  /v1/registry/leases/{lease_id}/keepalive:
+    post:
+      operationId: keepaliveRuntimeLease
+      x-arop-required-scopes: [registry:write]
+      parameters:
+        - $ref: '#/components/parameters/LeaseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KeepaliveRequest'}
+      responses:
+        '200':
+          description: The server-authoritative renewed lease.
+          content:
+            application/json:
+              schema: {$ref: '../schemas/registry/lease-v1.schema.json'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+  /v1/registry/instances/{instance_id}/drain:
+    post:
+      operationId: drainRuntimeInstance
+      x-arop-required-scopes: [registry:write]
+      parameters:
+        - $ref: '#/components/parameters/InstanceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DrainRequest'}
+      responses:
+        '200': {$ref: '#/components/responses/RuntimeInstance'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+components:
+  securitySchemes:
+    ControlPlaneBearer: {type: http, scheme: bearer}
+  parameters:
+    InstanceId:
+      name: instance_id
+      in: path
+      required: true
+      schema: {$ref: '../schemas/common/identifiers.schema.json#/$defs/instanceId'}
+    LeaseId:
+      name: lease_id
+      in: path
+      required: true
+      schema: {$ref: '../schemas/common/identifiers.schema.json#/$defs/leaseId'}
+    SessionIdQuery:
+      name: session_id
+      in: query
+      required: true
+      schema: {$ref: '../schemas/common/identifiers.schema.json#/$defs/sessionId'}
+    LeaseIdQuery:
+      name: lease_id
+      in: query
+      required: true
+      schema: {$ref: '../schemas/common/identifiers.schema.json#/$defs/leaseId'}
+    GenerationQuery:
+      name: generation
+      in: query
+      required: true
+      schema: {$ref: '#/components/schemas/PositiveSafeInteger'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 8, maxLength: 200, pattern: '^[!-~]+$'}
+  schemas:
+    PositiveSafeInteger: {type: integer, minimum: 1, maximum: 9007199254740991}
+    SafeInteger: {type: integer, minimum: 0, maximum: 9007199254740991}
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [schema_version, session_id, service_id, environment, endpoint, bindings, runtime]
+      properties:
+        schema_version: {const: 1}
+        session_id: {$ref: '../schemas/common/identifiers.schema.json#/$defs/sessionId'}
+        service_id: {$ref: '../schemas/common/identifiers.schema.json#/$defs/serviceId'}
+        environment: {allOf: [{$ref: '../schemas/common/identifiers.schema.json#/$defs/slug'}, {maxLength: 64}]}
+        endpoint: {$ref: '../schemas/registry/runtime-instance-v1.schema.json#/$defs/endpoint'}
+        bindings: {type: array, minItems: 1, maxItems: 256, items: {$ref: '../schemas/registry/runtime-instance-v1.schema.json#/$defs/binding'}}
+        runtime: {$ref: '../schemas/registry/runtime-instance-v1.schema.json#/$defs/runtime'}
+    Registration:
+      type: object
+      additionalProperties: false
+      required: [schema_version, instance, lease_ttl_seconds, keepalive_interval_seconds, replay]
+      properties:
+        schema_version: {const: 1}
+        instance: {$ref: '../schemas/registry/runtime-instance-v1.schema.json'}
+        lease_ttl_seconds: {type: integer, minimum: 1, maximum: 600}
+        keepalive_interval_seconds: {type: integer, minimum: 1, maximum: 599}
+        replay: {type: boolean}
+    KeepaliveRequest:
+      type: object
+      additionalProperties: false
+      required: [schema_version, instance_id, session_id, generation, heartbeat_sequence, reported_at, ready, active_runs, available_slots, queue_depth]
+      properties:
+        schema_version: {const: 1}
+        instance_id: {$ref: '../schemas/common/identifiers.schema.json#/$defs/instanceId'}
+        session_id: {$ref: '../schemas/common/identifiers.schema.json#/$defs/sessionId'}
+        generation: {$ref: '#/components/schemas/PositiveSafeInteger'}
+        heartbeat_sequence: {$ref: '#/components/schemas/PositiveSafeInteger'}
+        reported_at: {type: string, format: date-time}
+        ready: {type: boolean}
+        active_runs: {$ref: '#/components/schemas/SafeInteger'}
+        available_slots: {$ref: '#/components/schemas/SafeInteger'}
+        queue_depth: {$ref: '#/components/schemas/SafeInteger'}
+    DrainRequest:
+      type: object
+      additionalProperties: false
+      required: [schema_version, session_id, lease_id, generation, deadline_at]
+      properties:
+        schema_version: {const: 1}
+        session_id: {$ref: '../schemas/common/identifiers.schema.json#/$defs/sessionId'}
+        lease_id: {$ref: '../schemas/common/identifiers.schema.json#/$defs/leaseId'}
+        generation: {$ref: '#/components/schemas/PositiveSafeInteger'}
+        deadline_at: {type: string, format: date-time}
+    OperatorCASRequest:
+      type: object
+      additionalProperties: false
+      required: [schema_version, expected_resource_version, enabled, weight, priority]
+      properties:
+        schema_version: {const: 1}
+        expected_resource_version: {$ref: '#/components/schemas/PositiveSafeInteger'}
+        enabled: {type: boolean}
+        weight: {type: integer, minimum: 0, maximum: 1000}
+        priority: {$ref: '#/components/schemas/SafeInteger'}
+        maintenance_reason: {type: string, maxLength: 512}
+  responses:
+    RuntimeInstance:
+      description: The current runtime instance state.
+      content: {application/json: {schema: {$ref: '../schemas/registry/runtime-instance-v1.schema.json'}}}
+    InvalidRequest: {$ref: '#/components/responses/Error400'}
+    AuthenticationRequired:
+      description: A valid Control Plane bearer credential is required.
+      headers:
+        WWW-Authenticate: {schema: {type: string, pattern: '^Bearer(?: [A-Za-z][A-Za-z0-9_-]*="[ -!#-~]*")*$'}}
+      content: {application/json: {schema: {$ref: '../schemas/common/error.schema.json'}}}
+    Forbidden: {$ref: '#/components/responses/Error403'}
+    NotFound: {$ref: '#/components/responses/Error404'}
+    Conflict: {$ref: '#/components/responses/Error409'}
+    DependencyUnavailable:
+      description: A registry dependency is unavailable.
+      headers: {Retry-After: {schema: {type: integer, minimum: 1, maximum: 86400}}}
+      content: {application/json: {schema: {$ref: '../schemas/common/error.schema.json'}}}
+    Error400:
+      description: REGISTRY_INVALID_REQUEST
+      content: {application/json: {schema: {$ref: '../schemas/common/error.schema.json'}}}
+    Error403:
+      description: REGISTRY_FORBIDDEN
+      content: {application/json: {schema: {$ref: '../schemas/common/error.schema.json'}}}
+    Error404:
+      description: REGISTRY_INSTANCE_NOT_FOUND
+      content: {application/json: {schema: {$ref: '../schemas/common/error.schema.json'}}}
+    Error409:
+      description: Registry fencing, lease, idempotency, or CAS conflict.
+      content: {application/json: {schema: {$ref: '../schemas/common/error.schema.json'}}}

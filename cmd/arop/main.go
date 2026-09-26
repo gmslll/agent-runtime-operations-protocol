@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/publish"
+	registercommand "github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/register"
 	"github.com/gmslll/agent-runtime-operations-protocol/sdk/go/protocol/manifest"
+	registrysdk "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/registry"
 )
 
 func main() {
@@ -20,6 +22,20 @@ func main() {
 }
 
 func run(arguments []string) error {
+	if len(arguments) == 3 && arguments[0] == "register" {
+		baseURL, err := url.Parse(os.Getenv("AROP_CONTROL_PLANE_URL"))
+		if err != nil {
+			return fmt.Errorf("invalid AROP_CONTROL_PLANE_URL")
+		}
+		credential := os.Getenv("AROP_CONTROL_PLANE_TOKEN")
+		client := registrysdk.Client{BaseURL: baseURL, HTTPClient: &http.Client{Timeout: 30 * time.Second}, Credential: registrysdk.CredentialSourceFunc(func(context.Context) (string, error) {
+			if credential == "" {
+				return "", fmt.Errorf("registry credential unavailable")
+			}
+			return credential, nil
+		})}
+		return (registercommand.Command{Client: client, Stdout: os.Stdout}).Execute(context.Background(), registercommand.Options{InstanceID: arguments[1], ConfigPath: arguments[2], IdempotencyKey: os.Getenv("AROP_IDEMPOTENCY_KEY")})
+	}
 	if len(arguments) == 3 && arguments[0] == "publish" {
 		baseURL, err := url.Parse(os.Getenv("AROP_CONTROL_PLANE_URL"))
 		if err != nil {
@@ -47,7 +63,7 @@ func run(arguments []string) error {
 		return nil
 	}
 	if len(arguments) != 3 || arguments[0] != "manifest" || arguments[1] != "digest" {
-		return fmt.Errorf("usage: arop manifest digest <manifest.yaml|manifest.json> | arop publish <agent-id> <bundle.zip>")
+		return fmt.Errorf("usage: arop manifest digest <manifest.yaml|manifest.json> | arop publish <agent-id> <bundle.zip> | arop register <instance-id> <config.json>")
 	}
 
 	digest, err := manifest.DigestFile(arguments[2])

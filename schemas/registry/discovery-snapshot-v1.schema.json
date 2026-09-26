@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/registry/discovery-snapshot-v1.schema.json",
+  "title": "AROP v1 discovery snapshot",
+  "$comment": "A tenant-scoped, point-in-time set of currently discoverable runtime instances. The revision and compaction watermark share the same repository snapshot as the returned rows.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "revision", "compaction_watermark", "server_time", "instances"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "revision": {"$ref": "#/$defs/safeInteger"},
+    "compaction_watermark": {"$ref": "#/$defs/safeInteger"},
+    "server_time": {"type": "string", "format": "date-time"},
+    "instances": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {"$ref": "https://arop.invalid/schemas/v1/registry/runtime-instance-v1.schema.json"}
+    }
+  },
+  "$defs": {
+    "safeInteger": {"type": "integer", "minimum": 0, "maximum": 9007199254740991}
+  }
+}

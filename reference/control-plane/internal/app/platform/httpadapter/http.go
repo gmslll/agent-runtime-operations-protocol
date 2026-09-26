@@ -15,6 +15,7 @@ import (
 
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
 	platformports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/ports"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/registryapi"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication"
 	assetwire "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/generated/asset"
@@ -93,6 +94,13 @@ func NewApplicationHandler(application *platform.Platform, authenticate Authenti
 	return newHandlerWithServices(application, authenticate, publicationService, assetService)
 }
 
+func NewRegistryApplicationHandler(application *platform.Platform, authenticate AuthenticateFunc, publicationService publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service) (http.Handler, error) {
+	if authenticate == nil || publicationService == nil || assetService == nil || registryService == nil {
+		return nil, errors.New("authentication and all application services are required")
+	}
+	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService)
+}
+
 func newHandler(application *platform.Platform, authenticate AuthenticateFunc) (http.Handler, error) {
 	return newHandlerWithPublication(application, authenticate, nil)
 }
@@ -102,6 +110,10 @@ func newHandlerWithPublication(application *platform.Platform, authenticate Auth
 }
 
 func newHandlerWithServices(application *platform.Platform, authenticate AuthenticateFunc, service publication.PublicationService, assetService assets.AssetBrokerService) (http.Handler, error) {
+	return newHandlerWithAllServices(application, authenticate, service, assetService, nil)
+}
+
+func newHandlerWithAllServices(application *platform.Platform, authenticate AuthenticateFunc, service publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service) (http.Handler, error) {
 	if application == nil {
 		return nil, errors.New("platform application is required")
 	}
@@ -127,6 +139,21 @@ func newHandlerWithServices(application *platform.Platform, authenticate Authent
 		mux.HandleFunc("POST /v1/runs/{run_id}/assets:exchange", assetExchange(application, assetService))
 		mux.HandleFunc("PUT /v1/asset-content/{grant_id}", assetUpload(application, assetService))
 		mux.HandleFunc("GET /v1/asset-content/{grant_id}", assetDownload(application, assetService))
+	}
+	if registryService != nil {
+		registryHandler, err := registryapi.NewHTTPHandler(registryService, func(request *http.Request) (registryapi.Caller, platform.RequestMetadata, bool) {
+			principal, principalOK := PrincipalFromContext(request.Context())
+			metadata, metadataOK := MetadataFromContext(request.Context())
+			if !principalOK || !metadataOK {
+				return registryapi.Caller{}, platform.RequestMetadata{}, false
+			}
+			return registryapi.Caller{TenantID: principal.TenantID, PrincipalID: principal.PrincipalID, CredentialID: principal.CredentialID, Scopes: slices.Clone(principal.Scopes)}, metadata, true
+		})
+		if err != nil {
+			return nil, err
+		}
+		mux.Handle("/v1/registry/", registryHandler)
+		mux.Handle("/v1/discovery/", registryHandler)
 	}
 	return instrument(application, mux, authenticate), nil
 }
@@ -491,6 +518,8 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 				writePublicationError(capture, http.StatusRequestEntityTooLarge, "BUNDLE_TOO_LARGE", "capacity", false)
 			} else if operation == "asset.upload" {
 				writeAssetError(capture, assets.NewError(assets.CategoryCapacity, assets.ReasonAssetTooLarge))
+			} else if isRegistryOperation(operation) {
+				writePublicationError(capture, http.StatusBadRequest, "REGISTRY_INVALID_REQUEST", "validation", false)
 			} else {
 				writeJSON(capture, http.StatusRequestEntityTooLarge, errorResponse{Status: "rejected"})
 			}
@@ -514,7 +543,7 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 				default:
 					if operation == "asset.exchange" {
 						writeAssetError(capture, assets.NewError(assets.CategoryAuthentication, assets.ReasonAuthenticationRequired))
-					} else if isPublicationOperation(operation) {
+					} else if isPublicationOperation(operation) || isRegistryOperation(operation) {
 						writePublicationError(capture, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication", false)
 					} else {
 						writeJSON(capture, http.StatusUnauthorized, errorResponse{Status: "unauthorized"})
@@ -561,8 +590,12 @@ func isAssetOperation(operation string) bool {
 	return operation == "asset.exchange" || operation == "asset.upload" || operation == "asset.download"
 }
 
+func isRegistryOperation(operation string) bool {
+	return strings.HasPrefix(operation, "registry.")
+}
+
 func isContractOperation(operation string) bool {
-	return isPublicationOperation(operation) || isAssetOperation(operation)
+	return isPublicationOperation(operation) || isAssetOperation(operation) || isRegistryOperation(operation)
 }
 
 func requiresControlPlaneAuthentication(operation string) bool {
@@ -638,6 +671,31 @@ func classifyOperation(method, path string) string {
 			return "asset.download"
 		}
 	}
+	if len(segments) == 4 && segments[0] == "v1" && segments[1] == "registry" && segments[2] == "instances" {
+		switch method {
+		case http.MethodPut:
+			return "registry.register"
+		case http.MethodPatch:
+			return "registry.operate"
+		case http.MethodDelete:
+			return "registry.deregister"
+		}
+	}
+	if method == http.MethodPost && len(segments) == 5 && segments[0] == "v1" && segments[1] == "registry" && segments[2] == "instances" && segments[4] == "drain" {
+		return "registry.drain"
+	}
+	if method == http.MethodPost && len(segments) == 5 && segments[0] == "v1" && segments[1] == "registry" && segments[2] == "leases" && segments[4] == "keepalive" {
+		return "registry.keepalive"
+	}
+	if method == http.MethodGet && len(segments) == 5 && segments[0] == "v1" && segments[1] == "discovery" && segments[2] == "agents" && segments[4] == "instances" {
+		return "registry.discover"
+	}
+	if method == http.MethodGet && len(segments) == 3 && segments[0] == "v1" && segments[1] == "discovery" && segments[2] == "changes" {
+		// P15 freezes the P16 Watch authentication boundary without
+		// registering its handler. Authenticated callers therefore receive the
+		// mux's 404 until P16, never a fallback scope or an accidental route.
+		return "registry.watch"
+	}
 	return "http.unmatched"
 }
 
@@ -649,6 +707,14 @@ func scopesForOperation(operation string) []string {
 		return []string{"agent:read"}
 	case "asset.exchange":
 		return []string{"asset:exchange"}
+	case "registry.register":
+		return []string{"registry:register"}
+	case "registry.operate":
+		return []string{"registry:operate"}
+	case "registry.keepalive", "registry.drain", "registry.deregister":
+		return []string{"registry:write"}
+	case "registry.discover", "registry.watch":
+		return []string{"registry:discover"}
 	default:
 		return []string{"secret.read"}
 	}

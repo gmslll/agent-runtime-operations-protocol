@@ -19,11 +19,13 @@ const (
 	IDAudit   IDKind = "audit"
 	IDTrace   IDKind = "trace"
 	IDSpan    IDKind = "span"
+	IDLease   IDKind = "lease"
+	IDEvent   IDKind = "event"
 )
 
 func (kind IDKind) Validate() error {
 	switch kind {
-	case IDRequest, IDAudit, IDTrace, IDSpan:
+	case IDRequest, IDAudit, IDTrace, IDSpan, IDLease, IDEvent:
 		return nil
 	default:
 		return fmt.Errorf("unknown ID kind %q", kind)

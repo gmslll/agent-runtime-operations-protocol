@@ -1,0 +1,101 @@
+openapi: 3.1.0
+info:
+  title: AROP Runtime Discovery API v1
+  version: 1.0.0
+  description: >-
+    Tenant-scoped runtime discovery. P15 implements only the snapshot route.
+    The Watch wire contract is frozen here for P16, but a conforming P15 server
+    MUST NOT register the changes route.
+servers:
+  - url: https://control-plane.example.invalid
+security:
+  - ControlPlaneBearer: []
+paths:
+  /v1/discovery/agents/{agent_id}/instances:
+    get:
+      operationId: discoverRuntimeInstances
+      x-arop-required-scopes: [registry:discover]
+      parameters:
+        - name: agent_id
+          in: path
+          required: true
+          schema: {$ref: '../schemas/common/identifiers.schema.json#/$defs/agentId'}
+        - name: version
+          in: query
+          required: true
+          schema: {$ref: '../schemas/common/identifiers.schema.json#/$defs/semanticVersion'}
+        - name: skill_id
+          in: query
+          required: true
+          schema: {$ref: '../schemas/common/identifiers.schema.json#/$defs/skillId'}
+        - name: protocol_version
+          in: query
+          required: true
+          schema: {type: string, minLength: 1, maxLength: 64}
+      responses:
+        '200':
+          description: A point-in-time, server-clock-filtered discovery snapshot.
+          content:
+            application/json:
+              schema: {$ref: '../schemas/registry/discovery-snapshot-v1.schema.json'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+  /v1/discovery/changes:
+    get:
+      operationId: watchRuntimeDiscoveryChanges
+      summary: P16 long-poll contract; deliberately unregistered by P15 servers
+      x-arop-implementation-phase: P16
+      x-arop-required-scopes: [registry:discover]
+      parameters:
+        - name: after_revision
+          in: query
+          required: true
+          schema: {type: integer, minimum: 0, maximum: 9007199254740991}
+        - name: wait_seconds
+          in: query
+          required: true
+          schema: {type: integer, minimum: 1, maximum: 30}
+      responses:
+        '200':
+          description: Ordered events after the requested revision.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiscoveryChanges'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/AuthenticationRequired'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '410':
+          description: The requested revision was compacted; fetch a new snapshot.
+          content: {application/json: {schema: {$ref: '../schemas/common/error.schema.json'}}}
+        '503': {$ref: '#/components/responses/DependencyUnavailable'}
+components:
+  securitySchemes:
+    ControlPlaneBearer: {type: http, scheme: bearer}
+  schemas:
+    DiscoveryChanges:
+      type: object
+      additionalProperties: false
+      required: [schema_version, revision, compaction_watermark, events]
+      properties:
+        schema_version: {const: 1}
+        revision: {type: integer, minimum: 0, maximum: 9007199254740991}
+        compaction_watermark: {type: integer, minimum: 0, maximum: 9007199254740991}
+        events: {type: array, maxItems: 10000, items: {$ref: '../schemas/registry/registry-event-v1.schema.json'}}
+  responses:
+    InvalidRequest:
+      description: REGISTRY_INVALID_REQUEST
+      content: {application/json: {schema: {$ref: '../schemas/common/error.schema.json'}}}
+    AuthenticationRequired:
+      description: A valid Control Plane bearer credential is required.
+      headers:
+        WWW-Authenticate: {schema: {type: string, pattern: '^Bearer(?: [A-Za-z][A-Za-z0-9_-]*="[ -!#-~]*")*$'}}
+      content: {application/json: {schema: {$ref: '../schemas/common/error.schema.json'}}}
+    Forbidden:
+      description: REGISTRY_FORBIDDEN
+      content: {application/json: {schema: {$ref: '../schemas/common/error.schema.json'}}}
+    DependencyUnavailable:
+      description: A discovery dependency is unavailable.
+      headers: {Retry-After: {schema: {type: integer, minimum: 1, maximum: 86400}}}
+      content: {application/json: {schema: {$ref: '../schemas/common/error.schema.json'}}}

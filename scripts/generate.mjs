@@ -320,9 +320,14 @@ class ModelCompiler {
 
   nameFor(reference, hint) {
     const configured = this.names.get(reference);
-    const candidate = configured ?? pascal(hint);
+    let candidate = configured ?? pascal(hint);
     if (!/^[A-Z][A-Za-z0-9]*$/u.test(candidate)) fail(`invalid generated type name ${JSON.stringify(candidate)}`);
-    const prior = this.nameReferences.get(candidate);
+    let prior = this.nameReferences.get(candidate);
+    if (configured === undefined && (["DateTime", "Nullable", "SafeInteger", "URIReference"].includes(candidate) || prior !== undefined && prior !== reference)) {
+      const resource = new URL(reference).pathname.split("/").at(-1).replace(/\.schema\.json$/u, "").replace(/-v[0-9]+$/u, "");
+      candidate = `${pascal(resource)}${candidate}`;
+      prior = this.nameReferences.get(candidate);
+    }
     if (prior !== undefined && prior !== reference) fail(`generated type name collision ${candidate}: ${prior} / ${reference}`);
     this.nameReferences.set(candidate, reference);
     this.referenceNames.set(reference, candidate);
@@ -350,6 +355,24 @@ class ModelCompiler {
   compileSchema(schema, baseURI, hint) {
     if (schema === true) return { kind: "json" };
     if (schema === false || schema === null || typeof schema !== "object" || Array.isArray(schema)) fail(`unsupported schema at ${hint}`);
+    if (Array.isArray(schema.allOf) && Object.keys(schema).every((key) => ["allOf", "title", "description", "$comment"].includes(key))) {
+      const branches = schema.allOf.map((branch) => Object.hasOwn(branch, "$ref") ? this.resolve(branch.$ref, baseURI).schema : branch);
+      if (branches.length === 0 || branches.some((branch) => branch === null || typeof branch !== "object" || Array.isArray(branch))) fail(`allOf at ${hint} must contain schemas`);
+      const types = new Set(branches.map((branch) => branch.type).filter(Boolean));
+      if (types.size !== 1 || !types.has("string")) fail(`allOf at ${hint} only supports compatible string constraints`);
+      const patterns = branches.map((branch) => branch.pattern).filter((value) => value !== undefined);
+      const formats = branches.map((branch) => branch.format).filter((value) => value !== undefined);
+      if (new Set(patterns).size > 1 || new Set(formats).size > 1) fail(`allOf at ${hint} has incompatible string constraints`);
+      const minima = branches.map((branch) => branch.minLength).filter((value) => value !== undefined);
+      const maxima = branches.map((branch) => branch.maxLength).filter((value) => value !== undefined);
+      return this.compileSchema({
+        type: "string",
+        ...(formats.length > 0 ? { format: formats[0] } : {}),
+        ...(patterns.length > 0 ? { pattern: patterns[0] } : {}),
+        ...(minima.length > 0 ? { minLength: Math.max(...minima) } : {}),
+        ...(maxima.length > 0 ? { maxLength: Math.min(...maxima) } : {}),
+      }, baseURI, hint);
+    }
     if (Object.hasOwn(schema, "$ref")) {
       const siblings = Object.keys(schema).filter((key) => !["$ref", "title", "description", "$comment"].includes(key));
       if (siblings.length > 0) fail(`$ref siblings are outside ${mappingProfile}: ${siblings.join(",")}`);
@@ -412,14 +435,14 @@ class ModelCompiler {
     }
     switch (schema.type) {
       case "string":
-        if (schema.format !== undefined && !["date-time", "uri-reference"].includes(schema.format)) fail(`unsupported string format ${schema.format}`);
+        if (schema.format !== undefined && !["date-time", "uri", "uri-reference"].includes(schema.format)) fail(`unsupported string format ${schema.format}`);
         if (schema.minLength !== undefined && (!Number.isSafeInteger(schema.minLength) || schema.minLength < 0)) fail(`minLength at ${hint} must be a non-negative safe integer`);
         if (schema.maxLength !== undefined && (!Number.isSafeInteger(schema.maxLength) || schema.maxLength < 0)) fail(`maxLength at ${hint} must be a non-negative safe integer`);
         if (schema.minLength !== undefined && schema.maxLength !== undefined && schema.minLength > schema.maxLength) fail(`string bounds at ${hint} are inverted`);
         if (schema.pattern !== undefined) validatePortablePattern(schema.pattern, hint);
         if (schema.not !== undefined && (typeof schema.not?.pattern !== "string" || Object.keys(schema.not).some((key) => key !== "pattern"))) fail(`not at ${hint} only supports a pattern constraint`);
         if (schema.not?.pattern !== undefined) validatePortablePattern(schema.not.pattern, `${hint}.not`);
-        return { kind: schema.format === "date-time" ? "date-time" : schema.format === "uri-reference" ? "uri-reference" : "string", minLength: schema.minLength, maxLength: schema.maxLength, pattern: schema.pattern, notPattern: schema.not?.pattern };
+        return { kind: schema.format === "date-time" ? "date-time" : ["uri", "uri-reference"].includes(schema.format) ? "uri-reference" : "string", minLength: schema.minLength, maxLength: schema.maxLength, pattern: schema.pattern, notPattern: schema.not?.pattern };
       case "integer":
         if (!Number.isSafeInteger(schema.minimum) || !Number.isSafeInteger(schema.maximum) || schema.minimum > schema.maximum) fail(`integer bounds at ${hint} must declare finite safe minimum and maximum`);
         return { kind: "integer", minimum: schema.minimum, maximum: schema.maximum };
@@ -476,7 +499,11 @@ class ModelCompiler {
         if (schema.minProperties !== undefined && (!Number.isSafeInteger(schema.minProperties) || schema.minProperties < 0)) fail(`minProperties at ${hint} must be a non-negative safe integer`);
         if (schema.maxProperties !== undefined && (!Number.isSafeInteger(schema.maxProperties) || schema.maxProperties < 0)) fail(`maxProperties at ${hint} must be a non-negative safe integer`);
         if (schema.minProperties !== undefined && schema.maxProperties !== undefined && schema.minProperties > schema.maxProperties) fail(`object bounds at ${hint} are inverted`);
-        const propertyNames = schema.propertyNames === undefined ? undefined : this.compileSchema(schema.propertyNames, baseURI, `${hint}PropertyName`);
+        const propertyNames = schema.propertyNames === undefined ? undefined : this.compileSchema(
+          schema.propertyNames.type === undefined ? { type: "string", ...schema.propertyNames } : schema.propertyNames,
+          baseURI,
+          `${hint}PropertyName`,
+        );
         const anyOfRequired = schema.anyOf === undefined ? [] : schema.anyOf.map((branch, index) => {
           if (branch === null || typeof branch !== "object" || Array.isArray(branch)) fail(`anyOf[${index}] at ${hint} must be an object`);
           const unsupported = Object.keys(branch).filter((key) => !["required", "properties"].includes(key));
@@ -713,22 +740,23 @@ function buildGoRuntime(types, rootNames) {
           ? "continue"
           : `clean, err := ${additionalSanitizer}(object[key], forward); if err != nil { return nil, err }; object[key] = clean`;
       const propertyCount = `${type.minProperties === undefined ? "" : ` if len(object) < ${type.minProperties} { return nil, fmt.Errorf("${name} has fewer than minProperties") };`}${type.maxProperties === undefined ? "" : ` if len(object) > ${type.maxProperties} { return nil, fmt.Errorf("${name} has more than maxProperties") };`}`;
-      const propertyNameValidation = type.propertyNames === undefined ? "" : ` for key := range object { ${goValidation(type.propertyNames, type.propertyNames.kind === "named" ? `${type.propertyNames.name}(key)` : "key", "", { value: 0 }).join(" ").replaceAll("return err", "return nil, err").replaceAll("return fmt.Errorf", "return nil, fmt.Errorf")} };`;
+      const propertyNameValidation = type.propertyNames === undefined ? "" : ` for key := range object { ${goValidation(type.propertyNames, type.propertyNames.kind === "named" ? `${type.propertyNames.name}(key)` : "key", "", { value: 0 }).join("; ").replaceAll("return err", "return nil, err").replaceAll("return fmt.Errorf", "return nil, fmt.Errorf")} };`;
       const alternatives = type.anyOfRequired.length === 0 ? "" : ` alternatives := 0; ${type.anyOfRequired.map((group) => `{ matched := true; ${group.map((wire) => `if _, ok := object[${literal(wire)}]; !ok { matched = false };`).join(" ")} if matched { alternatives++ } }`).join("; ")}; if alternatives == 0 { return nil, fmt.Errorf("${name} does not satisfy any required-property alternative") };`;
       const conditionals = type.conditionals.map((rule) => ` if raw, ok := object[${literal(rule.property)}]; ok { var discriminator string; if err := json.Unmarshal(raw, &discriminator); err != nil { return nil, err }; if ${rule.values.map((value) => `discriminator == ${literal(value)}`).join(" || ")} { ${rule.required.map((wire) => `if _, exists := object[${literal(wire)}]; !exists { return nil, fmt.Errorf("${name}.${wire} is conditionally required") };`).join(" ")} ${Object.entries(rule.allowed).map(([wire, values]) => `if candidate, exists := object[${literal(wire)}]; exists { var value string; if err := json.Unmarshal(candidate, &value); err != nil { return nil, err }; allowed := map[string]bool{${values.map((value) => `${literal(value)}: true`).join(", ")}}; if !allowed[value] { return nil, fmt.Errorf("${name}.${wire} violates conditional enum") } }`).join(" ")} } };`).join("");
       namedSanitizers.push(`func sanitize${name}(data []byte, forward bool) ([]byte, error) { if bytes.Equal(bytes.TrimSpace(data), []byte("null")) { return nil, fmt.Errorf("non-nullable ${name} is null") }; var object map[string]json.RawMessage; if err := decodeJSON(data, &object); err != nil { return nil, err };${propertyCount}${propertyNameValidation}${required}${alternatives}${conditionals} known := map[string]bool{${known.split(", ").filter(Boolean).map((item) => `${item}: true`).join(", ")}}; for key := range object { if !known[key] { ${unknown} } };${nested} return json.Marshal(object) }`);
       const statements = [];
+      const validationSequence = { value: 0 };
       for (const field of type.fields) {
         const fieldExpression = `value.${goName(field.wire)}`;
-        if (field.required || field.type.kind === "nullable") statements.push(...goValidation(field.type, fieldExpression));
+        if (field.required || field.type.kind === "nullable") statements.push(...goValidation(field.type, fieldExpression, "\t", validationSequence));
         else {
           statements.push(`\tif ${fieldExpression} != nil {`);
-          statements.push(...goValidation(field.type, `*${fieldExpression}`, "\t\t"));
+          statements.push(...goValidation(field.type, `*${fieldExpression}`, "\t\t", validationSequence));
           statements.push("\t}");
         }
       }
       if (type.additional !== false) {
-        const additionalValidation = goValidation(type.additional, "item", "\t\t");
+        const additionalValidation = goValidation(type.additional, "item", "\t\t", validationSequence);
         if (additionalValidation.length > 0) {
           statements.push("\tfor _, item := range value.additionalProperties {");
           statements.push(...additionalValidation);
@@ -1206,6 +1234,10 @@ async function main() {
     if (language === "go" && config.outputs.go.model.startsWith("sdk/go/generated/asset/")) {
       modelSource = modelSource.replace("package generatedcodec", "package asset");
       probeSource = probeSource.replace("package generatedcodec", "package asset");
+    }
+    if (language === "go" && config.outputs.go.model.startsWith("sdk/go/generated/registry/")) {
+      modelSource = modelSource.replace("package generatedcodec", "package registry");
+      probeSource = probeSource.replace("package generatedcodec", "package registry");
     }
     if (language === "python") {
       const moduleName = path.basename(config.outputs.python.model, ".py");

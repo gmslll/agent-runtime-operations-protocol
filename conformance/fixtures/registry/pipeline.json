@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "resources": [
+    {"path": "schemas/common/identifiers.schema.json", "uri": "https://arop.invalid/schemas/v1/common/identifiers.schema.json"},
+    {"path": "schemas/registry/runtime-instance-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/registry/runtime-instance-v1.schema.json"},
+    {"path": "schemas/registry/lease-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/registry/lease-v1.schema.json"},
+    {"path": "schemas/registry/registry-event-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/registry/registry-event-v1.schema.json"},
+    {"path": "schemas/registry/discovery-snapshot-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/registry/discovery-snapshot-v1.schema.json"}
+  ],
+  "roots": [
+    {"ref": "https://arop.invalid/schemas/v1/registry/runtime-instance-v1.schema.json", "name": "RuntimeInstance"},
+    {"ref": "https://arop.invalid/schemas/v1/registry/lease-v1.schema.json", "name": "RegistryLease"},
+    {"ref": "https://arop.invalid/schemas/v1/registry/registry-event-v1.schema.json", "name": "RegistryEvent"},
+    {"ref": "https://arop.invalid/schemas/v1/registry/discovery-snapshot-v1.schema.json", "name": "DiscoverySnapshot"}
+  ],
+  "fixtures": {
+    "valid": [
+      {"id": "runtime-instance", "path": "conformance/fixtures/registry/runtime-instance.valid.json", "root": "RuntimeInstance"},
+      {"id": "registry-lease", "path": "conformance/fixtures/registry/lease.valid.json", "root": "RegistryLease"},
+      {"id": "registry-event", "path": "conformance/fixtures/registry/registry-event.valid.json", "root": "RegistryEvent"},
+      {"id": "discovery-snapshot", "path": "conformance/fixtures/registry/discovery-snapshot.valid.json", "root": "DiscoverySnapshot"}
+    ],
+    "forward": [
+      {"id": "discovery-snapshot-future-field", "path": "conformance/fixtures/registry/discovery-snapshot.forward.json", "root": "DiscoverySnapshot"}
+    ],
+    "invalid": [
+      {"id": "discovery-snapshot-unsafe-revision", "path": "conformance/fixtures/registry/discovery-snapshot.invalid.json", "root": "DiscoverySnapshot"}
+    ]
+  },
+  "outputs": {
+    "go": {"model": "sdk/go/generated/registry/registry.gen.go"},
+    "python": {"model": "sdk/python/src/arop/generated/registry/registry_gen.py"},
+    "typescript": {"model": "sdk/typescript/src/generated/registry/registry.gen.ts"}
+  }
+}

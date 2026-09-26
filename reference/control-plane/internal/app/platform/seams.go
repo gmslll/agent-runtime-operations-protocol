@@ -30,13 +30,19 @@ func (source SystemIDSource) NewID(ctx context.Context, kind platformports.IDKin
 		return "", errors.New("ID source clock is required")
 	}
 	switch kind {
-	case platformports.IDRequest, platformports.IDAudit:
+	case platformports.IDRequest, platformports.IDAudit, platformports.IDLease, platformports.IDEvent:
 		value, err := uuidV7(source.Clock.Now(), rand.Read)
 		if err != nil {
 			return "", err
 		}
 		if kind == platformports.IDRequest {
 			return "req_" + value, nil
+		}
+		if kind == platformports.IDLease {
+			return "lease_" + value, nil
+		}
+		if kind == platformports.IDEvent {
+			return "evt_" + value, nil
 		}
 		return "aud_" + value, nil
 	case platformports.IDTrace:
