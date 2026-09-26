@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/runtime/run-request-v1.schema.json",
+  "title": "AROP v1 RunRequest",
+  "$comment": "A Control Plane-authorized immutable request. Credentials, endpoints and channel-specific identifiers are forbidden. write and irreversible requests carry a stable cross-attempt effect_id.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "agent", "input", "deadline_at", "effects", "trace"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "agent": {"$ref": "#/$defs/agentBinding"},
+    "input": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "https://arop.invalid/schemas/v1/common/content-part.schema.json"}},
+    "deadline_at": {"type": "string", "format": "date-time"},
+    "conversation_ref": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/conversationRef"},
+    "effects": {"$ref": "#/$defs/effects"},
+    "trace": {"$ref": "https://arop.invalid/schemas/v1/common/trace.schema.json"},
+    "labels": {
+      "type": "object",
+      "maxProperties": 64,
+      "propertyNames": {"pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$", "maxLength": 64},
+      "additionalProperties": {"type": "string", "minLength": 1, "maxLength": 256}
+    }
+  },
+  "$defs": {
+    "agentBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "skill_id", "manifest_digest"],
+      "properties": {
+        "id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/agentId"},
+        "version": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/semanticVersion"},
+        "skill_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/skillId"},
+        "manifest_digest": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/sha256Digest"}
+      }
+    },
+    "effects": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level"],
+          "properties": {"level": {"const": "none"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level"],
+          "properties": {"level": {"const": "read"}}
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level", "effect_id"],
+          "properties": {
+            "level": {"const": "write"},
+            "effect_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/effectId"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level", "effect_id"],
+          "properties": {
+            "level": {"const": "irreversible"},
+            "effect_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/effectId"}
+          }
+        }
+      ]
+    }
+  }
+}

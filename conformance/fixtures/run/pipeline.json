@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "resources": [
+    {"path": "schemas/common/identifiers.schema.json", "uri": "https://arop.invalid/schemas/v1/common/identifiers.schema.json"},
+    {"path": "schemas/common/error.schema.json", "uri": "https://arop.invalid/schemas/v1/common/error.schema.json"},
+    {"path": "schemas/common/trace.schema.json", "uri": "https://arop.invalid/schemas/v1/common/trace.schema.json"},
+    {"path": "schemas/common/content-part.schema.json", "uri": "https://arop.invalid/schemas/v1/common/content-part.schema.json"},
+    {"path": "schemas/resources/asset-ref-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json"},
+    {"path": "schemas/resources/data-ref-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/resources/data-ref-v1.schema.json"},
+    {"path": "schemas/runtime/run-request-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/runtime/run-request-v1.schema.json"},
+    {"path": "schemas/runtime/result-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/runtime/result-v1.schema.json"},
+    {"path": "schemas/runtime/run-status-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/runtime/run-status-v1.schema.json"},
+    {"path": "schemas/runtime/command-v1.schema.json", "uri": "https://arop.invalid/schemas/v1/runtime/command-v1.schema.json"}
+  ],
+  "roots": [
+    {"ref": "https://arop.invalid/schemas/v1/runtime/run-request-v1.schema.json", "name": "RunRequest"},
+    {"ref": "https://arop.invalid/schemas/v1/runtime/result-v1.schema.json", "name": "RunResult"},
+    {"ref": "https://arop.invalid/schemas/v1/runtime/run-status-v1.schema.json", "name": "RunStatus"},
+    {"ref": "https://arop.invalid/schemas/v1/runtime/command-v1.schema.json", "name": "RunCommand"}
+  ],
+  "fixtures": {
+    "valid": [
+      {"id": "run-request", "path": "conformance/fixtures/run/run-request.valid.json", "root": "RunRequest"},
+      {"id": "run-result", "path": "conformance/fixtures/run/result.valid.json", "root": "RunResult"},
+      {"id": "run-status", "path": "conformance/fixtures/run/run-status.valid.json", "root": "RunStatus"},
+      {"id": "run-command", "path": "conformance/fixtures/run/command.valid.json", "root": "RunCommand"}
+    ],
+    "forward": [
+      {"id": "run-status-future-field", "path": "conformance/fixtures/run/run-status.forward.json", "root": "RunStatus"}
+    ],
+    "invalid": [
+      {"id": "irreversible-without-effect-id", "path": "conformance/fixtures/run/run-request.invalid.json", "root": "RunRequest"},
+      {"id": "success-without-final-snapshot", "path": "conformance/fixtures/run/result.invalid.json", "root": "RunResult"},
+      {"id": "nonterminal-with-result", "path": "conformance/fixtures/run/run-status.invalid.json", "root": "RunStatus"}
+    ]
+  },
+  "outputs": {
+    "go": {"model": "sdk/go/generated/run/run.gen.go"},
+    "python": {"model": "sdk/python/src/arop/generated/run/run_gen.py"},
+    "typescript": {"model": "sdk/typescript/src/generated/run/run.gen.ts"}
+  }
+}

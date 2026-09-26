@@ -1,0 +1,138 @@
+openapi: 3.1.0
+info:
+  title: AROP Control Plane Run v1 fragment
+  version: 1.0.0
+  description: Run creation, status and idempotent command contract.
+paths:
+  /v1/agent-runs:
+    post:
+      operationId: createAgentRun
+      security:
+        - ControlPlaneBearer: []
+      x-arop-required-scopes: [run:create]
+      x-arop-effects-require-stable-effect-id: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../../../schemas/runtime/run-request-v1.schema.json'
+      responses:
+        '201':
+          description: A durable queued Run was created.
+          headers:
+            Location:
+              required: true
+              schema: {type: string, pattern: '^/v1/agent-runs/run_[0-9a-f-]+$'}
+          content:
+            application/json:
+              schema:
+                $ref: '../../../schemas/runtime/run-status-v1.schema.json'
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '429': {$ref: '#/components/responses/Error429'}
+        '503': {$ref: '#/components/responses/Error503'}
+  /v1/agent-runs/{run_id}:
+    get:
+      operationId: getAgentRun
+      security:
+        - ControlPlaneBearer: []
+      x-arop-required-scopes: [run:read]
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: Current durable Run state.
+          content:
+            application/json:
+              schema:
+                $ref: '../../../schemas/runtime/run-status-v1.schema.json'
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '503': {$ref: '#/components/responses/Error503'}
+  /v1/agent-runs/{run_id}/commands:
+    post:
+      operationId: submitAgentRunCommand
+      security:
+        - ControlPlaneBearer: []
+      x-arop-required-scopes: [run:command]
+      x-arop-first-terminal-state-wins: true
+      parameters:
+        - $ref: '#/components/parameters/RunId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../../../schemas/runtime/command-v1.schema.json'
+      responses:
+        '200':
+          description: The idempotent command result.
+          content:
+            application/json:
+              schema:
+                $ref: '../../../schemas/runtime/run-status-v1.schema.json'
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '503': {$ref: '#/components/responses/Error503'}
+components:
+  securitySchemes:
+    ControlPlaneBearer: {type: http, scheme: bearer}
+  parameters:
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      schema:
+        $ref: '../../../schemas/common/identifiers.schema.json#/$defs/runId'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 8, maxLength: 200, pattern: '^[!-~]+$'}
+  schemas:
+    AROPError:
+      $ref: '../../../schemas/common/error.schema.json'
+  responses:
+    Error400: {$ref: '#/components/responses/Typed400'}
+    Error401:
+      description: Authentication required.
+      headers:
+        WWW-Authenticate:
+          required: true
+          schema: {type: string, pattern: '^Bearer(?: [A-Za-z][A-Za-z0-9_-]*="[ -!#-~]*")*$'}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Error403: {$ref: '#/components/responses/Typed403'}
+    Error404: {$ref: '#/components/responses/Typed404'}
+    Error409: {$ref: '#/components/responses/Typed409'}
+    Error429:
+      description: Capacity exhausted.
+      headers:
+        Retry-After: {required: true, schema: {type: integer, minimum: 1, maximum: 86400}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Error503:
+      description: A durable dependency is unavailable.
+      headers:
+        Retry-After: {required: true, schema: {type: integer, minimum: 1, maximum: 86400}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Typed400:
+      description: Invalid run request or command.
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Typed403:
+      description: Caller is not authorized for the run operation.
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Typed404:
+      description: Run not found within the caller tenant.
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Typed409:
+      description: Idempotency, state-version or effect reservation conflict.
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}

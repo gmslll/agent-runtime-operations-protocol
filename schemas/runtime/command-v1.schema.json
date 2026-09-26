@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/runtime/command-v1.schema.json",
+  "title": "AROP v1 Run command",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "command_id", "type", "expected_state_version", "data"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "command_id": {"type": "string", "pattern": "^cmd_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "type": {"enum": ["run.cancel", "input.submit", "approval.approve", "approval.reject"]},
+    "expected_state_version": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "data": {"type": "object", "maxProperties": 64},
+    "approved_by": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principal_id", "channel"],
+      "properties": {
+        "principal_id": {"type": "string", "pattern": "^prn_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+        "channel": {"type": "string", "minLength": 1, "maxLength": 64}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"type": {"enum": ["approval.approve", "approval.reject"]}}, "required": ["type"]},
+      "then": {"required": ["approved_by"]}
+    }
+  ]
+}

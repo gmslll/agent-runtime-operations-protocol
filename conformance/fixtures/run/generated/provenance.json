@@ -1,0 +1,275 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "command": {
+    "entry": "scripts/generate.mjs",
+    "config": "conformance/fixtures/run/pipeline.json",
+    "output": "<output>",
+    "result": "<output>/provenance.json"
+  },
+  "generator": {
+    "path": "scripts/generate.mjs",
+    "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+    "files": [
+      {
+        "path": "scripts/generate.mjs",
+        "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+        "bytes": 142421,
+        "mode": "100644"
+      },
+      {
+        "path": "scripts/lib/repository.mjs",
+        "sha256": "4d87c901bbfeee969214d8620154acefb6b76d9a8084fa858db1917c726b2733",
+        "bytes": 44748,
+        "mode": "100644"
+      },
+      {
+        "path": "package.json",
+        "sha256": "a0480da8a20f9ba2c1355d58723295d22ca3a06235e3763aaf67742edc4e2661",
+        "bytes": 574,
+        "mode": "100644"
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "982e444493976055a5d34793bcdbc50751ec6f9d60148562a037f19a8d036b37",
+        "bytes": 5565,
+        "mode": "100644"
+      }
+    ]
+  },
+  "configuration": {
+    "path": "conformance/fixtures/run/pipeline.json",
+    "sha256": "2d4f729a4d773954febefdc6ec3c56d325be21cf013cac69c2818e4afc5aa1b0",
+    "bytes": 3082,
+    "mode": "100644"
+  },
+  "resources": [
+    {
+      "path": "schemas/common/identifiers.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/identifiers.schema.json",
+      "sha256": "87503f773550083f8cb7f0213b6fd336bc21bf5c54575af49a21f447de209269",
+      "bytes": 2818,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/common/error.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/error.schema.json",
+      "sha256": "26f53fa585547b4ed3d601b6d1773cc410d6ac8f78136df26e4fb98c2d5b7890",
+      "bytes": 1100,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/common/trace.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/trace.schema.json",
+      "sha256": "9de00b47d1d56071c449111062f1f0cc2b29090a5720c3df90a29d04c3db5053",
+      "bytes": 744,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/common/content-part.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/content-part.schema.json",
+      "sha256": "d90e09b9c933cc8024ed3016d067a3f79a861548dd9e20c682b77ad13d120fee",
+      "bytes": 1189,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/resources/asset-ref-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json",
+      "sha256": "3fcd98064f555252a27d80af1bf951619dff2ae3c68680d6fd6215e83ca18433",
+      "bytes": 1243,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/resources/data-ref-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/resources/data-ref-v1.schema.json",
+      "sha256": "85b13a3b8fd4a1d4c74cb4d437fe3eea61aac30ba8934a175aece768d525948f",
+      "bytes": 916,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/runtime/run-request-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/runtime/run-request-v1.schema.json",
+      "sha256": "d9ea7ce7ed0ea57dc2809a8b6dede6552946ae55b71f0edac134a128d8561a36",
+      "bytes": 3068,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/runtime/result-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/runtime/result-v1.schema.json",
+      "sha256": "32ebf8f8fddf2f78fd9fdb83fcfa34869859dcaeae0fe35925fecf832845bdb2",
+      "bytes": 2629,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/runtime/run-status-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/runtime/run-status-v1.schema.json",
+      "sha256": "a3afc2fe407ac120d00478c7d80605b44ed835423a6ddd166161cd952f9a1773",
+      "bytes": 1857,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/runtime/command-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/runtime/command-v1.schema.json",
+      "sha256": "c327afe89085a338c9f5310429343bcb86f994fe0baa7b2f75f0f0dd973795c9",
+      "bytes": 1294,
+      "mode": "100644"
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "run-request",
+      "class": "valid",
+      "root": "RunRequest",
+      "path": "conformance/fixtures/run/run-request.valid.json",
+      "sha256": "f462be912dee3006af2cf41f2d950897c472c40fa109e79bb2d57fd6fdef4dc0",
+      "bytes": 587,
+      "mode": "100644"
+    },
+    {
+      "id": "run-result",
+      "class": "valid",
+      "root": "RunResult",
+      "path": "conformance/fixtures/run/result.valid.json",
+      "sha256": "523d960e38c75afba49381eadb75d9dc3041b5809001453e5a18718ccd93d36a",
+      "bytes": 415,
+      "mode": "100644"
+    },
+    {
+      "id": "run-status",
+      "class": "valid",
+      "root": "RunStatus",
+      "path": "conformance/fixtures/run/run-status.valid.json",
+      "sha256": "c7027bc980f038393792da6cae18f6eabdc2846ebeeb6998fb5329015596ffe9",
+      "bytes": 636,
+      "mode": "100644"
+    },
+    {
+      "id": "run-command",
+      "class": "valid",
+      "root": "RunCommand",
+      "path": "conformance/fixtures/run/command.valid.json",
+      "sha256": "a1f075094d9a0737084f8e1ece2768ff7bed6f613b5d2dcea84b404ebf9d8f3b",
+      "bytes": 183,
+      "mode": "100644"
+    },
+    {
+      "id": "run-status-future-field",
+      "class": "forward",
+      "root": "RunStatus",
+      "path": "conformance/fixtures/run/run-status.forward.json",
+      "sha256": "2613a665dae49a1207fbc81627747c6fbc2db2b074b64515728a8183958b3011",
+      "bytes": 660,
+      "mode": "100644"
+    },
+    {
+      "id": "irreversible-without-effect-id",
+      "class": "invalid",
+      "root": "RunRequest",
+      "path": "conformance/fixtures/run/run-request.invalid.json",
+      "sha256": "549932864096fa874d6018a65e439a3f1569e67c56b96146de3502852797e640",
+      "bytes": 442,
+      "mode": "100644"
+    },
+    {
+      "id": "success-without-final-snapshot",
+      "class": "invalid",
+      "root": "RunResult",
+      "path": "conformance/fixtures/run/result.invalid.json",
+      "sha256": "84efd968c19659ac9f837e8fa7f2568240b39763568dc87323db05cb53f43976",
+      "bytes": 221,
+      "mode": "100644"
+    },
+    {
+      "id": "nonterminal-with-result",
+      "class": "invalid",
+      "root": "RunStatus",
+      "path": "conformance/fixtures/run/run-status.invalid.json",
+      "sha256": "6567f7d02c882ed99d269f8d089c287c829180c40d1934280b0793c29659e232",
+      "bytes": 879,
+      "mode": "100644"
+    }
+  ],
+  "inputs_sha256": "17cbf18675eeb81fa828d9b00892eac462487457be6b28efb11a30c90269149a",
+  "outputs": [
+    {
+      "language": "go",
+      "path": "sdk/go/generated/run/run.gen.go",
+      "sha256": "66a599469d28716c61d84aaa75dc54468117fb5fd66c9b5b1314d9ef8ae3fc06",
+      "bytes": 90809,
+      "mode": "100644"
+    },
+    {
+      "language": "python",
+      "path": "sdk/python/src/arop/generated/run/run_gen.py",
+      "sha256": "1981b3e079cb2b0f8b9ddbb42e2b842ec7eb26cf7d8d53d86a4dfac4d3935b33",
+      "bytes": 42944,
+      "mode": "100644"
+    },
+    {
+      "language": "typescript",
+      "path": "sdk/typescript/src/generated/run/run.gen.ts",
+      "sha256": "048f6a7795fcfc75624d3d5e0926e2655b3511f39ef5107565736bab62e31540",
+      "bytes": 41026,
+      "mode": "100644"
+    }
+  ],
+  "outputs_sha256": "383f4ae4a02e79686c0c4b9c27bf62bb5fc51c830537eb4058e9c4190fed1fcb",
+  "checks": [
+    {
+      "id": "schema-valid-run-request",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-run-result",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-run-status",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-run-command",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-forward-run-status-future-field",
+      "passed": true,
+      "detail": "data must NOT have additional properties"
+    },
+    {
+      "id": "schema-invalid-irreversible-without-effect-id",
+      "passed": true,
+      "detail": "data/effects/level must be equal to constant, data/effects/level must be equal to constant, data/effects must have required property 'effect_id', data/effects/level must be equal to constant, data/effects must have required property 'effect_id', data/effects must match exactly one schema in oneOf"
+    },
+    {
+      "id": "schema-invalid-success-without-final-snapshot",
+      "passed": true,
+      "detail": "data must have required property 'snapshot', data must have required property 'result_ref', data must match exactly one schema in oneOf, data must match \"then\" schema"
+    },
+    {
+      "id": "schema-invalid-nonterminal-with-result",
+      "passed": true,
+      "detail": "data must NOT be valid, data must match \"then\" schema"
+    },
+    {
+      "id": "offline-resource-closure",
+      "passed": true,
+      "detail": "10 explicit resources"
+    },
+    {
+      "id": "mapping-profile",
+      "passed": true,
+      "detail": "38 named types"
+    },
+    {
+      "id": "deterministic-output-set",
+      "passed": true,
+      "detail": "3 outputs"
+    }
+  ]
+}

@@ -35,7 +35,7 @@ func TestProductionMigration0030Conformance(t *testing.T) {
 			t.Run("empty-and-idempotent", func(t *testing.T) {
 				database := openDatabase(t, dialect)
 				defer database.close()
-				runner := newRunner(t, database, loadCatalog(t, migrate.CurrentProductionCatalog(), dialect), p14Verifier(dialect), nil)
+				runner := newRunner(t, database, loadCatalog(t, migrate.P14ProductionCatalog(), dialect), p14Verifier(dialect), nil)
 				result, err := runner.Migrate(context.Background())
 				requireNoError(t, err)
 				if result.FromVersion != 0 || result.ToVersion != 30 || !reflect.DeepEqual(result.Applied, []int64{1, 5, 10, 20, 30}) || result.Snapshot != nil {
@@ -58,7 +58,7 @@ func TestProductionMigration0030Conformance(t *testing.T) {
 				if setup.ToVersion != 20 || !reflect.DeepEqual(setup.Applied, []int64{1, 5, 10, 20}) {
 					t.Fatalf("P13 setup result: %#v", setup)
 				}
-				current := newRunner(t, database, loadCatalog(t, migrate.CurrentProductionCatalog(), dialect), p14Verifier(dialect), database.backup)
+				current := newRunner(t, database, loadCatalog(t, migrate.P14ProductionCatalog(), dialect), p14Verifier(dialect), database.backup)
 				result, err := current.Migrate(context.Background())
 				requireNoError(t, err)
 				if result.FromVersion != 20 || result.ToVersion != 30 || !reflect.DeepEqual(result.Applied, []int64{30}) || result.Snapshot == nil {
@@ -70,7 +70,7 @@ func TestProductionMigration0030Conformance(t *testing.T) {
 			t.Run("dirty-history-fails-closed", func(t *testing.T) {
 				database := openDatabase(t, dialect)
 				defer database.close()
-				runner := newRunner(t, database, loadCatalog(t, migrate.CurrentProductionCatalog(), dialect), p14Verifier(dialect), nil)
+				runner := newRunner(t, database, loadCatalog(t, migrate.P14ProductionCatalog(), dialect), p14Verifier(dialect), nil)
 				_, err := runner.Migrate(context.Background())
 				requireNoError(t, err)
 				statement := `UPDATE arop_schema_migrations SET dirty=1,applied_at_ns=NULL WHERE version=30`

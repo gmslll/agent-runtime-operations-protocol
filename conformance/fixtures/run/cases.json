@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "valid": [
+    {"schema": "schemas/runtime/run-request-v1.schema.json", "document": "conformance/fixtures/run/run-request.valid.json"},
+    {"schema": "schemas/runtime/run-status-v1.schema.json", "document": "conformance/fixtures/run/run-status.valid.json"},
+    {"schema": "schemas/runtime/command-v1.schema.json", "document": "conformance/fixtures/run/command.valid.json"},
+    {"schema": "schemas/runtime/result-v1.schema.json", "document": "conformance/fixtures/run/result.valid.json"}
+  ],
+  "invalid_mutations": [
+    {"name": "unsafe-state-version", "document": "run-status.valid.json", "pointer": "/state_version", "value": 9007199254740992},
+    {"name": "write-without-effect-id", "document": "run-request.valid.json", "pointer": "/effects", "value": {"level": "write"}},
+    {"name": "nonterminal-with-result", "document": "run-status.valid.json", "pointer": "/result", "value": {"schema_version": 1, "run_id": "run_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c", "state": "cancelled", "usage": {"input_tokens": 0, "output_tokens": 0, "duration_ms": 0}, "completed_at": "2026-09-27T09:00:04Z"}},
+    {"name": "success-without-final-snapshot", "document": "result.valid.json", "pointer": "/snapshot", "delete": true}
+  ],
+  "terminal_states": ["succeeded", "failed", "cancelled", "timed_out"],
+  "nonterminal_states": ["queued", "dispatching", "running", "waiting_input", "cancel_requested"]
+}

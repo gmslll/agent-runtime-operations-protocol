@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/runtime/run-status-v1.schema.json",
+  "title": "AROP v1 Run status",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "state", "state_version", "agent", "authorization_snapshot_digest", "created_at", "updated_at", "deadline_at", "trace"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "run_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/runId"},
+    "state": {"enum": ["queued", "dispatching", "running", "waiting_input", "cancel_requested", "succeeded", "failed", "cancelled", "timed_out"]},
+    "state_version": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "agent": {"$ref": "https://arop.invalid/schemas/v1/runtime/run-request-v1.schema.json#/$defs/agentBinding"},
+    "authorization_snapshot_digest": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/sha256Digest"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "deadline_at": {"type": "string", "format": "date-time"},
+    "cancel_requested_at": {"type": "string", "format": "date-time"},
+    "trace": {"$ref": "https://arop.invalid/schemas/v1/common/trace.schema.json"},
+    "result": {"$ref": "https://arop.invalid/schemas/v1/runtime/result-v1.schema.json"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"state": {"enum": ["succeeded", "failed", "cancelled", "timed_out"]}}, "required": ["state"]},
+      "then": {"required": ["result"]}
+    },
+    {
+      "if": {"properties": {"state": {"enum": ["queued", "dispatching", "running", "waiting_input", "cancel_requested"]}}, "required": ["state"]},
+      "then": {"not": {"required": ["result"]}}
+    }
+  ]
+}

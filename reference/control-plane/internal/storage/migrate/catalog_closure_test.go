@@ -3,6 +3,7 @@ package migrate
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"strings"
 	"testing"
 	"testing/fstest"
 )
@@ -111,16 +112,20 @@ func TestProductionCatalogSnapshots(t *testing.T) {
 	if p13.ReportPhase != "P13" || p13.ReportPath != "build/reports/P13/report.json" || len(p13.Migrations) != 8 {
 		t.Fatalf("P13 snapshot drifted: %+v", p13)
 	}
+	p14 := P14ProductionCatalog()
+	if p14.ReportPhase != "P14" || p14.ReportPath != "build/reports/P14/report.json" || len(p14.Migrations) != 10 {
+		t.Fatalf("P14 snapshot drifted: %+v", p14)
+	}
 	current := CurrentProductionCatalog()
-	if current.ReportPhase != "P14" || current.ReportPath != "build/reports/P14/report.json" || len(current.Migrations) != 10 {
-		t.Fatalf("current catalog is not P14 complete: %+v", current)
+	if current.ReportPhase != "P18" || current.ReportPath != "build/reports/P18/report.json" || len(current.Migrations) != 12 {
+		t.Fatalf("current catalog is not P18 complete: %+v", current)
 	}
 	for _, item := range current.Migrations {
 		if item.Path == "" || item.OwnerPhase == "" || item.SHA256 == "" {
 			t.Fatalf("incomplete current declaration: %+v", item)
 		}
-		if item.Path == "sqlite/0040_future.sql" || item.Path == "postgres/0040_future.sql" {
-			t.Fatalf("test-only future migration admitted: %s", item.Path)
+		if strings.Contains(item.Path, "0050_") {
+			t.Fatalf("future migration admitted: %s", item.Path)
 		}
 	}
 }

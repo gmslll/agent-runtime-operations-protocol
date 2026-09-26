@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/runtime/result-v1.schema.json",
+  "title": "AROP v1 terminal Run result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "state", "usage", "completed_at"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "run_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/runId"},
+    "state": {"enum": ["succeeded", "failed", "cancelled", "timed_out"]},
+    "snapshot": {"$ref": "#/$defs/snapshot"},
+    "result_ref": {"$ref": "https://arop.invalid/schemas/v1/resources/data-ref-v1.schema.json"},
+    "error": {"$ref": "https://arop.invalid/schemas/v1/common/error.schema.json"},
+    "usage": {"$ref": "#/$defs/usage"},
+    "completed_at": {"type": "string", "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"state": {"const": "succeeded"}}, "required": ["state"]},
+      "then": {"oneOf": [{"required": ["snapshot"], "not": {"required": ["result_ref"]}}, {"required": ["result_ref"], "not": {"required": ["snapshot"]}}], "not": {"required": ["error"]}}
+    },
+    {
+      "if": {"properties": {"state": {"const": "failed"}}, "required": ["state"]},
+      "then": {"required": ["error"], "not": {"anyOf": [{"required": ["snapshot"]}, {"required": ["result_ref"]}]}}
+    },
+    {
+      "if": {"properties": {"state": {"enum": ["cancelled", "timed_out"]}}, "required": ["state"]},
+      "then": {"not": {"anyOf": [{"required": ["snapshot"]}, {"required": ["result_ref"]}]}}
+    }
+  ],
+  "$defs": {
+    "safeInteger": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "content", "digest"],
+      "properties": {
+        "revision": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "content": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "https://arop.invalid/schemas/v1/common/content-part.schema.json"}},
+        "digest": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/sha256Digest"}
+      }
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_tokens", "output_tokens", "duration_ms"],
+      "properties": {
+        "input_tokens": {"$ref": "#/$defs/safeInteger"},
+        "output_tokens": {"$ref": "#/$defs/safeInteger"},
+        "duration_ms": {"$ref": "#/$defs/safeInteger"},
+        "billable_units": {"$ref": "#/$defs/safeInteger"}
+      }
+    }
+  }
+}
