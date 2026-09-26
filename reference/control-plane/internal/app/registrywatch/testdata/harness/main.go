@@ -669,8 +669,8 @@ func run(directory string, overrides map[string]string, name string, args ...str
 }
 
 func cleanEnvironment(overrides map[string]string) []string {
-	values := map[string]string{"GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": "off", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "TZ": "UTC", "HOME": "/nonexistent"}
-	for _, key := range []string{"LANG", "LC_ALL", "PATH", "TMPDIR"} {
+	values := map[string]string{"GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": "off", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "TZ": "UTC"}
+	for _, key := range []string{"HOME", "LANG", "LC_ALL", "PATH", "TMPDIR"} {
 		if value := os.Getenv(key); value != "" {
 			values[key] = value
 		}
