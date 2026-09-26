@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "transition_id": "P18-P05-MODULE-TRANSITION-001",
+  "status": "validated",
+  "policy": {
+    "owner_phase_semantics": "first-introduction-and-accountability",
+    "exclusive_mutation_ownership": false,
+    "evidence_mode": "git-object-replay"
+  },
+  "from_phase": "P05",
+  "to_phase": "P18",
+  "baseline_commit": "013439d2752edd4b1e4ec1f315625a7b973e16a3",
+  "result_commit": "f5c25889ad74a9fa4268fa5eac5a64401499da16",
+  "reason": "P18 repins the nested Control Plane to the clean committed root snapshot that contains the accepted Run lifecycle models consumed by production composition.",
+  "changed_paths": [
+    "reference/control-plane/go.mod",
+    "reference/control-plane/go.sum"
+  ],
+  "affected_artifacts": [
+    "nested-control-plane-go-module"
+  ],
+  "history": [
+    {
+      "commit": "f5c25889ad74a9fa4268fa5eac5a64401499da16",
+      "changed_paths": [
+        "reference/control-plane/go.mod",
+        "reference/control-plane/go.sum"
+      ],
+      "before": [
+        {
+          "path": "reference/control-plane/go.mod",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "81b19153f14cd3ba1a284581fc355de9ffa3ac1f9571bcbaf187bc2d47b23aff"
+        },
+        {
+          "path": "reference/control-plane/go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "bcff62d55c81cf3bdfe3fa5148f26fcbd72a8cae9573916addb31d8971d137c7"
+        }
+      ],
+      "after": [
+        {
+          "path": "reference/control-plane/go.mod",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "b720624ab03b5acbf268b865766ddd288eb4b03562feeda95af1c7e5fa52ee98"
+        },
+        {
+          "path": "reference/control-plane/go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "80251677fa3ea3767ab4c34a017bf22f994d722c0859f3dfcbca9b255e9c7b66"
+        }
+      ]
+    }
+  ],
+  "root_pin": {
+    "before": {
+      "commit": "dff156e5d35444175485c0a589ff7077ba48bb61",
+      "version": "v0.0.0-20260925200248-dff156e5d354",
+      "zip_h1": "h1:U5jw6DhVxZKC1mJPuQh8a35IRN/edvxZpKHGAOqrilU=",
+      "go_mod_h1": "h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk="
+    },
+    "after": {
+      "commit": "013439d2752edd4b1e4ec1f315625a7b973e16a3",
+      "version": "v0.0.0-20260926182258-013439d2752e",
+      "zip_h1": "h1:8w/Tk/1EReaE7Hx4oKAV9lJcZHMTwi5gtsxWUhEb/rk=",
+      "go_mod_h1": "h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk="
+    }
+  },
+  "acceptance": [
+    {
+      "phase": "P05",
+      "command": "make test-go-workspace",
+      "report": "build/reports/P05/report.json"
+    },
+    {
+      "phase": "P18",
+      "command": "make test-run-lifecycle",
+      "report": "build/reports/P18/report.json"
+    }
+  ],
+  "constraints": [
+    "frozen-p05-archive-remains-immutable",
+    "no-unrecorded-p05-owned-drift",
+    "runtime-inputs-remain-empty"
+  ]
+}
