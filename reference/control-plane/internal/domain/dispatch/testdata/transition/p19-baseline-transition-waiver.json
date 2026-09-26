@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "waiver_id": "P19-DISPATCH-SECURITY-TRANSITION-001",
-  "status": "draft",
+  "status": "validated",
   "policy": {
     "owner_phase_semantics": "first-introduction-and-accountability",
     "ownership_transferred": false
@@ -11,12 +11,241 @@
     "commit": "9a092c363c90f6b13f3873990a569fbe24653c2a"
   },
   "transition": {
-    "from_phases": ["P01", "P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18"],
+    "from_phases": [
+      "P01",
+      "P02",
+      "P05",
+      "P06",
+      "P07",
+      "P08",
+      "P09",
+      "P10",
+      "P11",
+      "P12",
+      "P13",
+      "P14",
+      "P15",
+      "P16",
+      "P17",
+      "P18"
+    ],
     "to_phase": "P19",
     "reason": "P19 introduces durable dispatch selection, monotonically fenced Attempts, short-lived ES256 Dispatch Tickets and public JWKS rotation metadata while preserving all earlier ownership and historical acceptance boundaries."
   },
-  "affected_artifacts": [],
-  "source_closure": [],
-  "acceptance": [],
-  "constraints": []
+  "affected_artifacts": [
+    "arop-cli-publication-command",
+    "asset-broker-service",
+    "audit-trace-memory-bootstrap",
+    "audit-trace-ports",
+    "ci-workspace-validation",
+    "control-plane-platform-foundation",
+    "credential-store",
+    "dispatch-fixtures",
+    "dispatcher-ticket-service",
+    "durable-audit-storage",
+    "generated-dispatch-go",
+    "generated-dispatch-python",
+    "generated-dispatch-typescript",
+    "go-module-proxy-bootstrap",
+    "go-work-example",
+    "identity-service",
+    "migration-engine",
+    "migration-engine-fixture-versions",
+    "nested-control-plane-go-module",
+    "openapi-control-plane-dispatch-fragment",
+    "phase-report-p05",
+    "phase-report-p08",
+    "phase-report-p09",
+    "phase-report-p10",
+    "phase-report-p12",
+    "phase-report-p13",
+    "phase-report-p14",
+    "phase-report-p15",
+    "phase-report-p16",
+    "phase-report-p18",
+    "phase-report-p19",
+    "postgres-migration-asset",
+    "postgres-migration-base",
+    "postgres-migration-dispatch",
+    "postgres-migration-identity",
+    "postgres-migration-publication",
+    "postgres-migration-registry",
+    "postgres-migration-run",
+    "postgres-uow-storage-adapter",
+    "publication-service",
+    "reference-control-plane-server",
+    "reference-secret-exchange",
+    "registry-api-service",
+    "registry-core-service",
+    "registry-recovery-service",
+    "run-lifecycle-service",
+    "schema-attempt",
+    "schema-dispatch-ticket",
+    "schema-jwks-metadata",
+    "sqlite-migration-asset",
+    "sqlite-migration-base",
+    "sqlite-migration-dispatch",
+    "sqlite-migration-identity",
+    "sqlite-migration-publication",
+    "sqlite-migration-registry",
+    "sqlite-migration-run",
+    "sqlite-uow-storage-adapter"
+  ],
+  "source_closure": [
+    "Makefile",
+    "conformance/fixtures/dispatch/attempt.invalid.json",
+    "conformance/fixtures/dispatch/attempt.valid.json",
+    "conformance/fixtures/dispatch/cases.json",
+    "conformance/fixtures/dispatch/dispatch-ticket.forward.json",
+    "conformance/fixtures/dispatch/dispatch-ticket.invalid.json",
+    "conformance/fixtures/dispatch/dispatch-ticket.valid.json",
+    "conformance/fixtures/dispatch/generated/provenance.json",
+    "conformance/fixtures/dispatch/jwks.invalid.json",
+    "conformance/fixtures/dispatch/jwks.valid.json",
+    "conformance/fixtures/dispatch/pipeline.json",
+    "internal/tooling/cmd/arop-go-proxy-bootstrap/main.go",
+    "openapi/fragments/control-plane/dispatch-jwks-v1.yaml",
+    "reference/control-plane/cmd/aropd/main.go",
+    "reference/control-plane/cmd/aropd/main_test.go",
+    "reference/control-plane/go.mod",
+    "reference/control-plane/go.sum",
+    "reference/control-plane/internal/app/platform/config.go",
+    "reference/control-plane/internal/app/platform/httpadapter/http.go",
+    "reference/control-plane/internal/app/platform/platform_test.go",
+    "reference/control-plane/internal/domain/dispatch/candidates.go",
+    "reference/control-plane/internal/domain/dispatch/errors.go",
+    "reference/control-plane/internal/domain/dispatch/http.go",
+    "reference/control-plane/internal/domain/dispatch/http_test.go",
+    "reference/control-plane/internal/domain/dispatch/ports.go",
+    "reference/control-plane/internal/domain/dispatch/service.go",
+    "reference/control-plane/internal/domain/dispatch/service_test.go",
+    "reference/control-plane/internal/domain/dispatch/signer.go",
+    "reference/control-plane/internal/domain/dispatch/storage/internalstore/postgres_test.go",
+    "reference/control-plane/internal/domain/dispatch/storage/internalstore/schema.go",
+    "reference/control-plane/internal/domain/dispatch/storage/internalstore/store.go",
+    "reference/control-plane/internal/domain/dispatch/storage/internalstore/store_test.go",
+    "reference/control-plane/internal/domain/dispatch/storage/postgres/repository.go",
+    "reference/control-plane/internal/domain/dispatch/storage/sqlite/repository.go",
+    "reference/control-plane/internal/domain/dispatch/testdata/acceptance/production_migration_test.go",
+    "reference/control-plane/internal/domain/dispatch/testdata/harness/main.go",
+    "reference/control-plane/internal/domain/dispatch/testdata/harness/main_test.go",
+    "reference/control-plane/internal/domain/dispatch/testdata/transition/p19-baseline-transition-waiver.json",
+    "reference/control-plane/internal/domain/dispatch/testdata/transition/p19-p05-transition.json",
+    "reference/control-plane/internal/domain/dispatch/token.go",
+    "reference/control-plane/internal/domain/dispatch/types.go",
+    "reference/control-plane/internal/domain/run/testdata/acceptance/production_migration_test.go",
+    "reference/control-plane/internal/domain/run/testdata/harness/main.go",
+    "reference/control-plane/internal/storage/migrate/catalog_closure_test.go",
+    "reference/control-plane/internal/storage/migrate/production_catalog.go",
+    "reference/control-plane/migrations/postgres/0050_dispatch.sql",
+    "reference/control-plane/migrations/sqlite/0050_dispatch.sql",
+    "schemas/runtime/attempt-v1.schema.json",
+    "schemas/runtime/dispatch-ticket-v1.schema.json",
+    "schemas/runtime/jwks-metadata-v1.schema.json",
+    "sdk/go/generated/dispatch/dispatch.gen.go",
+    "sdk/python/src/arop/generated/dispatch/dispatch_gen.py",
+    "sdk/typescript/src/generated/dispatch/dispatch.gen.ts"
+  ],
+  "acceptance": [
+    {
+      "phase": "P01",
+      "command": "make spec-index-check",
+      "report": "build/reports/P01/report.json"
+    },
+    {
+      "phase": "P02",
+      "command": "make blueprint-check",
+      "report": "build/reports/P02/report.json"
+    },
+    {
+      "phase": "P05",
+      "command": "make test-go-workspace",
+      "report": "build/reports/P05/report.json"
+    },
+    {
+      "phase": "P06",
+      "command": "make test-protocol-foundation",
+      "report": "build/reports/P06/report.json"
+    },
+    {
+      "phase": "P07",
+      "command": "make test-codegen-pipeline",
+      "report": "build/reports/P07/report.json"
+    },
+    {
+      "phase": "P08",
+      "command": "make test-control-plane-platform",
+      "report": "build/reports/P08/report.json"
+    },
+    {
+      "phase": "P09",
+      "command": "make test-storage-migrations",
+      "report": "build/reports/P09/report.json"
+    },
+    {
+      "phase": "P10",
+      "command": "make test-identity-secrets",
+      "report": "build/reports/P10/report.json"
+    },
+    {
+      "phase": "P11",
+      "command": "make test-publication-contracts",
+      "report": "build/reports/P11/report.json"
+    },
+    {
+      "phase": "P12",
+      "command": "make test-publication-service",
+      "report": "build/reports/P12/report.json"
+    },
+    {
+      "phase": "P13",
+      "command": "make test-asset-broker",
+      "report": "build/reports/P13/report.json"
+    },
+    {
+      "phase": "P14",
+      "command": "make test-registry-core",
+      "report": "build/reports/P14/report.json"
+    },
+    {
+      "phase": "P15",
+      "command": "make test-registry-api",
+      "report": "build/reports/P15/report.json"
+    },
+    {
+      "phase": "P16",
+      "command": "make test-registry-recovery",
+      "report": "build/reports/P16/report.json"
+    },
+    {
+      "phase": "P17",
+      "command": "make verify-registry",
+      "report": "build/reports/P17/report.json"
+    },
+    {
+      "phase": "P18",
+      "command": "make test-run-lifecycle",
+      "report": "build/reports/P18/report.json"
+    },
+    {
+      "phase": "P19",
+      "command": "make test-dispatch-ticket",
+      "report": "build/reports/P19/report.json"
+    }
+  ],
+  "constraints": [
+    "dispatch-attempt-run-transition-capacity-reservation-key-metadata-and-durable-audit-mutate-in-one-uow",
+    "candidate-session-generation-resource-version-binding-health-readiness-and-capacity-are-revalidated-inside-reservation",
+    "dispatch-idempotency-is-tenant-scoped-request-bound-and-race-safe",
+    "attempt-number-and-fencing-token-increase-monotonically-and-expired-attempts-never-consume-capacity",
+    "ticket-binds-run-attempt-agent-deployment-instance-generation-fencing-audience-endpoint-mode-scope-and-expiry",
+    "es256-private-key-material-is-accessible-only-through-signer-and-never-stored-or-exposed",
+    "jwks-has-one-active-key-retiring-overlap-and-public-only-metadata",
+    "authentication-authorization-capacity-dependency-and-idempotency-errors-fail-closed-and-are-durably-audited",
+    "public-integers-never-exceed-the-js-safe-maximum",
+    "p09-p10-p12-p13-p14-and-p18-catalog-snapshots-remain-immutable",
+    "production-catalog-ends-at-0050-and-event-ingest-remains-absent",
+    "owner-phase-accountability-does-not-transfer",
+    "p19-report-runtime-inputs-remain-empty"
+  ]
 }
