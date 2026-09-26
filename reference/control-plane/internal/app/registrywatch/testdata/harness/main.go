@@ -125,6 +125,11 @@ func main() {
 	add("p16-watch-ha-recovery-tests", goErr, "Watch race, poll, compaction, leader fencing and dual-engine restore pass with race detection")
 	add("p16-no-skips-cache-or-no-tests", rejectIncompleteTests(goEvidence), "test stream has no skip/cache/no-tests terminal")
 
+	p01 := refreshPhaseReport(root, "P01", "spec-index-check")
+	add("p16-p01-refresh", p01.err, "P01 report is current before historical regressions")
+	p02 := refreshPhaseReport(root, "P02", "blueprint-check")
+	add("p16-p02-refresh", p02.err, "P02 report is current before historical regressions")
+
 	p15 := run(root, nil, "make", "verify-report", "REPORT=build/reports/P15/report.json")
 	if p15.err != nil {
 		p15 = run(root, nil, "make", "test-registry-api")
@@ -140,6 +145,8 @@ func main() {
 		{Kind: "p16-fixtures", SHA256: report.Hash(fixtureEvidence), Bytes: int64(len(fixtureEvidence))},
 		{Kind: "p16-go-tests", SHA256: report.Hash(goEvidence), Bytes: int64(len(goEvidence))},
 		{Kind: "p16-postgres16", SHA256: report.Hash(postgresEvidence), Bytes: int64(len(postgresEvidence))},
+		{Kind: "p01-refresh", SHA256: report.Hash(p01.output), Bytes: int64(len(p01.output))},
+		{Kind: "p02-refresh", SHA256: report.Hash(p02.output), Bytes: int64(len(p02.output))},
 		{Kind: "p15-execution", SHA256: report.Hash(p15.output), Bytes: int64(len(p15.output))},
 	}
 	for _, phase := range []string{"P01", "P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15"} {
@@ -165,6 +172,23 @@ func main() {
 		fatal(errors.New("P16 checks failed; see build/reports/P16/report.json"))
 	}
 	fmt.Printf("AROP registry recovery passed: %d checks.\n", len(checks))
+}
+
+func refreshPhaseReport(root, phase, target string) commandResult {
+	verified := run(root, nil, "make", "verify-report", "REPORT=build/reports/"+phase+"/report.json")
+	if verified.err == nil {
+		return verified
+	}
+	refreshed := run(root, nil, "make", target)
+	verified.output = append(verified.output, refreshed.output...)
+	if refreshed.err != nil {
+		verified.err = refreshed.err
+		return verified
+	}
+	final := run(root, nil, "make", "verify-report", "REPORT=build/reports/"+phase+"/report.json")
+	verified.output = append(verified.output, final.output...)
+	verified.err = final.err
+	return verified
 }
 
 func trackedInputs(root string) ([]string, error) {
@@ -598,15 +622,18 @@ func runGoTests(root, scratch, dsn, postgresBin string) ([]byte, error) {
 	}
 	overrides := map[string]string{"GOWORK": work, "TMPDIR": scratch, "AROP_P16_POSTGRES_URL": dsn, "AROP_P16_POSTGRES_BIN": postgresBin, "AROP_P16_SCRATCH": scratch}
 	directory := filepath.Join(root, "reference/control-plane")
-	primary := run(directory, overrides, "go", "test", "-count=1", "-race", "-json", "./internal/app/registrywatch", "./internal/app/registryapi", "./internal/app/platform/httpadapter", "./internal/domain/registry/storage/sqlite", "./cmd/aropd")
 	// The P14 repository test and the P16 coordinator test both rebuild the
 	// registry tables. Run them serially against the private cluster so package
-	// parallelism cannot turn independent destructive fixtures into a race.
+	// parallelism cannot turn independent destructive fixtures into a race. The
+	// P14 repository matrix runs first because it needs the production schema;
+	// the P16 coordinator deliberately replaces that schema with a minimal
+	// recovery fixture afterward.
 	overrides["AROP_P14_POSTGRES_URL"] = dsn
 	overrides["AROP_P14_MIGRATION_ROOT"] = filepath.Join(root, "reference/control-plane/migrations")
 	postgres := run(directory, overrides, "go", "test", "-count=1", "-race", "-json", "./internal/domain/registry/storage/postgres")
-	output := append(append([]byte(nil), primary.output...), postgres.output...)
-	return output, errors.Join(primary.err, postgres.err)
+	primary := run(directory, overrides, "go", "test", "-count=1", "-race", "-json", "./internal/app/registrywatch", "./internal/app/registryapi", "./internal/app/platform/httpadapter", "./internal/domain/registry/storage/sqlite", "./cmd/aropd")
+	output := append(append([]byte(nil), postgres.output...), primary.output...)
+	return output, errors.Join(postgres.err, primary.err)
 }
 
 func rejectIncompleteTests(output []byte) error {
