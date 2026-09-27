@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "transition_id": "P24-BASELINE-TRANSITION-001",
+  "status": "draft",
+  "baseline_commit": "5bada508fa5e7035abd1d33817b4de7abf3ee49d",
+  "affected_artifacts": [],
+  "source_closure": [],
+  "acceptance_closure": [],
+  "constraints": []
+}
