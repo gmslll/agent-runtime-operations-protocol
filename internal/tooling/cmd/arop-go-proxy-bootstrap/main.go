@@ -50,9 +50,9 @@ const (
 	p05GoModH1        = "h1:ov6WTouj8Qdfs+WL7KgViSYyf6mbrYLBDM8N2EvrxxY="
 	p08Commit         = "e92c2f5fc82ad7d1f0b2ac9c59d004db6419ec29"
 	p09Commit         = "fcfa827482a5379c17c13edaefedc8a54a6f850c"
-	currentPin        = "1371c86650f671262ac3e2a1a6cca38f310372dc"
-	currentVersion    = "v0.0.0-20260927083523-1371c86650f6"
-	currentZipH1      = "h1:HudcF4GVvikUjfC6E/Yrk/lh/7VWZtY4NKZZEdZGQcg="
+	currentPin        = "8b6e626ee5f6008fec3faaeb5962e59930fbedf6"
+	currentVersion    = "v0.0.0-20260927124416-8b6e626ee5f6"
+	currentZipH1      = "h1:8DPsZ/Mfk7D574pkhsvYaaosiqkwSmel/1oAtDYDZSI="
 	currentGoModH1    = "h1:Rj7AtdAbBX/kEeEEhsMvohI9kM8P1ayuHHMNVvD/ong="
 )
 
@@ -60,6 +60,7 @@ var transitionPaths = []string{
 	"cmd/arop/internal/commands/publish/testdata/transition/p12-p05-transition.json",
 	"conformance/fixtures/provider-reliability/testdata/transition/p21-p05-transition.json",
 	"conformance/fixtures/streaming/testdata/transition/p22-p05-transition.json",
+	"conformance/fixtures/worker/testdata/transition/p24-p05-transition.json",
 	"conformance/harness/base/testdata/transition/p06-p05-transition.json",
 	"reference/control-plane/internal/app/platform/testdata/transition/p08-p05-transition.json",
 	"reference/control-plane/internal/domain/assets/testdata/transition/p13-p05-transition.json",
@@ -1797,13 +1798,20 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 	}
 	p22Result := "f4f51f8c0cc76f64df6c289d2745724c9263aa79"
 	p22, err := expectedTransition(root, "P22-P05-MODULE-TRANSITION-001", "P22", "2daaaaaf6aecba3e4180bbfab152f782bf95dc14", p22Result,
-		[]string{nestedDirectory + "/go.mod", nestedDirectory + "/go.sum"}, []string{p22Result}, []string{"nested-control-plane-go-module"}, &pinTransition{p21Pin, activePin},
+		[]string{nestedDirectory + "/go.mod", nestedDirectory + "/go.sum"}, []string{p22Result}, []string{"nested-control-plane-go-module"}, &pinTransition{p21Pin, activePinBeforeP24()},
 		"P22 repins the nested Control Plane to the clean committed root snapshot containing the accepted generated streaming models and Go streaming SDK consumed by relay composition.", "make test-streaming-resume", "build/reports/P22/report.json")
 	if err != nil {
 		return replay, err
 	}
-	expected := []transitionRecord{p06, p08, p09, p12, p13, p18, p19, p20, p21, p22}
-	expectedByPath := []transitionRecord{p12, p21, p22, p06, p08, p13, p19, p20, p18, p09}
+	p24Result := "e190c8ab745b2402804a50d7885fb33444816a0a"
+	p24, err := expectedTransition(root, "P24-P05-MODULE-TRANSITION-001", "P24", p22Result, p24Result,
+		[]string{nestedDirectory + "/go.mod", nestedDirectory + "/go.sum"}, []string{p24Result}, []string{"nested-control-plane-go-module"}, &pinTransition{activePinBeforeP24(), activePin},
+		"P24 repins the nested Control Plane to the clean committed root snapshot containing the accepted Worker Pull wire models and generated Go codec consumed by durable worker composition.", "make test-worker-service", "build/reports/P24/report.json")
+	if err != nil {
+		return replay, err
+	}
+	expected := []transitionRecord{p06, p08, p09, p12, p13, p18, p19, p20, p21, p22, p24}
+	expectedByPath := []transitionRecord{p12, p21, p22, p24, p06, p08, p13, p19, p20, p18, p09}
 	manifest, err := loadArtifactManifest(root)
 	if err != nil {
 		return replay, err
@@ -1815,10 +1823,11 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 	if err := validateExactSet(discoveredRecords, transitionPaths, "transition record set"); err != nil {
 		return replay, err
 	}
-	expectedCarrierArtifacts := []string{"arop-cli-publication-command", "provider-reliability-fixtures", "streaming-fixtures", "conformance-harness-base", "control-plane-platform-foundation", "asset-broker-service", "dispatcher-ticket-service", "event-ledger-service", "run-lifecycle-service", "migration-engine-fixture-versions"}
+	expectedCarrierArtifacts := []string{"arop-cli-publication-command", "provider-reliability-fixtures", "streaming-fixtures", "worker-fixtures", "conformance-harness-base", "control-plane-platform-foundation", "asset-broker-service", "dispatcher-ticket-service", "event-ledger-service", "run-lifecycle-service", "migration-engine-fixture-versions"}
 	expectedAffectedOwners := []map[string]string{
 		{"nested-control-plane-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05", "root-go-module": "P05", "root-go-sum": "P05"},
+		{"nested-control-plane-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05"},
 		{"root-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05", "reference-control-plane-server": "P08"},
@@ -1921,6 +1930,10 @@ func activePinBeforeP21() rootPin {
 
 func activePinBeforeP22() rootPin {
 	return rootPin{"820fd4e4b8d247e0595fc4bce36a8791ea22b5f4", "v0.0.0-20260927054524-820fd4e4b8d2", "h1:oqyhEFHg9Tn4/BZhKZ1J5SSYATMk5wwQ1g8iBMsAEEs=", "h1:Rj7AtdAbBX/kEeEEhsMvohI9kM8P1ayuHHMNVvD/ong="}
+}
+
+func activePinBeforeP24() rootPin {
+	return rootPin{"1371c86650f671262ac3e2a1a6cca38f310372dc", "v0.0.0-20260927083523-1371c86650f6", "h1:HudcF4GVvikUjfC6E/Yrk/lh/7VWZtY4NKZZEdZGQcg=", "h1:Rj7AtdAbBX/kEeEEhsMvohI9kM8P1ayuHHMNVvD/ong="}
 }
 
 func expectedTransition(root, id, toPhase, baseline, result string, pathspecs, commits, artifacts []string, pin *pinTransition, reason, command, reportPath string) (transitionRecord, error) {
