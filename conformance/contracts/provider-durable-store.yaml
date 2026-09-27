@@ -1,0 +1,65 @@
+contract: arop-provider-durable-store-v1
+version: 1
+status: normative
+scope: provider-runtime
+semantics:
+  delivery: at-least-once
+  exactly_once_claim: forbidden
+  in_memory_production_fallback: forbidden
+  bearer_persistence: forbidden
+transaction:
+  method: Within
+  requirements:
+    - callback receives a transaction-scoped context and Transaction
+    - callback error rolls back every mutation
+    - successful return commits Inbox, Outbox and effect state atomically
+    - commit uncertainty is returned as a dependency error and never reported as success
+inbox:
+  key: [run_id, attempt_id]
+  immutable_binding:
+    - request_digest
+    - authorization_digest
+    - agent_id
+    - agent_version
+    - skill_id
+    - deployment_id
+    - instance_id
+    - generation
+    - fencing_token
+    - deadline_at
+  states: [accepted, running, cancel_requested, succeeded, failed, cancelled, timed_out]
+  terminal_states: [succeeded, failed, cancelled, timed_out]
+  requirements:
+    - duplicate key with identical bindings replays durable state
+    - duplicate key with a different binding fails with ErrConflict
+    - state updates use state_version compare-and-set
+    - terminal state always contains a complete final RunResult
+effects:
+  key: effect_id
+  states: [started, completed]
+  requirements:
+    - effect_id is stable across Attempts
+    - claim is committed before invoking an external side effect
+    - completed result is replayed without invoking the side effect again
+    - started without completed fails with ErrEffectUncertain
+    - the SDK never blindly repeats an uncertain write or irreversible effect
+outbox:
+  key: [run_id, attempt_id, sequence]
+  requirements:
+    - sequence starts at one and is strictly monotonic per Attempt
+    - event_id is globally unique in one provider database
+    - event is committed before any network delivery attempt
+    - acknowledgement is durable and compare-and-set
+readiness:
+  requirements:
+    - verifies connectivity, migration history and exact schema
+    - becomes false after integrity or schema drift
+reference_sqlite:
+  migration: reference/agents/go-http/migrations/sqlite/0001_provider_state.sql
+  adapter: reference/agents/go-http/internal/storage/sqlite
+  requirements:
+    - database path and every existing parent reject symlinks
+    - empty migration, idempotent reopen and checksum history are verified
+    - dirty unversioned and tampered schemas fail closed
+    - foreign keys and integrity checks pass
+    - no PostgreSQL provider migration is claimed in P21
