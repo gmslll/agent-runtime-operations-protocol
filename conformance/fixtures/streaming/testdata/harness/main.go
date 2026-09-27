@@ -451,7 +451,7 @@ func validateTransition(root string) error {
 		return err
 	}
 	if os.Getenv("AROP_PRINT_P22_TRANSITION") == "1" {
-		encoded, _ := json.MarshalIndent(discovered, "", "  ")
+		encoded, _ := json.MarshalIndent(map[string]any{"sources": discovered.sources, "artifacts": discovered.artifacts}, "", "  ")
 		fmt.Println(string(encoded))
 	}
 	if err = validateTransitionCandidate(value, discovered); err != nil {
