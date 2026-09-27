@@ -346,25 +346,66 @@ func validateGeneratedContracts(root string) ([]byte, error) {
 
 func validateProvenanceFiles(root string, data []byte) error {
 	var value struct {
-		SchemaVersion int `json:"schema_version"`
-		Generator     struct {
-			Files []fileEvidence `json:"files"`
+		SchemaVersion  int    `json:"schema_version"`
+		PipelineID     string `json:"pipeline_id"`
+		MappingProfile string `json:"mapping_profile"`
+		Command        struct {
+			Entry, Config, Output, Result string
+		} `json:"command"`
+		Generator struct {
+			Path, SHA256 string
+			Files        []fileEvidence `json:"files"`
 		} `json:"generator"`
-		Configuration                fileEvidence `json:"configuration"`
-		Resources, Fixtures, Outputs []fileEvidence
-		Checks                       []struct {
+		Configuration fileEvidence `json:"configuration"`
+		Resources     []struct {
+			fileEvidence
+			URI string `json:"uri"`
+		} `json:"resources"`
+		Fixtures []struct {
+			fileEvidence
+			ID, Class string
+		} `json:"fixtures"`
+		InputsSHA256 string `json:"inputs_sha256"`
+		Outputs      []struct {
+			fileEvidence
+			Language string `json:"language"`
+		} `json:"outputs"`
+		OutputsSHA256 string `json:"outputs_sha256"`
+		Checks        []struct {
 			ID, Detail string
 			Passed     bool
-		}
+		} `json:"checks"`
 	}
 	if err := strictJSON(data, &value); err != nil {
 		return err
 	}
-	if value.SchemaVersion != 1 || len(value.Outputs) != 6 || len(value.Checks) != 6 {
+	if value.SchemaVersion != 1 || value.PipelineID != "arop-codegen-v1" || value.MappingProfile != "arop-wire-model-v1" ||
+		value.Command.Entry != "scripts/generate.mjs" || value.Command.Config != "conformance/fixtures/streaming/pipeline.json" ||
+		value.Command.Output != "<output>" || value.Command.Result != "<output>/provenance.json" ||
+		value.Generator.Path != "scripts/generate.mjs" || value.Generator.SHA256 == "" || value.InputsSHA256 == "" || value.OutputsSHA256 == "" ||
+		len(value.Resources) != 3 || len(value.Fixtures) != 3 || len(value.Outputs) != 6 || len(value.Checks) != 6 {
 		return errors.New("streaming provenance inventory is incomplete")
 	}
-	files := append(append(append(append([]fileEvidence{}, value.Generator.Files...), value.Configuration), value.Resources...), value.Fixtures...)
-	for _, item := range append(files, value.Outputs...) {
+	files := append(append([]fileEvidence{}, value.Generator.Files...), value.Configuration)
+	for _, item := range value.Resources {
+		if item.URI == "" {
+			return errors.New("streaming provenance resource URI is empty")
+		}
+		files = append(files, item.fileEvidence)
+	}
+	for _, item := range value.Fixtures {
+		if item.ID == "" || item.Class == "" {
+			return errors.New("streaming provenance fixture identity is empty")
+		}
+		files = append(files, item.fileEvidence)
+	}
+	for _, item := range value.Outputs {
+		if item.Language == "" {
+			return errors.New("streaming provenance output language is empty")
+		}
+		files = append(files, item.fileEvidence)
+	}
+	for _, item := range files {
 		actual, err := fileDigest(root, item.Path)
 		if err != nil || actual.SHA256 != item.SHA256 || actual.Bytes != item.Bytes || actual.Mode != item.Mode {
 			return fmt.Errorf("provenance file mismatch: %s", item.Path)
@@ -379,8 +420,10 @@ func validateProvenanceFiles(root string, data []byte) error {
 }
 
 type fileEvidence struct {
-	Path, SHA256, Mode string
-	Bytes              int64
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Bytes  int64  `json:"bytes"`
+	Mode   string `json:"mode"`
 }
 
 func fileDigest(root, path string) (fileEvidence, error) {
