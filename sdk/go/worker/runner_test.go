@@ -220,6 +220,37 @@ func TestRunnerDrainCancelsBlockingClaim(t *testing.T) {
 	}
 }
 
+func TestRunnerReleasesPanickingHandlerWithoutProcessCrash(t *testing.T) {
+	api := &fakePullAPI{claims: []workerwire.WorkerClaim{testClaim(t, 1)}}
+	runner, err := NewRunner(RunnerConfig{API: api, Handler: HandlerFunc(func(context.Context, Task) (Outcome, error) { panic("sensitive panic payload") }), WorkerID: "worker-a", SessionID: "ses_018f0c00-0000-7000-8000-000000000002", Generation: 7, SupportedBindings: []workerwire.AgentBinding{claimBinding()}, LeaseSeconds: 15, BackoffMinimum: time.Millisecond, BackoffMaximum: 5 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runErr := make(chan error, 1)
+	go func() { runErr <- runner.Run(context.Background()) }()
+	deadline := time.Now().Add(time.Second)
+	for {
+		api.mu.Lock()
+		released := len(api.releases)
+		api.mu.Unlock()
+		if released == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("panicking handler claim was not released")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := runner.Drain(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-runErr; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestEffectIDStableAcrossAttempts(t *testing.T) {
 	first, err := EffectID("run_018f0c00-0000-7000-8000-000000000003", "send-email")
 	if err != nil {

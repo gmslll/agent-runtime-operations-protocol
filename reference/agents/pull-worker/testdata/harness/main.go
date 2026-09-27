@@ -290,20 +290,21 @@ func validateImports(root string, result commandResult) error {
 
 func validateTestTerminals(output []byte) error {
 	required := map[string]bool{
-		"TestClientClaimCompleteAndNoRedirect":          false,
-		"TestClientRejectsAmbiguousAndLeakyResponses":   false,
-		"TestClientCancellationAndConfiguration":        false,
-		"TestRunnerRetriesIdenticalCompletionAndRenews": false,
-		"TestRunnerBackpressureAndDrainCancellation":    false,
-		"TestRunnerDrainCancelsBlockingClaim":           false,
-		"TestEffectIDStableAcrossAttempts":              false,
-		"TestEventHelperConcurrentSequenceAndFencing":   false,
-		"TestEventHelperResumesDurableProducerSequence": false,
-		"TestSecureIdentifiersAreUUIDv7":                false,
-		"TestNewRunnerRejectsInvalidWireConfiguration":  false,
-		"TestEchoHandlerProducesTerminalSnapshot":       false,
-		"TestFileCredentialSourceRotationAndSafety":     false,
-		"TestParseOptions":                              false,
+		"TestClientClaimCompleteAndNoRedirect":                  false,
+		"TestClientRejectsAmbiguousAndLeakyResponses":           false,
+		"TestClientCancellationAndConfiguration":                false,
+		"TestRunnerRetriesIdenticalCompletionAndRenews":         false,
+		"TestRunnerBackpressureAndDrainCancellation":            false,
+		"TestRunnerDrainCancelsBlockingClaim":                   false,
+		"TestRunnerReleasesPanickingHandlerWithoutProcessCrash": false,
+		"TestEffectIDStableAcrossAttempts":                      false,
+		"TestEventHelperConcurrentSequenceAndFencing":           false,
+		"TestEventHelperResumesDurableProducerSequence":         false,
+		"TestSecureIdentifiersAreUUIDv7":                        false,
+		"TestNewRunnerRejectsInvalidWireConfiguration":          false,
+		"TestEchoHandlerProducesTerminalSnapshot":               false,
+		"TestFileCredentialSourceRotationAndSafety":             false,
+		"TestParseOptions":                                      false,
 	}
 	packagePass := map[string]bool{}
 	for _, line := range bytes.Split(output, []byte{'\n'}) {

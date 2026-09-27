@@ -286,7 +286,7 @@ func (runner *Runner) handle(parent context.Context, claim workerwire.WorkerClai
 		stopRenew()
 		<-renewStopped
 	}()
-	outcome, handleErr := runner.config.Handler.Handle(ctx, Task{Claim: claim})
+	outcome, handleErr := invokeHandler(runner.config.Handler, ctx, Task{Claim: claim})
 	if handleErr != nil || ctx.Err() != nil {
 		reason := "retryable_failure"
 		if runner.draining.Load() {
@@ -328,6 +328,16 @@ func (runner *Runner) handle(parent context.Context, claim workerwire.WorkerClai
 		}
 		backoff = growBackoff(backoff, runner.config.BackoffMaximum)
 	}
+}
+
+func invokeHandler(handler Handler, ctx context.Context, task Task) (outcome Outcome, err error) {
+	defer func() {
+		if recover() != nil {
+			outcome = Outcome{}
+			err = errors.New("worker handler panic")
+		}
+	}()
+	return handler.Handle(ctx, task)
 }
 
 func (runner *Runner) renew(ctx context.Context, cancel context.CancelFunc, claim workerwire.WorkerClaim) {
