@@ -165,9 +165,10 @@ func main() {
 	add("p10-exact-test-inventory-negatives", verifyInventoryNegatives(), "nested skip and duplicate top-level/package terminals fail closed")
 	add("p10-secret-egress-scan", rejectSensitive(tests.Output), "test output contains no credential or SecretRef canary")
 
-	transition := run(root, nil, "go", "run", "-modfile="+filepath.Join(root, "go.mod"), filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go"), "validate")
+	transitionEnvironment := map[string]string{"GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": "off", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0"}
+	transition := run(root, transitionEnvironment, "go", "run", "-modfile="+filepath.Join(root, "go.mod"), filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go"), "validate")
 	add("p10-transition-waiver", transition.Err, "validated waiver equals independently discovered Git and manifest closure")
-	transitionNegative := run(root, nil, "go", "run", "-modfile="+filepath.Join(root, "go.mod"), filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go"), "negative")
+	transitionNegative := run(root, transitionEnvironment, "go", "run", "-modfile="+filepath.Join(root, "go.mod"), filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go"), "negative")
 	add("p10-transition-waiver-negatives", transitionNegative.Err, "artifact, source, acceptance, constraint, owner, rename and changed-to-reverted negatives fail closed")
 
 	p08 := run(root, nil, "make", "test-control-plane-platform")
