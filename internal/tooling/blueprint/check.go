@@ -1124,7 +1124,7 @@ func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact
 			text := string(data)
 			isNode := ext == ".mjs" || ext == ".js" || ext == ".cjs" || ext == ".ts" || nodeShebang(text)
 			owner := artifactForPath(rel, artifacts)
-			if isGeneratedTypeScriptLibrary(ext, text, owner) {
+			if isTypeScriptLibrary(ext, text, owner) {
 				isNode = false
 			}
 			if isNode {
@@ -1180,14 +1180,17 @@ func runtimeBoundary(root string, artifacts []Artifact, byID map[string]Artifact
 	return p
 }
 
-func isGeneratedTypeScriptLibrary(ext, source string, owner Artifact) bool {
-	return ext == ".ts" && !nodeShebang(source) && owner.Kind == "generated-code" && owner.Language == "typescript"
+func isTypeScriptLibrary(ext, source string, owner Artifact) bool {
+	return ext == ".ts" && !nodeShebang(source) && owner.Language == "typescript" && map[string]bool{"generated-code": true, "sdk-component": true, "sdk": true}[owner.Kind]
 }
 func boundaryNegativeProbes() []string {
 	p := []string{}
 	generatedTypeScript := Artifact{Kind: "generated-code", Language: "typescript"}
-	if !isGeneratedTypeScriptLibrary(".ts", "export interface Model {}\n", generatedTypeScript) {
+	if !isTypeScriptLibrary(".ts", "export interface Model {}\n", generatedTypeScript) {
 		p = append(p, "generated TypeScript library rejected")
+	}
+	if !isTypeScriptLibrary(".ts", "export interface Client {}\n", Artifact{Kind: "sdk-component", Language: "typescript"}) {
+		p = append(p, "TypeScript SDK library rejected")
 	}
 	for name, probe := range map[string]struct {
 		ext, source string
@@ -1198,7 +1201,7 @@ func boundaryNegativeProbes() []string {
 		"generated-shebang": {ext: ".ts", source: "#!/usr/bin/env node\nexport const value = 1\n", owner: generatedTypeScript},
 		"wrong-language":    {ext: ".ts", source: "export const value = 1\n", owner: Artifact{Kind: "generated-code", Language: "javascript"}},
 	} {
-		if isGeneratedTypeScriptLibrary(probe.ext, probe.source, probe.owner) {
+		if isTypeScriptLibrary(probe.ext, probe.source, probe.owner) {
 			p = append(p, name+" bypassed Node boundary")
 		}
 	}
