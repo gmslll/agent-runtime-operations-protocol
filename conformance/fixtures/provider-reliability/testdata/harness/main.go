@@ -249,7 +249,7 @@ func validateContracts(root string) ([]byte, error) {
 		combined = append(combined, 0)
 	}
 	openapi := string(combined)
-	for _, required := range []string{"/v1/runs:", "/v1/runs/{run_id}:", "/v1/runs/{run_id}/commands:", "bearerAuth", "202", "DurableStore", "Inbox", "Outbox", "effect_id"} {
+	for _, required := range []string{"/v1/runs:", "/v1/runs/{run_id}:", "/v1/runs/{run_id}/commands:", "RunBearer", "202", "DurableStore", "Inbox", "Outbox", "effect_id"} {
 		if !strings.Contains(openapi, required) {
 			return nil, fmt.Errorf("P21 contracts omit %q", required)
 		}
@@ -534,7 +534,7 @@ func runNested(root string) (commandResult, commandResult) {
 		return commandResult{err: err}, commandResult{err: err}
 	}
 	work := filepath.Join(temporary, "go.work")
-	body := "go 1.24.0\n\nuse (\n\t" + root + "\n\t" + filepath.Join(root, "reference/control-plane") + "\n)\n\nreplace github.com/gmslll/agent-runtime-operations-protocol@v0.0.0-20260927054524-820fd4e4b8d2 => " + root + "\n"
+	body := "go 1.24.0\n\nuse " + filepath.Join(root, "reference/control-plane") + "\n\nreplace github.com/gmslll/agent-runtime-operations-protocol => " + root + "\n"
 	if err = os.WriteFile(work, []byte(body), 0o600); err != nil {
 		return commandResult{err: err}, commandResult{err: err}
 	}
@@ -628,6 +628,14 @@ func cleanEnvironment(overrides map[string]string) []string {
 	}
 	for key, value := range defaults {
 		result = append(result, key+"="+value)
+	}
+	if _, present := defaults["PATH"]; !present {
+		for index, entry := range result {
+			if strings.HasPrefix(entry, "PATH=") && !strings.Contains(entry, "/opt/homebrew/opt/postgresql@16/bin") {
+				result[index] = "PATH=/opt/homebrew/opt/postgresql@16/bin:" + strings.TrimPrefix(entry, "PATH=")
+				break
+			}
+		}
 	}
 	return result
 }

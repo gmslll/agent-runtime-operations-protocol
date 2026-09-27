@@ -25,10 +25,11 @@ import (
 )
 
 const (
-	command  = "make test-event-ledger"
-	checker  = "reference/control-plane/internal/domain/event/testdata/harness/main.go"
-	waiver   = "reference/control-plane/internal/domain/event/testdata/transition/p20-baseline-transition-waiver.json"
-	baseline = "459c869214cf719aaf0364fbadc6ee094bbf2376"
+	command    = "make test-event-ledger"
+	checker    = "reference/control-plane/internal/domain/event/testdata/harness/main.go"
+	waiver     = "reference/control-plane/internal/domain/event/testdata/transition/p20-baseline-transition-waiver.json"
+	nextWaiver = "conformance/fixtures/provider-reliability/testdata/transition/p21-baseline-transition-waiver.json"
+	baseline   = "459c869214cf719aaf0364fbadc6ee094bbf2376"
 )
 
 var requiredOwnedArtifacts = []string{
@@ -342,13 +343,21 @@ func discoverTransition(root string) (discoveredTransition, error) {
 }
 
 func transitionEndpoint(root string) (string, error) {
-	resolved := run(root, nil, "git", "rev-parse", "HEAD")
-	if resolved.err != nil {
-		return "", resolved.err
+	introduction := run(root, nil, "git", "log", "--format=%H", "--diff-filter=A", "--", nextWaiver)
+	commits := lines(introduction.output)
+	if introduction.err != nil || len(commits) != 1 {
+		return "", errors.New("P21 transition carrier must have one introduction commit")
 	}
-	endpoint := strings.TrimSpace(string(resolved.output))
+	parent := run(root, nil, "git", "rev-parse", commits[0]+"^")
+	if parent.err != nil {
+		return "", parent.err
+	}
+	endpoint := strings.TrimSpace(string(parent.output))
+	if endpoint != "be3f4e1e3a0b7ec0dc59774eec0813c8ed2cc993" {
+		return "", fmt.Errorf("P20 historical endpoint=%s", endpoint)
+	}
 	if ancestor := run(root, nil, "git", "merge-base", "--is-ancestor", endpoint, "HEAD"); ancestor.err != nil {
-		return "", errors.New("P20 endpoint is not the current HEAD")
+		return "", errors.New("P20 historical endpoint is not an ancestor of HEAD")
 	}
 	return endpoint, nil
 }
@@ -977,11 +986,15 @@ func validateOpenAPI(root string) error {
 }
 
 func validateCatalog(root string) error {
-	data, err := os.ReadFile(filepath.Join(root, "reference/control-plane/internal/storage/migrate/production_catalog.go"))
+	endpoint, err := transitionEndpoint(root)
 	if err != nil {
 		return err
 	}
-	text := string(data)
+	result := run(root, nil, "git", "show", endpoint+":reference/control-plane/internal/storage/migrate/production_catalog.go")
+	if result.err != nil {
+		return result.err
+	}
+	text := string(result.output)
 	for _, required := range []string{"func P09ProductionCatalog()", "func P10ProductionCatalog()", "func P12ProductionCatalog()", "func P13ProductionCatalog()", "func P14ProductionCatalog()", "func P18ProductionCatalog()", "func P19ProductionCatalog()", "func CurrentProductionCatalog()", `closure.ReportPhase = "P20"`, "0050_dispatch.sql", "0060_event.sql"} {
 		if !strings.Contains(text, required) {
 			return fmt.Errorf("catalog missing %s", required)
