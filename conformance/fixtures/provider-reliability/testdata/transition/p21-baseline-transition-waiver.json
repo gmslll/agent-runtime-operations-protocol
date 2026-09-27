@@ -113,6 +113,7 @@
     "reference/control-plane/internal/domain/dispatch/service.go",
     "reference/control-plane/internal/domain/dispatch/service_test.go",
     "reference/control-plane/internal/domain/dispatch/storage/internalstore/store.go",
+    "reference/control-plane/internal/domain/event/testdata/harness/main.go",
     "reference/control-plane/internal/storage/migrate/catalog_closure_test.go",
     "reference/control-plane/internal/storage/migrate/production_catalog.go",
     "sdk/go/consumer/client.go",
