@@ -61,7 +61,14 @@ func TestES256VerifierBindsEveryRuntimeFact(t *testing.T) {
 	if _, err = verifier.Verify(context.Background(), token, VerifyRequest{Method: "GET", Path: "/v1/runs/run_01999999-9999-7999-8999-999999999990", RequiredScope: "agent:invoke", Now: now}); err == nil {
 		t.Fatal("token accepted for a different run path")
 	}
-	tampered := token[:len(token)-1] + "A"
+	tamperedParts := strings.Split(token, ".")
+	tamperedSignature, decodeErr := base64.RawURLEncoding.Strict().DecodeString(tamperedParts[2])
+	if decodeErr != nil {
+		t.Fatal(decodeErr)
+	}
+	tamperedSignature[0] ^= 1
+	tamperedParts[2] = base64.RawURLEncoding.EncodeToString(tamperedSignature)
+	tampered := strings.Join(tamperedParts, ".")
 	if _, err = verifier.Verify(context.Background(), tampered, VerifyRequest{Method: "POST", Path: "/v1/runs", RequiredScope: "agent:invoke", Now: now}); err == nil {
 		t.Fatal("tampered signature accepted")
 	}
