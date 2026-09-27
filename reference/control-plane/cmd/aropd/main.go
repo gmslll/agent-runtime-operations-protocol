@@ -27,6 +27,8 @@ import (
 	platformports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/ports"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/registryapi"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/registrywatch"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/streaming"
+	streamstore "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/streaming/storage/internalstore"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets"
 	assetpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets/storage/postgres"
 	assetsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets/storage/sqlite"
@@ -158,6 +160,13 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 		if err != nil {
 			_ = cleanup()
 			return nil, nil, nil, errors.New("assemble proxy delivery HTTP handler")
+		}
+	}
+	if streamService := streamingServiceFromChecks(checks); streamService != nil {
+		handler, err = httpadapter.NewStreamingApplicationHandler(application, referenceAuthenticate(identityServiceFromChecks(checks), ids), publicationServiceFromChecks(checks), assetServiceFromChecks(checks), registryAPIServiceFromChecks(checks), registryWatchServiceFromChecks(checks), runServiceFromChecks(checks), dispatchServiceFromChecks(checks), eventServiceFromChecks(checks), deliveryServiceFromChecks(checks), streamService)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, errors.New("assemble streaming HTTP handler")
 		}
 	}
 	httpServer := httpadapter.NewServer(application, handler)
@@ -314,6 +323,14 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			}
 			checks = append(checks, eventService)
 		}
+		if catalogOwns(catalogClosure, "P22") {
+			streamService, err := composeStreaming(db, migrate.DialectSQLite)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, streamService)
+		}
 		return uow, store, checks, cleanup, nil
 	case platform.ModePostgres:
 		root, err := canonicalDirectory(config.MigrationRoot)
@@ -435,6 +452,14 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 				return nil, nil, nil, nil, err
 			}
 			checks = append(checks, eventService)
+		}
+		if catalogOwns(catalogClosure, "P22") {
+			streamService, err := composeStreaming(db, migrate.DialectPostgres)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, streamService)
 		}
 		return uow, store, checks, cleanup, nil
 	default:
@@ -856,6 +881,22 @@ func composeEvent(db *sql.DB, dialect migrate.Dialect, lookup durable.Transactio
 	return service, nil
 }
 
+func composeStreaming(db *sql.DB, dialect migrate.Dialect) (*streaming.Service, error) {
+	storeDialect := streamstore.SQLite
+	if dialect == migrate.DialectPostgres {
+		storeDialect = streamstore.Postgres
+	}
+	reader, err := streamstore.New(db, storeDialect)
+	if err != nil {
+		return nil, errors.New("initialize streaming event reader")
+	}
+	service, err := streaming.New(streaming.Dependencies{Reader: reader, Authorizer: referenceRunAuthorizer{}, Waiter: streaming.TimerWaiter{}, PollInterval: 125 * time.Millisecond, HeartbeatEvery: 120})
+	if err != nil {
+		return nil, errors.New("initialize streaming service")
+	}
+	return service, nil
+}
+
 func identityServiceFromChecks(checks []platformports.ReadinessCheck) *identity.Service {
 	for _, check := range checks {
 		if service, ok := check.(*identity.Service); ok {
@@ -931,6 +972,15 @@ func eventServiceFromChecks(checks []platformports.ReadinessCheck) *event.Servic
 func deliveryServiceFromChecks(checks []platformports.ReadinessCheck) *delivery.Service {
 	for _, check := range checks {
 		if service, ok := check.(*delivery.Service); ok {
+			return service
+		}
+	}
+	return nil
+}
+
+func streamingServiceFromChecks(checks []platformports.ReadinessCheck) *streaming.Service {
+	for _, check := range checks {
+		if service, ok := check.(*streaming.Service); ok {
 			return service
 		}
 	}

@@ -37,6 +37,7 @@ func TestRunRouteScopesAreExact(t *testing.T) {
 		{http.MethodPost, "/v1/agent-runs", "run.create", "run:create"},
 		{http.MethodGet, "/v1/agent-runs/run_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c", "run.read", "run:read"},
 		{http.MethodPost, "/v1/agent-runs/run_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c/commands", "run.command", "run:command"},
+		{http.MethodGet, "/v1/agent-runs/run_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c/events", "stream.events", "run:read"},
 	} {
 		if actual := classifyOperation(test.method, test.path); actual != test.operation {
 			t.Fatalf("%s %s operation=%s want=%s", test.method, test.path, actual, test.operation)
@@ -44,6 +45,45 @@ func TestRunRouteScopesAreExact(t *testing.T) {
 		if scopes := scopesForOperation(test.operation); len(scopes) != 1 || scopes[0] != test.scope {
 			t.Fatalf("%s scopes=%v want=%s", test.operation, scopes, test.scope)
 		}
+	}
+}
+
+func TestStreamingInstrumentationUsesLiveWriterAndNoGenericTransaction(t *testing.T) {
+	store, err := memory.New(50, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := platform.RealClock{}
+	application, err := platform.New(platform.DefaultConfig(), platform.Dependencies{Clock: clock, IDs: platform.SystemIDSource{Clock: clock}, Faults: platform.NoopFaultHook{}, UoW: &platform.SerialUnitOfWork{}, Observability: store}, "arop-reference-control-plane", "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	authenticate := func(ctx context.Context, credential string, _ platform.RequestMetadata) (AuthenticatedPrincipal, error) {
+		if credential != "valid-reference-token" || !slices.Equal(RequiredScopesFromContext(ctx), []string{"run:read"}) {
+			return AuthenticatedPrincipal{}, errors.New("rejected")
+		}
+		return AuthenticatedPrincipal{TenantID: "reference", PrincipalID: "principal", CredentialID: "credential", Scopes: []string{"run:read"}}, nil
+	}
+	next := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if _, ok := PrincipalFromContext(request.Context()); !ok {
+			t.Fatal("principal absent")
+		}
+		writer.Header().Set("Content-Type", "text/event-stream")
+		writer.WriteHeader(http.StatusOK)
+		_, _ = writer.Write([]byte(": heartbeat\n\n"))
+		controller := http.NewResponseController(writer)
+		if flushErr := controller.Flush(); flushErr != nil {
+			t.Fatalf("flush: %v", flushErr)
+		}
+	})
+	handler := instrument(application, next, authenticate)
+	request := httptest.NewRequest(http.MethodGet, "/v1/agent-runs/run_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c/events", nil)
+	request.Header.Set("Authorization", "Bearer valid-reference-token")
+	request.Header.Set("Accept", "text/event-stream")
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || response.Header().Get("Content-Type") != "text/event-stream" || response.Body.String() != ": heartbeat\n\n" {
+		t.Fatalf("status=%d headers=%v body=%q", response.Code, response.Header(), response.Body.String())
 	}
 }
 

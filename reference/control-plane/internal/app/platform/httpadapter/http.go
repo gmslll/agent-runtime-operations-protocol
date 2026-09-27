@@ -18,6 +18,7 @@ import (
 	platformports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/ports"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/registryapi"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/registrywatch"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/streaming"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/assets"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/dispatch"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/event"
@@ -103,42 +104,49 @@ func NewRegistryApplicationHandler(application *platform.Platform, authenticate 
 	if authenticate == nil || publicationService == nil || assetService == nil || registryService == nil {
 		return nil, errors.New("authentication and all application services are required")
 	}
-	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, nil, nil, nil, nil, nil)
+	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, nil, nil, nil, nil, nil, nil)
 }
 
 func NewRegistryRecoveryApplicationHandler(application *platform.Platform, authenticate AuthenticateFunc, publicationService publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service) (http.Handler, error) {
 	if authenticate == nil || publicationService == nil || assetService == nil || registryService == nil || watchService == nil {
 		return nil, errors.New("authentication and all registry recovery services are required")
 	}
-	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService, nil, nil, nil, nil)
+	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService, nil, nil, nil, nil, nil)
 }
 
 func NewRunApplicationHandler(application *platform.Platform, authenticate AuthenticateFunc, publicationService publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service, runService *run.Service) (http.Handler, error) {
 	if authenticate == nil || publicationService == nil || assetService == nil || registryService == nil || watchService == nil || runService == nil {
 		return nil, errors.New("authentication and all run application services are required")
 	}
-	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService, runService, nil, nil, nil)
+	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService, runService, nil, nil, nil, nil)
 }
 
 func NewDispatchApplicationHandler(application *platform.Platform, authenticate AuthenticateFunc, publicationService publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service, runService *run.Service, dispatchService *dispatch.Service) (http.Handler, error) {
 	if authenticate == nil || publicationService == nil || assetService == nil || registryService == nil || watchService == nil || runService == nil || dispatchService == nil {
 		return nil, errors.New("authentication and all dispatch application services are required")
 	}
-	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService, runService, dispatchService, nil, nil)
+	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService, runService, dispatchService, nil, nil, nil)
 }
 
 func NewEventApplicationHandler(application *platform.Platform, authenticate AuthenticateFunc, publicationService publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service, runService *run.Service, dispatchService *dispatch.Service, eventService *event.Service) (http.Handler, error) {
 	if authenticate == nil || publicationService == nil || assetService == nil || registryService == nil || watchService == nil || runService == nil || dispatchService == nil || eventService == nil {
 		return nil, errors.New("authentication and all event application services are required")
 	}
-	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService, runService, dispatchService, eventService, nil)
+	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService, runService, dispatchService, eventService, nil, nil)
 }
 
 func NewDeliveryApplicationHandler(application *platform.Platform, authenticate AuthenticateFunc, publicationService publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service, runService *run.Service, dispatchService *dispatch.Service, eventService *event.Service, deliveryService *delivery.Service) (http.Handler, error) {
 	if authenticate == nil || publicationService == nil || assetService == nil || registryService == nil || watchService == nil || runService == nil || dispatchService == nil || eventService == nil || deliveryService == nil {
 		return nil, errors.New("authentication and all delivery application services are required")
 	}
-	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService, runService, dispatchService, eventService, deliveryService)
+	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService, runService, dispatchService, eventService, deliveryService, nil)
+}
+
+func NewStreamingApplicationHandler(application *platform.Platform, authenticate AuthenticateFunc, publicationService publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service, runService *run.Service, dispatchService *dispatch.Service, eventService *event.Service, deliveryService *delivery.Service, streamService *streaming.Service) (http.Handler, error) {
+	if authenticate == nil || publicationService == nil || assetService == nil || registryService == nil || watchService == nil || runService == nil || dispatchService == nil || eventService == nil || deliveryService == nil || streamService == nil {
+		return nil, errors.New("authentication and all streaming application services are required")
+	}
+	return newHandlerWithAllServices(application, authenticate, publicationService, assetService, registryService, watchService, runService, dispatchService, eventService, deliveryService, streamService)
 }
 
 func newHandler(application *platform.Platform, authenticate AuthenticateFunc) (http.Handler, error) {
@@ -150,10 +158,10 @@ func newHandlerWithPublication(application *platform.Platform, authenticate Auth
 }
 
 func newHandlerWithServices(application *platform.Platform, authenticate AuthenticateFunc, service publication.PublicationService, assetService assets.AssetBrokerService) (http.Handler, error) {
-	return newHandlerWithAllServices(application, authenticate, service, assetService, nil, nil, nil, nil, nil, nil)
+	return newHandlerWithAllServices(application, authenticate, service, assetService, nil, nil, nil, nil, nil, nil, nil)
 }
 
-func newHandlerWithAllServices(application *platform.Platform, authenticate AuthenticateFunc, service publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service, runService *run.Service, dispatchService *dispatch.Service, eventService *event.Service, deliveryService *delivery.Service) (http.Handler, error) {
+func newHandlerWithAllServices(application *platform.Platform, authenticate AuthenticateFunc, service publication.PublicationService, assetService assets.AssetBrokerService, registryService *registryapi.Service, watchService *registrywatch.Service, runService *run.Service, dispatchService *dispatch.Service, eventService *event.Service, deliveryService *delivery.Service, streamService *streaming.Service) (http.Handler, error) {
 	if application == nil {
 		return nil, errors.New("platform application is required")
 	}
@@ -237,6 +245,13 @@ func newHandlerWithAllServices(application *platform.Platform, authenticate Auth
 		}
 		deliveryRunHandler = deliveryHandler
 	}
+	if streamService != nil {
+		streamHandler, err := streaming.NewHTTPHandler(streamService, streamingContextCallerProvider{})
+		if err != nil {
+			return nil, err
+		}
+		mux.Handle("GET /v1/agent-runs/{run_id}/events", streamHandler)
+	}
 	if dispatchRunHandler != nil || deliveryRunHandler != nil {
 		mux.Handle("POST /v1/agent-runs/", http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			switch {
@@ -273,6 +288,7 @@ func (eventContextMetadataProvider) TenantID(request *http.Request) (string, boo
 }
 
 type runContextCallerProvider struct{}
+type streamingContextCallerProvider struct{}
 
 type dispatchContextCallerProvider struct{ application *platform.Platform }
 
@@ -307,6 +323,15 @@ func (runContextCallerProvider) Authenticate(request *http.Request, _ run.Operat
 
 func (runContextCallerProvider) Metadata(request *http.Request) (platform.RequestMetadata, bool) {
 	return MetadataFromContext(request.Context())
+}
+
+func (streamingContextCallerProvider) Caller(request *http.Request) (run.Caller, platform.RequestMetadata, bool) {
+	principal, principalOK := PrincipalFromContext(request.Context())
+	metadata, metadataOK := MetadataFromContext(request.Context())
+	if !principalOK || !metadataOK {
+		return run.Caller{}, platform.RequestMetadata{}, false
+	}
+	return run.Caller{TenantID: principal.TenantID, PrincipalID: principal.PrincipalID, CredentialID: principal.CredentialID, Scopes: slices.Clone(principal.Scopes)}, metadata, true
 }
 
 func assetExchange(application *platform.Platform, service assets.AssetBrokerService) http.HandlerFunc {
@@ -643,6 +668,10 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		config := application.Config()
 		operation := classifyOperation(request.Method, request.URL.Path)
+		if operation == "stream.events" {
+			serveStreaming(application, next, authenticate, writer, request)
+			return
+		}
 		requestTimeout := config.RequestTimeout
 		if operation == "registry.watch" && requestTimeout <= registrywatch.MaxWait {
 			requestTimeout = registrywatch.MaxWait + time.Second
@@ -749,6 +778,89 @@ func instrument(application *platform.Platform, next http.Handler, authenticate 
 	})
 }
 
+func serveStreaming(application *platform.Platform, next http.Handler, authenticate AuthenticateFunc, writer http.ResponseWriter, request *http.Request) {
+	startedAt := application.Now()
+	metadata, err := application.BeginRequest(request.Context(), request.Header.Values(requestIDHeader), request.Header.Values(traceparentHeader), request.Header.Values(tracestateHeader))
+	streamWriter := &streamResponseWriter{ResponseWriter: writer}
+	setSecurityHeaders(streamWriter.Header())
+	if metadata.RequestID != "" {
+		streamWriter.Header().Set(requestIDHeader, metadata.RequestID)
+	}
+	if metadata.Traceparent() != "" {
+		streamWriter.Header().Set(traceparentHeader, metadata.Traceparent())
+	}
+	if err != nil {
+		writePublicationError(streamWriter, http.StatusBadRequest, "INVALID_REQUEST", "validation", false)
+		return
+	}
+	authenticationContext := context.WithValue(request.Context(), requiredScopesContextKey{}, []string{"run:read"})
+	principal, err := authenticateBearer(authenticationContext, request.Header.Values("Authorization"), metadata, authenticate)
+	if err != nil {
+		if errors.Is(err, ErrAuthenticationUnavailable) {
+			writePublicationError(streamWriter, http.StatusServiceUnavailable, "DEPENDENCY_UNAVAILABLE", "dependency", true)
+		} else {
+			writePublicationError(streamWriter, http.StatusUnauthorized, "AUTHENTICATION_REQUIRED", "authentication", false)
+		}
+		return
+	}
+	ctx := context.WithValue(request.Context(), principalContextKey{}, principal)
+	ctx = context.WithValue(ctx, metadataContextKey{}, metadata)
+	defer func() {
+		if recover() != nil && !streamWriter.wroteHeader {
+			writePublicationError(streamWriter, http.StatusInternalServerError, "INTERNAL_ERROR", "internal", false)
+		}
+		if metadata.RequestID != "" && metadata.TraceID != "" && metadata.SpanID != "" {
+			recordContext, cancel := context.WithTimeout(context.WithoutCancel(request.Context()), application.Config().RequestTimeout)
+			_ = application.RecordObservation(recordContext, platform.Observation{Metadata: metadata, Operation: "stream.events", StartedAt: startedAt, EndedAt: application.Now(), HTTPStatus: streamWriter.statusCode()})
+			cancel()
+		}
+	}()
+	next.ServeHTTP(streamWriter, request.WithContext(ctx))
+}
+
+type streamResponseWriter struct {
+	http.ResponseWriter
+	status      int
+	wroteHeader bool
+}
+
+func (writer *streamResponseWriter) WriteHeader(status int) {
+	if !writer.wroteHeader {
+		writer.status, writer.wroteHeader = status, true
+		writer.ResponseWriter.WriteHeader(status)
+	}
+}
+
+func (writer *streamResponseWriter) Write(value []byte) (int, error) {
+	if !writer.wroteHeader {
+		writer.WriteHeader(http.StatusOK)
+	}
+	return writer.ResponseWriter.Write(value)
+}
+
+func (writer *streamResponseWriter) Flush() {
+	_ = writer.FlushError()
+}
+
+func (writer *streamResponseWriter) FlushError() error {
+	if !writer.wroteHeader {
+		writer.WriteHeader(http.StatusOK)
+	}
+	if flusher, ok := writer.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+		return nil
+	}
+	return http.ErrNotSupported
+}
+
+func (writer *streamResponseWriter) Unwrap() http.ResponseWriter { return writer.ResponseWriter }
+func (writer *streamResponseWriter) statusCode() int {
+	if writer.status == 0 {
+		return http.StatusOK
+	}
+	return writer.status
+}
+
 func isPublicationOperation(operation string) bool {
 	return operation == "publication.publish" || operation == "publication.get"
 }
@@ -763,12 +875,13 @@ func isRegistryOperation(operation string) bool {
 
 func isRunOperation(operation string) bool { return strings.HasPrefix(operation, "run.") }
 
-func isDispatchOperation(operation string) bool { return strings.HasPrefix(operation, "dispatch.") }
-func isDeliveryOperation(operation string) bool { return strings.HasPrefix(operation, "delivery.") }
-func isEventOperation(operation string) bool    { return strings.HasPrefix(operation, "event.") }
+func isDispatchOperation(operation string) bool  { return strings.HasPrefix(operation, "dispatch.") }
+func isDeliveryOperation(operation string) bool  { return strings.HasPrefix(operation, "delivery.") }
+func isEventOperation(operation string) bool     { return strings.HasPrefix(operation, "event.") }
+func isStreamingOperation(operation string) bool { return strings.HasPrefix(operation, "stream.") }
 
 func isContractOperation(operation string) bool {
-	return isPublicationOperation(operation) || isAssetOperation(operation) || isRegistryOperation(operation) || isRunOperation(operation) || isDispatchOperation(operation) || isDeliveryOperation(operation) || isEventOperation(operation)
+	return isPublicationOperation(operation) || isAssetOperation(operation) || isRegistryOperation(operation) || isRunOperation(operation) || isDispatchOperation(operation) || isDeliveryOperation(operation) || isEventOperation(operation) || isStreamingOperation(operation)
 }
 
 func requiresControlPlaneAuthentication(operation string) bool {
@@ -879,6 +992,9 @@ func classifyOperation(method, path string) string {
 	if method == http.MethodGet && len(segments) == 3 && segments[0] == "v1" && segments[1] == "agent-runs" {
 		return "run.read"
 	}
+	if method == http.MethodGet && len(segments) == 4 && segments[0] == "v1" && segments[1] == "agent-runs" && segments[3] == "events" {
+		return "stream.events"
+	}
 	if method == http.MethodPost && len(segments) == 4 && segments[0] == "v1" && segments[1] == "agent-runs" && segments[3] == "commands" {
 		return "run.command"
 	}
@@ -925,6 +1041,8 @@ func scopesForOperation(operation string) []string {
 		return []string{"run:deliver"}
 	case "event.session":
 		return []string{"event:session"}
+	case "stream.events":
+		return []string{"run:read"}
 	case "dispatch.jwks":
 		return nil
 	default:

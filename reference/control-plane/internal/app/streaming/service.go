@@ -16,6 +16,17 @@ func New(dependencies Dependencies) (*Service, error) {
 	return &Service{deps: dependencies}, nil
 }
 
+func (service *Service) Name() string { return "streaming-service" }
+
+func (service *Service) Check(ctx context.Context) error {
+	if checker, ok := service.deps.Reader.(interface{ Check(context.Context) error }); ok {
+		if err := checker.Check(ctx); err != nil {
+			return NewError(CategoryDependency, ReasonDependencyUnavailable)
+		}
+	}
+	return nil
+}
+
 func (service *Service) Stream(ctx context.Context, request Request, sink Sink) error {
 	if sink == nil || request.Validate() != nil {
 		return NewError(CategoryValidation, ReasonInvalidRequest)

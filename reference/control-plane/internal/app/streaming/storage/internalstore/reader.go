@@ -34,6 +34,8 @@ func New(db *sql.DB, dialect Dialect) (*Reader, error) {
 	return &Reader{db: db, dialect: dialect}, nil
 }
 
+func (reader *Reader) Check(ctx context.Context) error { return reader.db.PingContext(ctx) }
+
 func (reader *Reader) Binding(ctx context.Context, tenantID, runID string) (run.AgentBinding, error) {
 	var value run.AgentBinding
 	err := reader.db.QueryRowContext(ctx, reader.query(`SELECT agent_id,agent_version,skill_id,manifest_digest FROM arop_runs WHERE tenant_id=? AND run_id=?`), tenantID, runID).Scan(&value.ID, &value.Version, &value.SkillID, &value.ManifestDigest)

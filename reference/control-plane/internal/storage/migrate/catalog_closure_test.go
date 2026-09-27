@@ -125,8 +125,16 @@ func TestProductionCatalogSnapshots(t *testing.T) {
 	if p19.ReportPhase != "P19" || p19.ReportPath != "build/reports/P19/report.json" || len(p19.Migrations) != 14 {
 		t.Fatalf("P19 snapshot drifted: %+v", p19)
 	}
+	p20 := P20ProductionCatalog()
+	if p20.ReportPhase != "P20" || len(p20.Migrations) != 16 || !slices.Contains(p20.OwnerPhases, "P20") {
+		t.Fatalf("unexpected P20 closure: %#v", p20)
+	}
+	p21 := P21ProductionCatalog()
+	if p21.ReportPhase != "P21" || len(p21.Migrations) != 16 || !slices.Contains(p21.OwnerPhases, "P21") {
+		t.Fatalf("unexpected P21 closure: %#v", p21)
+	}
 	current := CurrentProductionCatalog()
-	if current.ReportPhase != "P21" || current.ReportPath != "build/reports/P21/report.json" || len(current.Migrations) != 16 || !slices.Contains(current.OwnerPhases, "P21") {
+	if current.ReportPhase != "P22" || current.ReportPath != "build/reports/P22/report.json" || len(current.Migrations) != 16 || !slices.Contains(current.OwnerPhases, "P22") {
 		t.Fatalf("current catalog is not P20 complete: %+v", current)
 	}
 	for _, item := range current.Migrations {

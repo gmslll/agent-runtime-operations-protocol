@@ -130,19 +130,37 @@ func P19ProductionCatalog() CatalogClosure {
 	return closure
 }
 
-// CurrentProductionCatalog is the only catalog used by production
-// composition. P20 advances the paired history to 0060; P21 changes runtime
-// composition without adding a Control Plane migration. Historical phases
-// always inject their immutable snapshots instead.
-func CurrentProductionCatalog() CatalogClosure {
+// P20ProductionCatalog is the immutable event-ledger catalog.
+func P20ProductionCatalog() CatalogClosure {
 	closure := P19ProductionCatalog()
-	closure.ID = "control-plane-production-migrations"
-	closure.ReportPhase = "P21"
-	closure.ReportPath = "build/reports/P21/report.json"
-	closure.OwnerPhases = append(closure.OwnerPhases, "P20", "P21")
+	closure.ID = "control-plane-p20-production-migrations"
+	closure.ReportPhase = "P20"
+	closure.ReportPath = "build/reports/P20/report.json"
+	closure.OwnerPhases = append(closure.OwnerPhases, "P20")
 	closure.Migrations = append(closure.Migrations,
 		DeclaredMigration{Dialect: DialectPostgres, Path: "postgres/0060_event.sql", OwnerPhase: "P20", SHA256: "1807e9171879bfffda2879de32905617e952aae31e664a5955e3594108e9d66d"},
 		DeclaredMigration{Dialect: DialectSQLite, Path: "sqlite/0060_event.sql", OwnerPhase: "P20", SHA256: "4c905e53a2790b025075e77bcba5e660e6c112c24e1890eec957a83e02cb90e6"},
 	)
+	return closure
+}
+
+// P21ProductionCatalog freezes the provider-delivery composition endpoint.
+func P21ProductionCatalog() CatalogClosure {
+	closure := P20ProductionCatalog()
+	closure.ID = "control-plane-p21-production-migrations"
+	closure.ReportPhase = "P21"
+	closure.ReportPath = "build/reports/P21/report.json"
+	closure.OwnerPhases = append(closure.OwnerPhases, "P21")
+	return closure
+}
+
+// CurrentProductionCatalog is the only catalog used by production
+// composition. P22 adds streaming composition without adding a migration.
+func CurrentProductionCatalog() CatalogClosure {
+	closure := P21ProductionCatalog()
+	closure.ID = "control-plane-production-migrations"
+	closure.ReportPhase = "P22"
+	closure.ReportPath = "build/reports/P22/report.json"
+	closure.OwnerPhases = append(closure.OwnerPhases, "P22")
 	return closure
 }
