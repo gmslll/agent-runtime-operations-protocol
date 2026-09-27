@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "transition_id": "P20-P05-MODULE-TRANSITION-001",
+  "status": "validated",
+  "policy": {
+    "owner_phase_semantics": "first-introduction-and-accountability",
+    "exclusive_mutation_ownership": false,
+    "evidence_mode": "git-object-replay"
+  },
+  "from_phase": "P05",
+  "to_phase": "P20",
+  "baseline_commit": "b45c36801cc4fdca3c1a466d96506063d0c5b785",
+  "result_commit": "870a9d87401341749313ca9386607b51c58c0ed4",
+  "reason": "P20 repins the nested Control Plane to the clean committed root snapshot that contains the accepted Event Ledger models consumed by production composition.",
+  "changed_paths": [
+    "reference/control-plane/go.mod",
+    "reference/control-plane/go.sum"
+  ],
+  "affected_artifacts": [
+    "nested-control-plane-go-module"
+  ],
+  "history": [
+    {
+      "commit": "870a9d87401341749313ca9386607b51c58c0ed4",
+      "changed_paths": [
+        "reference/control-plane/go.mod",
+        "reference/control-plane/go.sum"
+      ],
+      "before": [
+        {
+          "path": "reference/control-plane/go.mod",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "afc6dea513919d4915bfd2b17c84b27eda45e707f7be76ab58d43aa75d224258"
+        },
+        {
+          "path": "reference/control-plane/go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "8ae8440d2e116ad3a25c6b30e67fcdad12ded88e59ed267c541f9bfb4a9aa04a"
+        }
+      ],
+      "after": [
+        {
+          "path": "reference/control-plane/go.mod",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "e9090cb78c59eecd846ec748ddb48fd284393e3b3a10234323dce72223039753"
+        },
+        {
+          "path": "reference/control-plane/go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "1ecd911b2715b666155f206a705097db2a8957406bc96429878069cafe064c04"
+        }
+      ]
+    }
+  ],
+  "root_pin": {
+    "before": {
+      "commit": "f2174bb7a8248b184b688910406ce72e2515dbc0",
+      "version": "v0.0.0-20260926201824-f2174bb7a824",
+      "zip_h1": "h1:gtjTkHIRuFhffueZtJtJCfbYrCblUAXkcCisaARCZ0U=",
+      "go_mod_h1": "h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk="
+    },
+    "after": {
+      "commit": "b45c36801cc4fdca3c1a466d96506063d0c5b785",
+      "version": "v0.0.0-20260927011623-b45c36801cc4",
+      "zip_h1": "h1:99HWU6cxeo7rWpkNgiMsEBxjid/SuO4ns6pfCySupuY=",
+      "go_mod_h1": "h1:N4IdtBpzQjKJuhxiIlhJsGn/zIiC1jgKPB9TZKRBmZk="
+    }
+  },
+  "acceptance": [
+    {
+      "phase": "P05",
+      "command": "make test-go-workspace",
+      "report": "build/reports/P05/report.json"
+    },
+    {
+      "phase": "P20",
+      "command": "make test-event-ledger",
+      "report": "build/reports/P20/report.json"
+    }
+  ],
+  "constraints": [
+    "frozen-p05-archive-remains-immutable",
+    "no-unrecorded-p05-owned-drift",
+    "runtime-inputs-remain-empty"
+  ]
+}
