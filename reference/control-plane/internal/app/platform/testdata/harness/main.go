@@ -44,6 +44,7 @@ const (
 	p19WaiverPath   = "reference/control-plane/internal/domain/dispatch/testdata/transition/p19-baseline-transition-waiver.json"
 	p20WaiverPath   = "reference/control-plane/internal/domain/event/testdata/transition/p20-baseline-transition-waiver.json"
 	p21WaiverPath   = "conformance/fixtures/provider-reliability/testdata/transition/p21-baseline-transition-waiver.json"
+	p22WaiverPath   = "conformance/fixtures/streaming/testdata/transition/p22-baseline-transition-waiver.json"
 	nestedModule    = "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane"
 	rootModule      = "github.com/gmslll/agent-runtime-operations-protocol"
 	p13WaiverPath   = "reference/control-plane/internal/domain/assets/testdata/transition/p13-baseline-transition-waiver.json"
@@ -99,6 +100,7 @@ var p09CompositionInputs = []string{
 	"reference/control-plane/internal/storage/migrate/testdata/engine-versions/baseline-transition-waiver.json",
 	"reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go",
 	p10WaiverPath,
+	p22WaiverPath,
 	"reference/control-plane/migrations/postgres/0001_base.sql",
 	"reference/control-plane/migrations/postgres/0005_identity.sql",
 	"reference/control-plane/migrations/sqlite/0001_base.sql",
@@ -113,6 +115,7 @@ var p09CompositionDirectories = []string{
 	"reference/control-plane/internal/adapters/secrets",
 	"reference/control-plane/internal/identity",
 	"reference/control-plane/internal/ports/secrets",
+	"reference/control-plane/internal/app/streaming",
 }
 
 var expectedTests = map[string][]string{
@@ -134,6 +137,7 @@ var expectedTests = map[string][]string{
 		"TestRegistryRecoveryRouteIsAuthenticatedScopedAndOutsideGenericUoW",
 		"TestRegistryRoutesEnforceAuthenticationScopeTenantAndWatchBoundary",
 		"TestRunRouteScopesAreExact",
+		"TestStreamingInstrumentationUsesLiveWriterAndNoGenericTransaction",
 	},
 	nestedModule + "/internal/ports/observability": {
 		"TestObservabilityValuesValidateAndRedact",
@@ -415,6 +419,15 @@ func p21AllowsPackage(root, importPath string) bool {
 	return importPath == base || strings.HasPrefix(importPath, base+"/")
 }
 
+func p22AllowsPackage(root, importPath string) bool {
+	data, err := os.ReadFile(filepath.Join(root, p22WaiverPath))
+	if err != nil || !bytes.Contains(data, []byte(`"status": "validated"`)) || !bytes.Contains(data, []byte(`"commit": "2daaaaaf6aecba3e4180bbfab152f782bf95dc14"`)) {
+		return false
+	}
+	base := nestedModule + "/internal/app/streaming"
+	return importPath == base || strings.HasPrefix(importPath, base+"/") || importPath == rootModule+"/sdk/go/generated/streaming"
+}
+
 func runP10TransitionChecker(root, mode string) ([]byte, error) {
 	path := filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go")
 	cmd := exec.Command("go", "run", "-modfile="+filepath.Join(root, "go.mod"), path, mode)
@@ -626,7 +639,7 @@ func verifyProductionImports(root string) error {
 					continue
 				}
 				if !allowedByDirectory[relativeRoot][value] {
-					if (relativeRoot == "reference/control-plane/cmd/aropd" && p10AllowsPackage(root, value)) || p12AllowsPackage(root, value) || p13AllowsPackage(root, value) || p14AllowsPackage(root, value) || p15AllowsPackage(root, value) || p16AllowsPackage(root, value) || p18AllowsPackage(root, value) || p19AllowsPackage(root, value) || p20AllowsPackage(root, value) || p21AllowsPackage(root, value) {
+					if (relativeRoot == "reference/control-plane/cmd/aropd" && p10AllowsPackage(root, value)) || p12AllowsPackage(root, value) || p13AllowsPackage(root, value) || p14AllowsPackage(root, value) || p15AllowsPackage(root, value) || p16AllowsPackage(root, value) || p18AllowsPackage(root, value) || p19AllowsPackage(root, value) || p20AllowsPackage(root, value) || p21AllowsPackage(root, value) || p22AllowsPackage(root, value) {
 						continue
 					}
 					relative, _ := filepath.Rel(root, path)
@@ -1528,6 +1541,12 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 		if p21AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) {
 			seen[item.ImportPath] = true
 			continue
+		}
+		if p22AllowsPackage(root, item.ImportPath) && item.Module != nil {
+			if item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) || item.Module.Path == rootModule && item.Module.Version == rootVersion && pathWithin(moduleCache, item.Dir) && !pathWithin(root, item.Dir) {
+				seen[item.ImportPath] = true
+				continue
+			}
 		}
 		if item.Module != nil {
 			if wantVersion, ok := externalVersions[item.Module.Path]; ok && item.Module.Version == wantVersion && pathWithin(moduleCache, item.Dir) && !pathWithin(root, item.Dir) {

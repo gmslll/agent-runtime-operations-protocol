@@ -21,10 +21,11 @@ import (
 )
 
 const (
-	command  = "make test-direct-proxy-provider"
-	checker  = "conformance/fixtures/provider-reliability/testdata/harness/main.go"
-	waiver   = "conformance/fixtures/provider-reliability/testdata/transition/p21-baseline-transition-waiver.json"
-	baseline = "be3f4e1e3a0b7ec0dc59774eec0813c8ed2cc993"
+	command    = "make test-direct-proxy-provider"
+	checker    = "conformance/fixtures/provider-reliability/testdata/harness/main.go"
+	waiver     = "conformance/fixtures/provider-reliability/testdata/transition/p21-baseline-transition-waiver.json"
+	nextWaiver = "conformance/fixtures/streaming/testdata/transition/p22-baseline-transition-waiver.json"
+	baseline   = "be3f4e1e3a0b7ec0dc59774eec0813c8ed2cc993"
 )
 
 var requiredOwnedArtifacts = []string{
@@ -304,7 +305,11 @@ func discoverTransition(root string) (discoveredTransition, error) {
 	if parent.err != nil || strings.TrimSpace(string(parent.output)) != baseline {
 		return discoveredTransition{}, errors.New("transition carrier introduction parent is not the frozen P20 endpoint")
 	}
-	diff := run(root, nil, "git", "diff", "--no-renames", "-z", "--name-status", baseline+"..HEAD")
+	endpoint, err := transitionEndpoint(root)
+	if err != nil {
+		return discoveredTransition{}, err
+	}
+	diff := run(root, nil, "git", "diff", "--no-renames", "-z", "--name-status", baseline+".."+endpoint)
 	if diff.err != nil {
 		return discoveredTransition{}, diff.err
 	}
@@ -318,6 +323,23 @@ func discoverTransition(root string) (discoveredTransition, error) {
 	}
 	artifacts, err := discoverArtifacts(root, manifest, sources)
 	return discoveredTransition{sources: sources, artifacts: artifacts}, err
+}
+
+func transitionEndpoint(root string) (string, error) {
+	intro := run(root, nil, "git", "log", "--format=%H", "--diff-filter=A", "--", nextWaiver)
+	commits := strings.Fields(string(intro.output))
+	if intro.err != nil || len(commits) != 1 {
+		return "", errors.New("P22 transition carrier must have one introduction commit")
+	}
+	parent := run(root, nil, "git", "rev-parse", commits[0]+"^")
+	endpoint := strings.TrimSpace(string(parent.output))
+	if parent.err != nil || endpoint != "2daaaaaf6aecba3e4180bbfab152f782bf95dc14" {
+		return "", errors.New("P21 historical endpoint does not match the P22 carrier parent")
+	}
+	if ancestor := run(root, nil, "git", "merge-base", "--is-ancestor", endpoint, "HEAD"); ancestor.err != nil {
+		return "", errors.New("P21 historical endpoint is not an ancestor of HEAD")
+	}
+	return endpoint, nil
 }
 
 func parseChangedSources(data []byte) ([]string, error) {

@@ -41,6 +41,7 @@ const (
 	p19WaiverPath   = "reference/control-plane/internal/domain/dispatch/testdata/transition/p19-baseline-transition-waiver.json"
 	p20WaiverPath   = "reference/control-plane/internal/domain/event/testdata/transition/p20-baseline-transition-waiver.json"
 	p21WaiverPath   = "conformance/fixtures/provider-reliability/testdata/transition/p21-baseline-transition-waiver.json"
+	p22WaiverPath   = "conformance/fixtures/streaming/testdata/transition/p22-baseline-transition-waiver.json"
 	reportDirectory = "build/reports/P09"
 	compositionTest = "reference/control-plane/internal/storage/migrate/testdata/engine-versions/composition/p09_storage_acceptance_test.go"
 	nestedModule    = "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane"
@@ -98,8 +99,10 @@ var inputRoots = []string{
 	"reference/control-plane/internal/ports/secrets",
 	"reference/control-plane/internal/adapters/secrets",
 	"reference/control-plane/internal/app/platform",
+	"reference/control-plane/internal/app/streaming",
 	"reference/control-plane/internal/ports/observability",
 	p10WaiverPath,
+	p22WaiverPath,
 	"reference/control-plane/cmd/aropd",
 	"reference/control-plane/go.mod",
 	"reference/control-plane/go.sum",
@@ -488,6 +491,15 @@ func p21AllowsPackage(root, importPath string) bool {
 	}
 	base := nestedModule + "/internal/app/delivery"
 	return importPath == base || strings.HasPrefix(importPath, base+"/")
+}
+
+func p22AllowsPackage(root, importPath string) bool {
+	data, err := os.ReadFile(filepath.Join(root, p22WaiverPath))
+	if err != nil || !bytes.Contains(data, []byte(`"status": "validated"`)) || !bytes.Contains(data, []byte(`"commit": "2daaaaaf6aecba3e4180bbfab152f782bf95dc14"`)) {
+		return false
+	}
+	base := nestedModule + "/internal/app/streaming"
+	return importPath == base || strings.HasPrefix(importPath, base+"/") || importPath == rootModule+"/sdk/go/generated/streaming"
 }
 
 func verifyBaselineTransitionWaiver(root string, inputPaths []string, goListOutput []byte) error {
@@ -2114,6 +2126,12 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 		if p21AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) {
 			seenNested[item.ImportPath] = true
 			continue
+		}
+		if p22AllowsPackage(root, item.ImportPath) && item.Module != nil {
+			if item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) || item.Module.Path == rootModule && item.Module.Version == rootVersion && pathWithin(moduleCache, item.Dir) && !pathWithin(root, item.Dir) {
+				seenNested[item.ImportPath] = true
+				continue
+			}
 		}
 		if item.ImportPath == rootModule+"/sdk/go/protocol/core" {
 			if item.Module == nil || item.Module.Path != rootModule || item.Module.Version != rootVersion || !pathWithin(moduleCache, item.Dir) || pathWithin(root, item.Dir) {
