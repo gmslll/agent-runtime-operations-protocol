@@ -1012,7 +1012,7 @@ func runTests(root, scratch, dsn string) commandResult {
 		"AROP_P20_SCRATCH": realScratch, "AROP_P20_MIGRATION_ROOT": filepath.Join(root, "reference/control-plane/migrations"), "AROP_P20_POSTGRES_URL": dsn,
 		"AROP_TEST_POSTGRES_DSN": dsn,
 	}
-	return run(filepath.Join(root, "reference/control-plane"), environment, "go", "test", "-count=1", "-race", "-json",
+	return run(filepath.Join(root, "reference/control-plane"), environment, "go", "test", "-count=1", "-p=1", "-race", "-json",
 		"./cmd/aropd", "./internal/app/platform/httpadapter", "./internal/domain/event", "./internal/domain/event/storage/internalstore", "./internal/domain/event/testdata/acceptance", "./internal/domain/event/testdata/harness", "./internal/storage/migrate")
 }
 

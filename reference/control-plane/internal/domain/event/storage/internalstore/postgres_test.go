@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,7 @@ func TestPostgresEventSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	preparePostgresEventDatabase(t, db)
 	if err = VerifySchema(Postgres)(context.Background(), db); err != nil {
 		t.Fatal(err)
 	}
@@ -42,6 +44,7 @@ func TestPostgresEventLedgerTerminalAndCapacityRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	preparePostgresEventDatabase(t, db)
 	uow, err := postgresadapter.NewUnitOfWork(db)
 	if err != nil {
 		t.Fatal(err)
@@ -76,6 +79,28 @@ func TestPostgresEventLedgerTerminalAndCapacityRelease(t *testing.T) {
 	}
 	assertPostgresTenantCount(t, db, "arop_event_ledger", 1)
 	assertPostgresTenantCount(t, db, "arop_event_capacity_releases", 1)
+}
+
+func preparePostgresEventDatabase(t *testing.T, db *sql.DB) {
+	t.Helper()
+	if _, err := db.Exec(`DROP SCHEMA public CASCADE; CREATE SCHEMA public`); err != nil {
+		t.Fatalf("reset PostgreSQL event test database: %v", err)
+	}
+	root := os.Getenv("AROP_P20_MIGRATION_ROOT")
+	if root == "" {
+		root = filepath.Join("..", "..", "..", "..", "..", "migrations")
+	}
+	for _, name := range []string{"0001_base.sql", "0005_identity.sql", "0010_publication.sql", "0020_asset.sql", "0030_registry.sql", "0040_run.sql", "0050_dispatch.sql", "0060_event.sql"} {
+		contents, err := os.ReadFile(filepath.Join(root, "postgres", name))
+		if err != nil {
+			t.Fatalf("read PostgreSQL migration %s: %v", name, err)
+		}
+		for _, statement := range strings.Split(string(contents), "\n-- arop:statement\n") {
+			if _, err = db.Exec(statement); err != nil {
+				t.Fatalf("apply PostgreSQL migration %s: %v", name, err)
+			}
+		}
+	}
 }
 
 func assertPostgresTenantCount(t *testing.T, db *sql.DB, table string, want int) {
