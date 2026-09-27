@@ -39,6 +39,7 @@ const (
 	p16WaiverPath   = "reference/control-plane/internal/app/registrywatch/testdata/transition/p16-baseline-transition-waiver.json"
 	p18WaiverPath   = "reference/control-plane/internal/domain/run/testdata/transition/p18-baseline-transition-waiver.json"
 	p19WaiverPath   = "reference/control-plane/internal/domain/dispatch/testdata/transition/p19-baseline-transition-waiver.json"
+	p20WaiverPath   = "reference/control-plane/internal/domain/event/testdata/transition/p20-baseline-transition-waiver.json"
 	reportDirectory = "build/reports/P09"
 	compositionTest = "reference/control-plane/internal/storage/migrate/testdata/engine-versions/composition/p09_storage_acceptance_test.go"
 	nestedModule    = "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane"
@@ -468,6 +469,15 @@ func p19AllowsPackage(root, importPath string) bool {
 	}
 	base := nestedModule + "/internal/domain/dispatch"
 	return importPath == base || strings.HasPrefix(importPath, base+"/") || importPath == rootModule+"/sdk/go/generated/dispatch"
+}
+
+func p20AllowsPackage(root, importPath string) bool {
+	data, err := os.ReadFile(filepath.Join(root, p20WaiverPath))
+	if err != nil || !bytes.Contains(data, []byte(`"status": "validated"`)) || !bytes.Contains(data, []byte(`"commit": "459c869214cf719aaf0364fbadc6ee094bbf2376"`)) {
+		return false
+	}
+	nested := nestedModule + "/internal/domain/event"
+	return importPath == nested || strings.HasPrefix(importPath, nested+"/") || importPath == rootModule+"/sdk/go/generated/event"
 }
 
 func verifyBaselineTransitionWaiver(root string, inputPaths []string, goListOutput []byte) error {
@@ -2080,6 +2090,12 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 			}
 		}
 		if p19AllowsPackage(root, item.ImportPath) && item.Module != nil {
+			if item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) || item.Module.Path == rootModule && item.Module.Version == rootVersion && pathWithin(moduleCache, item.Dir) && !pathWithin(root, item.Dir) {
+				seenNested[item.ImportPath] = true
+				continue
+			}
+		}
+		if p20AllowsPackage(root, item.ImportPath) && item.Module != nil {
 			if item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) || item.Module.Path == rootModule && item.Module.Version == rootVersion && pathWithin(moduleCache, item.Dir) && !pathWithin(root, item.Dir) {
 				seenNested[item.ImportPath] = true
 				continue

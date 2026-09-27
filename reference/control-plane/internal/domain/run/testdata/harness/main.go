@@ -950,8 +950,8 @@ func validateCatalog(root string) error {
 	if start < 0 || end <= start || strings.Count(text[start:end], "0030_registry.sql") != 2 || strings.Contains(text[start:end], "0040_run.sql") {
 		return errors.New("P14 catalog snapshot is not exactly complete through 0030")
 	}
-	current := strings.Index(text, "func CurrentProductionCatalog()")
-	if current <= end || strings.Count(text[end:current], "0040_run.sql") != 2 || strings.Contains(text[end:current], "0050_dispatch.sql") || !strings.Contains(text[end:current], `ReportPhase: "P18"`) {
+	p19 := strings.Index(text, "func P19ProductionCatalog()")
+	if p19 <= end || strings.Count(text[end:p19], "0040_run.sql") != 2 || strings.Contains(text[end:p19], "0050_dispatch.sql") || !strings.Contains(text[end:p19], `ReportPhase: "P18"`) {
 		return errors.New("P18 production catalog is not exactly complete through 0040")
 	}
 	return nil

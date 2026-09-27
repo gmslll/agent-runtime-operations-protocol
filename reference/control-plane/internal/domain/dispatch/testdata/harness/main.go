@@ -956,16 +956,17 @@ func validateCatalog(root string) error {
 		return err
 	}
 	text := string(data)
-	for _, required := range []string{"func P09ProductionCatalog()", "func P10ProductionCatalog()", "func P12ProductionCatalog()", "func P13ProductionCatalog()", "func P14ProductionCatalog()", "func P18ProductionCatalog()", "func CurrentProductionCatalog()", `closure.ReportPhase = "P19"`, "0040_run.sql", "0050_dispatch.sql"} {
+	for _, required := range []string{"func P09ProductionCatalog()", "func P10ProductionCatalog()", "func P12ProductionCatalog()", "func P13ProductionCatalog()", "func P14ProductionCatalog()", "func P18ProductionCatalog()", "func P19ProductionCatalog()", "func CurrentProductionCatalog()", `closure.ReportPhase = "P19"`, "0040_run.sql", "0050_dispatch.sql"} {
 		if !strings.Contains(text, required) {
 			return fmt.Errorf("catalog missing %s", required)
 		}
 	}
-	start, end := strings.Index(text, "func P18ProductionCatalog()"), strings.Index(text, "func CurrentProductionCatalog()")
+	start, end := strings.Index(text, "func P18ProductionCatalog()"), strings.Index(text, "func P19ProductionCatalog()")
 	if start < 0 || end <= start || strings.Count(text[start:end], "0040_run.sql") != 2 || strings.Contains(text[start:end], "0050_dispatch.sql") {
 		return errors.New("P18 catalog snapshot is not exactly complete through 0040")
 	}
-	if strings.Count(text[end:], "0050_dispatch.sql") != 2 || !strings.Contains(text[end:], `closure.ReportPhase = "P19"`) {
+	current := strings.Index(text, "func CurrentProductionCatalog()")
+	if current <= end || strings.Count(text[end:current], "0050_dispatch.sql") != 2 || strings.Contains(text[end:current], "0060_event.sql") || !strings.Contains(text[end:current], `closure.ReportPhase = "P19"`) {
 		return errors.New("P19 production catalog is not exactly complete through 0050")
 	}
 	return nil

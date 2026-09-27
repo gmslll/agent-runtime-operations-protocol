@@ -39,7 +39,7 @@ func TestProductionMigration0050Conformance(t *testing.T) {
 			t.Run("empty-and-idempotent", func(t *testing.T) {
 				database := openDatabase(t, dialect)
 				defer database.close()
-				runner := newRunner(t, database, loadCatalog(t, migrate.CurrentProductionCatalog(), dialect), p19Verifier(dialect), nil)
+				runner := newRunner(t, database, loadCatalog(t, migrate.P19ProductionCatalog(), dialect), p19Verifier(dialect), nil)
 				result, err := runner.Migrate(context.Background())
 				requireNoError(t, err)
 				if result.FromVersion != 0 || result.ToVersion != 50 || !reflect.DeepEqual(result.Applied, []int64{1, 5, 10, 20, 30, 40, 50}) || result.Snapshot != nil {
@@ -62,7 +62,7 @@ func TestProductionMigration0050Conformance(t *testing.T) {
 				if setup.ToVersion != 40 || !reflect.DeepEqual(setup.Applied, []int64{1, 5, 10, 20, 30, 40}) {
 					t.Fatalf("P18 setup result: %#v", setup)
 				}
-				current := newRunner(t, database, loadCatalog(t, migrate.CurrentProductionCatalog(), dialect), p19Verifier(dialect), database.backup)
+				current := newRunner(t, database, loadCatalog(t, migrate.P19ProductionCatalog(), dialect), p19Verifier(dialect), database.backup)
 				result, err := current.Migrate(context.Background())
 				requireNoError(t, err)
 				if result.FromVersion != 40 || result.ToVersion != 50 || !reflect.DeepEqual(result.Applied, []int64{50}) || result.Snapshot == nil {
@@ -74,7 +74,7 @@ func TestProductionMigration0050Conformance(t *testing.T) {
 			t.Run("dirty-history-fails-closed", func(t *testing.T) {
 				database := openDatabase(t, dialect)
 				defer database.close()
-				runner := newRunner(t, database, loadCatalog(t, migrate.CurrentProductionCatalog(), dialect), p19Verifier(dialect), nil)
+				runner := newRunner(t, database, loadCatalog(t, migrate.P19ProductionCatalog(), dialect), p19Verifier(dialect), nil)
 				_, err := runner.Migrate(context.Background())
 				requireNoError(t, err)
 				statement := `UPDATE arop_schema_migrations SET dirty=1,applied_at_ns=NULL WHERE version=50`
