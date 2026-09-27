@@ -140,6 +140,7 @@
     "reference/control-plane/internal/domain/run/storage/internalstore/store.go",
     "reference/control-plane/internal/domain/run/testdata/harness/main.go",
     "reference/control-plane/internal/domain/run/types.go",
+    "reference/control-plane/internal/identity/testdata/harness/main.go",
     "reference/control-plane/internal/storage/migrate/catalog_closure_test.go",
     "reference/control-plane/internal/storage/migrate/production_catalog.go",
     "reference/control-plane/internal/storage/migrate/testdata/engine-versions/harness/main.go",
