@@ -82,6 +82,13 @@ func TestSQLiteWorkerClaimRenewFencingCompleteAndReplay(t *testing.T) {
 	}); err != nil || !replay {
 		t.Fatalf("completion replay=%v err=%v", replay, err)
 	}
+	wrongToken := complete
+	wrongToken.Request.LeaseToken = "wlt_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+	wrongToken.LeaseTokenDigest = worker.TokenDigest(wrongToken.Request.LeaseToken)
+	err = uow.Within(context.Background(), func(ctx context.Context) error { _, inner := store.Complete(ctx, wrongToken); return inner })
+	if failure, ok := worker.AsError(err); !ok || failure.Reason != worker.ReasonIdempotencyConflict {
+		t.Fatalf("completion replay accepted wrong lease token: %v", err)
+	}
 	assertWorkerCount(t, db, "SELECT count(*) FROM arop_worker_completions", 1)
 	assertWorkerCount(t, db, "SELECT count(*) FROM arop_worker_outbox", 1)
 	assertWorkerCount(t, db, "SELECT count(*) FROM arop_event_ledger", 1)

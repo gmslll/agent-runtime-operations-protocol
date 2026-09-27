@@ -201,10 +201,11 @@ func (store *Store) Complete(ctx context.Context, command worker.CompleteCommand
 	if err = store.lock(ctx, tx, "worker/complete/"+command.Request.Caller.TenantID+"/"+command.KeyDigest, "worker/claim/"+command.Request.Caller.TenantID+"/"+command.Request.ClaimID); err != nil {
 		return false, err
 	}
-	var storedDigest, claimID, attemptID string
-	err = tx.QueryRowContext(ctx, store.query(`SELECT request_digest,claim_id,attempt_id FROM arop_worker_completions WHERE tenant_id=? AND idempotency_key_digest=?`), command.Request.Caller.TenantID, command.KeyDigest).Scan(&storedDigest, &claimID, &attemptID)
+	var storedDigest, claimID, attemptID, workerID, leaseTokenDigest string
+	var fencingToken uint64
+	err = tx.QueryRowContext(ctx, store.query(`SELECT completion.request_digest,completion.claim_id,completion.attempt_id,claim.worker_id,claim.lease_token_digest,claim.fencing_token FROM arop_worker_completions completion JOIN arop_worker_claims claim ON claim.tenant_id=completion.tenant_id AND claim.claim_id=completion.claim_id WHERE completion.tenant_id=? AND completion.idempotency_key_digest=?`), command.Request.Caller.TenantID, command.KeyDigest).Scan(&storedDigest, &claimID, &attemptID, &workerID, &leaseTokenDigest, &fencingToken)
 	if err == nil {
-		if storedDigest != command.RequestDigest || claimID != command.Request.ClaimID || attemptID != command.Request.AttemptID {
+		if storedDigest != command.RequestDigest || claimID != command.Request.ClaimID || attemptID != command.Request.AttemptID || workerID != command.Request.WorkerID || leaseTokenDigest != command.LeaseTokenDigest || fencingToken != command.Request.FencingToken {
 			return false, worker.NewError(worker.CategoryConflict, worker.ReasonIdempotencyConflict)
 		}
 		return true, nil
@@ -232,8 +233,16 @@ func (store *Store) Complete(ctx context.Context, command worker.CompleteCommand
 	if err = store.appendTerminal(ctx, tx, attempt, envelope, terminal, command.Now); err != nil {
 		return false, err
 	}
-	if _, err = tx.ExecContext(ctx, store.query(`UPDATE arop_worker_claims SET claim_state='completed',closed_at=? WHERE tenant_id=? AND claim_id=? AND claim_state='active'`), formatTime(command.Now), claim.TenantID, claim.ClaimID); err != nil {
+	result, err := tx.ExecContext(ctx, store.query(`UPDATE arop_worker_claims SET claim_state='completed',closed_at=? WHERE tenant_id=? AND claim_id=? AND claim_state='active'`), formatTime(command.Now), claim.TenantID, claim.ClaimID)
+	if err != nil {
 		return false, store.classify(err)
+	}
+	rows, rowsErr := result.RowsAffected()
+	if rowsErr != nil {
+		return false, store.dependency()
+	}
+	if rows != 1 {
+		return false, worker.NewError(worker.CategoryConflict, worker.ReasonClaimExpired)
 	}
 	_, err = tx.ExecContext(ctx, store.query(`INSERT INTO arop_worker_completions(tenant_id,completion_id,claim_id,attempt_id,idempotency_key_digest,request_digest,result_digest,terminal_event_id,completed_at,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`), claim.TenantID, command.Request.CompletionID, claim.ClaimID, claim.AttemptID, command.KeyDigest, command.RequestDigest, resultDigest, command.EventID, formatTime(command.Request.CompletedAt), formatTime(command.Now))
 	if err != nil {
@@ -616,11 +625,27 @@ func (store *Store) appendTerminal(ctx context.Context, q migrate.Queryer, attem
 	if _, err = q.ExecContext(ctx, store.query(`INSERT INTO arop_event_ledger(tenant_id,run_id,run_sequence,attempt_id,producer_sequence,event_id,source,event_type,event_digest,envelope_json,occurred_at,received_at,projection_applied) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`), attempt.TenantID, attempt.RunID, runSequence, attempt.AttemptID, producer, envelope.ID, envelope.Source, envelope.Type, digest, string(encoded), formatTime(envelope.Time), formatTime(now), true); err != nil {
 		return store.classify(err)
 	}
-	if _, err = q.ExecContext(ctx, store.query(`UPDATE arop_event_attempt_projections SET last_producer_sequence=?,updated_at=? WHERE tenant_id=? AND attempt_id=?`), producer, formatTime(now), attempt.TenantID, attempt.AttemptID); err != nil {
+	result, err = q.ExecContext(ctx, store.query(`UPDATE arop_event_attempt_projections SET last_producer_sequence=?,updated_at=? WHERE tenant_id=? AND attempt_id=?`), producer, formatTime(now), attempt.TenantID, attempt.AttemptID)
+	if err != nil {
 		return store.classify(err)
 	}
-	if _, err = q.ExecContext(ctx, store.query(`UPDATE arop_event_run_projections SET last_run_sequence=?,terminal_state=?,terminal_result_json=?,terminal_event_id=?,updated_at=? WHERE tenant_id=? AND run_id=? AND terminal_state IS NULL`), runSequence, string(terminal.State), string(terminal.Result), envelope.ID, formatTime(now), attempt.TenantID, attempt.RunID); err != nil {
+	rows, rowsErr := result.RowsAffected()
+	if rowsErr != nil {
+		return store.dependency()
+	}
+	if rows != 1 {
+		return worker.NewError(worker.CategoryConflict, worker.ReasonAttemptFenced)
+	}
+	result, err = q.ExecContext(ctx, store.query(`UPDATE arop_event_run_projections SET last_run_sequence=?,terminal_state=?,terminal_result_json=?,terminal_event_id=?,updated_at=? WHERE tenant_id=? AND run_id=? AND terminal_state IS NULL`), runSequence, string(terminal.State), string(terminal.Result), envelope.ID, formatTime(now), attempt.TenantID, attempt.RunID)
+	if err != nil {
 		return store.classify(err)
+	}
+	rows, rowsErr = result.RowsAffected()
+	if rowsErr != nil {
+		return store.dependency()
+	}
+	if rows != 1 {
+		return worker.NewError(worker.CategoryConflict, worker.ReasonAttemptFenced)
 	}
 	if _, err = q.ExecContext(ctx, store.query(`INSERT INTO arop_event_capacity_releases(tenant_id,attempt_id,run_id,run_sequence,terminal_event_id,released_at) VALUES(?,?,?,?,?,?)`), attempt.TenantID, attempt.AttemptID, attempt.RunID, runSequence, envelope.ID, formatTime(now)); err != nil {
 		return store.classify(err)
