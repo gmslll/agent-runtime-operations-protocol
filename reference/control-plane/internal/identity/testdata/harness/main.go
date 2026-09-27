@@ -141,11 +141,6 @@ func main() {
 	if scratchErr == nil {
 		scratchErr = os.Chmod(scratch, 0o700)
 	}
-	childHome := "/nonexistent"
-	if scratchErr == nil {
-		childHome = filepath.Join(scratch, "home")
-		scratchErr = os.Mkdir(childHome, 0o700)
-	}
 	add("p10-private-scratch", scratchErr, "private acceptance scratch created")
 	var cluster *postgresCluster
 	var postgresEvidence []byte
@@ -170,13 +165,13 @@ func main() {
 	add("p10-exact-test-inventory-negatives", verifyInventoryNegatives(), "nested skip and duplicate top-level/package terminals fail closed")
 	add("p10-secret-egress-scan", rejectSensitive(tests.Output), "test output contains no credential or SecretRef canary")
 
-	transitionEnvironment := map[string]string{"GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": "off", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "HOME": childHome}
+	transitionEnvironment := map[string]string{"GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": "off", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
 	transition := run(root, transitionEnvironment, "go", "run", "-modfile="+filepath.Join(root, "go.mod"), filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go"), "validate")
 	add("p10-transition-waiver", transition.Err, "validated waiver equals independently discovered Git and manifest closure")
 	transitionNegative := run(root, transitionEnvironment, "go", "run", "-modfile="+filepath.Join(root, "go.mod"), filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go"), "negative")
 	add("p10-transition-waiver-negatives", transitionNegative.Err, "artifact, source, acceptance, constraint, owner, rename and changed-to-reverted negatives fail closed")
 
-	regressionEnvironment := map[string]string{"HOME": childHome}
+	regressionEnvironment := map[string]string{"GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
 	p08 := run(root, regressionEnvironment, "make", "test-control-plane-platform")
 	if p08.Err == nil {
 		p08.Err = verifyCurrentReport(root, "build/reports/P08/report.json")
