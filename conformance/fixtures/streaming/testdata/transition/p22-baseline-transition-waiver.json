@@ -104,6 +104,7 @@
     "conformance/fixtures/streaming/testdata/harness/main_test.go",
     "conformance/fixtures/streaming/testdata/transition/p22-baseline-transition-waiver.json",
     "conformance/fixtures/streaming/testdata/transition/p22-p05-transition.json",
+    "conformance/fixtures/streaming/testdata/verification/main.go",
     "internal/tooling/blueprint/check.go",
     "internal/tooling/cmd/arop-go-proxy-bootstrap/main.go",
     "reference/control-plane/cmd/aropd/main.go",
