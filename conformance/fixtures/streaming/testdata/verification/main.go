@@ -76,6 +76,7 @@ func main() {
 }
 
 func executeAtCarrier(root string) (out result) {
+	preserve := false
 	temporary, err := os.MkdirTemp("/tmp", "arop-p23-archive-")
 	if err != nil {
 		return result{err: err}
@@ -86,6 +87,9 @@ func executeAtCarrier(root string) (out result) {
 		return added
 	}
 	defer func() {
+		if preserve {
+			return
+		}
 		removed := execute(root, "git", "worktree", "remove", "--force", temporary)
 		if out.err == nil && removed.err != nil {
 			out.err = removed.err
@@ -106,6 +110,8 @@ func executeAtCarrier(root string) (out result) {
 	out = execute(temporary, "make", "test-streaming-resume")
 	out.output = append(validation.output, out.output...)
 	if out.err != nil {
+		preserve = true
+		out.err = fmt.Errorf("%w; archived worktree preserved at %s", out.err, temporary)
 		return out
 	}
 	for _, phase := range phases {
