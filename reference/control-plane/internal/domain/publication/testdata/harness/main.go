@@ -102,6 +102,12 @@ func main() {
 	}
 	add("p12-sqlite-postgres-publication", tests.err, "publication, HTTP, CLI, migration and both repository suites pass without skip")
 	add("p12-no-skips", rejectSkips(tests.output), "test stream has no skip/cache/no-tests terminal")
+	if pg != nil {
+		err = pg.stop()
+	} else {
+		err = nil
+	}
+	add("p12-postgres-shutdown", err, "private PostgreSQL stopped before historical regressions")
 
 	regressions := []struct{ name, target, report string }{
 		{"p05", "test-go-workspace", "build/reports/P05/report.json"},
@@ -122,12 +128,6 @@ func main() {
 		add("p12-"+item.name+"-regression", r.err, strings.ToUpper(item.name)+" current report verified")
 		evidence = append(evidence, report.RuntimeEvidence{Kind: item.name + "-regression", SHA256: report.Hash(r.output), Bytes: int64(len(r.output))})
 	}
-	if pg != nil {
-		err = pg.stop()
-	} else {
-		err = nil
-	}
-	add("p12-postgres-shutdown", err, "private PostgreSQL stopped")
 	if scratchErr == nil {
 		err = os.RemoveAll(scratch)
 	} else {

@@ -161,6 +161,12 @@ func main() {
 	}
 	add("p18-run-domain-storage-migrations", tests.err, "domain, dual repositories, exact schemas and migration transition pass with race detection")
 	add("p18-no-skips-cache-or-no-tests", rejectIncompleteTests(tests.output), "test stream has no skip/cache/no-tests terminal")
+	if pg != nil {
+		err = pg.stop()
+	} else {
+		err = errors.New("private PostgreSQL was not started")
+	}
+	add("p18-postgres-shutdown", err, "private PostgreSQL stopped before historical regressions")
 
 	evidence := []report.RuntimeEvidence{
 		{Kind: "p18-go-test", SHA256: report.Hash(tests.output), Bytes: int64(len(tests.output))},
@@ -181,12 +187,6 @@ func main() {
 		add("p18-"+strings.ToLower(phase)+"-regression", verified.err, phase+" current report verified after P17")
 		evidence = append(evidence, report.RuntimeEvidence{Kind: strings.ToLower(phase) + "-regression", SHA256: report.Hash(verified.output), Bytes: int64(len(verified.output))})
 	}
-	if pg != nil {
-		err = pg.stop()
-	} else {
-		err = errors.New("private PostgreSQL was not started")
-	}
-	add("p18-postgres-shutdown", err, "private PostgreSQL stopped")
 	if scratchErr == nil {
 		err = os.RemoveAll(scratch)
 		if err == nil {

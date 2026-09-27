@@ -285,6 +285,12 @@ func main() {
 	add("p09-real-composition", compositionErr, "cmd/aropd compose runs real SQLite and PostgreSQL storage, reports ready durable health, persists observations, fails closed, and bounds advisory-lock startup")
 	listErr := verifyProductionList(root, standalone.Version, standalone.ModuleCache, standalone.List)
 	add("p09-production-go-list", listErr, "dependency closure is exact and resolves from isolated caches")
+	if cluster != nil {
+		err = cluster.Stop()
+	} else {
+		err = nil
+	}
+	add("p09-postgres-clean-shutdown", err, "private PostgreSQL stopped and was waited before historical regressions")
 	waiverErr := verifyBaselineTransitionWaiver(root, inputPaths, standalone.List.Output)
 	add("p09-baseline-transition-waiver", waiverErr, "manifest ownership, the P08 baseline diff, and the actual Go compilation closure independently match the waiver's exact affected artifact/source set")
 	add("p09-baseline-transition-waiver-omission-negatives", verifyBaselineTransitionWaiverOmissionNegatives(root, inputPaths, standalone.List.Output), "omitting any independently discovered P08 artifact, changed source, or acceptance checker is rejected")
@@ -296,12 +302,6 @@ func main() {
 	p08 := runP08Regression(root, scratch)
 	add("p09-p08-regression", commandFailure(p08), "P08 platform acceptance and report verification remain green")
 
-	if cluster != nil {
-		err = cluster.Stop()
-	} else {
-		err = nil
-	}
-	add("p09-postgres-clean-shutdown", err, "private PostgreSQL stopped and was waited")
 	if scratchErr == nil {
 		err = removeAllWritable(scratch)
 	} else {

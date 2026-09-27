@@ -114,8 +114,13 @@ func main() {
 	scratch, err = filepath.EvalSymlinks(scratch)
 	fatal(err)
 	cluster, postgresEvidence, postgresErr := startPostgres(scratch)
+	clusterStopped := false
 	if cluster != nil {
-		defer cluster.Stop()
+		defer func() {
+			if !clusterStopped {
+				cluster.Stop()
+			}
+		}()
 	}
 	add("p16-private-postgres16", postgresErr, "private Unix-socket-only PostgreSQL 16 is ready")
 	goEvidence := []byte(nil)
@@ -127,6 +132,14 @@ func main() {
 	}
 	add("p16-watch-ha-recovery-tests", goErr, "Watch race, poll, compaction, leader fencing and dual-engine restore pass with race detection")
 	add("p16-no-skips-cache-or-no-tests", rejectIncompleteTests(goEvidence), "test stream has no skip/cache/no-tests terminal")
+	if cluster != nil {
+		cluster.Stop()
+		clusterStopped = true
+		err = nil
+	} else {
+		err = errors.New("private PostgreSQL was not started")
+	}
+	add("p16-postgres-shutdown", err, "private PostgreSQL stopped before historical regressions")
 
 	p01 := refreshPhaseReport(root, "P01", "spec-index-check")
 	add("p16-p01-refresh", p01.err, "P01 report is current before historical regressions")

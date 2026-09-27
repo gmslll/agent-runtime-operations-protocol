@@ -112,6 +112,12 @@ func main() {
 	}
 	add("p13-sqlite-postgres-asset-broker", tests.err, "asset domain, HTTP, composition, migration and both repositories pass")
 	add("p13-no-skips-cache-or-no-tests", rejectIncompleteTests(tests.output), "test stream has no skip/cache/no-tests terminal")
+	if pg != nil {
+		err = pg.stop()
+	} else {
+		err = errors.New("private PostgreSQL was not started")
+	}
+	add("p13-postgres-shutdown", err, "private PostgreSQL stopped before historical regressions")
 
 	evidence := []report.RuntimeEvidence{
 		{Kind: "p13-go-test", SHA256: report.Hash(tests.output), Bytes: int64(len(tests.output))},
@@ -139,12 +145,6 @@ func main() {
 		add("p13-"+strings.ToLower(phase)+"-regression", verified.err, phase+" current report verified after P12")
 		evidence = append(evidence, report.RuntimeEvidence{Kind: strings.ToLower(phase) + "-regression", SHA256: report.Hash(verified.output), Bytes: int64(len(verified.output))})
 	}
-	if pg != nil {
-		err = pg.stop()
-	} else {
-		err = errors.New("private PostgreSQL was not started")
-	}
-	add("p13-postgres-shutdown", err, "private PostgreSQL stopped")
 	if scratchErr == nil {
 		err = os.RemoveAll(scratch)
 		if err == nil {

@@ -164,6 +164,12 @@ func main() {
 	add("p10-exact-test-inventory", inventoryErr, "all statically discovered packages and top-level tests ran once with no fail, skip, cache, or no-tests terminal")
 	add("p10-exact-test-inventory-negatives", verifyInventoryNegatives(), "nested skip and duplicate top-level/package terminals fail closed")
 	add("p10-secret-egress-scan", rejectSensitive(tests.Output), "test output contains no credential or SecretRef canary")
+	if cluster != nil {
+		err = cluster.stop()
+	} else {
+		err = nil
+	}
+	add("p10-postgres-clean-shutdown", err, "private PostgreSQL stopped and was waited before historical regressions")
 
 	transitionEnvironment := map[string]string{"GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": "off", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_CONFIG_NOSYSTEM": "1"}
 	transition := run(root, transitionEnvironment, "go", "run", "-modfile="+filepath.Join(root, "go.mod"), filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go"), "validate")
@@ -183,12 +189,6 @@ func main() {
 	}
 	add("p10-p09-regression", p09.Err, "P09 dual-database acceptance and current report verification pass on the P10 head")
 
-	if cluster != nil {
-		err = cluster.stop()
-	} else {
-		err = nil
-	}
-	add("p10-postgres-clean-shutdown", err, "private PostgreSQL stopped and was waited")
 	if scratchErr == nil {
 		err = os.RemoveAll(scratch)
 	} else {
