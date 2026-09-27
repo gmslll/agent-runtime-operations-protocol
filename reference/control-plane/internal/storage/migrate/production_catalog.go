@@ -154,13 +154,28 @@ func P21ProductionCatalog() CatalogClosure {
 	return closure
 }
 
-// CurrentProductionCatalog is the only catalog used by production
-// composition. P22 adds streaming composition without adding a migration.
-func CurrentProductionCatalog() CatalogClosure {
+// P22ProductionCatalog freezes streaming composition without adding a
+// migration. Later phases must use this snapshot for historical P22 replay.
+func P22ProductionCatalog() CatalogClosure {
 	closure := P21ProductionCatalog()
-	closure.ID = "control-plane-production-migrations"
+	closure.ID = "control-plane-p22-production-migrations"
 	closure.ReportPhase = "P22"
 	closure.ReportPath = "build/reports/P22/report.json"
 	closure.OwnerPhases = append(closure.OwnerPhases, "P22")
+	return closure
+}
+
+// CurrentProductionCatalog is the only catalog used by production
+// composition. P24 adds the durable worker-pull claim ledger.
+func CurrentProductionCatalog() CatalogClosure {
+	closure := P22ProductionCatalog()
+	closure.ID = "control-plane-production-migrations"
+	closure.ReportPhase = "P24"
+	closure.ReportPath = "build/reports/P24/report.json"
+	closure.OwnerPhases = append(closure.OwnerPhases, "P24")
+	closure.Migrations = append(closure.Migrations,
+		DeclaredMigration{Dialect: DialectPostgres, Path: "postgres/0070_worker.sql", OwnerPhase: "P24", SHA256: "ad70346acf575206a279a97bfd8098035e50d768eca0d65cc8eaae778a94c2d6"},
+		DeclaredMigration{Dialect: DialectSQLite, Path: "sqlite/0070_worker.sql", OwnerPhase: "P24", SHA256: "5c3e06ceae4cab49e7ec8a092d3049b24996690a50d1a31af63d693a71d6bc6f"},
+	)
 	return closure
 }

@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
-	"strings"
 	"testing"
 	"testing/fstest"
 )
@@ -133,16 +132,17 @@ func TestProductionCatalogSnapshots(t *testing.T) {
 	if p21.ReportPhase != "P21" || len(p21.Migrations) != 16 || !slices.Contains(p21.OwnerPhases, "P21") {
 		t.Fatalf("unexpected P21 closure: %#v", p21)
 	}
+	p22 := P22ProductionCatalog()
+	if p22.ReportPhase != "P22" || len(p22.Migrations) != 16 || !slices.Contains(p22.OwnerPhases, "P22") {
+		t.Fatalf("unexpected P22 closure: %#v", p22)
+	}
 	current := CurrentProductionCatalog()
-	if current.ReportPhase != "P22" || current.ReportPath != "build/reports/P22/report.json" || len(current.Migrations) != 16 || !slices.Contains(current.OwnerPhases, "P22") {
-		t.Fatalf("current catalog is not P20 complete: %+v", current)
+	if current.ReportPhase != "P24" || current.ReportPath != "build/reports/P24/report.json" || len(current.Migrations) != 18 || !slices.Contains(current.OwnerPhases, "P24") {
+		t.Fatalf("current catalog is not P24 complete: %+v", current)
 	}
 	for _, item := range current.Migrations {
 		if item.Path == "" || item.OwnerPhase == "" || item.SHA256 == "" {
 			t.Fatalf("incomplete current declaration: %+v", item)
-		}
-		if strings.Contains(item.Path, "0070_") {
-			t.Fatalf("future migration admitted: %s", item.Path)
 		}
 	}
 }

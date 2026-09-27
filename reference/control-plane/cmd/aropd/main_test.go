@@ -327,7 +327,7 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 		if err = os.WriteFile(keyPath, []byte("0123456789abcdef0123456789abcdef"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		application, server, cleanup, err := composeWithCatalog([]string{"--listen=127.0.0.1:0", "--mode=sqlite", "--database-dsn=" + filepath.Join(root, "p20.db"), "--migration-root=" + migrationRoot, "--backup-directory=" + backup, "--asset-token-key-file=" + keyPath, "--asset-token-key-id=atk_reference_test", "--dispatch-issuer=https://control-plane.example.invalid"}, nil, migrate.CurrentProductionCatalog())
+		application, server, cleanup, err := composeWithCatalog([]string{"--listen=127.0.0.1:0", "--mode=sqlite", "--database-dsn=" + filepath.Join(root, "p20.db"), "--migration-root=" + migrationRoot, "--backup-directory=" + backup, "--asset-token-key-file=" + keyPath, "--asset-token-key-id=atk_reference_test", "--dispatch-issuer=https://control-plane.example.invalid"}, nil, migrate.P20ProductionCatalog())
 		if err != nil {
 			t.Fatal(err)
 		}

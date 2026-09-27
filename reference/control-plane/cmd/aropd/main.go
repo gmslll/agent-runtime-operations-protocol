@@ -47,6 +47,9 @@ import (
 	domainrun "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/run"
 	runpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/run/storage/postgres"
 	runsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/run/storage/sqlite"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/worker"
+	workerpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/worker/storage/postgres"
+	workersqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/worker/storage/sqlite"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/identity"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/ports/observability"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/storage/migrate"
@@ -167,6 +170,13 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 		if err != nil {
 			_ = cleanup()
 			return nil, nil, nil, errors.New("assemble streaming HTTP handler")
+		}
+	}
+	if workerService := workerServiceFromChecks(checks); workerService != nil {
+		handler, err = httpadapter.NewWorkerApplicationHandler(application, referenceAuthenticate(identityServiceFromChecks(checks), ids), publicationServiceFromChecks(checks), assetServiceFromChecks(checks), registryAPIServiceFromChecks(checks), registryWatchServiceFromChecks(checks), runServiceFromChecks(checks), dispatchServiceFromChecks(checks), eventServiceFromChecks(checks), deliveryServiceFromChecks(checks), streamingServiceFromChecks(checks), workerService)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, errors.New("assemble worker pull HTTP handler")
 		}
 	}
 	httpServer := httpadapter.NewServer(application, handler)
@@ -331,6 +341,14 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			}
 			checks = append(checks, streamService)
 		}
+		if catalogOwns(catalogClosure, "P24") {
+			workerService, err := composeWorker(db, migrate.DialectSQLite, uow.Transaction, uow, store, clock, ids)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, workerService)
+		}
 		return uow, store, checks, cleanup, nil
 	case platform.ModePostgres:
 		root, err := canonicalDirectory(config.MigrationRoot)
@@ -461,6 +479,14 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			}
 			checks = append(checks, streamService)
 		}
+		if catalogOwns(catalogClosure, "P24") {
+			workerService, err := composeWorker(db, migrate.DialectPostgres, uow.Transaction, uow, store, clock, ids)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, workerService)
+		}
 		return uow, store, checks, cleanup, nil
 	default:
 		return nil, nil, nil, nil, errors.New("unsupported storage mode")
@@ -525,9 +551,17 @@ func schemaVerifier(catalog migrate.CatalogClosure, dialect migrate.Dialect) mig
 			return err
 		}
 		if dialect == migrate.DialectSQLite {
-			return eventsqlite.VerifySchema()(ctx, query)
+			err = eventsqlite.VerifySchema()(ctx, query)
+		} else {
+			err = eventpostgres.VerifySchema()(ctx, query)
 		}
-		return eventpostgres.VerifySchema()(ctx, query)
+		if err != nil || !catalogOwns(catalog, "P24") {
+			return err
+		}
+		if dialect == migrate.DialectSQLite {
+			return workersqlite.VerifySchema()(ctx, query)
+		}
+		return workerpostgres.VerifySchema()(ctx, query)
 	}
 }
 
@@ -538,7 +572,7 @@ func composeIdentity(db *sql.DB, dialect migrate.Dialect, lookup durable.Transac
 	}
 	service, err := identity.New(identity.Dependencies{
 		Clock: clock, IDs: ids, Faults: faults, UoW: uow, Observability: observations, Repository: repository,
-		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent:publish", "agent:read", "asset:exchange", "event:session", "registry:discover", "registry:operate", "registry:register", "registry:write", "run:command", "run:create", "run:dispatch", "run:read", "secret.read"}, AllowedTenants: []string{"reference-dev"},
+		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent:publish", "agent:read", "asset:exchange", "event:session", "registry:discover", "registry:operate", "registry:register", "registry:write", "run:command", "run:create", "run:dispatch", "run:read", "secret.read", "worker:claim", "worker:complete"}, AllowedTenants: []string{"reference-dev"},
 	})
 	if err != nil {
 		return nil, errors.New("initialize identity service")
@@ -897,6 +931,66 @@ func composeStreaming(db *sql.DB, dialect migrate.Dialect) (*streaming.Service, 
 	return service, nil
 }
 
+type workerIDSource struct{ source platformports.IDSource }
+
+func (source workerIDSource) next(ctx context.Context, prefix string) (string, error) {
+	identifier, err := source.source.NewID(ctx, platformports.IDEvent)
+	if err != nil || !strings.HasPrefix(identifier, "evt_") {
+		return "", errors.New("generate worker identifier")
+	}
+	return prefix + strings.TrimPrefix(identifier, "evt_"), nil
+}
+
+func (source workerIDSource) NewClaimID(ctx context.Context) (string, error) {
+	return source.next(ctx, "clm_")
+}
+func (source workerIDSource) NewAttemptID(ctx context.Context) (string, error) {
+	return source.next(ctx, "att_")
+}
+func (source workerIDSource) NewTokenID(ctx context.Context) (string, error) {
+	return source.next(ctx, "tok_")
+}
+func (source workerIDSource) NewEventID(ctx context.Context) (string, error) {
+	return source.next(ctx, "evt_")
+}
+func (source workerIDSource) NewOutboxID(ctx context.Context) (string, error) {
+	return source.next(ctx, "out_")
+}
+func (source workerIDSource) NewAuditID(ctx context.Context) (string, error) {
+	return source.source.NewID(ctx, platformports.IDAudit)
+}
+
+type referenceWorkerAuthorizer struct{}
+
+func (referenceWorkerAuthorizer) Authorize(_ context.Context, caller worker.Caller, operation worker.Operation, _ string) error {
+	want := "worker:claim"
+	if operation == worker.OperationComplete {
+		want = "worker:complete"
+	}
+	if caller.Validate() != nil || !slices.Contains(caller.Scopes, want) {
+		return worker.NewError(worker.CategoryAuthorization, worker.ReasonAuthorization)
+	}
+	return nil
+}
+
+func composeWorker(db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, observations observability.Store, clock platformports.Clock, ids platformports.IDSource) (*worker.Service, error) {
+	var repository worker.Repository
+	var err error
+	if dialect == migrate.DialectSQLite {
+		repository, err = workersqlite.New(db, lookup)
+	} else {
+		repository, err = workerpostgres.New(db, lookup)
+	}
+	if err != nil {
+		return nil, errors.New("initialize worker repository")
+	}
+	service, err := worker.New(worker.Dependencies{Clock: clock, IDs: workerIDSource{source: ids}, Tokens: worker.CryptoTokenSource{}, UoW: uow, Observability: observations, Authorizer: referenceWorkerAuthorizer{}, Repository: repository})
+	if err != nil {
+		return nil, errors.New("initialize worker pull service")
+	}
+	return service, nil
+}
+
 func identityServiceFromChecks(checks []platformports.ReadinessCheck) *identity.Service {
 	for _, check := range checks {
 		if service, ok := check.(*identity.Service); ok {
@@ -981,6 +1075,15 @@ func deliveryServiceFromChecks(checks []platformports.ReadinessCheck) *delivery.
 func streamingServiceFromChecks(checks []platformports.ReadinessCheck) *streaming.Service {
 	for _, check := range checks {
 		if service, ok := check.(*streaming.Service); ok {
+			return service
+		}
+	}
+	return nil
+}
+
+func workerServiceFromChecks(checks []platformports.ReadinessCheck) *worker.Service {
+	for _, check := range checks {
+		if service, ok := check.(*worker.Service); ok {
 			return service
 		}
 	}
