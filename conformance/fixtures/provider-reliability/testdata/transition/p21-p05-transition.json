@@ -9,17 +9,55 @@
   },
   "from_phase": "P05",
   "to_phase": "P21",
-  "baseline_commit": "820fd4e4b8d247e0595fc4bce36a8791ea22b5f4",
+  "baseline_commit": "be3f4e1e3a0b7ec0dc59774eec0813c8ed2cc993",
   "result_commit": "8ec5bc8c1e714f94b2684f1e74a973f4be7dcc73",
   "reason": "P21 repins the nested Control Plane to the clean committed root snapshot containing the accepted Provider and Consumer SDK surface consumed by proxy delivery composition.",
   "changed_paths": [
+    "go.mod",
+    "go.sum",
     "reference/control-plane/go.mod",
     "reference/control-plane/go.sum"
   ],
   "affected_artifacts": [
-    "nested-control-plane-go-module"
+    "nested-control-plane-go-module",
+    "root-go-module"
   ],
   "history": [
+    {
+      "commit": "f2b02ae0ed58597990037b7e192acb87ba6b38b6",
+      "changed_paths": [
+        "go.mod",
+        "go.sum"
+      ],
+      "before": [
+        {
+          "path": "go.mod",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "e400de8a8e81cdb05ed61caee8b915864e0f026c1349d4b9a6e3ee18e52a9964"
+        },
+        {
+          "path": "go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "28d7756965070591be45d5c7ac84b7e810f7fbee9da353b8831e4a32b76dcbaf"
+        }
+      ],
+      "after": [
+        {
+          "path": "go.mod",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "0bbb6e8e7c6aed5b0453f1bb1ae68fcc7f67c68ce92069f613cd5512683123dc"
+        },
+        {
+          "path": "go.sum",
+          "type": "blob",
+          "mode": "100644",
+          "sha256": "f0d456fed889263e233e1876e86a2d318610425fc53e882397157975f05e747a"
+        }
+      ]
+    },
     {
       "commit": "33aff568c13c001ab4fe64f77fa0c4295f820013",
       "changed_paths": [
