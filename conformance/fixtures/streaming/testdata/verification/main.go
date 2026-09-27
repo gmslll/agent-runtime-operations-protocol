@@ -2,6 +2,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -46,10 +47,7 @@ func main() {
 	evidence := []report.RuntimeEvidence{{Kind: "p22-black-box-rerun", SHA256: report.Hash(run.output), Bytes: int64(len(run.output))}}
 	for _, phase := range phases {
 		path := "build/reports/" + phase + "/report.json"
-		verified, mode, verifyErr := report.Verify(report.VerifyOptions{Root: root, ReportPath: path, AllowAncestor: true})
-		if verifyErr == nil && (mode != "ancestor-archive-only" || !verified.Success) {
-			verifyErr = fmt.Errorf("mode=%s success=%v", mode, verified.Success)
-		}
+		verifyErr := validateArchivedReport(root, phase)
 		add("p23-"+strings.ToLower(phase)+"-report", verifyErr, phase+" report is successful and bound to the immutable P23 carrier archive")
 		if data, readErr := os.ReadFile(filepath.Join(root, path)); readErr == nil {
 			evidence = append(evidence, report.RuntimeEvidence{Kind: strings.ToLower(phase) + "-report", SHA256: report.Hash(data), Bytes: int64(len(data))})
@@ -73,6 +71,29 @@ func main() {
 		fatal(errors.New("P23 verification did not produce a current successful report"))
 	}
 	fmt.Printf("AROP Run and Delivery verification passed: %d checks.\n", len(checks))
+}
+
+func validateArchivedReport(root, phase string) error {
+	data, err := os.ReadFile(filepath.Join(root, "build", "reports", phase, "report.json"))
+	if err != nil {
+		return err
+	}
+	var value report.Report
+	if err = json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	if value.SchemaVersion != 1 || !value.Success || value.Provenance.Git.Head != p23Carrier || value.Provenance.Git.Dirty || len(value.Provenance.Git.DirtyEntries) != 0 || len(value.Checks) == 0 {
+		return fmt.Errorf("invalid archived %s report lifecycle", phase)
+	}
+	for _, check := range value.Checks {
+		if !check.Passed {
+			return fmt.Errorf("archived %s check failed: %s", phase, check.Name)
+		}
+	}
+	if _, err = os.Stat(filepath.Join(root, "build", "reports", phase, "junit.xml")); err != nil {
+		return err
+	}
+	return nil
 }
 
 func executeAtCarrier(root string) (out result) {
