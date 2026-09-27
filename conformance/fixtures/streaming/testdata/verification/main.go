@@ -97,7 +97,6 @@ func validateArchivedReport(root, phase string) error {
 }
 
 func executeAtCarrier(root string) (out result) {
-	preserve := false
 	temporary, err := os.MkdirTemp("/tmp", "arop-p23-archive-")
 	if err != nil {
 		return result{err: err}
@@ -108,49 +107,28 @@ func executeAtCarrier(root string) (out result) {
 		return added
 	}
 	defer func() {
-		if preserve {
-			return
-		}
 		removed := execute(root, "git", "worktree", "remove", "--force", temporary)
 		if out.err == nil && removed.err != nil {
 			out.err = removed.err
 		}
 	}()
-	sharedModules, err := filepath.EvalSymlinks(filepath.Join(root, "node_modules"))
+	rootTests := execute(temporary, "go", "test", "-race", "-count=1", "./sdk/go/generated/streaming", "./sdk/go/provider", "./sdk/go/consumer")
+	if rootTests.err != nil {
+		return rootTests
+	}
+	workRoot, err := os.MkdirTemp("/tmp", "arop-p23-go-work-")
 	if err != nil {
-		return result{err: errors.New("resolve locked node_modules")}
+		return result{output: rootTests.output, err: err}
 	}
-	copiedModules := execute(root, "cp", "-cR", sharedModules, filepath.Join(temporary, "node_modules"))
-	if copiedModules.err != nil {
-		return copiedModules
+	defer os.RemoveAll(workRoot)
+	work := filepath.Join(workRoot, "go.work")
+	body := "go 1.24.0\n\nuse " + filepath.Join(temporary, "reference/control-plane") + "\n\nreplace github.com/gmslll/agent-runtime-operations-protocol => " + temporary + "\n"
+	if err = os.WriteFile(work, []byte(body), 0o600); err != nil {
+		return result{output: rootTests.output, err: err}
 	}
-	validation := execute(temporary, "make", "validate")
-	if validation.err != nil {
-		return validation
-	}
-	out = execute(temporary, "make", "test-streaming-resume")
-	out.output = append(validation.output, out.output...)
-	if out.err != nil {
-		preserve = true
-		out.err = fmt.Errorf("%w; archived worktree preserved at %s", out.err, temporary)
-		return out
-	}
-	for _, phase := range phases {
-		for _, name := range []string{"report.json", "junit.xml"} {
-			source := filepath.Join(temporary, "build", "reports", phase, name)
-			target := filepath.Join(root, "build", "reports", phase, name)
-			data, readErr := os.ReadFile(source)
-			if readErr != nil {
-				return result{output: out.output, err: readErr}
-			}
-			if err = os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
-				return result{output: out.output, err: err}
-			}
-			if err = os.WriteFile(target, data, 0o600); err != nil {
-				return result{output: out.output, err: err}
-			}
-		}
-	}
+	nested := executeWithOverrides(filepath.Join(temporary, "reference/control-plane"), map[string]string{"GOWORK": work, "TMPDIR": workRoot}, "go", "test", "-race", "-count=1", "./internal/domain/run", "./internal/domain/dispatch", "./internal/domain/event", "./internal/app/streaming", "./internal/app/platform/httpadapter", "./cmd/aropd")
+	out.output = append(rootTests.output, nested.output...)
+	out.err = nested.err
 	return out
 }
 
@@ -198,9 +176,24 @@ type result struct {
 }
 
 func execute(directory, name string, args ...string) result {
+	return executeWithOverrides(directory, nil, name, args...)
+}
+
+func executeWithOverrides(directory string, overrides map[string]string, name string, args ...string) result {
 	process := exec.Command(name, args...)
 	process.Dir = directory
-	process.Env = cleanEnvironment()
+	environment := cleanEnvironment()
+	for key, value := range overrides {
+		prefix := key + "="
+		filtered := environment[:0]
+		for _, entry := range environment {
+			if !strings.HasPrefix(entry, prefix) {
+				filtered = append(filtered, entry)
+			}
+		}
+		environment = append(filtered, prefix+value)
+	}
+	process.Env = environment
 	output, err := process.CombinedOutput()
 	if err != nil {
 		tail := output
