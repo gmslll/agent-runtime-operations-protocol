@@ -10,6 +10,7 @@
     {"path":"schemas/resources/asset-ref-v1.schema.json","uri":"https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json"},
     {"path":"schemas/resources/data-ref-v1.schema.json","uri":"https://arop.invalid/schemas/v1/resources/data-ref-v1.schema.json"},
     {"path":"schemas/runtime/command-v1.schema.json","uri":"https://arop.invalid/schemas/v1/runtime/command-v1.schema.json"},
+    {"path":"schemas/runtime/run-request-v1.schema.json","uri":"https://arop.invalid/schemas/v1/runtime/run-request-v1.schema.json"},
     {"path":"schemas/runtime/result-v1.schema.json","uri":"https://arop.invalid/schemas/v1/runtime/result-v1.schema.json"},
     {"path":"schemas/runtime/worker-claim-v1.schema.json","uri":"https://arop.invalid/schemas/v1/runtime/worker-claim-v1.schema.json"},
     {"path":"schemas/runtime/worker-complete-v1.schema.json","uri":"https://arop.invalid/schemas/v1/runtime/worker-complete-v1.schema.json"}

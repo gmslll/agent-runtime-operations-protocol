@@ -6,12 +6,12 @@ info:
 servers:
   - url: https://control-plane.example.invalid
 paths:
-  /v1/worker/claims:
+  /v1/workers/{worker_id}/claims:next:
     post:
       operationId: claimWorkerAttempt
       security: [{WorkerBearer: []}]
       x-arop-required-scopes: [worker:claim]
-      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      parameters: [{$ref: '#/components/parameters/WorkerId'}]
       requestBody:
         required: true
         content:
@@ -34,12 +34,12 @@ paths:
         '415': {$ref: '#/components/responses/Error415'}
         '429': {$ref: '#/components/responses/Error429'}
         '503': {$ref: '#/components/responses/Error503'}
-  /v1/worker/claims/{claim_id}:renew:
+  /v1/workers/{worker_id}/claims/{claim_id}:renew:
     post:
       operationId: renewWorkerClaim
       security: [{WorkerBearer: []}]
       x-arop-required-scopes: [worker:claim]
-      parameters: [{$ref: '#/components/parameters/ClaimId'}]
+      parameters: [{$ref: '#/components/parameters/WorkerId'}, {$ref: '#/components/parameters/ClaimId'}]
       requestBody:
         required: true
         content:
@@ -59,12 +59,13 @@ paths:
         '404': {$ref: '#/components/responses/Error404'}
         '409': {$ref: '#/components/responses/Error409'}
         '503': {$ref: '#/components/responses/Error503'}
-  /v1/worker/claims/{claim_id}:complete:
+  /v1/workers/{worker_id}/claims/{claim_id}:complete:
     post:
       operationId: completeWorkerAttempt
       security: [{WorkerBearer: []}]
       x-arop-required-scopes: [worker:complete]
       parameters:
+        - {$ref: '#/components/parameters/WorkerId'}
         - {$ref: '#/components/parameters/ClaimId'}
         - {$ref: '#/components/parameters/IdempotencyKey'}
       requestBody:
@@ -82,12 +83,12 @@ paths:
         '413': {$ref: '#/components/responses/Error413'}
         '415': {$ref: '#/components/responses/Error415'}
         '503': {$ref: '#/components/responses/Error503'}
-  /v1/worker/claims/{claim_id}:release:
+  /v1/workers/{worker_id}/claims/{claim_id}:release:
     post:
       operationId: releaseWorkerClaim
       security: [{WorkerBearer: []}]
       x-arop-required-scopes: [worker:claim]
-      parameters: [{$ref: '#/components/parameters/ClaimId'}]
+      parameters: [{$ref: '#/components/parameters/WorkerId'}, {$ref: '#/components/parameters/ClaimId'}]
       requestBody:
         required: true
         content:
@@ -105,6 +106,11 @@ components:
   securitySchemes:
     WorkerBearer: {type: http, scheme: bearer, bearerFormat: JWT}
   parameters:
+    WorkerId:
+      name: worker_id
+      in: path
+      required: true
+      schema: {$ref: '../schemas/runtime/worker-claim-v1.schema.json#/$defs/workerId'}
     ClaimId:
       name: claim_id
       in: path

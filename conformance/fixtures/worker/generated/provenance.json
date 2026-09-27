@@ -40,8 +40,8 @@
   },
   "configuration": {
     "path": "conformance/fixtures/worker/pipeline.json",
-    "sha256": "96c7eefb7bef53cec276dd41f9d273951c3131ddde5245893e0bd867a37b2fb0",
-    "bytes": 2938,
+    "sha256": "e166a8dbe6a1a51b4e86fa6459a6fcfa55e586b27d0b60f7a58837c68b2e891a",
+    "bytes": 3072,
     "mode": "100644"
   },
   "resources": [
@@ -95,6 +95,13 @@
       "mode": "100644"
     },
     {
+      "path": "schemas/runtime/run-request-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/runtime/run-request-v1.schema.json",
+      "sha256": "d9ea7ce7ed0ea57dc2809a8b6dede6552946ae55b71f0edac134a128d8561a36",
+      "bytes": 3068,
+      "mode": "100644"
+    },
+    {
       "path": "schemas/runtime/result-v1.schema.json",
       "uri": "https://arop.invalid/schemas/v1/runtime/result-v1.schema.json",
       "sha256": "32ebf8f8fddf2f78fd9fdb83fcfa34869859dcaeae0fe35925fecf832845bdb2",
@@ -104,8 +111,8 @@
     {
       "path": "schemas/runtime/worker-claim-v1.schema.json",
       "uri": "https://arop.invalid/schemas/v1/runtime/worker-claim-v1.schema.json",
-      "sha256": "1a9e7edad71ee41968607095e773dbf42ccfe2b9fcafe53654e53f4471c82ceb",
-      "bytes": 3505,
+      "sha256": "6ebe86f7af9aa3d40d692833605d3c35949675da14dcdd2d86008e2f29f129f0",
+      "bytes": 3735,
       "mode": "100644"
     },
     {
@@ -122,8 +129,8 @@
       "class": "valid",
       "root": "WorkerClaim",
       "path": "conformance/fixtures/worker/claim.valid.json",
-      "sha256": "b3148246dac3a6c18185b628b2f82f78c714491202547cf02c790812c028b1b0",
-      "bytes": 708,
+      "sha256": "288a82f53e82190154c50bec29b0c139414e1062200bc01dff531c146f4c54ad",
+      "bytes": 944,
       "mode": "100644"
     },
     {
@@ -140,8 +147,8 @@
       "class": "forward",
       "root": "WorkerClaim",
       "path": "conformance/fixtures/worker/claim.forward.json",
-      "sha256": "074d2c7988cc6c9a6f88a0a437e96e9a20fbb8b0261560a89aec858fbe30e321",
-      "bytes": 743,
+      "sha256": "fb74a7bd0f5ec8b29ca7196f6a7e9e05c9b2c15939537a28431c9cc4248021e5",
+      "bytes": 979,
       "mode": "100644"
     },
     {
@@ -149,8 +156,8 @@
       "class": "invalid",
       "root": "WorkerClaim",
       "path": "conformance/fixtures/worker/claim.invalid.json",
-      "sha256": "cdfec5594032df78429af07ccf9efcb5e4c3f027f13517254ec8b6ec32f11272",
-      "bytes": 693,
+      "sha256": "d1d40776a1e35c124d00aaefc2ae32dbfae60fa97ff23ab7bb0b10b05eef94e9",
+      "bytes": 944,
       "mode": "100644"
     },
     {
@@ -163,31 +170,31 @@
       "mode": "100644"
     }
   ],
-  "inputs_sha256": "90fd1710bd6b898eb0ba96ecfa0a2a13119fcbcbed39a860270b10fd8275d546",
+  "inputs_sha256": "041f92d030c219862aa5e32497f5ff550cdf3caf1809830db901363f1d84275f",
   "outputs": [
     {
       "language": "go",
       "path": "sdk/go/generated/worker/worker.gen.go",
-      "sha256": "859860f623a3232d8550f41bb46777320b65e948c58e6b1f4f08d94001cb0043",
-      "bytes": 89874,
+      "sha256": "de94002da899d0be4539ce8a74ba067e69078b92821fb1c0cbf50783dc9e8931",
+      "bytes": 102674,
       "mode": "100644"
     },
     {
       "language": "python",
       "path": "sdk/python/src/arop/generated/worker/worker_gen.py",
-      "sha256": "fea3c99e0642ff73ea65f90c5953943cacb80804c0f3b2bc1aaa8f2e6293d4a5",
-      "bytes": 42871,
+      "sha256": "b6feec638a0fe6cd82ca272339369bbc7293344d26d48e3d1617d2056c2462a2",
+      "bytes": 48531,
       "mode": "100644"
     },
     {
       "language": "typescript",
       "path": "sdk/typescript/src/generated/worker/worker.gen.ts",
-      "sha256": "2fc8f4b35760b23db305328f68f82d770c5b5c30b6601b156e6861e2fb4c4928",
-      "bytes": 41216,
+      "sha256": "2443b673b4ece34361626c4ab17d4f04a043816bd328d617b14674047e64b91e",
+      "bytes": 46311,
       "mode": "100644"
     }
   ],
-  "outputs_sha256": "e96bc19d8a7bb725ff6b58672ec8a1d39bb249c71bda773de1868cbb12b2f40f",
+  "outputs_sha256": "a4a9277210b70e9c43164d2ec7669b029472beee8fb49bcef2985427b17ad7a2",
   "checks": [
     {
       "id": "schema-valid-worker-claim",
@@ -217,12 +224,12 @@
     {
       "id": "offline-resource-closure",
       "passed": true,
-      "detail": "10 explicit resources"
+      "detail": "11 explicit resources"
     },
     {
       "id": "mapping-profile",
       "passed": true,
-      "detail": "34 named types"
+      "detail": "45 named types"
     },
     {
       "id": "deterministic-output-set",

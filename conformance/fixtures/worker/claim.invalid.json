@@ -1,14 +1,22 @@
 {
   "schema_version": 1,
   "claim_id": "clm_018f0c00-0000-7000-8000-000000000001",
-  "worker_id": "wrk_018f0c00-0000-7000-8000-000000000002",
+  "worker_id": "worker-a",
+  "session_id": "ses_018f0c00-0000-7000-8000-000000000002",
+  "generation": 7,
   "run_id": "run_018f0c00-0000-7000-8000-000000000003",
   "attempt_id": "att_018f0c00-0000-7000-8000-000000000004",
   "attempt_number": 1,
   "fencing_token": 0,
   "lease_token": "wlt_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
   "lease_expires_at": "2026-09-27T10:01:00Z",
-  "command": {"schema_version": 1, "command_id": "cmd_018f0c00-0000-7000-8000-000000000005", "type": "input.submit", "expected_state_version": 1, "data": {}},
-  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+  "run_request": {
+    "schema_version": 1,
+    "agent": {"id": "image.generate", "version": "1.0.0", "skill_id": "default", "manifest_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    "input": [{"type": "text", "text": "work"}],
+    "deadline_at": "2026-09-27T10:05:00Z",
+    "effects": {"level": "none"},
+    "trace": {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+  },
   "claimed_at": "2026-09-27T10:00:00Z"
 }
