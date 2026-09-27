@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "provider": [
+    "durable-inbox-replay",
+    "durable-outbox-commit",
+    "effect-completed-replay",
+    "effect-uncertain-no-blind-repeat",
+    "cancel-before-running",
+    "deadline-terminal",
+    "trace-and-usage-terminal",
+    "sqlite-clean-oracle",
+    "sqlite-dirty-and-tamper-rejection"
+  ],
+  "consumer": [
+    "direct-delivery",
+    "proxy-delivery",
+    "expired-ticket-fresh-redispatch",
+    "query-and-command",
+    "dns-ip-policy-per-connection",
+    "redirect-credential-no-replay"
+  ],
+  "security": [
+    "strict-es256",
+    "exact-ticket-runtime-binding",
+    "control-plane-and-runtime-bearer-separation",
+    "caller-cannot-select-proxy-endpoint",
+    "no-sse-route"
+  ]
+}
