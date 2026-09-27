@@ -40,6 +40,7 @@ const (
 	p18WaiverPath   = "reference/control-plane/internal/domain/run/testdata/transition/p18-baseline-transition-waiver.json"
 	p19WaiverPath   = "reference/control-plane/internal/domain/dispatch/testdata/transition/p19-baseline-transition-waiver.json"
 	p20WaiverPath   = "reference/control-plane/internal/domain/event/testdata/transition/p20-baseline-transition-waiver.json"
+	p21WaiverPath   = "conformance/fixtures/provider-reliability/testdata/transition/p21-baseline-transition-waiver.json"
 	reportDirectory = "build/reports/P09"
 	compositionTest = "reference/control-plane/internal/storage/migrate/testdata/engine-versions/composition/p09_storage_acceptance_test.go"
 	nestedModule    = "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane"
@@ -478,6 +479,15 @@ func p20AllowsPackage(root, importPath string) bool {
 	}
 	nested := nestedModule + "/internal/domain/event"
 	return importPath == nested || strings.HasPrefix(importPath, nested+"/") || importPath == rootModule+"/sdk/go/generated/event"
+}
+
+func p21AllowsPackage(root, importPath string) bool {
+	data, err := os.ReadFile(filepath.Join(root, p21WaiverPath))
+	if err != nil || !bytes.Contains(data, []byte(`"status": "validated"`)) || !bytes.Contains(data, []byte(`"commit": "be3f4e1e3a0b7ec0dc59774eec0813c8ed2cc993"`)) {
+		return false
+	}
+	base := nestedModule + "/internal/app/delivery"
+	return importPath == base || strings.HasPrefix(importPath, base+"/")
 }
 
 func verifyBaselineTransitionWaiver(root string, inputPaths []string, goListOutput []byte) error {
@@ -2100,6 +2110,10 @@ func verifyProductionList(root, rootVersion, moduleCache string, result commandR
 				seenNested[item.ImportPath] = true
 				continue
 			}
+		}
+		if p21AllowsPackage(root, item.ImportPath) && item.Module != nil && item.Module.Path == nestedModule && item.Module.Version == "" && pathWithin(filepath.Join(root, "reference/control-plane"), item.Dir) {
+			seenNested[item.ImportPath] = true
+			continue
 		}
 		if item.ImportPath == rootModule+"/sdk/go/protocol/core" {
 			if item.Module == nil || item.Module.Path != rootModule || item.Module.Version != rootVersion || !pathWithin(moduleCache, item.Dir) || pathWithin(root, item.Dir) {
