@@ -540,7 +540,7 @@ func runNested(root string) (commandResult, commandResult) {
 	}
 	overrides := map[string]string{"GOWORK": work, "TMPDIR": temporary}
 	directory := filepath.Join(root, "reference/control-plane")
-	packages := []string{"./internal/app/delivery", "./internal/domain/dispatch/...", "./internal/app/platform/httpadapter", "./internal/storage/migrate", "./cmd/aropd"}
+	packages := []string{"./internal/app/delivery", "./internal/domain/dispatch", "./internal/domain/dispatch/storage/internalstore", "./internal/app/platform/httpadapter", "./internal/storage/migrate", "./cmd/aropd"}
 	testArgs := append([]string{"test", "-race", "-count=1"}, packages...)
 	vetArgs := append([]string{"vet"}, packages...)
 	return run(directory, overrides, "go", testArgs...), run(directory, overrides, "go", vetArgs...)
