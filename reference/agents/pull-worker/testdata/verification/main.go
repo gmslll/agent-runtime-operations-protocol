@@ -63,7 +63,7 @@ func main() {
 	nestedTests := runNested(root)
 	add("p26-control-plane-security-tests", nestedTests.err, "identity, SecretRef, URL/Asset, audit/trace, delivery and migration security tests pass under race detection")
 	add("p26-test-terminals", rejectIncompleteTests(append(append([]byte(nil), rootTests.output...), nestedTests.output...)), "security suites contain no fail, skip, cache or no-test terminal")
-	storage := run(root, nil, "make", "test-storage-migrations")
+	storage := runStorageRegression(root)
 	add("p26-backup-restore-regression", storage.err, "live dual-store migration, backup/restore, hostile credential and readiness matrix passes")
 	add("p26-sensitive-output-scan", scanEvidence(rootTests.output, nestedTests.output, storage.output), "runtime evidence contains no credential, lease token, DSN or password sentinel")
 
@@ -204,6 +204,22 @@ func runNested(root string) commandResult {
 	packages := []string{"./internal/adapters/secrets", "./internal/identity", "./internal/domain/assets", "./internal/domain/publication", "./internal/domain/run", "./internal/domain/dispatch", "./internal/domain/event", "./internal/app/delivery", "./internal/app/streaming", "./internal/app/platform/httpadapter", "./internal/storage/migrate"}
 	arguments := append([]string{"test", "-json", "-race", "-count=1"}, packages...)
 	return run(filepath.Join(root, "reference/control-plane"), map[string]string{"GOWORK": work, "TMPDIR": temporary}, "go", arguments...)
+}
+
+func runStorageRegression(root string) commandResult {
+	temporary, err := os.MkdirTemp("/tmp", "arop-p26-storage-")
+	if err != nil {
+		return commandResult{err: err}
+	}
+	if err := os.Remove(temporary); err != nil {
+		return commandResult{err: err}
+	}
+	added := run(root, nil, "git", "worktree", "add", "--detach", temporary, "HEAD")
+	if added.err != nil {
+		return added
+	}
+	defer func() { _ = run(root, nil, "git", "worktree", "remove", "--force", temporary).err }()
+	return run(temporary, nil, "make", "test-storage-migrations")
 }
 
 func rejectIncompleteTests(output []byte) error {
