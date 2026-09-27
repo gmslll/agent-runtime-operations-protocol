@@ -259,12 +259,47 @@ func discoverTransition(root string) (discovered, error) {
 			}
 		}
 		if len(matches) == 0 {
+			if strings.HasSuffix(source, ".go") {
+				directory := filepath.ToSlash(filepath.Dir(source))
+				for _, artifact := range manifest.Artifacts {
+					if artifact.PathRole == "concrete" && artifact.Kind == "go-package" && filepath.ToSlash(filepath.Dir(artifact.Path)) == directory {
+						matches = append(matches, artifact)
+					}
+				}
+			}
+			if len(matches) != 0 {
+				for _, artifact := range matches {
+					artifacts[artifact.ID] = true
+					if artifact.AcceptanceTest != "" {
+						acceptance[strings.Replace(artifact.AcceptanceTest, "make-", "make ", 1)] = true
+					}
+				}
+				continue
+			}
 			if source == "Makefile" {
 				contents, readErr := os.ReadFile(filepath.Join(root, source))
-				if readErr != nil || !bytes.Contains(contents, []byte("test-worker-service:")) || !bytes.Contains(contents, []byte(checker)) {
+				if readErr != nil || !bytes.Contains(contents, []byte("test-worker-service:")) || !bytes.Contains(contents, []byte(filepath.Dir(checker))) {
 					return discovered{}, errors.New("Makefile does not bind the exact P24 checker")
 				}
 				acceptance[command] = true
+				continue
+			}
+			if strings.HasSuffix(source, "/go.sum") {
+				modulePath := strings.TrimSuffix(source, "go.sum") + "go.mod"
+				for _, artifact := range manifest.Artifacts {
+					if artifact.PathRole == "concrete" && filepath.ToSlash(artifact.Path) == modulePath {
+						matches = append(matches, artifact)
+					}
+				}
+			}
+			if len(matches) != 0 {
+				// go.sum is the cryptographic sibling of the manifest-owned go.mod.
+				for _, artifact := range matches {
+					artifacts[artifact.ID] = true
+					if artifact.AcceptanceTest != "" {
+						acceptance[strings.Replace(artifact.AcceptanceTest, "make-", "make ", 1)] = true
+					}
+				}
 				continue
 			}
 			return discovered{}, fmt.Errorf("changed source has no concrete manifest owner: %s", source)
