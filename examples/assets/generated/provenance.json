@@ -10,12 +10,12 @@
   },
   "generator": {
     "path": "scripts/generate.mjs",
-    "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+    "sha256": "6cd1a79f68dec890f97a6c26c78ca54cca00d86af25cab845e26e431bf5cda2c",
     "files": [
       {
         "path": "scripts/generate.mjs",
-        "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
-        "bytes": 142421,
+        "sha256": "6cd1a79f68dec890f97a6c26c78ca54cca00d86af25cab845e26e431bf5cda2c",
+        "bytes": 142404,
         "mode": "100644"
       },
       {
@@ -141,31 +141,31 @@
       "mode": "100644"
     }
   ],
-  "inputs_sha256": "3e61d55aa2bc461d96fff20c34ada261708b39440203dc738aef71d47533b410",
+  "inputs_sha256": "c62713249f2b182caf12ba938a9ec508b0da6f7afd917f38282eeb62a598f1fa",
   "outputs": [
     {
       "language": "go",
       "path": "sdk/go/generated/asset/asset.gen.go",
-      "sha256": "0705df43bac8cb16bbb0b97256bd2ee9144ee3ed1822a608bb730eb7f85c5b7b",
+      "sha256": "60149639e568624756c3035fe4292cc88cd3a52b26633bd99a9f4040b948c8f7",
       "bytes": 30873,
       "mode": "100644"
     },
     {
       "language": "python",
       "path": "sdk/python/src/arop/generated/asset/asset_gen.py",
-      "sha256": "fb5aae9aa670a0d95dfc6d35f7742f176a679f776f09d8c8a1667ebd92e60ea5",
-      "bytes": 19090,
+      "sha256": "c3251212637aeda7e469d95eaba6622873451d21a7b27b6044557061d5df45ed",
+      "bytes": 19100,
       "mode": "100644"
     },
     {
       "language": "typescript",
       "path": "sdk/typescript/src/generated/asset/asset.gen.ts",
-      "sha256": "32f000f5f5e5dcd4ae390c7752d0983121b569117f4e13c4bda8332e2419f3e3",
+      "sha256": "e0ae588572cdc83f7c34c22b5e9d4054a15bdbe052cfa3518274e9cd65dec762",
       "bytes": 20078,
       "mode": "100644"
     }
   ],
-  "outputs_sha256": "e990f449d7b3134afc92fb874c0c72baefb862524ccf8c1c7d84fded140117ae",
+  "outputs_sha256": "23ae9bfe80b8de9f1c5ac20a1703c063d40856814608701ab82def01f3dcb7c8",
   "checks": [
     {
       "id": "schema-valid-download-grant",

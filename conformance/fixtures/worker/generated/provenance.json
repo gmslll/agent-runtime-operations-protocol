@@ -10,12 +10,12 @@
   },
   "generator": {
     "path": "scripts/generate.mjs",
-    "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+    "sha256": "6cd1a79f68dec890f97a6c26c78ca54cca00d86af25cab845e26e431bf5cda2c",
     "files": [
       {
         "path": "scripts/generate.mjs",
-        "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
-        "bytes": 142421,
+        "sha256": "6cd1a79f68dec890f97a6c26c78ca54cca00d86af25cab845e26e431bf5cda2c",
+        "bytes": 142404,
         "mode": "100644"
       },
       {
@@ -170,31 +170,31 @@
       "mode": "100644"
     }
   ],
-  "inputs_sha256": "041f92d030c219862aa5e32497f5ff550cdf3caf1809830db901363f1d84275f",
+  "inputs_sha256": "59a564d73bfe98019ab8d0914d439a950407e6d8802fc84c0ddd5d2d13e251dc",
   "outputs": [
     {
       "language": "go",
       "path": "sdk/go/generated/worker/worker.gen.go",
-      "sha256": "de94002da899d0be4539ce8a74ba067e69078b92821fb1c0cbf50783dc9e8931",
+      "sha256": "c36a15f42e23f069425c161ecafd6dfcac92649f0a3fee8c43440ebd7185f6c8",
       "bytes": 102674,
       "mode": "100644"
     },
     {
       "language": "python",
       "path": "sdk/python/src/arop/generated/worker/worker_gen.py",
-      "sha256": "b6feec638a0fe6cd82ca272339369bbc7293344d26d48e3d1617d2056c2462a2",
-      "bytes": 48531,
+      "sha256": "8adbef8869f8d74047ba972e5eeeeed5753094c5f5af4cfdad798b1dc80ee71a",
+      "bytes": 48658,
       "mode": "100644"
     },
     {
       "language": "typescript",
       "path": "sdk/typescript/src/generated/worker/worker.gen.ts",
-      "sha256": "2443b673b4ece34361626c4ab17d4f04a043816bd328d617b14674047e64b91e",
+      "sha256": "023dba622a98672468bb10a695ccc9f1b84b1f9e524f7bbfd63b02718498dfb1",
       "bytes": 46311,
       "mode": "100644"
     }
   ],
-  "outputs_sha256": "a4a9277210b70e9c43164d2ec7669b029472beee8fb49bcef2985427b17ad7a2",
+  "outputs_sha256": "8165e2715b6376032c8481619bc314f29841387e395dff6fd378ae82b4a7f79f",
   "checks": [
     {
       "id": "schema-valid-worker-claim",

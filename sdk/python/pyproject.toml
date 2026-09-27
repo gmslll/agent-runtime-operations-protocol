@@ -1,0 +1,24 @@
+[build-system]
+requires = []
+build-backend = "build_package"
+backend-path = ["scripts"]
+
+[project]
+name = "arop-sdk"
+version = "0.1.0.dev0"
+description = "Agent Runtime Operations Protocol Python SDK"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+authors = [{name = "KingLucky AROP Contributors"}]
+classifiers = [
+  "Development Status :: 2 - Pre-Alpha",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+]
+
+[tool.arop-package]
+source-root = "src"
+package-root = "arop"
+wheel-tag = "py3-none-any"
+source-date-epoch = 0

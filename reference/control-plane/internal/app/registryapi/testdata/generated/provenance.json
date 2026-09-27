@@ -10,12 +10,12 @@
   },
   "generator": {
     "path": "scripts/generate.mjs",
-    "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+    "sha256": "6cd1a79f68dec890f97a6c26c78ca54cca00d86af25cab845e26e431bf5cda2c",
     "files": [
       {
         "path": "scripts/generate.mjs",
-        "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
-        "bytes": 142421,
+        "sha256": "6cd1a79f68dec890f97a6c26c78ca54cca00d86af25cab845e26e431bf5cda2c",
+        "bytes": 142404,
         "mode": "100644"
       },
       {
@@ -137,31 +137,31 @@
       "mode": "100644"
     }
   ],
-  "inputs_sha256": "42fdcf335b83804fa0166bc13cb1383a7c804ba4019eac021b23af5cc0a8a4fb",
+  "inputs_sha256": "d73f37b52c5d74eb8e37e8eddd13e47556c18da309d643b50220b225d452b2da",
   "outputs": [
     {
       "language": "go",
       "path": "sdk/go/generated/registry/registry.gen.go",
-      "sha256": "90fbb50dfbadcc04d8ce96996c9c3f970cc9b619ad4f70cb37bf0105963a9ad5",
+      "sha256": "f8e19c4e9ed9217c7dfce59aeb7ce10cde22c705e5477622bb4d1fc11925269d",
       "bytes": 67639,
       "mode": "100644"
     },
     {
       "language": "python",
       "path": "sdk/python/src/arop/generated/registry/registry_gen.py",
-      "sha256": "ea57b482a52980ef7530f40ebaabb14554729c10d5d0d0884f46c1ad14302e26",
-      "bytes": 33419,
+      "sha256": "bfa878657be13942f496d179ab488727bba703f538fa810ab977842eced72a6a",
+      "bytes": 33429,
       "mode": "100644"
     },
     {
       "language": "typescript",
       "path": "sdk/typescript/src/generated/registry/registry.gen.ts",
-      "sha256": "0fb8190fdc5131433585b9e8298a0fce0287f37f5aef01906ae24e4e854068f8",
+      "sha256": "4fc3515d14fc5e55ad1adf28a4a2aaec4c764e86407611479aeeeea2c6cc2201",
       "bytes": 33597,
       "mode": "100644"
     }
   ],
-  "outputs_sha256": "176c5a6ab12df4a43a5d622e4d1bafc09e8fc61d4e514f99daedcb0450f5b069",
+  "outputs_sha256": "60a3cc50b773e118423c0b469a4d87a768a87308f9831fe889fa528b14fa6feb",
   "checks": [
     {
       "id": "schema-valid-runtime-instance",

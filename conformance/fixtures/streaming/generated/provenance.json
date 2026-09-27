@@ -10,12 +10,12 @@
   },
   "generator": {
     "path": "scripts/generate.mjs",
-    "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+    "sha256": "6cd1a79f68dec890f97a6c26c78ca54cca00d86af25cab845e26e431bf5cda2c",
     "files": [
       {
         "path": "scripts/generate.mjs",
-        "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
-        "bytes": 142421,
+        "sha256": "6cd1a79f68dec890f97a6c26c78ca54cca00d86af25cab845e26e431bf5cda2c",
+        "bytes": 142404,
         "mode": "100644"
       },
       {
@@ -93,52 +93,52 @@
       "mode": "100644"
     }
   ],
-  "inputs_sha256": "b64411e35d91eefedca9eec9cd34447626651e8cf181c16f13afc28e163c2ac3",
+  "inputs_sha256": "e5e6d0db964ac7af431e90d505f558d20d4cafe0e19e2661074811c5c732b320",
   "outputs": [
     {
       "language": "go",
       "path": "sdk/go/generated/streaming/streaming.gen.go",
-      "sha256": "24d69ea5f616ede85f0eae352f3e23f9edae9bd02d704d4b92068a567967804f",
+      "sha256": "abf34065c65a7b31f271d8f949e5e5bb074519a285a750323323c543ec7c0c08",
       "bytes": 19901,
       "mode": "100644"
     },
     {
       "language": "go",
       "path": "sdk/go/generated/streaming/streaming_contract_test.go",
-      "sha256": "a461c53c61198f053c6d79d898ffa54dbed4e290248401c89a811952b5eebfd4",
+      "sha256": "5c07f45b9728cc1fc3fab2a7167640d5a43f1107f36dafd1b95318278675d334",
       "bytes": 4705,
       "mode": "100644"
     },
     {
       "language": "python",
       "path": "sdk/python/src/arop/generated/streaming/probe.py",
-      "sha256": "ee419d955b48d8c355c37631415e6e0a330d17a39515b7678a07886ef32103bb",
+      "sha256": "4c6b269ac55390ac02e9b8289f293c208dc118056340fbd0d86bb698ff2780c6",
       "bytes": 4008,
       "mode": "100644"
     },
     {
       "language": "python",
       "path": "sdk/python/src/arop/generated/streaming/streaming_gen.py",
-      "sha256": "f1d58858c99e56607a941893658c0774c980158320888db6c4ac7174e445ff76",
-      "bytes": 13779,
+      "sha256": "835fd44d750956d13b1b55c1e6248317694b71bd4d12c9cdd72d91e8a228e2d8",
+      "bytes": 13789,
       "mode": "100644"
     },
     {
       "language": "typescript",
       "path": "sdk/typescript/src/generated/streaming/probe.ts",
-      "sha256": "8f24f05d67d58d9311e00363bd6d816a81b6c108905101b436a91ea77409481f",
+      "sha256": "2c94680d40f9a889929a7b98fa2c81e80fbed5e1821afed3e60ceedd1860e558",
       "bytes": 3465,
       "mode": "100644"
     },
     {
       "language": "typescript",
       "path": "sdk/typescript/src/generated/streaming/streaming.gen.ts",
-      "sha256": "f5dc07de2c07e725a0426027068dbcfc4c3ce4d8535f1c3223b516932b9383e4",
+      "sha256": "d2b6f81ad93d27935a5577ccdf5508e2fe935804bc294246805d7d49e0c3f4e2",
       "bytes": 15814,
       "mode": "100644"
     }
   ],
-  "outputs_sha256": "f334ecca3e3d89787ce55d8bde7f71fccd0925b7a2978efb243f1cdb8b6271f5",
+  "outputs_sha256": "6075fabc8c49aeb6ba0bbe0cf79dcf2f0d34b2f07b20977a43a408832abb70f6",
   "checks": [
     {
       "id": "schema-valid-stream-event",

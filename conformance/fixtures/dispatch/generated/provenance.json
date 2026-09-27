@@ -10,12 +10,12 @@
   },
   "generator": {
     "path": "scripts/generate.mjs",
-    "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+    "sha256": "6cd1a79f68dec890f97a6c26c78ca54cca00d86af25cab845e26e431bf5cda2c",
     "files": [
       {
         "path": "scripts/generate.mjs",
-        "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
-        "bytes": 142421,
+        "sha256": "6cd1a79f68dec890f97a6c26c78ca54cca00d86af25cab845e26e431bf5cda2c",
+        "bytes": 142404,
         "mode": "100644"
       },
       {
@@ -174,31 +174,31 @@
       "mode": "100644"
     }
   ],
-  "inputs_sha256": "49c03593c41ca03a06eef3b9b60e8e0d6f794d2081d3d2e7dbb06f28d5c8d50c",
+  "inputs_sha256": "67486cbe360bade79fb104eaad06358bad5584dd1f7bb1a6df438b9d84417ca0",
   "outputs": [
     {
       "language": "go",
       "path": "sdk/go/generated/dispatch/dispatch.gen.go",
-      "sha256": "ed0fbac7902a70cbedafd53c202c47a65f34e38c55a8d7cbbf6369e7fbf73ad7",
+      "sha256": "8e672d5198a03599d0521462a74d5c59822aa3c95dcf0d1479cdbd589fdb9c1c",
       "bytes": 52684,
       "mode": "100644"
     },
     {
       "language": "python",
       "path": "sdk/python/src/arop/generated/dispatch/dispatch_gen.py",
-      "sha256": "6c539f8614bd82eeb425c922b0275e76e242809632661d2a19749e3be0b0660a",
-      "bytes": 27338,
+      "sha256": "96d90ffebecd0ddfc5f72e7deacbc28059f22612fb536ffeeae37051081d62fa",
+      "bytes": 27348,
       "mode": "100644"
     },
     {
       "language": "typescript",
       "path": "sdk/typescript/src/generated/dispatch/dispatch.gen.ts",
-      "sha256": "5206d1bab1d782a93502b29581f2d65d9dd62c0e6402e7b4c3e9b1ef24dfee77",
+      "sha256": "b4985b0de89967be84be8292b88e605588596d40e2688187a0d28904e461ed75",
       "bytes": 28286,
       "mode": "100644"
     }
   ],
-  "outputs_sha256": "0a9a059cc5cb8435b66fcb05695877cfb89c9a2962eb89ac4472df6a272d8dd9",
+  "outputs_sha256": "a991e303b720af101aa33a88e920483578dad9592f9cb41bd11a33d874fb17c8",
   "checks": [
     {
       "id": "schema-valid-attempt",

@@ -10,12 +10,12 @@
   },
   "generator": {
     "path": "scripts/generate.mjs",
-    "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+    "sha256": "6cd1a79f68dec890f97a6c26c78ca54cca00d86af25cab845e26e431bf5cda2c",
     "files": [
       {
         "path": "scripts/generate.mjs",
-        "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
-        "bytes": 142421,
+        "sha256": "6cd1a79f68dec890f97a6c26c78ca54cca00d86af25cab845e26e431bf5cda2c",
+        "bytes": 142404,
         "mode": "100644"
       },
       {
@@ -301,31 +301,31 @@
       "mode": "100644"
     }
   ],
-  "inputs_sha256": "03f3e3c2a8d10d5500885ea0449c25c9e85590fc2b72308d9b7646d264d5de8a",
+  "inputs_sha256": "aeca28a5d9ccfaf029d90c605e6db33bdddb1a8550bb6137a3681e8124683731",
   "outputs": [
     {
       "language": "go",
       "path": "sdk/go/generated/event/event.gen.go",
-      "sha256": "d25843d5135f88c14d01eb2a9fd7293bd9186e43d67d0d0a38fa5c9d61a1ce3a",
+      "sha256": "719cc40a22efbc1b77cfe40830d6674209ef00f750260bb07b829372fca3ec1a",
       "bytes": 103874,
       "mode": "100644"
     },
     {
       "language": "python",
       "path": "sdk/python/src/arop/generated/event/event_gen.py",
-      "sha256": "fd1bb225d76f8f9744345d8594a0ed6bbc7c69b000697ef40efa11911de837f6",
-      "bytes": 48664,
+      "sha256": "3278557e65cf8642e568eb63ea0f45015bcc7a5a045cba5de19e089841049754",
+      "bytes": 48746,
       "mode": "100644"
     },
     {
       "language": "typescript",
       "path": "sdk/typescript/src/generated/event/event.gen.ts",
-      "sha256": "a09dead924d06a18c806dd1bfc3f1103a2a9f737b4d579deb6ea0eb47aad8f81",
+      "sha256": "6da33ab49720dd43bcf47cfcd505502eb9e6a4f30b5662ab38562a6f2d27bce5",
       "bytes": 44948,
       "mode": "100644"
     }
   ],
-  "outputs_sha256": "e982c6c0755b780fa900ec77b220e8db3c271f566c1974e6c3c1b449e780a611",
+  "outputs_sha256": "cc3b8395bea27edc0f853e1e8564ede7e0f50244831e3f36f1c6d194ebd01416",
   "checks": [
     {
       "id": "schema-valid-envelope",
