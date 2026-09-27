@@ -141,6 +141,11 @@ func main() {
 	if scratchErr == nil {
 		scratchErr = os.Chmod(scratch, 0o700)
 	}
+	childHome := "/nonexistent"
+	if scratchErr == nil {
+		childHome = filepath.Join(scratch, "home")
+		scratchErr = os.Mkdir(childHome, 0o700)
+	}
 	add("p10-private-scratch", scratchErr, "private acceptance scratch created")
 	var cluster *postgresCluster
 	var postgresEvidence []byte
@@ -165,18 +170,19 @@ func main() {
 	add("p10-exact-test-inventory-negatives", verifyInventoryNegatives(), "nested skip and duplicate top-level/package terminals fail closed")
 	add("p10-secret-egress-scan", rejectSensitive(tests.Output), "test output contains no credential or SecretRef canary")
 
-	transitionEnvironment := map[string]string{"GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": "off", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0"}
+	transitionEnvironment := map[string]string{"GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": "off", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "HOME": childHome}
 	transition := run(root, transitionEnvironment, "go", "run", "-modfile="+filepath.Join(root, "go.mod"), filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go"), "validate")
 	add("p10-transition-waiver", transition.Err, "validated waiver equals independently discovered Git and manifest closure")
 	transitionNegative := run(root, transitionEnvironment, "go", "run", "-modfile="+filepath.Join(root, "go.mod"), filepath.Join(root, "reference/control-plane/internal/storage/migrate/testdata/engine-versions/transitioncheck/check.go"), "negative")
 	add("p10-transition-waiver-negatives", transitionNegative.Err, "artifact, source, acceptance, constraint, owner, rename and changed-to-reverted negatives fail closed")
 
-	p08 := run(root, nil, "make", "test-control-plane-platform")
+	regressionEnvironment := map[string]string{"HOME": childHome}
+	p08 := run(root, regressionEnvironment, "make", "test-control-plane-platform")
 	if p08.Err == nil {
 		p08.Err = verifyCurrentReport(root, "build/reports/P08/report.json")
 	}
 	add("p10-p08-regression", p08.Err, "P08 acceptance and current report verification pass on the P10 head")
-	p09 := run(root, nil, "make", "test-storage-migrations")
+	p09 := run(root, regressionEnvironment, "make", "test-storage-migrations")
 	if p09.Err == nil {
 		p09.Err = verifyCurrentReport(root, "build/reports/P09/report.json")
 	}
