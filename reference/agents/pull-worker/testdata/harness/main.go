@@ -285,7 +285,11 @@ func immutableEndpoint(root string) (string, string, error) {
 }
 
 func validateNoPersistence(root string) error {
-	diff := run(root, nil, "git", "diff", "--name-only", baseline+"..HEAD", "--")
+	_, endpoint, endpointErr := immutableEndpoint(root)
+	if endpointErr != nil {
+		return endpointErr
+	}
+	diff := run(root, nil, "git", "diff", "--name-only", baseline+".."+endpoint, "--")
 	if diff.err != nil {
 		return diff.err
 	}
