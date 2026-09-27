@@ -346,6 +346,15 @@ func (repository *fakeRepository) GetByIdempotency(_ context.Context, tenantID, 
 	return attempt, repository.requestDigests[tenantID+"/"+key], nil
 }
 
+func (repository *fakeRepository) GetAttempt(_ context.Context, tenantID, attemptID string) (Attempt, error) {
+	for _, attempt := range repository.attempts {
+		if attempt.TenantID == tenantID && attempt.AttemptID == attemptID {
+			return attempt, nil
+		}
+	}
+	return Attempt{}, NewError(CategoryNotFound, ReasonRunNotFound)
+}
+
 func (repository *fakeRepository) Reserve(_ context.Context, command ReserveCommand) (Attempt, bool, error) {
 	repository.mutex.Lock()
 	defer repository.mutex.Unlock()

@@ -172,6 +172,53 @@ func (service *Service) JWKS(ctx context.Context) (JWKS, error) {
 	return result, nil
 }
 
+// ValidateProxyDelivery re-authenticates a caller supplied proxy capability
+// against the durable Attempt and current verification-key set. The returned
+// Attempt endpoint is the only permitted proxy target; caller headers never
+// choose an arbitrary forwarding address.
+func (service *Service) ValidateProxyDelivery(ctx context.Context, caller Caller, runID, attemptID, token string) (Attempt, RunView, error) {
+	now := service.now()
+	if caller.Validate() != nil || !prefixedUUID("run_", runID) || !prefixedUUID("att_", attemptID) || len(token) < 96 || len(token) > 8192 {
+		return Attempt{}, RunView{}, NewError(CategoryValidation, ReasonTicketInvalid)
+	}
+	attempt, err := service.deps.Repository.GetAttempt(ctx, caller.TenantID, attemptID)
+	if err != nil {
+		return Attempt{}, RunView{}, err
+	}
+	if attempt.Validate() != nil || attempt.RunID != runID || attempt.TransportProfile != "proxy" || attempt.State != StateIssued && attempt.State != StateAccepted || !now.Before(attempt.TicketExpiresAt) {
+		return Attempt{}, RunView{}, NewError(CategoryConflict, ReasonTicketExpired)
+	}
+	view, err := service.deps.Runs.DispatchableRun(ctx, caller.TenantID, runID)
+	if err != nil || view.Validate() != nil {
+		return Attempt{}, RunView{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
+	}
+	keys, err := service.deps.Signer.VerificationKeys(ctx, now)
+	if err != nil {
+		return Attempt{}, RunView{}, NewError(CategoryDependency, ReasonDependencyUnavailable)
+	}
+	var key KeyMetadata
+	for _, candidate := range keys {
+		if candidate.KeyID == attempt.SigningKeyID {
+			key = candidate
+			break
+		}
+	}
+	if key.KeyID == "" {
+		return Attempt{}, RunView{}, NewError(CategoryAuthorization, ReasonTicketInvalid)
+	}
+	claims, err := VerifyToken(token, key, VerifyExpectation{
+		Issuer: service.deps.Issuer, Audience: attempt.Audience, RunID: runID, AttemptID: attemptID,
+		AgentID: view.Agent.ID, AgentVersion: view.Agent.Version, SkillID: view.Agent.SkillID,
+		DeploymentID: attempt.DeploymentID, InstanceID: attempt.InstanceID, TransportProfile: attempt.TransportProfile,
+		Endpoint: attempt.Endpoint, Generation: attempt.Generation, FencingToken: attempt.FencingToken,
+		ExpiresAt: attempt.TicketExpiresAt, Now: now, RequiredScope: "agent:invoke",
+	})
+	if err != nil || claims.Subject != caller.PrincipalID || claims.AuthorizedParty != caller.CredentialID {
+		return Attempt{}, RunView{}, NewError(CategoryAuthorization, ReasonTicketInvalid)
+	}
+	return attempt, view, nil
+}
+
 func validateSigningSet(keys []KeyMetadata, activeID string, now time.Time, maxTTL time.Duration) error {
 	normalized, err := normalizeKeys(keys)
 	if err != nil || len(normalized) == 0 || len(normalized) > 32 {

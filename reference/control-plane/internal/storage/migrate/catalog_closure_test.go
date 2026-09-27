@@ -3,6 +3,7 @@ package migrate
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -125,7 +126,7 @@ func TestProductionCatalogSnapshots(t *testing.T) {
 		t.Fatalf("P19 snapshot drifted: %+v", p19)
 	}
 	current := CurrentProductionCatalog()
-	if current.ReportPhase != "P20" || current.ReportPath != "build/reports/P20/report.json" || len(current.Migrations) != 16 {
+	if current.ReportPhase != "P21" || current.ReportPath != "build/reports/P21/report.json" || len(current.Migrations) != 16 || !slices.Contains(current.OwnerPhases, "P21") {
 		t.Fatalf("current catalog is not P20 complete: %+v", current)
 	}
 	for _, item := range current.Migrations {

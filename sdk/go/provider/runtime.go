@@ -370,14 +370,16 @@ func (runtime *Runtime) start(record InboxRecord) {
 
 func (runtime *Runtime) execute(ctx context.Context, record InboxRecord) {
 	if err := runtime.markRunning(ctx, &record); err != nil {
-		if current, loadErr := runtime.config.Store.GetInbox(context.Background(), record.RunID, record.AttemptID); loadErr == nil && current.State == InboxCancelRequested {
-			_ = runtime.finalize(context.Background(), current, cancelledResult(current.RunID, runtime.now()), InboxCancelled)
+		finalizeCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if current, loadErr := runtime.config.Store.GetInbox(finalizeCtx, record.RunID, record.AttemptID); loadErr == nil && current.State == InboxCancelRequested {
+			_ = runtime.finalize(finalizeCtx, current, cancelledResult(current.RunID, runtime.now()), InboxCancelled)
 		}
 		return
 	}
 	request, err := runwire.DecodeRunRequest(record.RequestJSON)
 	if err != nil {
-		_ = runtime.finalize(context.Background(), record, failedResult(record.RunID, runtime.now()), InboxFailed)
+		runtime.finalizeDetached(record, failedResult(record.RunID, runtime.now()), InboxFailed)
 		return
 	}
 	execution := &Execution{store: runtime.config.Store, record: record, clock: runtime.config.Clock}
@@ -400,7 +402,13 @@ func (runtime *Runtime) execute(ctx context.Context, record InboxRecord) {
 		encoded, _ = runwire.EncodeRunResult(result)
 	}
 	record.ResultJSON = encoded
-	_ = runtime.finalize(context.Background(), record, result, state)
+	runtime.finalizeDetached(record, result, state)
+}
+
+func (runtime *Runtime) finalizeDetached(record InboxRecord, result runwire.RunResult, state InboxState) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_ = runtime.finalize(ctx, record, result, state)
 }
 
 func (runtime *Runtime) markRunning(ctx context.Context, record *InboxRecord) error {

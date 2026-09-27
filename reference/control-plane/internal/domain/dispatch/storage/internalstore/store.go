@@ -72,6 +72,14 @@ func (store *Store) GetByIdempotency(ctx context.Context, tenantID, keyDigest st
 	return attempt, requestDigest, err
 }
 
+func (store *Store) GetAttempt(ctx context.Context, tenantID, attemptID string) (dispatch.Attempt, error) {
+	queryer := migrate.Queryer(store.db)
+	if tx, ok := store.lookup(ctx); ok {
+		queryer = tx
+	}
+	return store.loadAttempt(ctx, queryer, tenantID, attemptID)
+}
+
 func (store *Store) Reserve(ctx context.Context, command dispatch.ReserveCommand) (dispatch.Attempt, bool, error) {
 	if command.Run.Validate() != nil || command.Candidate.Validate(command.Now) != nil || !validHex(command.KeyDigest, 64) || !strings.HasPrefix(command.RequestDigest, "sha256:") || !utc(command.Now) || !utc(command.LeaseExpires) || !utc(command.TicketExpires) || command.TicketExpires.After(command.LeaseExpires) || !strings.HasPrefix(command.AttemptID, "att_") || !strings.HasPrefix(command.TokenID, "tok_") || !strings.HasPrefix(command.DeploymentID, "dep_") || command.SigningKey.Validate(5*time.Minute) != nil || len(command.SigningKeys) == 0 {
 		return dispatch.Attempt{}, false, dispatch.NewError(dispatch.CategoryValidation, dispatch.ReasonInvalidRequest)

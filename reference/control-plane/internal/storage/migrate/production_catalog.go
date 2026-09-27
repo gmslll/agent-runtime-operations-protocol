@@ -131,14 +131,15 @@ func P19ProductionCatalog() CatalogClosure {
 }
 
 // CurrentProductionCatalog is the only catalog used by production
-// composition. P20 advances the paired history to 0060. Historical phases
+// composition. P20 advances the paired history to 0060; P21 changes runtime
+// composition without adding a Control Plane migration. Historical phases
 // always inject their immutable snapshots instead.
 func CurrentProductionCatalog() CatalogClosure {
 	closure := P19ProductionCatalog()
 	closure.ID = "control-plane-production-migrations"
-	closure.ReportPhase = "P20"
-	closure.ReportPath = "build/reports/P20/report.json"
-	closure.OwnerPhases = append(closure.OwnerPhases, "P20")
+	closure.ReportPhase = "P21"
+	closure.ReportPath = "build/reports/P21/report.json"
+	closure.OwnerPhases = append(closure.OwnerPhases, "P20", "P21")
 	closure.Migrations = append(closure.Migrations,
 		DeclaredMigration{Dialect: DialectPostgres, Path: "postgres/0060_event.sql", OwnerPhase: "P20", SHA256: "1807e9171879bfffda2879de32905617e952aae31e664a5955e3594108e9d66d"},
 		DeclaredMigration{Dialect: DialectSQLite, Path: "sqlite/0060_event.sql", OwnerPhase: "P20", SHA256: "4c905e53a2790b025075e77bcba5e660e6c112c24e1890eec957a83e02cb90e6"},

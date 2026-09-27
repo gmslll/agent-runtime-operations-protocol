@@ -45,6 +45,7 @@ type ReserveCommand struct {
 
 type Repository interface {
 	GetByIdempotency(context.Context, string, string) (Attempt, string, error)
+	GetAttempt(context.Context, string, string) (Attempt, error)
 	Reserve(context.Context, ReserveCommand) (Attempt, bool, error)
 	SyncKeys(context.Context, []KeyMetadata, time.Time) error
 	Keys(context.Context, time.Time) ([]KeyMetadata, error)

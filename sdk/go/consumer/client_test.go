@@ -62,7 +62,7 @@ func TestProxyDeliveryKeepsRuntimeTokenOffAuthorizationHeader(t *testing.T) {
 		case strings.HasSuffix(request.URL.Path, ":dispatch"):
 			writeTicket(response, server.URL, "proxy", testAttemptID(), consumerNow.Add(time.Minute))
 		case strings.HasSuffix(request.URL.Path, ":deliver"):
-			if request.Header.Get("Authorization") != "Bearer control-token-000000" || request.Header.Get("X-AROP-Run-Token") != testRunToken() || request.Header.Get("X-AROP-Runtime-Endpoint") != server.URL+"/v1/runs" {
+			if request.Header.Get("Authorization") != "Bearer control-token-000000" || request.Header.Get("X-AROP-Run-Token") != testRunToken() || request.Header.Get("X-AROP-Runtime-Endpoint") != "" {
 				t.Fatalf("proxy credentials were not separated: %#v", request.Header)
 			}
 			writeStatus(response, http.StatusAccepted)
@@ -110,6 +110,30 @@ func TestNetworkPolicyAndRedirectFailClosedWithoutCredentialLeak(t *testing.T) {
 	}
 	if resolver.calls.Load() == 0 {
 		t.Fatal("resolver was not consulted")
+	}
+}
+
+func TestSameOriginRedirectIsRejectedWithoutCredentialReplay(t *testing.T) {
+	var redirected atomic.Int64
+	var server *httptest.Server
+	server = httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		switch {
+		case strings.HasSuffix(request.URL.Path, ":dispatch"):
+			writeTicket(response, server.URL, "direct", testAttemptID(), consumerNow.Add(time.Minute))
+		case request.URL.Path == "/v1/runs":
+			response.Header().Set("Location", server.URL+"/v1/redirected")
+			response.WriteHeader(http.StatusTemporaryRedirect)
+		case request.URL.Path == "/v1/redirected":
+			if request.Header.Get("Authorization") != "" || request.Header.Get("Idempotency-Key") != "" {
+				redirected.Add(1)
+			}
+			writeStatus(response, http.StatusAccepted)
+		}
+	}))
+	defer server.Close()
+	client := testClient(t, server, &countingResolver{}, allowAll{}, "direct")
+	if _, err := client.Invoke(context.Background(), testRunID(), testRunRequest(t)); err == nil || redirected.Load() != 0 {
+		t.Fatalf("same-origin redirect accepted or replayed credentials: err=%v replay=%d", err, redirected.Load())
 	}
 }
 

@@ -152,7 +152,8 @@ func (client *Client) Dispatch(ctx context.Context, runID, idempotencyKey string
 		return dispatchwire.DispatchTicket{}, decodeRemoteError(response.StatusCode, body)
 	}
 	ticket, err := dispatchwire.DecodeDispatchTicket(body)
-	if err != nil || string(ticket.RunID) != runID {
+	wantLocation := "/v1/agent-runs/" + runID + "/attempts/" + string(ticket.AttemptID)
+	if err != nil || string(ticket.RunID) != runID || !singleHeaderValue(response.Header, "Location", wantLocation) {
 		return dispatchwire.DispatchTicket{}, errors.New("invalid dispatch response")
 	}
 	return ticket, nil
@@ -220,7 +221,6 @@ func (client *Client) Deliver(ctx context.Context, ticket dispatchwire.DispatchT
 	httpRequest.Header.Set("Idempotency-Key", string(ticket.AttemptID))
 	if ticket.Delivery.Mode == "proxy" {
 		httpRequest.Header.Set("X-AROP-Run-Token", ticket.RunToken)
-		httpRequest.Header.Set("X-AROP-Runtime-Endpoint", string(ticket.Delivery.Endpoint))
 	}
 	response, err := client.http.Do(httpRequest)
 	if err != nil {
@@ -342,12 +342,9 @@ func secureHTTPClient(source *http.Client, resolver Resolver, policy AddressPoli
 		return nil, last
 	}
 	client.Transport = transport
-	client.CheckRedirect = func(request *http.Request, via []*http.Request) error {
-		if len(via) >= 3 || request.URL.Scheme != "https" || len(via) == 0 || !sameOrigin(request.URL, via[0].URL) || request.URL.User != nil {
-			return http.ErrUseLastResponse
-		}
-		return nil
-	}
+	// Capabilities and idempotency keys are never replayed across redirects.
+	// A caller that intentionally targets a new URL must obtain a fresh ticket.
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	client.Timeout = 0 // request contexts are the sole timeout authority.
 	return client, nil
 }
@@ -374,10 +371,6 @@ func parseHTTPSURL(value string) (*url.URL, error) {
 		return nil, ErrUnsafeEndpoint
 	}
 	return parsed, nil
-}
-
-func sameOrigin(left, right *url.URL) bool {
-	return strings.EqualFold(left.Scheme, right.Scheme) && strings.EqualFold(left.Host, right.Host)
 }
 
 func bounded(reader io.Reader) ([]byte, error) {
@@ -417,8 +410,27 @@ func singleContentType(header http.Header, expected string) bool {
 	return len(values) == 1 && strings.EqualFold(strings.TrimSpace(values[0]), expected)
 }
 
+func singleHeaderValue(header http.Header, name, expected string) bool {
+	values := header.Values(name)
+	return len(values) == 1 && values[0] == expected
+}
+
 func validRunID(value string) bool {
-	return strings.HasPrefix(value, "run_") && len(value) == 40
+	if !strings.HasPrefix(value, "run_") || len(value) != 40 {
+		return false
+	}
+	for index, character := range value[4:] {
+		if index == 8 || index == 13 || index == 18 || index == 23 {
+			if character != '-' {
+				return false
+			}
+			continue
+		}
+		if character < '0' || character > '9' && character < 'a' || character > 'f' {
+			return false
+		}
+	}
+	return true
 }
 
 func validKey(value string) bool {

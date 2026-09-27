@@ -21,6 +21,7 @@ import (
 	secretadapter "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/secrets"
 	postgresadapter "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/storage/postgres"
 	sqliteadapter "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/adapters/storage/sqlite"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/delivery"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/httpadapter"
 	platformports "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/app/platform/ports"
@@ -84,6 +85,21 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	if catalogOwns(catalogClosure, "P21") {
+		if dispatcher := dispatchServiceFromChecks(checks); dispatcher != nil {
+			forwarder, forwardErr := delivery.NewHTTPForwarder(nil, nil, nil)
+			if forwardErr != nil {
+				_ = cleanup()
+				return nil, nil, nil, errors.New("initialize proxy delivery transport")
+			}
+			deliveryService, deliveryErr := delivery.New(dispatcher, forwarder, clock.Now)
+			if deliveryErr != nil {
+				_ = cleanup()
+				return nil, nil, nil, errors.New("initialize proxy delivery service")
+			}
+			checks = append(checks, deliveryService)
+		}
+	}
 	application, err := platform.New(config, platform.Dependencies{
 		Clock: clock, IDs: ids, Faults: faults,
 		UoW: uow, Observability: store, Checks: checks,
@@ -135,6 +151,13 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 		if err != nil {
 			_ = cleanup()
 			return nil, nil, nil, errors.New("assemble event ledger HTTP handler")
+		}
+	}
+	if deliveryService := deliveryServiceFromChecks(checks); deliveryService != nil {
+		handler, err = httpadapter.NewDeliveryApplicationHandler(application, referenceAuthenticate(identityServiceFromChecks(checks), ids), publicationServiceFromChecks(checks), assetServiceFromChecks(checks), registryAPIServiceFromChecks(checks), registryWatchServiceFromChecks(checks), runServiceFromChecks(checks), dispatchServiceFromChecks(checks), eventServiceFromChecks(checks), deliveryService)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, errors.New("assemble proxy delivery HTTP handler")
 		}
 	}
 	httpServer := httpadapter.NewServer(application, handler)
@@ -899,6 +922,15 @@ func dispatchServiceFromChecks(checks []platformports.ReadinessCheck) *dispatch.
 func eventServiceFromChecks(checks []platformports.ReadinessCheck) *event.Service {
 	for _, check := range checks {
 		if service, ok := check.(*event.Service); ok {
+			return service
+		}
+	}
+	return nil
+}
+
+func deliveryServiceFromChecks(checks []platformports.ReadinessCheck) *delivery.Service {
+	for _, check := range checks {
+		if service, ok := check.(*delivery.Service); ok {
 			return service
 		}
 	}
