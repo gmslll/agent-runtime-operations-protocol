@@ -632,7 +632,7 @@ func cleanEnvironment(overrides map[string]string) []string {
 	if _, present := defaults["PATH"]; !present {
 		for index, entry := range result {
 			if strings.HasPrefix(entry, "PATH=") && !strings.Contains(entry, "/opt/homebrew/opt/postgresql@16/bin") {
-				result[index] = "PATH=/opt/homebrew/opt/postgresql@16/bin:" + strings.TrimPrefix(entry, "PATH=")
+				result[index] = "PATH=/opt/homebrew/bin:/opt/homebrew/opt/postgresql@16/bin:" + strings.TrimPrefix(entry, "PATH=")
 				break
 			}
 		}
