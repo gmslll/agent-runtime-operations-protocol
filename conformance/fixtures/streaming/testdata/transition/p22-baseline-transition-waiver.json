@@ -121,6 +121,7 @@
     "reference/control-plane/internal/app/streaming/storage/internalstore/reader.go",
     "reference/control-plane/internal/app/streaming/storage/internalstore/reader_test.go",
     "reference/control-plane/internal/app/streaming/types.go",
+    "reference/control-plane/internal/domain/dispatch/testdata/harness/main.go",
     "reference/control-plane/internal/storage/migrate/catalog_closure_test.go",
     "reference/control-plane/internal/storage/migrate/production_catalog.go",
     "reference/control-plane/internal/storage/migrate/testdata/engine-versions/harness/main.go",

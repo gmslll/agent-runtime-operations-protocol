@@ -11,112 +11,37 @@ import (
 	"testing"
 )
 
-func decodeFixture(root string, data []byte, forward bool) (any, error) {
-	switch root {
-	case "StreamEvent":
-		if forward {
-			return DecodeStreamEventForward(data)
-		}
-		return DecodeStreamEvent(data)
-	default:
-		return nil, fmt.Errorf("unknown fixture root %s", root)
-	}
-}
+func decodeFixture(root string, data []byte, forward bool) (any, error) { switch root {
+	case "StreamEvent": if forward { return DecodeStreamEventForward(data) }; return DecodeStreamEvent(data)
+	default: return nil, fmt.Errorf("unknown fixture root %s", root)
+} }
 
 func TestGeneratedCodec(t *testing.T) {
-	cases := []struct {
-		name, root, document string
-		forward              bool
-	}{
+	cases := []struct{name, root, document string; forward bool}{
 		{name: "stream-event", root: "StreamEvent", document: "{\"specversion\":\"1.0\",\"id\":\"evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef11\",\"source\":\"https://runtime.example.invalid/instances/instance-01\",\"type\":\"io.kinglucky.arop.output.delta.v1\",\"subject\":\"runs/run_01932f13-0cd2-7a82-8fa3-1cb5ce13ef10\",\"time\":\"2026-09-21T08:00:01.125Z\",\"datacontenttype\":\"application/json\",\"dataschema\":\"https://arop.invalid/schemas/v1/events/output-events-v1.schema.json\",\"runid\":\"run_01932f13-0cd2-7a82-8fa3-1cb5ce13ef10\",\"attemptid\":\"att_01932f13-0cd2-7a82-8fa3-1cb5ce13ef12\",\"producersequence\":1,\"traceparent\":\"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\",\"data\":{\"output_id\":\"answer\",\"offset\":0,\"delta\":\"商品\"}}"},
 		{name: "stream-event-future", root: "StreamEvent", document: "{\"specversion\":\"1.0\",\"id\":\"evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef11\",\"source\":\"https://runtime.example.invalid/instances/instance-01\",\"type\":\"io.kinglucky.arop.output.delta.v1\",\"subject\":\"runs/run_01932f13-0cd2-7a82-8fa3-1cb5ce13ef10\",\"time\":\"2026-09-21T08:00:01.125Z\",\"datacontenttype\":\"application/json\",\"dataschema\":\"https://arop.invalid/schemas/v1/events/output-events-v1.schema.json\",\"runid\":\"run_01932f13-0cd2-7a82-8fa3-1cb5ce13ef10\",\"attemptid\":\"att_01932f13-0cd2-7a82-8fa3-1cb5ce13ef12\",\"producersequence\":1,\"traceparent\":\"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01\",\"data\":{},\"future_field\":true}", forward: true},
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {
-			var value any
-			var err error
-			if item.forward {
-				if _, strictErr := decodeFixture(item.root, []byte(item.document), false); strictErr == nil {
-					t.Fatal("authoring accepted forward fields")
-				}
-				value, err = decodeFixture(item.root, []byte(item.document), true)
-			} else {
-				value, err = decodeFixture(item.root, []byte(item.document), false)
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			encoded, err := json.Marshal(value)
-			if err != nil {
-				t.Fatal(err)
-			}
-			left := decodeComparable(t, []byte(item.document))
-			right := decodeComparable(t, encoded)
-			if !jsonEquivalent(left, right) {
-				t.Fatalf("round-trip drift: %s", encoded)
-			}
+			var value any; var err error
+			if item.forward { if _, strictErr := decodeFixture(item.root, []byte(item.document), false); strictErr == nil { t.Fatal("authoring accepted forward fields") }; value, err = decodeFixture(item.root, []byte(item.document), true) } else { value, err = decodeFixture(item.root, []byte(item.document), false) }; if err != nil { t.Fatal(err) }
+			encoded, err := json.Marshal(value); if err != nil { t.Fatal(err) }
+			left := decodeComparable(t, []byte(item.document)); right := decodeComparable(t, encoded)
+			if !jsonEquivalent(left, right) { t.Fatalf("round-trip drift: %s", encoded) }
 		})
 	}
 }
 
 func TestGeneratedCodecRejectsInvalid(t *testing.T) {
-	cases := []struct{ name, root, document string }{
+	cases := []struct{name, root, document string}{
 		{name: "stream-event-invalid", root: "StreamEvent", document: "{\"specversion\":\"1.0\",\"id\":\"evt_bad\",\"source\":\"file:///secret\",\"type\":\"com.example.agent.output.delta.v1\",\"subject\":\"runs/wrong\",\"time\":\"not-time\",\"datacontenttype\":\"application/json\",\"dataschema\":\"https://evil.invalid/schema.json\",\"runid\":\"run_bad\",\"attemptid\":\"att_bad\",\"producersequence\":9007199254740992,\"traceparent\":\"secret\",\"data\":{}}"},
 	}
-	for _, item := range cases {
-		t.Run(item.name, func(t *testing.T) {
-			if _, err := decodeFixture(item.root, []byte(item.document), false); err == nil {
-				t.Fatalf("%s was accepted", item.name)
-			}
-		})
-	}
+	for _, item := range cases { t.Run(item.name, func(t *testing.T) { if _, err := decodeFixture(item.root, []byte(item.document), false); err == nil { t.Fatalf("%s was accepted", item.name) } }) }
 }
 
-func jsonEquivalent(left any, right any) bool {
-	switch typed := left.(type) {
-	case json.Number:
-		other, ok := right.(json.Number)
-		if !ok {
-			return false
-		}
-		leftRat, leftOK := new(big.Rat).SetString(typed.String())
-		rightRat, rightOK := new(big.Rat).SetString(other.String())
-		return leftOK && rightOK && leftRat.Cmp(rightRat) == 0
-	case []any:
-		other, ok := right.([]any)
-		if !ok || len(typed) != len(other) {
-			return false
-		}
-		for index := range typed {
-			if !jsonEquivalent(typed[index], other[index]) {
-				return false
-			}
-		}
-		return true
-	case map[string]any:
-		other, ok := right.(map[string]any)
-		if !ok || len(typed) != len(other) {
-			return false
-		}
-		for key, item := range typed {
-			candidate, exists := other[key]
-			if !exists || !jsonEquivalent(item, candidate) {
-				return false
-			}
-		}
-		return true
-	default:
-		return reflect.DeepEqual(left, right)
-	}
-}
+func jsonEquivalent(left any, right any) bool { switch typed := left.(type) { case json.Number: other, ok := right.(json.Number); if !ok { return false }; leftRat, leftOK := new(big.Rat).SetString(typed.String()); rightRat, rightOK := new(big.Rat).SetString(other.String()); return leftOK && rightOK && leftRat.Cmp(rightRat) == 0; case []any: other, ok := right.([]any); if !ok || len(typed) != len(other) { return false }; for index := range typed { if !jsonEquivalent(typed[index], other[index]) { return false } }; return true; case map[string]any: other, ok := right.(map[string]any); if !ok || len(typed) != len(other) { return false }; for key, item := range typed { candidate, exists := other[key]; if !exists || !jsonEquivalent(item, candidate) { return false } }; return true; default: return reflect.DeepEqual(left, right) } }
 
 func decodeComparable(t *testing.T, data []byte) any {
-	t.Helper()
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	var value any
-	if err := decoder.Decode(&value); err != nil {
-		t.Fatal(err)
-	}
-	return value
+	t.Helper(); decoder := json.NewDecoder(bytes.NewReader(data)); decoder.UseNumber(); var value any
+	if err := decoder.Decode(&value); err != nil { t.Fatal(err) }; return value
 }
