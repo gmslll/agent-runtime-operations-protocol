@@ -66,11 +66,13 @@ func (function HandlerFunc) Execute(ctx context.Context, execution *Execution, r
 
 // Config contains mandatory provider runtime dependencies.
 type Config struct {
-	Store        DurableStore
-	Verifier     TokenVerifier
-	Handler      Handler
-	Clock        func() time.Time
-	MaxBodyBytes int64
+	Store                   DurableStore
+	Verifier                TokenVerifier
+	Handler                 Handler
+	Clock                   func() time.Time
+	MaxBodyBytes            int64
+	StreamPollInterval      time.Duration
+	StreamHeartbeatInterval time.Duration
 }
 
 // Runtime is an http.Handler for the non-streaming Agent Runtime v1 surface.
@@ -93,6 +95,15 @@ func NewRuntime(config Config) (*Runtime, error) {
 	}
 	if config.MaxBodyBytes < 1024 || config.MaxBodyBytes > maxBodyBytes {
 		return nil, errors.New("provider runtime body limit is invalid")
+	}
+	if config.StreamPollInterval == 0 {
+		config.StreamPollInterval = 100 * time.Millisecond
+	}
+	if config.StreamHeartbeatInterval == 0 {
+		config.StreamHeartbeatInterval = 15 * time.Second
+	}
+	if config.StreamPollInterval < 10*time.Millisecond || config.StreamPollInterval > 5*time.Second || config.StreamHeartbeatInterval < config.StreamPollInterval || config.StreamHeartbeatInterval > time.Minute {
+		return nil, errors.New("provider stream timing is invalid")
 	}
 	return &Runtime{config: config, cancels: map[string]context.CancelFunc{}}, nil
 }
@@ -149,6 +160,15 @@ func (runtime *Runtime) ServeHTTP(response http.ResponseWriter, request *http.Re
 
 func (runtime *Runtime) routeRun(response http.ResponseWriter, request *http.Request) {
 	remainder := strings.TrimPrefix(request.URL.Path, "/v1/runs/")
+	if strings.HasSuffix(remainder, "/events") {
+		runID := strings.TrimSuffix(remainder, "/events")
+		if request.Method != http.MethodGet || strings.Contains(runID, "/") || !validPrefixed("run_", runID) {
+			writeProblem(response, http.StatusNotFound, "NOT_FOUND")
+			return
+		}
+		runtime.stream(response, request, runID)
+		return
+	}
 	if strings.HasSuffix(remainder, "/commands") {
 		runID := strings.TrimSuffix(remainder, "/commands")
 		if request.Method != http.MethodPost || strings.Contains(runID, "/") || !validPrefixed("run_", runID) {
@@ -534,9 +554,13 @@ func (execution *Execution) Emit(ctx context.Context, eventID, eventType string,
 }
 
 func (runtime *Runtime) verify(ctx context.Context, token, method, path string) (Claims, error) {
+	return runtime.verifyScope(ctx, token, method, path, "agent:invoke")
+}
+
+func (runtime *Runtime) verifyScope(ctx context.Context, token, method, path, scope string) (Claims, error) {
 	now := runtime.now()
-	claims, err := runtime.config.Verifier.Verify(ctx, token, VerifyRequest{Method: method, Path: path, RequiredScope: "agent:invoke", Now: now})
-	if err != nil || claims.Validate(now, "agent:invoke") != nil {
+	claims, err := runtime.config.Verifier.Verify(ctx, token, VerifyRequest{Method: method, Path: path, RequiredScope: scope, Now: now})
+	if err != nil || claims.Validate(now, scope) != nil {
 		return Claims{}, errors.New("authentication failed")
 	}
 	return claims, nil
