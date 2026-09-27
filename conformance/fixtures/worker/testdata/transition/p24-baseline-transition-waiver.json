@@ -3,7 +3,7 @@
   "transition_id": "P24-BASELINE-TRANSITION-001",
   "status": "validated",
   "baseline_commit": "5bada508fa5e7035abd1d33817b4de7abf3ee49d",
-  "carrier_commit": "9486c398cc66e239e3141780614ff99d0be05935",
+  "carrier_commit": "9486c398c440a82941eb1da8101ff9fdbcb2829b",
   "affected_artifacts": [
     "control-plane-platform-foundation",
     "event-ledger-service",

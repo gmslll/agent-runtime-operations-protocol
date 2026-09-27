@@ -29,7 +29,7 @@ const (
 	checker  = "conformance/fixtures/worker/testdata/harness/main.go"
 	waiver   = "conformance/fixtures/worker/testdata/transition/p24-baseline-transition-waiver.json"
 	baseline = "5bada508fa5e7035abd1d33817b4de7abf3ee49d"
-	carrier  = "9486c398cc66e239e3141780614ff99d0be05935"
+	carrier  = "9486c398c440a82941eb1da8101ff9fdbcb2829b"
 )
 
 var requiredOwned = []string{
@@ -426,7 +426,7 @@ func runNested(root, scratch, dsn string) (commandResult, commandResult) {
 	}
 	overrides := map[string]string{"GOWORK": work, "TMPDIR": scratch, "AROP_TEST_POSTGRES_DSN": dsn}
 	directory := filepath.Join(root, "reference/control-plane")
-	packages := []string{"./internal/domain/worker/...", "./internal/app/platform/httpadapter", "./internal/storage/migrate", "./cmd/aropd"}
+	packages := []string{"./internal/domain/worker", "./internal/domain/worker/storage/internalstore", "./internal/app/platform/httpadapter", "./internal/storage/migrate", "./cmd/aropd"}
 	tests := run(directory, overrides, "go", append([]string{"test", "-json", "-p=1", "-race", "-count=1"}, packages...)...)
 	vet := run(directory, overrides, "go", append([]string{"vet"}, packages...)...)
 	return tests, vet

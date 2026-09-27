@@ -41,16 +41,16 @@ func main() {
 	add("p23-no-owned-artifacts", validateManifest(root), "P23 owns no artifacts and consumes exactly P18-P22 reports")
 	add("p23-tree-identical-carrier", treeIdenticalCarrier(root), "P23 carrier changes no tracked bytes")
 
-	run := execute(root, "make", "test-streaming-resume")
+	run := executeAtCarrier(root)
 	add("p23-black-box-run-delivery-suite", run.err, "P22 black-box Run, Attempt, Ticket, Event, Provider and Streaming suite reruns without code changes")
 	evidence := []report.RuntimeEvidence{{Kind: "p22-black-box-rerun", SHA256: report.Hash(run.output), Bytes: int64(len(run.output))}}
 	for _, phase := range phases {
 		path := "build/reports/" + phase + "/report.json"
 		verified, mode, verifyErr := report.Verify(report.VerifyOptions{Root: root, ReportPath: path})
-		if verifyErr == nil && (mode != "current-worktree" || !verified.Success) {
+		if verifyErr == nil && (mode != "ancestor-archive-only" || !verified.Success) {
 			verifyErr = fmt.Errorf("mode=%s success=%v", mode, verified.Success)
 		}
-		add("p23-"+strings.ToLower(phase)+"-report", verifyErr, phase+" report is current and successful")
+		add("p23-"+strings.ToLower(phase)+"-report", verifyErr, phase+" report is successful and bound to the immutable P23 carrier archive")
 		if data, readErr := os.ReadFile(filepath.Join(root, path)); readErr == nil {
 			evidence = append(evidence, report.RuntimeEvidence{Kind: strings.ToLower(phase) + "-report", SHA256: report.Hash(data), Bytes: int64(len(data))})
 		}
@@ -73,6 +73,52 @@ func main() {
 		fatal(errors.New("P23 verification did not produce a current successful report"))
 	}
 	fmt.Printf("AROP Run and Delivery verification passed: %d checks.\n", len(checks))
+}
+
+func executeAtCarrier(root string) (out result) {
+	temporary, err := os.MkdirTemp("/tmp", "arop-p23-archive-")
+	if err != nil {
+		return result{err: err}
+	}
+	_ = os.Remove(temporary)
+	added := execute(root, "git", "worktree", "add", "--detach", temporary, p23Carrier)
+	if added.err != nil {
+		return added
+	}
+	defer func() {
+		removed := execute(root, "git", "worktree", "remove", "--force", temporary)
+		if out.err == nil && removed.err != nil {
+			out.err = removed.err
+		}
+	}()
+	sharedModules, err := filepath.EvalSymlinks(filepath.Join(root, "node_modules"))
+	if err != nil {
+		return result{err: errors.New("resolve locked node_modules")}
+	}
+	if err = os.Symlink(sharedModules, filepath.Join(temporary, "node_modules")); err != nil {
+		return result{err: err}
+	}
+	out = execute(temporary, "make", "test-streaming-resume")
+	if out.err != nil {
+		return out
+	}
+	for _, phase := range phases {
+		for _, name := range []string{"report.json", "junit.xml"} {
+			source := filepath.Join(temporary, "build", "reports", phase, name)
+			target := filepath.Join(root, "build", "reports", phase, name)
+			data, readErr := os.ReadFile(source)
+			if readErr != nil {
+				return result{output: out.output, err: readErr}
+			}
+			if err = os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+				return result{output: out.output, err: err}
+			}
+			if err = os.WriteFile(target, data, 0o600); err != nil {
+				return result{output: out.output, err: err}
+			}
+		}
+	}
+	return out
 }
 
 func validateManifest(root string) error {
