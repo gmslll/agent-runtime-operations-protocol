@@ -22,9 +22,10 @@ const (
 )
 
 type Store struct {
-	db      *sql.DB
-	lookup  durable.TransactionLookup
-	dialect Dialect
+	db           *sql.DB
+	lookup       durable.TransactionLookup
+	dialect      Dialect
+	eventResults bool
 }
 
 func New(db *sql.DB, lookup durable.TransactionLookup, dialect Dialect) (*Store, error) {
@@ -33,6 +34,8 @@ func New(db *sql.DB, lookup durable.TransactionLookup, dialect Dialect) (*Store,
 	}
 	return &Store{db: db, lookup: lookup, dialect: dialect}, nil
 }
+
+func (store *Store) EnableEventResults() { store.eventResults = true }
 
 func (store *Store) Create(ctx context.Context, record run.Run, keyDigest, requestDigest string, outbox run.Outbox) error {
 	if record.Validate() != nil || outbox.Validate() != nil || record.RunID != outbox.RunID || len(keyDigest) != 64 {
@@ -199,7 +202,14 @@ func (store *Store) load(ctx context.Context, queryer migrate.Queryer, tenantID,
 	var input, labels, auth string
 	var conversation, effectID, tracestate, cancel sql.NullString
 	var state, effectLevel, deadline, created, updated string
-	err := queryer.QueryRowContext(ctx, store.query(`SELECT tenant_id,run_id,agent_id,agent_version,skill_id,manifest_digest,input_json,labels_json,conversation_ref,effect_level,effect_id,state,state_version,authorization_snapshot_json,authorization_snapshot_digest,traceparent,tracestate,deadline_at,created_at,updated_at,cancel_requested_at,usage_input_tokens,usage_output_tokens,usage_duration_ms,usage_billable_units FROM arop_runs WHERE tenant_id=? AND run_id=?`), tenantID, runID).Scan(&record.TenantID, &record.RunID, &record.Agent.ID, &record.Agent.Version, &record.Agent.SkillID, &record.Agent.ManifestDigest, &input, &labels, &conversation, &effectLevel, &effectID, &state, &record.StateVersion, &auth, &record.AuthorizationSnapshotDigest, &record.Traceparent, &tracestate, &deadline, &created, &updated, &cancel, &record.Usage.InputTokens, &record.Usage.OutputTokens, &record.Usage.DurationMS, &record.Usage.BillableUnits)
+	statement := `SELECT r.tenant_id,r.run_id,r.agent_id,r.agent_version,r.skill_id,r.manifest_digest,r.input_json,r.labels_json,r.conversation_ref,r.effect_level,r.effect_id,r.state,r.state_version,r.authorization_snapshot_json,r.authorization_snapshot_digest,r.traceparent,r.tracestate,r.deadline_at,r.created_at,r.updated_at,r.cancel_requested_at,r.usage_input_tokens,r.usage_output_tokens,r.usage_duration_ms,r.usage_billable_units FROM arop_runs r WHERE r.tenant_id=? AND r.run_id=?`
+	destinations := []any{&record.TenantID, &record.RunID, &record.Agent.ID, &record.Agent.Version, &record.Agent.SkillID, &record.Agent.ManifestDigest, &input, &labels, &conversation, &effectLevel, &effectID, &state, &record.StateVersion, &auth, &record.AuthorizationSnapshotDigest, &record.Traceparent, &tracestate, &deadline, &created, &updated, &cancel, &record.Usage.InputTokens, &record.Usage.OutputTokens, &record.Usage.DurationMS, &record.Usage.BillableUnits}
+	var result sql.NullString
+	if store.eventResults {
+		statement = `SELECT r.tenant_id,r.run_id,r.agent_id,r.agent_version,r.skill_id,r.manifest_digest,r.input_json,r.labels_json,r.conversation_ref,r.effect_level,r.effect_id,r.state,r.state_version,r.authorization_snapshot_json,r.authorization_snapshot_digest,r.traceparent,r.tracestate,r.deadline_at,r.created_at,r.updated_at,r.cancel_requested_at,r.usage_input_tokens,r.usage_output_tokens,r.usage_duration_ms,r.usage_billable_units,p.terminal_result_json FROM arop_runs r LEFT JOIN arop_event_run_projections p ON p.tenant_id=r.tenant_id AND p.run_id=r.run_id WHERE r.tenant_id=? AND r.run_id=?`
+		destinations = append(destinations, &result)
+	}
+	err := queryer.QueryRowContext(ctx, store.query(statement), tenantID, runID).Scan(destinations...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return run.Run{}, run.NewError(run.CategoryNotFound, run.ReasonRunNotFound)
 	}
@@ -209,6 +219,9 @@ func (store *Store) load(ctx context.Context, queryer migrate.Queryer, tenantID,
 	record.Input = json.RawMessage(input)
 	record.Labels = json.RawMessage(labels)
 	record.AuthorizationSnapshot = json.RawMessage(auth)
+	if result.Valid {
+		record.Result = json.RawMessage(result.String)
+	}
 	record.ConversationRef = conversation.String
 	record.Tracestate = tracestate.String
 	record.Effects = run.EffectIntent{Level: run.EffectLevel(effectLevel), EffectID: effectID.String}

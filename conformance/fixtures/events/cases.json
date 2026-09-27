@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "valid": [
+    {"schema":"schemas/events/event-envelope-v1.schema.json","document":"conformance/fixtures/events/envelope.valid.json"},
+    {"schema":"schemas/events/lifecycle-events-v1.schema.json","document":"conformance/fixtures/events/lifecycle.valid.json"},
+    {"schema":"schemas/events/output-events-v1.schema.json","document":"conformance/fixtures/events/output.valid.json"},
+    {"schema":"schemas/events/progress-events-v1.schema.json","document":"conformance/fixtures/events/progress.valid.json"},
+    {"schema":"schemas/events/usage-events-v1.schema.json","document":"conformance/fixtures/events/usage.valid.json"},
+    {"schema":"schemas/events/event-session-v1.schema.json","document":"conformance/fixtures/events/session.valid.json"}
+  ],
+  "invalid": [
+    {"schema":"schemas/events/event-envelope-v1.schema.json","document":"conformance/fixtures/events/envelope.invalid.json"},
+    {"schema":"schemas/events/lifecycle-events-v1.schema.json","document":"conformance/fixtures/events/lifecycle.invalid.json"},
+    {"schema":"schemas/events/output-events-v1.schema.json","document":"conformance/fixtures/events/output.invalid.json"},
+    {"schema":"schemas/events/progress-events-v1.schema.json","document":"conformance/fixtures/events/progress.invalid.json"},
+    {"schema":"schemas/events/usage-events-v1.schema.json","document":"conformance/fixtures/events/usage.invalid.json"},
+    {"schema":"schemas/events/event-session-v1.schema.json","document":"conformance/fixtures/events/session.invalid.json"}
+  ]
+}

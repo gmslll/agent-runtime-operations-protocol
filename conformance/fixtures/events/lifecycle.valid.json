@@ -1,0 +1,1 @@
+{"state":"succeeded","snapshot":{"revision":1,"content":[{"type":"text","text":"完成"}],"digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"usage":{"input_tokens":3,"output_tokens":2,"duration_ms":100,"billable_units":1},"completed_at":"2026-09-21T08:00:02Z"}

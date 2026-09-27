@@ -206,6 +206,7 @@ type Run struct {
 	DeadlineAt, CreatedAt, UpdatedAt time.Time
 	CancelRequestedAt                *time.Time
 	Usage                            Usage
+	Result                           json.RawMessage
 }
 
 func (run Run) Validate() error {
@@ -214,6 +215,12 @@ func (run Run) Validate() error {
 	}
 	if _, err := canonicalLabels(run.Labels); err != nil {
 		return errors.New("invalid run labels")
+	}
+	if len(run.Result) != 0 {
+		var result map[string]json.RawMessage
+		if json.Unmarshal(run.Result, &result) != nil || result == nil {
+			return errors.New("invalid run result")
+		}
 	}
 	if err := (protocolcore.TraceContext{Traceparent: run.Traceparent, Tracestate: run.Tracestate}).Validate(); err != nil {
 		return errors.New("invalid run trace context")

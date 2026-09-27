@@ -32,6 +32,9 @@ import (
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/dispatch"
 	dispatchpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/dispatch/storage/postgres"
 	dispatchsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/dispatch/storage/sqlite"
+	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/event"
+	eventpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/event/storage/postgres"
+	eventsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/event/storage/sqlite"
 	"github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication"
 	publicationpostgres "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication/storage/postgres"
 	publicationsqlite "github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane/internal/domain/publication/storage/sqlite"
@@ -125,6 +128,13 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 		if err != nil {
 			_ = cleanup()
 			return nil, nil, nil, errors.New("assemble dispatch HTTP handler")
+		}
+	}
+	if eventService := eventServiceFromChecks(checks); eventService != nil {
+		handler, err = httpadapter.NewEventApplicationHandler(application, referenceAuthenticate(identityServiceFromChecks(checks), ids), publicationServiceFromChecks(checks), assetServiceFromChecks(checks), registryAPIServiceFromChecks(checks), registryWatchServiceFromChecks(checks), runServiceFromChecks(checks), dispatchServiceFromChecks(checks), eventService)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, errors.New("assemble event ledger HTTP handler")
 		}
 	}
 	httpServer := httpadapter.NewServer(application, handler)
@@ -258,7 +268,7 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			checks = append(checks, registryService, watchService)
 		}
 		if catalogOwns(catalogClosure, "P18") {
-			runService, err := composeRun(db, migrate.DialectSQLite, uow.Transaction, uow, store, clock, ids)
+			runService, err := composeRun(db, migrate.DialectSQLite, uow.Transaction, uow, store, clock, ids, catalogOwns(catalogClosure, "P20"))
 			if err != nil {
 				_ = cleanup()
 				return nil, nil, nil, nil, err
@@ -266,12 +276,20 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			checks = append(checks, runService)
 		}
 		if catalogOwns(catalogClosure, "P19") {
-			dispatchService, err := composeDispatch(ctx, db, migrate.DialectSQLite, uow.Transaction, uow, store, clock, ids, config.DispatchIssuer)
+			dispatchService, err := composeDispatch(ctx, db, migrate.DialectSQLite, uow.Transaction, uow, store, clock, ids, config.DispatchIssuer, catalogOwns(catalogClosure, "P20"))
 			if err != nil {
 				_ = cleanup()
 				return nil, nil, nil, nil, err
 			}
 			checks = append(checks, dispatchService)
+		}
+		if catalogOwns(catalogClosure, "P20") {
+			eventService, err := composeEvent(db, migrate.DialectSQLite, uow.Transaction, uow, store, clock, ids, config.DispatchIssuer)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, eventService)
 		}
 		return uow, store, checks, cleanup, nil
 	case platform.ModePostgres:
@@ -372,7 +390,7 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			checks = append(checks, registryService, watchService)
 		}
 		if catalogOwns(catalogClosure, "P18") {
-			runService, err := composeRun(db, migrate.DialectPostgres, uow.Transaction, uow, store, clock, ids)
+			runService, err := composeRun(db, migrate.DialectPostgres, uow.Transaction, uow, store, clock, ids, catalogOwns(catalogClosure, "P20"))
 			if err != nil {
 				_ = cleanup()
 				return nil, nil, nil, nil, err
@@ -380,12 +398,20 @@ func composeStorageContext(ctx context.Context, config platform.Config, catalogC
 			checks = append(checks, runService)
 		}
 		if catalogOwns(catalogClosure, "P19") {
-			dispatchService, err := composeDispatch(ctx, db, migrate.DialectPostgres, uow.Transaction, uow, store, clock, ids, config.DispatchIssuer)
+			dispatchService, err := composeDispatch(ctx, db, migrate.DialectPostgres, uow.Transaction, uow, store, clock, ids, config.DispatchIssuer, catalogOwns(catalogClosure, "P20"))
 			if err != nil {
 				_ = cleanup()
 				return nil, nil, nil, nil, err
 			}
 			checks = append(checks, dispatchService)
+		}
+		if catalogOwns(catalogClosure, "P20") {
+			eventService, err := composeEvent(db, migrate.DialectPostgres, uow.Transaction, uow, store, clock, ids, config.DispatchIssuer)
+			if err != nil {
+				_ = cleanup()
+				return nil, nil, nil, nil, err
+			}
+			checks = append(checks, eventService)
 		}
 		return uow, store, checks, cleanup, nil
 	default:
@@ -443,9 +469,17 @@ func schemaVerifier(catalog migrate.CatalogClosure, dialect migrate.Dialect) mig
 			return err
 		}
 		if dialect == migrate.DialectSQLite {
-			return dispatchsqlite.VerifySchema()(ctx, query)
+			err = dispatchsqlite.VerifySchema()(ctx, query)
+		} else {
+			err = dispatchpostgres.VerifySchema()(ctx, query)
 		}
-		return dispatchpostgres.VerifySchema()(ctx, query)
+		if err != nil || !catalogOwns(catalog, "P20") {
+			return err
+		}
+		if dialect == migrate.DialectSQLite {
+			return eventsqlite.VerifySchema()(ctx, query)
+		}
+		return eventpostgres.VerifySchema()(ctx, query)
 	}
 }
 
@@ -456,7 +490,7 @@ func composeIdentity(db *sql.DB, dialect migrate.Dialect, lookup durable.Transac
 	}
 	service, err := identity.New(identity.Dependencies{
 		Clock: clock, IDs: ids, Faults: faults, UoW: uow, Observability: observations, Repository: repository,
-		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent:publish", "agent:read", "asset:exchange", "registry:discover", "registry:operate", "registry:register", "registry:write", "run:command", "run:create", "run:dispatch", "run:read", "secret.read"}, AllowedTenants: []string{"reference-dev"},
+		AllowedKinds: []string{"service"}, AllowedAudiences: []string{"reference-control-plane"}, AllowedScopes: []string{"agent:publish", "agent:read", "asset:exchange", "event:session", "registry:discover", "registry:operate", "registry:register", "registry:write", "run:command", "run:create", "run:dispatch", "run:read", "secret.read"}, AllowedTenants: []string{"reference-dev"},
 	})
 	if err != nil {
 		return nil, errors.New("initialize identity service")
@@ -662,7 +696,7 @@ func (source runIDSource) NewOutboxID(ctx context.Context) (string, error) {
 	return source.next(ctx, "out_")
 }
 
-func composeRun(db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, observations observability.Store, clock platformports.Clock, ids platformports.IDSource) (*domainrun.Service, error) {
+func composeRun(db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, observations observability.Store, clock platformports.Clock, ids platformports.IDSource, eventResults bool) (*domainrun.Service, error) {
 	var repository domainrun.Repository
 	var err error
 	if dialect == migrate.DialectSQLite {
@@ -672,6 +706,13 @@ func composeRun(db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionL
 	}
 	if err != nil {
 		return nil, errors.New("initialize run repository")
+	}
+	if eventResults {
+		enabler, ok := repository.(interface{ EnableEventResults() })
+		if !ok {
+			return nil, errors.New("run repository cannot expose event results")
+		}
+		enabler.EnableEventResults()
 	}
 	service, err := domainrun.New(domainrun.Dependencies{Clock: clock, IDs: runIDSource{source: ids}, UoW: uow, Observability: observations, Authorizer: referenceRunAuthorizer{}, Repository: repository})
 	if err != nil {
@@ -715,7 +756,7 @@ func (source dispatchIDSource) NewAuditID(ctx context.Context) (string, error) {
 	return source.source.NewID(ctx, platformports.IDAudit)
 }
 
-func composeDispatch(ctx context.Context, db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, observations observability.Store, clock platformports.Clock, ids platformports.IDSource, issuer string) (*dispatch.Service, error) {
+func composeDispatch(ctx context.Context, db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, observations observability.Store, clock platformports.Clock, ids platformports.IDSource, issuer string, eventCapacityReleases bool) (*dispatch.Service, error) {
 	var repository dispatch.Repository
 	var runs dispatch.RunReader
 	var registryRepository registry.Repository
@@ -725,12 +766,18 @@ func composeDispatch(ctx context.Context, db *sql.DB, dialect migrate.Dialect, l
 		if storeErr != nil {
 			return nil, errors.New("initialize SQLite dispatch repository")
 		}
+		if eventCapacityReleases {
+			store.EnableEventCapacityReleases()
+		}
 		repository, runs = store, store
 		registryRepository, err = registrysqlite.New(db, lookup)
 	} else {
 		store, storeErr := dispatchpostgres.New(db, lookup, issuer)
 		if storeErr != nil {
 			return nil, errors.New("initialize PostgreSQL dispatch repository")
+		}
+		if eventCapacityReleases {
+			store.EnableEventCapacityReleases()
 		}
 		repository, runs = store, store
 		registryRepository, err = registrypostgres.New(db, lookup)
@@ -758,6 +805,30 @@ func composeDispatch(ctx context.Context, db *sql.DB, dialect migrate.Dialect, l
 	})
 	if err != nil {
 		return nil, errors.New("initialize dispatch service")
+	}
+	return service, nil
+}
+
+type eventIDSource struct{ source platformports.IDSource }
+
+func (source eventIDSource) NewAuditID(ctx context.Context) (string, error) {
+	return source.source.NewID(ctx, platformports.IDAudit)
+}
+
+func composeEvent(db *sql.DB, dialect migrate.Dialect, lookup durable.TransactionLookup, uow platformports.UnitOfWork, observations observability.Store, clock platformports.Clock, ids platformports.IDSource, issuer string) (*event.Service, error) {
+	var repository event.Repository
+	var err error
+	if dialect == migrate.DialectSQLite {
+		repository, err = eventsqlite.New(db, lookup)
+	} else {
+		repository, err = eventpostgres.New(db, lookup)
+	}
+	if err != nil {
+		return nil, errors.New("initialize event ledger repository")
+	}
+	service, err := event.New(event.Dependencies{Clock: clock, IDs: eventIDSource{source: ids}, Tokens: event.SecureTokenSource{}, UoW: uow, Observability: observations, Repository: repository, ControlPlaneBaseURL: issuer, SessionTTL: 2 * time.Minute, AttemptLeaseTTL: 5 * time.Minute})
+	if err != nil {
+		return nil, errors.New("initialize event ledger service")
 	}
 	return service, nil
 }
@@ -819,6 +890,15 @@ func runServiceFromChecks(checks []platformports.ReadinessCheck) *domainrun.Serv
 func dispatchServiceFromChecks(checks []platformports.ReadinessCheck) *dispatch.Service {
 	for _, check := range checks {
 		if service, ok := check.(*dispatch.Service); ok {
+			return service
+		}
+	}
+	return nil
+}
+
+func eventServiceFromChecks(checks []platformports.ReadinessCheck) *event.Service {
+	for _, check := range checks {
+		if service, ok := check.(*event.Service); ok {
 			return service
 		}
 	}

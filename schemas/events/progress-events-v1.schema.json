@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/events/progress-events-v1.schema.json",
+  "title": "AROP v1 progress event data",
+  "type": "object", "additionalProperties": false,
+  "required": ["progress"],
+  "properties": {"step_id": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,127}$"}, "progress": {"type": "integer", "minimum": 0, "maximum": 100}, "message": {"type": "string", "maxLength": 4096}, "state": {"enum": ["started", "running", "completed", "failed"]}}
+}

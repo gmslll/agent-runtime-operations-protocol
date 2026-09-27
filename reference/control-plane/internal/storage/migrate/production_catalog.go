@@ -114,18 +114,34 @@ func P18ProductionCatalog() CatalogClosure {
 	}
 }
 
-// CurrentProductionCatalog is the only catalog used by production
-// composition. P19 advances the paired history to 0050. Historical phases
-// always inject their immutable snapshot instead.
-func CurrentProductionCatalog() CatalogClosure {
+// P19ProductionCatalog is the immutable historical catalog used when P19 is
+// replayed under later phases. It must never include migrations owned after
+// P19.
+func P19ProductionCatalog() CatalogClosure {
 	closure := P18ProductionCatalog()
-	closure.ID = "control-plane-production-migrations"
+	closure.ID = "control-plane-p19-production-migrations"
 	closure.ReportPhase = "P19"
 	closure.ReportPath = "build/reports/P19/report.json"
 	closure.OwnerPhases = append(closure.OwnerPhases, "P19")
 	closure.Migrations = append(closure.Migrations,
 		DeclaredMigration{Dialect: DialectPostgres, Path: "postgres/0050_dispatch.sql", OwnerPhase: "P19", SHA256: "a4030579cdb3e7c92126a66da305a3eab64eacb18fb0e1114cdc9701b254e7fc"},
 		DeclaredMigration{Dialect: DialectSQLite, Path: "sqlite/0050_dispatch.sql", OwnerPhase: "P19", SHA256: "e8c4d5593b6629f3114544e94dd5d898aca88a2433c734eb62c6d938d640d9ab"},
+	)
+	return closure
+}
+
+// CurrentProductionCatalog is the only catalog used by production
+// composition. P20 advances the paired history to 0060. Historical phases
+// always inject their immutable snapshots instead.
+func CurrentProductionCatalog() CatalogClosure {
+	closure := P19ProductionCatalog()
+	closure.ID = "control-plane-production-migrations"
+	closure.ReportPhase = "P20"
+	closure.ReportPath = "build/reports/P20/report.json"
+	closure.OwnerPhases = append(closure.OwnerPhases, "P20")
+	closure.Migrations = append(closure.Migrations,
+		DeclaredMigration{Dialect: DialectPostgres, Path: "postgres/0060_event.sql", OwnerPhase: "P20", SHA256: "1807e9171879bfffda2879de32905617e952aae31e664a5955e3594108e9d66d"},
+		DeclaredMigration{Dialect: DialectSQLite, Path: "sqlite/0060_event.sql", OwnerPhase: "P20", SHA256: "4c905e53a2790b025075e77bcba5e660e6c112c24e1890eec957a83e02cb90e6"},
 	)
 	return closure
 }

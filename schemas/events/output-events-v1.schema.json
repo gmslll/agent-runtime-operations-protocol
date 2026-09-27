@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/events/output-events-v1.schema.json",
+  "title": "AROP v1 output event data",
+  "oneOf": [{"$ref": "#/$defs/delta"}, {"$ref": "#/$defs/snapshot"}, {"$ref": "#/$defs/state"}],
+  "$defs": {
+    "delta": {"type": "object", "additionalProperties": false, "required": ["output_id", "offset", "delta"], "properties": {"output_id": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,127}$"}, "offset": {"type": "integer", "minimum": 0, "maximum": 9007199254740991, "$comment": "UTF-8 byte offset"}, "delta": {"type": "string", "maxLength": 1048576}}},
+    "snapshot": {"type": "object", "additionalProperties": false, "required": ["output_id", "revision", "content", "digest"], "properties": {"output_id": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,127}$"}, "revision": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}, "content": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "https://arop.invalid/schemas/v1/common/content-part.schema.json"}}, "digest": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/sha256Digest"}}},
+    "state": {"type": "object", "additionalProperties": false, "required": ["output_id", "state"], "properties": {"output_id": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9._-]{0,127}$"}, "state": {"enum": ["started", "reset", "completed"]}}}
+  }
+}

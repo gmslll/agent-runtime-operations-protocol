@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/events/event-envelope-v1.schema.json",
+  "title": "AROP v1 immutable event envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["specversion", "id", "source", "type", "subject", "time", "datacontenttype", "dataschema", "runid", "attemptid", "producersequence", "traceparent", "data"],
+  "properties": {
+    "specversion": {"const": "1.0"},
+    "id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/eventId"},
+    "source": {"type": "string", "format": "uri", "pattern": "^https://[^?#]+$", "maxLength": 2048},
+    "type": {"type": "string", "pattern": "^io\\.kinglucky\\.arop\\.(?:run|output|progress|usage)\\.[a-z_]+\\.v1$", "maxLength": 128},
+    "subject": {"type": "string", "pattern": "^runs/run_[0-9a-f-]+$", "maxLength": 80},
+    "time": {"type": "string", "format": "date-time"},
+    "datacontenttype": {"const": "application/json"},
+    "dataschema": {"type": "string", "format": "uri", "pattern": "^https://arop\\.invalid/schemas/v1/events/[a-z0-9-]+\\.schema\\.json$", "maxLength": 256},
+    "runid": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/runId"},
+    "attemptid": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/attemptId"},
+    "producersequence": {"$ref": "#/$defs/positiveSafeInteger"},
+    "runsequence": {"$ref": "#/$defs/positiveSafeInteger"},
+    "traceparent": {"$ref": "https://arop.invalid/schemas/v1/common/trace.schema.json#/properties/traceparent"},
+    "data": {"type": "object"}
+  },
+  "$defs": {"positiveSafeInteger": {"type": "integer", "minimum": 1, "maximum": 9007199254740991}}
+}

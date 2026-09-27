@@ -120,15 +120,19 @@ func TestProductionCatalogSnapshots(t *testing.T) {
 	if p18.ReportPhase != "P18" || p18.ReportPath != "build/reports/P18/report.json" || len(p18.Migrations) != 12 {
 		t.Fatalf("P18 snapshot drifted: %+v", p18)
 	}
+	p19 := P19ProductionCatalog()
+	if p19.ReportPhase != "P19" || p19.ReportPath != "build/reports/P19/report.json" || len(p19.Migrations) != 14 {
+		t.Fatalf("P19 snapshot drifted: %+v", p19)
+	}
 	current := CurrentProductionCatalog()
-	if current.ReportPhase != "P19" || current.ReportPath != "build/reports/P19/report.json" || len(current.Migrations) != 14 {
-		t.Fatalf("current catalog is not P19 complete: %+v", current)
+	if current.ReportPhase != "P20" || current.ReportPath != "build/reports/P20/report.json" || len(current.Migrations) != 16 {
+		t.Fatalf("current catalog is not P20 complete: %+v", current)
 	}
 	for _, item := range current.Migrations {
 		if item.Path == "" || item.OwnerPhase == "" || item.SHA256 == "" {
 			t.Fatalf("incomplete current declaration: %+v", item)
 		}
-		if strings.Contains(item.Path, "0060_") {
+		if strings.Contains(item.Path, "0070_") {
 			t.Fatalf("future migration admitted: %s", item.Path)
 		}
 	}

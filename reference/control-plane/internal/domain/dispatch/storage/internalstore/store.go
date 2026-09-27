@@ -26,11 +26,18 @@ const (
 )
 
 type Store struct {
-	db      *sql.DB
-	lookup  durable.TransactionLookup
-	dialect Dialect
-	issuer  string
+	db                    *sql.DB
+	lookup                durable.TransactionLookup
+	dialect               Dialect
+	issuer                string
+	eventCapacityReleases bool
 }
+
+// EnableEventCapacityReleases switches the dispatcher to the P20 capacity
+// projection. It is only called by production composition after the paired
+// 0060 migration is part of the selected catalog; historical P19 replay never
+// references a table that did not exist at that endpoint.
+func (store *Store) EnableEventCapacityReleases() { store.eventCapacityReleases = true }
 
 func New(db *sql.DB, lookup durable.TransactionLookup, dialect Dialect, issuer string) (*Store, error) {
 	parsed, err := url.Parse(issuer)
@@ -222,7 +229,11 @@ func (store *Store) verifyCandidate(ctx context.Context, tx *sql.Tx, command dis
 		return dispatch.NewError(dispatch.CategoryCapacity, dispatch.ReasonNoCapacity)
 	}
 	var reserved uint64
-	if err = tx.QueryRowContext(ctx, store.query(`SELECT count(*) FROM arop_dispatch_attempts WHERE tenant_id=? AND instance_id=? AND session_id=? AND generation=? AND attempt_state IN ('issued','accepted') AND lease_expires_at>?`), command.Run.TenantID, command.Candidate.InstanceID, command.Candidate.SessionID, command.Candidate.Generation, formatTime(command.Now)).Scan(&reserved); err != nil {
+	capacityQuery := `SELECT count(*) FROM arop_dispatch_attempts WHERE tenant_id=? AND instance_id=? AND session_id=? AND generation=? AND attempt_state IN ('issued','accepted') AND lease_expires_at>?`
+	if store.eventCapacityReleases {
+		capacityQuery = `SELECT count(*) FROM arop_dispatch_attempts a WHERE a.tenant_id=? AND a.instance_id=? AND a.session_id=? AND a.generation=? AND a.attempt_state IN ('issued','accepted') AND a.lease_expires_at>? AND NOT EXISTS (SELECT 1 FROM arop_event_capacity_releases r WHERE r.tenant_id=a.tenant_id AND r.attempt_id=a.attempt_id)`
+	}
+	if err = tx.QueryRowContext(ctx, store.query(capacityQuery), command.Run.TenantID, command.Candidate.InstanceID, command.Candidate.SessionID, command.Candidate.Generation, formatTime(command.Now)).Scan(&reserved); err != nil {
 		return dispatch.NewError(dispatch.CategoryDependency, dispatch.ReasonDependencyUnavailable)
 	}
 	if reserved >= runtime.Capacity.AvailableSlots {

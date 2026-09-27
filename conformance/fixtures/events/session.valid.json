@@ -1,0 +1,1 @@
+{"event_batch_url":"https://control.example.invalid/v1/agent-runs/run_01932f13-0cd2-7a82-8fa3-1cb5ce13ef10/events:batch","event_token":"evtcap_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","expires_at":"2026-09-21T08:10:00Z","max_batch_events":100,"max_batch_bytes":262144}

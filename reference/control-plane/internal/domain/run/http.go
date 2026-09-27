@@ -231,6 +231,14 @@ func writeStatus(writer http.ResponseWriter, record Run, status int) {
 		value := generated.DateTime(record.CancelRequestedAt.Format(time.RFC3339Nano))
 		wire.CancelRequestedAt = &value
 	}
+	if record.State.Terminal() {
+		result, err := terminalWireResult(record)
+		if err != nil {
+			writeTyped(writer, NewError(CategoryDependency, ReasonDependencyUnavailable))
+			return
+		}
+		wire.Result = &result
+	}
 	encoded, err := generated.EncodeRunStatus(wire)
 	if err != nil {
 		writeTyped(writer, NewError(CategoryDependency, ReasonDependencyUnavailable))
@@ -239,6 +247,32 @@ func writeStatus(writer http.ResponseWriter, record Run, status int) {
 	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(status)
 	_, _ = writer.Write(encoded)
+}
+
+func terminalWireResult(record Run) (generated.RunResult, error) {
+	var object map[string]json.RawMessage
+	if len(record.Result) != 0 {
+		if err := json.Unmarshal(record.Result, &object); err != nil || object == nil {
+			return generated.RunResult{}, errors.New("invalid terminal result")
+		}
+	} else {
+		if record.State != StateCancelled && record.State != StateTimedOut {
+			return generated.RunResult{}, errors.New("terminal result is unavailable")
+		}
+		usage, _ := json.Marshal(map[string]uint64{"input_tokens": record.Usage.InputTokens, "output_tokens": record.Usage.OutputTokens, "duration_ms": record.Usage.DurationMS, "billable_units": record.Usage.BillableUnits})
+		state, _ := json.Marshal(record.State)
+		completed, _ := json.Marshal(record.UpdatedAt.Format(time.RFC3339Nano))
+		object = map[string]json.RawMessage{"state": state, "usage": usage, "completed_at": completed}
+	}
+	schemaVersion, _ := json.Marshal(1)
+	runID, _ := json.Marshal(record.RunID)
+	object["schema_version"] = schemaVersion
+	object["run_id"] = runID
+	encoded, err := json.Marshal(object)
+	if err != nil {
+		return generated.RunResult{}, err
+	}
+	return generated.DecodeRunResult(encoded)
 }
 func writeTyped(writer http.ResponseWriter, err error) {
 	failure, ok := AsError(err)

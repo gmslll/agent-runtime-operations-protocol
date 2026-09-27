@@ -2,6 +2,7 @@ package run
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -99,5 +100,22 @@ func TestHTTPFailsClosedOnAuthenticationAndMediaType(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusRequestEntityTooLarge || !strings.Contains(response.Body.String(), "RUN_REQUEST_TOO_LARGE") {
 		t.Fatalf("oversize body contract missing: status=%d body=%s", response.Code, response.Body.String())
+	}
+}
+
+func TestTerminalWireResultExposesCommittedEventProjection(t *testing.T) {
+	record := Run{
+		RunID: "run_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5c", State: StateSucceeded,
+		UpdatedAt: baseTime,
+		Result:    json.RawMessage(`{"state":"succeeded","snapshot":{"revision":1,"content":[{"type":"text","text":"done"}],"digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"usage":{"input_tokens":3,"output_tokens":2,"duration_ms":100,"billable_units":1},"completed_at":"2026-09-27T09:00:00Z"}`),
+	}
+	result, err := terminalWireResult(record)
+	if err != nil || string(result.RunID) != record.RunID || result.State != "succeeded" || result.Snapshot == nil || result.Error != nil {
+		t.Fatalf("event projection result=%#v err=%v", result, err)
+	}
+	missing := record
+	missing.Result = nil
+	if _, err = terminalWireResult(missing); err == nil {
+		t.Fatal("successful run without a committed final result was exposed")
 	}
 }

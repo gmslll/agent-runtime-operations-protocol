@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "resources": [
+    {"path":"schemas/common/identifiers.schema.json","uri":"https://arop.invalid/schemas/v1/common/identifiers.schema.json"},
+    {"path":"schemas/common/trace.schema.json","uri":"https://arop.invalid/schemas/v1/common/trace.schema.json"},
+    {"path":"schemas/common/error.schema.json","uri":"https://arop.invalid/schemas/v1/common/error.schema.json"},
+    {"path":"schemas/common/content-part.schema.json","uri":"https://arop.invalid/schemas/v1/common/content-part.schema.json"},
+    {"path":"schemas/resources/asset-ref-v1.schema.json","uri":"https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json"},
+    {"path":"schemas/resources/data-ref-v1.schema.json","uri":"https://arop.invalid/schemas/v1/resources/data-ref-v1.schema.json"},
+    {"path":"schemas/runtime/result-v1.schema.json","uri":"https://arop.invalid/schemas/v1/runtime/result-v1.schema.json"},
+    {"path":"schemas/events/event-envelope-v1.schema.json","uri":"https://arop.invalid/schemas/v1/events/event-envelope-v1.schema.json"},
+    {"path":"schemas/events/lifecycle-events-v1.schema.json","uri":"https://arop.invalid/schemas/v1/events/lifecycle-events-v1.schema.json"},
+    {"path":"schemas/events/output-events-v1.schema.json","uri":"https://arop.invalid/schemas/v1/events/output-events-v1.schema.json"},
+    {"path":"schemas/events/progress-events-v1.schema.json","uri":"https://arop.invalid/schemas/v1/events/progress-events-v1.schema.json"},
+    {"path":"schemas/events/usage-events-v1.schema.json","uri":"https://arop.invalid/schemas/v1/events/usage-events-v1.schema.json"},
+    {"path":"schemas/events/event-session-v1.schema.json","uri":"https://arop.invalid/schemas/v1/events/event-session-v1.schema.json"}
+  ],
+  "roots": [
+    {"ref":"https://arop.invalid/schemas/v1/events/event-envelope-v1.schema.json","name":"EventEnvelope"},
+    {"ref":"https://arop.invalid/schemas/v1/events/lifecycle-events-v1.schema.json#/$defs/stateData","name":"LifecycleStateData"},
+    {"ref":"https://arop.invalid/schemas/v1/events/lifecycle-events-v1.schema.json#/$defs/terminalData","name":"LifecycleTerminalData"},
+    {"ref":"https://arop.invalid/schemas/v1/events/output-events-v1.schema.json#/$defs/delta","name":"OutputDeltaData"},
+    {"ref":"https://arop.invalid/schemas/v1/events/output-events-v1.schema.json#/$defs/snapshot","name":"OutputSnapshotData"},
+    {"ref":"https://arop.invalid/schemas/v1/events/output-events-v1.schema.json#/$defs/state","name":"OutputStateData"},
+    {"ref":"https://arop.invalid/schemas/v1/events/progress-events-v1.schema.json","name":"ProgressEventData"},
+    {"ref":"https://arop.invalid/schemas/v1/events/usage-events-v1.schema.json","name":"UsageEventData"},
+    {"ref":"https://arop.invalid/schemas/v1/events/event-session-v1.schema.json#/$defs/eventSessionRequest","name":"EventSessionRequest"},
+    {"ref":"https://arop.invalid/schemas/v1/events/event-session-v1.schema.json#/$defs/eventSession","name":"EventSession"},
+    {"ref":"https://arop.invalid/schemas/v1/events/event-session-v1.schema.json#/$defs/eventBatch","name":"EventBatch"},
+    {"ref":"https://arop.invalid/schemas/v1/events/event-session-v1.schema.json#/$defs/eventBatchAck","name":"EventBatchAck"}
+  ],
+  "fixtures": {
+    "valid": [
+      {"id":"envelope","path":"conformance/fixtures/events/envelope.valid.json","root":"EventEnvelope"}, {"id":"lifecycle","path":"conformance/fixtures/events/lifecycle.valid.json","root":"LifecycleTerminalData"}, {"id":"output","path":"conformance/fixtures/events/output.valid.json","root":"OutputDeltaData"}, {"id":"progress","path":"conformance/fixtures/events/progress.valid.json","root":"ProgressEventData"}, {"id":"usage","path":"conformance/fixtures/events/usage.valid.json","root":"UsageEventData"}, {"id":"session","path":"conformance/fixtures/events/session.valid.json","root":"EventSession"}
+    ],
+    "forward": [
+      {"id":"envelope-future","path":"conformance/fixtures/events/envelope.forward.json","root":"EventEnvelope"}, {"id":"lifecycle-future","path":"conformance/fixtures/events/lifecycle.forward.json","root":"LifecycleStateData"}, {"id":"output-future","path":"conformance/fixtures/events/output.forward.json","root":"OutputStateData"}, {"id":"progress-future","path":"conformance/fixtures/events/progress.forward.json","root":"ProgressEventData"}, {"id":"usage-future","path":"conformance/fixtures/events/usage.forward.json","root":"UsageEventData"}, {"id":"session-future","path":"conformance/fixtures/events/session.forward.json","root":"EventSessionRequest"}
+    ],
+    "invalid": [
+      {"id":"envelope-invalid","path":"conformance/fixtures/events/envelope.invalid.json","root":"EventEnvelope"}, {"id":"lifecycle-missing-final","path":"conformance/fixtures/events/lifecycle.invalid.json","root":"LifecycleTerminalData"}, {"id":"output-negative-offset","path":"conformance/fixtures/events/output.invalid.json","root":"OutputDeltaData"}, {"id":"progress-out-of-range","path":"conformance/fixtures/events/progress.invalid.json","root":"ProgressEventData"}, {"id":"usage-unsafe","path":"conformance/fixtures/events/usage.invalid.json","root":"UsageEventData"}, {"id":"session-invalid","path":"conformance/fixtures/events/session.invalid.json","root":"EventSession"}
+    ]
+  },
+  "outputs": {"go":{"model":"sdk/go/generated/event/event.gen.go"},"python":{"model":"sdk/python/src/arop/generated/event/event_gen.py"},"typescript":{"model":"sdk/typescript/src/generated/event/event.gen.ts"}}
+}

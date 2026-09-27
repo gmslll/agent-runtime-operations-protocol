@@ -142,6 +142,85 @@ func TestSQLiteAtomicReservationFencingCapacityAndPublicKeys(t *testing.T) {
 	}
 }
 
+func TestSQLiteTerminalEventReleaseRestoresDispatchCapacity(t *testing.T) {
+	db, err := sql.Open("sqlite", "file:dispatch-event-capacity?mode=memory&cache=shared&_pragma=foreign_keys(1)&_txlock=immediate")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	for _, migration := range []string{"0030_registry.sql", "0040_run.sql", "0050_dispatch.sql", "0060_event.sql"} {
+		applyMigration(t, db, "../../../../../migrations/sqlite/"+migration)
+	}
+	uow, err := sqliteuow.NewUnitOfWork(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := New(db, uow.Transaction, SQLite, "https://control.example.invalid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.EnableEventCapacityReleases()
+
+	now := time.Date(2026, 9, 27, 9, 0, 0, 0, time.UTC)
+	firstRunID, secondRunID := testUUID("run_", "31"), testUUID("run_", "32")
+	insertRun(t, db, SQLite, firstRunID, now)
+	insertRun(t, db, SQLite, secondRunID, now)
+	insertInstance(t, db, SQLite, now)
+	signer, err := dispatch.NewProcessSigner(now.Add(-time.Minute), "key-capacity-20260927", time.Hour, 5*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, err := signer.ActiveKey(context.Background(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, err := signer.VerificationKeys(context.Background(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstRun, err := store.DispatchableRun(context.Background(), "acme", firstRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstCommand := reserveCommand(firstRun, candidate(now, 1), active, keys, now, "31", "d")
+	var first dispatch.Attempt
+	if err = uow.Within(context.Background(), func(ctx context.Context) error {
+		var inner error
+		first, _, inner = store.Reserve(ctx, firstCommand)
+		return inner
+	}); err != nil {
+		t.Fatal(err)
+	}
+	secondRun, err := store.DispatchableRun(context.Background(), "acme", secondRunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondCommand := reserveCommand(secondRun, candidate(now, 1), active, keys, now, "32", "e")
+	if err = uow.Within(context.Background(), func(ctx context.Context) error {
+		_, _, inner := store.Reserve(ctx, secondCommand)
+		return inner
+	}); err == nil {
+		t.Fatal("capacity was available before the terminal event release")
+	}
+
+	eventID := testUUID("evt_", "31")
+	if _, err = db.Exec(`INSERT INTO arop_event_ledger(tenant_id,run_id,run_sequence,attempt_id,producer_sequence,event_id,source,event_type,event_digest,envelope_json,occurred_at,received_at,projection_applied) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		"acme", firstRunID, 1, first.AttemptID, 1, eventID, "runtime://runtime-a", "io.arop.run.succeeded.v1", "sha256:"+strings.Repeat("f", 64), `{}`, formatTime(now), formatTime(now), 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(`INSERT INTO arop_event_capacity_releases(tenant_id,attempt_id,run_id,run_sequence,terminal_event_id,released_at) VALUES(?,?,?,?,?,?)`,
+		"acme", first.AttemptID, firstRunID, 1, eventID, formatTime(now)); err != nil {
+		t.Fatal(err)
+	}
+	if err = uow.Within(context.Background(), func(ctx context.Context) error {
+		_, _, inner := store.Reserve(ctx, secondCommand)
+		return inner
+	}); err != nil {
+		t.Fatalf("terminal event release did not restore dispatch capacity: %v", err)
+	}
+}
+
 func applyMigration(t *testing.T, db *sql.DB, path string) {
 	t.Helper()
 	contents, err := os.ReadFile(path)

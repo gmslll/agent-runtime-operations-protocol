@@ -1,0 +1,76 @@
+openapi: 3.1.0
+info:
+  title: AROP Control Plane Event Session v1 fragment
+  version: 1.0.0
+  description: Short-lived Event Session capabilities and durable batch ingestion. This fragment does not expose SSE.
+paths:
+  /v1/agent-runs/{run_id}/event-session:
+    post:
+      operationId: createEventSession
+      security: [{RuntimeSessionBearer: []}]
+      x-arop-required-scopes: [event:session]
+      parameters: [{$ref: '#/components/parameters/RunId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '../../../schemas/events/event-session-v1.schema.json#/$defs/eventSessionRequest'}}}
+      responses:
+        '201':
+          description: A short-lived, write-only Event capability scoped to the current Run and Attempt.
+          headers: {Cache-Control: {required: true, schema: {const: no-store}}}
+          content: {application/json: {schema: {$ref: '../../../schemas/events/event-session-v1.schema.json#/$defs/eventSession'}}}
+        '400': {$ref: '#/components/responses/TypedError'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/TypedError'}
+        '409': {$ref: '#/components/responses/TypedError'}
+        '503': {$ref: '#/components/responses/Error503'}
+  /v1/agent-runs/{run_id}/events:batch:
+    post:
+      operationId: appendEventBatch
+      security: [{EventBearer: []}]
+      x-arop-event-capability: write-only
+      parameters:
+        - {$ref: '#/components/parameters/RunId'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '../../../schemas/events/event-session-v1.schema.json#/$defs/eventBatch'}}}
+      responses:
+        '200':
+          description: Batch committed to the immutable Event Ledger.
+          headers: {Cache-Control: {required: true, schema: {const: no-store}}}
+          content: {application/json: {schema: {$ref: '../../../schemas/events/event-session-v1.schema.json#/$defs/eventBatchAck'}}}
+        '400': {$ref: '#/components/responses/TypedError'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '409': {$ref: '#/components/responses/TypedError'}
+        '413': {$ref: '#/components/responses/TypedError'}
+        '503': {$ref: '#/components/responses/Error503'}
+components:
+  securitySchemes:
+    RuntimeSessionBearer: {type: http, scheme: bearer}
+    EventBearer: {type: http, scheme: bearer}
+  parameters:
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      schema: {$ref: '../../../schemas/common/identifiers.schema.json#/$defs/runId'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 8, maxLength: 200, pattern: '^[!-~]+$'}
+  schemas:
+    AROPError: {$ref: '../../../schemas/common/error.schema.json'}
+    EventEnvelope: {$ref: '../../../schemas/events/event-envelope-v1.schema.json'}
+  responses:
+    Error401:
+      description: Runtime Session or Event capability authentication failed.
+      headers: {WWW-Authenticate: {required: true, schema: {const: Bearer}}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Error503:
+      description: Durable Event Ledger dependency unavailable.
+      headers: {Retry-After: {required: true, schema: {type: integer, minimum: 1, maximum: 86400}}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    TypedError:
+      description: Typed AROP event error.
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}

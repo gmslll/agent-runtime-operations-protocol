@@ -1,4 +1,4 @@
-// Command harness is the sole writer of the P19 dispatch ticket report.
+// Command harness is the sole writer of the P20 event ledger report.
 package main
 
 import (
@@ -25,25 +25,27 @@ import (
 )
 
 const (
-	command    = "make test-dispatch-ticket"
-	checker    = "reference/control-plane/internal/domain/dispatch/testdata/harness/main.go"
-	waiver     = "reference/control-plane/internal/domain/dispatch/testdata/transition/p19-baseline-transition-waiver.json"
-	nextWaiver = "reference/control-plane/internal/domain/event/testdata/transition/p20-baseline-transition-waiver.json"
-	baseline   = "9a092c363c90f6b13f3873990a569fbe24653c2a"
+	command  = "make test-event-ledger"
+	checker  = "reference/control-plane/internal/domain/event/testdata/harness/main.go"
+	waiver   = "reference/control-plane/internal/domain/event/testdata/transition/p20-baseline-transition-waiver.json"
+	baseline = "459c869214cf719aaf0364fbadc6ee094bbf2376"
 )
 
 var requiredOwnedArtifacts = []string{
-	"dispatch-fixtures",
-	"dispatcher-ticket-service",
-	"generated-dispatch-go",
-	"generated-dispatch-python",
-	"generated-dispatch-typescript",
-	"openapi-control-plane-dispatch-fragment",
-	"postgres-migration-dispatch",
-	"schema-attempt",
-	"schema-dispatch-ticket",
-	"schema-jwks-metadata",
-	"sqlite-migration-dispatch",
+	"event-fixtures",
+	"event-ledger-service",
+	"generated-event-go",
+	"generated-event-python",
+	"generated-event-typescript",
+	"openapi-control-plane-event-fragment",
+	"postgres-migration-event",
+	"schema-event-envelope",
+	"schema-event-session",
+	"schema-lifecycle-events",
+	"schema-output-events",
+	"schema-progress-events",
+	"schema-usage-events",
+	"sqlite-migration-event",
 }
 
 type commandResult struct {
@@ -117,29 +119,29 @@ func main() {
 		checks = append(checks, report.Check{Name: name, Passed: err == nil, Detail: detail})
 	}
 	inputs, err := trackedInputs(root)
-	add("p19-static-input-closure", err, fmt.Sprintf("%d tracked inputs", len(inputs)))
+	add("p20-static-input-closure", err, fmt.Sprintf("%d tracked inputs", len(inputs)))
 	runtimeInputs, runtimeErr := declaredRuntimeInputs(root)
-	add("p19-runtime-inputs-empty", errors.Join(runtimeErr, requireEmpty(runtimeInputs)), "manifest-declared runtime_inputs is empty")
+	add("p20-runtime-inputs-empty", errors.Join(runtimeErr, requireEmpty(runtimeInputs)), "manifest-declared runtime_inputs is empty")
 	ownedErr := validateOwnedArtifacts(root)
-	add("p19-owned-artifact-inventory", ownedErr, "manifest declares the exact eleven P19-owned artifacts")
+	add("p20-owned-artifact-inventory", ownedErr, "manifest declares the exact fourteen P20-owned artifacts")
 	transitionErr := validateTransition(root)
-	if os.Getenv("AROP_PRINT_P19_TRANSITION") == "1" {
+	if os.Getenv("AROP_PRINT_P20_TRANSITION") == "1" {
 		fatal(transitionErr)
 		return
 	}
-	add("p19-transition-waiver", transitionErr, "waiver exactly binds Git changes, manifest owners, acceptance and constraints")
+	add("p20-transition-waiver", transitionErr, "waiver exactly binds Git changes, manifest owners, acceptance and constraints")
 	fixtureEvidence, fixtureErr := validateFixtures(root)
-	add("p19-schema-fixtures", fixtureErr, "Attempt, Dispatch Ticket and JWKS fixtures pass offline validation")
+	add("p20-schema-fixtures", fixtureErr, "event envelope, lifecycle, output, progress, usage and session fixtures pass offline validation")
 	generatedEvidence, generatedErr := validateGeneratedContracts(root)
-	add("p19-generated-contracts", generatedErr, "Go, Python and TypeScript dispatch models regenerate without drift")
-	add("p19-openapi-contract", validateOpenAPI(root), "dispatch and public JWKS OpenAPI expose exact scopes and security boundaries")
-	add("p19-production-catalog", validateCatalog(root), "P18 snapshot is frozen and production catalog ends at paired 0050")
+	add("p20-generated-contracts", generatedErr, "Go, Python and TypeScript event models regenerate without drift")
+	add("p20-openapi-contract", validateOpenAPI(root), "Event Session and batch endpoints expose exact capability boundaries without SSE")
+	add("p20-production-catalog", validateCatalog(root), "P19 snapshot is frozen and production catalog ends at paired 0060")
 
-	scratch, scratchErr := os.MkdirTemp("/tmp", "arop-p19-")
+	scratch, scratchErr := os.MkdirTemp("/tmp", "arop-p20-")
 	if scratchErr == nil {
 		scratchErr = os.Chmod(scratch, 0o700)
 	}
-	add("p19-private-scratch", scratchErr, "private scratch created")
+	add("p20-private-scratch", scratchErr, "private scratch created")
 	var pg *cluster
 	var pgEvidence []byte
 	if scratchErr == nil {
@@ -147,33 +149,33 @@ func main() {
 	} else {
 		err = scratchErr
 	}
-	add("p19-private-postgres16", err, "private PostgreSQL 16 ready on a private Unix socket")
+	add("p20-private-postgres16", err, "private PostgreSQL 16 ready on a private Unix socket")
 	var tests commandResult
 	if pg != nil {
 		tests = runTests(root, scratch, pg.dsn())
 	} else {
 		tests.err = errors.New("PostgreSQL prerequisite failed")
 	}
-	add("p19-dispatch-domain-storage-migrations", tests.err, "dispatch domain, dual repositories, exact schemas and migration transition pass with race detection")
-	add("p19-no-skips-cache-or-no-tests", rejectIncompleteTests(tests.output), "test stream has no skip/cache/no-tests terminal")
+	add("p20-event-domain-storage-migrations", tests.err, "event domain, dual repositories, exact schemas and migration transition pass with race detection")
+	add("p20-no-skips-cache-or-no-tests", rejectIncompleteTests(tests.output), "test stream has no skip/cache/no-tests terminal")
 
 	evidence := []report.RuntimeEvidence{
-		{Kind: "p19-go-test", SHA256: report.Hash(tests.output), Bytes: int64(len(tests.output))},
-		{Kind: "p19-postgres-toolchain", SHA256: report.Hash(pgEvidence), Bytes: int64(len(pgEvidence))},
-		{Kind: "p19-fixture-validation", SHA256: report.Hash(fixtureEvidence), Bytes: int64(len(fixtureEvidence))},
-		{Kind: "p19-codegen-reproducibility", SHA256: report.Hash(generatedEvidence), Bytes: int64(len(generatedEvidence))},
+		{Kind: "p20-go-test", SHA256: report.Hash(tests.output), Bytes: int64(len(tests.output))},
+		{Kind: "p20-postgres-toolchain", SHA256: report.Hash(pgEvidence), Bytes: int64(len(pgEvidence))},
+		{Kind: "p20-fixture-validation", SHA256: report.Hash(fixtureEvidence), Bytes: int64(len(fixtureEvidence))},
+		{Kind: "p20-codegen-reproducibility", SHA256: report.Hash(generatedEvidence), Bytes: int64(len(generatedEvidence))},
 	}
-	p18 := run(root, nil, "make", "test-run-lifecycle")
-	if p18.err == nil {
-		verified := run(root, nil, "make", "verify-report", "REPORT=build/reports/P18/report.json")
-		p18.output = append(p18.output, verified.output...)
-		p18.err = verified.err
+	p19 := run(root, nil, "make", "test-dispatch-ticket")
+	if p19.err == nil {
+		verified := run(root, nil, "make", "verify-report", "REPORT=build/reports/P19/report.json")
+		p19.output = append(p19.output, verified.output...)
+		p19.err = verified.err
 	}
-	add("p19-p18-regression", p18.err, "P18 and the preceding lifecycle chain pass on the current head")
-	evidence = append(evidence, report.RuntimeEvidence{Kind: "p18-regression", SHA256: report.Hash(p18.output), Bytes: int64(len(p18.output))})
-	for _, phase := range []string{"P01", "P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18"} {
+	add("p20-p19-regression", p19.err, "P19 and the preceding dispatch chain pass on the current head")
+	evidence = append(evidence, report.RuntimeEvidence{Kind: "p19-regression", SHA256: report.Hash(p19.output), Bytes: int64(len(p19.output))})
+	for _, phase := range []string{"P01", "P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18", "P19"} {
 		verified := run(root, nil, "make", "verify-report", "REPORT=build/reports/"+phase+"/report.json")
-		add("p19-"+strings.ToLower(phase)+"-report", verified.err, phase+" current report verified after P18")
+		add("p20-"+strings.ToLower(phase)+"-report", verified.err, phase+" current report verified after P19")
 		evidence = append(evidence, report.RuntimeEvidence{Kind: strings.ToLower(phase) + "-report-verification", SHA256: report.Hash(verified.output), Bytes: int64(len(verified.output))})
 	}
 	if pg != nil {
@@ -181,7 +183,7 @@ func main() {
 	} else {
 		err = errors.New("private PostgreSQL was not started")
 	}
-	add("p19-postgres-shutdown", err, "private PostgreSQL stopped")
+	add("p20-postgres-shutdown", err, "private PostgreSQL stopped")
 	if scratchErr == nil {
 		err = os.RemoveAll(scratch)
 		if err == nil {
@@ -192,25 +194,25 @@ func main() {
 	} else {
 		err = errors.New("private scratch was not created")
 	}
-	add("p19-scratch-cleanup", err, "scratch removed")
+	add("p20-scratch-cleanup", err, "scratch removed")
 	sort.Slice(evidence, func(left, right int) bool { return evidence[left].Kind < evidence[right].Kind })
 
 	written, err := report.Write(report.WriteOptions{
-		Root: root, Directory: "build/reports/P19", Suite: "AROP P19 dispatch ticket", Class: "p19.dispatch",
+		Root: root, Directory: "build/reports/P20", Suite: "AROP P20 event ledger", Class: "p20.event",
 		Command: command, CheckerPath: checker, InputPaths: inputs, RuntimeInputPaths: runtimeInputs, RuntimeEvidence: evidence, Checks: checks,
-		Summary:   map[string]any{"owned_artifacts": 11, "database_engines": 2, "runtime_inputs": len(runtimeInputs)},
-		AuditNote: "P19 binds the exact eleven manifest-owned artifacts and an independently discovered Git/manifest transition closure. Candidate selection revalidates live registry generation, session, binding and capacity inside the dispatch UoW; Attempt, fencing, Run state, public key metadata and durable audit commit atomically. Tickets are short-lived ES256 JWS values bound to run, attempt, agent, deployment, instance, generation, fencing, audience, endpoint, mode and expiry. Private signing material remains behind the Signer port and never enters database, HTTP, logs or reports. SQLite and PostgreSQL 16 enforce exact 0050 schema parity and the same empty, P18-to-P19, idempotent and dirty-history matrix. P01-P18 regressions enter only as digest-and-byte runtime evidence and runtime_inputs remains empty.",
+		Summary:   map[string]any{"owned_artifacts": 14, "database_engines": 2, "runtime_inputs": len(runtimeInputs)},
+		AuditNote: "P20 binds the exact fourteen manifest-owned artifacts and an independently discovered Git/manifest transition closure. An authenticated Runtime Session exchanges the current assigned Attempt identity for a short-lived write-only Event capability; every append revalidates tenant, run, attempt, instance session, generation, fencing, lease and canonical source. The durable Inbox, immutable event append, producer/run sequence projections, irreversible terminal result, final usage, Runtime capacity release and durable audit commit atomically. Duplicate, out-of-order, conflicting and late-terminal events fail closed or remain audit-only as specified. SQLite and PostgreSQL 16 enforce exact 0060 schema parity and the same empty, P19-to-P20, idempotent and dirty-history matrix. P01-P19 regressions enter only as digest-and-byte runtime evidence, no SSE route is introduced, and runtime_inputs remains empty.",
 	})
 	fatal(err)
-	verified, mode, err := report.Verify(report.VerifyOptions{Root: root, ReportPath: "build/reports/P19/report.json"})
+	verified, mode, err := report.Verify(report.VerifyOptions{Root: root, ReportPath: "build/reports/P20/report.json"})
 	fatal(err)
 	if mode != "current-worktree" || verified.Success != written.Success {
-		fatal(errors.New("P19 self-verification mismatch"))
+		fatal(errors.New("P20 self-verification mismatch"))
 	}
 	if !written.Success {
-		fatal(errors.New("P19 checks failed; see build/reports/P19/report.json"))
+		fatal(errors.New("P20 checks failed; see build/reports/P20/report.json"))
 	}
-	fmt.Printf("AROP dispatch ticket passed: %d checks.\n", len(checks))
+	fmt.Printf("AROP event ledger passed: %d checks.\n", len(checks))
 }
 
 func declaredRuntimeInputs(root string) ([]string, error) {
@@ -221,13 +223,13 @@ func declaredRuntimeInputs(root string) ([]string, error) {
 	var found []string
 	matches := 0
 	for _, artifact := range manifest.Artifacts {
-		if artifact.ID == "phase-report-p19" {
+		if artifact.ID == "phase-report-p20" {
 			matches++
 			found = append([]string(nil), artifact.RuntimeInputs...)
 		}
 	}
 	if matches != 1 {
-		return nil, fmt.Errorf("phase-report-p19 manifest entries=%d", matches)
+		return nil, fmt.Errorf("phase-report-p20 manifest entries=%d", matches)
 	}
 	return found, nil
 }
@@ -246,16 +248,16 @@ func validateOwnedArtifacts(root string) error {
 	}
 	var found []string
 	for _, artifact := range manifest.Artifacts {
-		if artifact.OwnerPhase == "P19" {
+		if artifact.OwnerPhase == "P20" {
 			found = append(found, artifact.ID)
-			if artifact.PathRole != "concrete" || artifact.AcceptanceTest != "make-test-dispatch-ticket" {
-				return fmt.Errorf("P19 artifact %s has invalid ownership metadata", artifact.ID)
+			if artifact.PathRole != "concrete" || artifact.AcceptanceTest != "make-test-event-ledger" {
+				return fmt.Errorf("P20 artifact %s has invalid ownership metadata", artifact.ID)
 			}
 		}
 	}
 	sort.Strings(found)
 	if !reflect.DeepEqual(found, requiredOwnedArtifacts) {
-		return fmt.Errorf("P19 owned artifacts=%v want=%v", found, requiredOwnedArtifacts)
+		return fmt.Errorf("P20 owned artifacts=%v want=%v", found, requiredOwnedArtifacts)
 	}
 	return nil
 }
@@ -293,7 +295,7 @@ func validateTransition(root string) error {
 	if err != nil {
 		return err
 	}
-	if os.Getenv("AROP_PRINT_P19_TRANSITION") == "1" {
+	if os.Getenv("AROP_PRINT_P20_TRANSITION") == "1" {
 		fmt.Printf("sources=%q\nartifacts=%q\n", discovered.sources, discovered.artifacts)
 	}
 	if err := validateTransitionCandidate(value, discovered); err != nil {
@@ -310,7 +312,7 @@ func discoverTransition(root string) (discoveredTransition, error) {
 	}
 	parent := run(root, nil, "git", "rev-parse", commits[0]+"^")
 	if parent.err != nil || strings.TrimSpace(string(parent.output)) != baseline {
-		return discoveredTransition{}, errors.New("transition carrier introduction parent is not the frozen P18 endpoint")
+		return discoveredTransition{}, errors.New("transition carrier introduction parent is not the frozen P19 endpoint")
 	}
 	endpoint, err := transitionEndpoint(root)
 	if err != nil {
@@ -340,21 +342,13 @@ func discoverTransition(root string) (discoveredTransition, error) {
 }
 
 func transitionEndpoint(root string) (string, error) {
-	introduction := run(root, nil, "git", "log", "--format=%H", "--diff-filter=A", "--", nextWaiver)
-	commits := lines(introduction.output)
-	if introduction.err != nil || len(commits) != 1 {
-		return "", errors.New("P20 transition carrier must have one introduction commit")
+	resolved := run(root, nil, "git", "rev-parse", "HEAD")
+	if resolved.err != nil {
+		return "", resolved.err
 	}
-	parent := run(root, nil, "git", "rev-parse", commits[0]+"^")
-	if parent.err != nil {
-		return "", parent.err
-	}
-	endpoint := strings.TrimSpace(string(parent.output))
-	if endpoint != "459c869214cf719aaf0364fbadc6ee094bbf2376" {
-		return "", fmt.Errorf("P19 historical endpoint=%s", endpoint)
-	}
+	endpoint := strings.TrimSpace(string(resolved.output))
 	if ancestor := run(root, nil, "git", "merge-base", "--is-ancestor", endpoint, "HEAD"); ancestor.err != nil {
-		return "", errors.New("P19 historical endpoint is not an ancestor of HEAD")
+		return "", errors.New("P20 endpoint is not the current HEAD")
 	}
 	return endpoint, nil
 }
@@ -396,7 +390,7 @@ func discoverCompiledClosure(root string) (map[string]bool, error) {
 		"go.mod": true, "go.sum": true,
 		"reference/control-plane/go.mod": true, "reference/control-plane/go.sum": true,
 	}
-	temporary, err := os.MkdirTemp("/tmp", "arop-p19-closure-")
+	temporary, err := os.MkdirTemp("/tmp", "arop-p20-closure-")
 	if err != nil {
 		return nil, err
 	}
@@ -410,7 +404,7 @@ func discoverCompiledClosure(root string) (map[string]bool, error) {
 		return nil, err
 	}
 	listed := runStdout(filepath.Join(root, "reference/control-plane"), map[string]string{"GOWORK": work, "GOENV": "off", "GOFLAGS": "-mod=readonly", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "TMPDIR": temporary}, "go", "list", "-deps", "-test", "-json",
-		"./internal/domain/dispatch/...", "./internal/domain/dispatch/testdata/acceptance", "./internal/domain/dispatch/testdata/harness",
+		"./internal/domain/event/...", "./internal/domain/event/testdata/acceptance", "./internal/domain/event/testdata/harness",
 		"./cmd/aropd", "./internal/domain/run/...", "./internal/domain/run/testdata/acceptance", "./internal/domain/run/testdata/harness",
 		"./internal/domain/registry/...", "./internal/domain/registry/testdata/acceptance", "./internal/domain/registry/testdata/harness",
 		"./internal/domain/assets/testdata/acceptance", "./internal/domain/assets/testdata/harness",
@@ -451,30 +445,46 @@ func discoverReadClosure() map[string]bool {
 		"reference/control-plane/internal/app/registrywatch/testdata/harness/main.go",
 		"reference/control-plane/internal/domain/assets/testdata/harness/main.go",
 		"reference/control-plane/internal/storage/migrate/testdata/engine-versions/harness/main.go",
-		"reference/control-plane/internal/domain/dispatch/testdata/transition/p19-p05-transition.json",
+		"reference/control-plane/internal/domain/event/testdata/transition/p20-p05-transition.json",
+		"reference/control-plane/internal/domain/dispatch/testdata/transition/p19-baseline-transition-waiver.json",
+		"reference/control-plane/internal/domain/dispatch/testdata/harness/main.go",
 		"reference/control-plane/internal/domain/run/testdata/transition/p18-baseline-transition-waiver.json",
 		"reference/control-plane/internal/domain/run/testdata/harness/main.go",
 		"reference/control-plane/internal/storage/migrate/PRODUCTION_CATALOG.md",
 		"reference/control-plane/internal/storage/migrate/production_catalog.go",
-		"reference/control-plane/migrations/sqlite/0050_dispatch.sql",
-		"reference/control-plane/migrations/postgres/0050_dispatch.sql",
-		"conformance/fixtures/dispatch/attempt.invalid.json",
-		"conformance/fixtures/dispatch/attempt.valid.json",
-		"conformance/fixtures/dispatch/cases.json",
-		"conformance/fixtures/dispatch/dispatch-ticket.forward.json",
-		"conformance/fixtures/dispatch/dispatch-ticket.invalid.json",
-		"conformance/fixtures/dispatch/dispatch-ticket.valid.json",
-		"conformance/fixtures/dispatch/generated/provenance.json",
-		"conformance/fixtures/dispatch/jwks.invalid.json",
-		"conformance/fixtures/dispatch/jwks.valid.json",
-		"conformance/fixtures/dispatch/pipeline.json",
-		"openapi/fragments/control-plane/dispatch-jwks-v1.yaml",
-		"schemas/runtime/attempt-v1.schema.json",
-		"schemas/runtime/dispatch-ticket-v1.schema.json",
-		"schemas/runtime/jwks-metadata-v1.schema.json",
-		"sdk/go/generated/dispatch/dispatch.gen.go",
-		"sdk/python/src/arop/generated/dispatch/dispatch_gen.py",
-		"sdk/typescript/src/generated/dispatch/dispatch.gen.ts",
+		"reference/control-plane/migrations/sqlite/0060_event.sql",
+		"reference/control-plane/migrations/postgres/0060_event.sql",
+		"conformance/fixtures/events/cases.json",
+		"conformance/fixtures/events/envelope.forward.json",
+		"conformance/fixtures/events/envelope.invalid.json",
+		"conformance/fixtures/events/envelope.valid.json",
+		"conformance/fixtures/events/generated/provenance.json",
+		"conformance/fixtures/events/lifecycle.forward.json",
+		"conformance/fixtures/events/lifecycle.invalid.json",
+		"conformance/fixtures/events/lifecycle.valid.json",
+		"conformance/fixtures/events/output.forward.json",
+		"conformance/fixtures/events/output.invalid.json",
+		"conformance/fixtures/events/output.valid.json",
+		"conformance/fixtures/events/pipeline.json",
+		"conformance/fixtures/events/progress.forward.json",
+		"conformance/fixtures/events/progress.invalid.json",
+		"conformance/fixtures/events/progress.valid.json",
+		"conformance/fixtures/events/session.forward.json",
+		"conformance/fixtures/events/session.invalid.json",
+		"conformance/fixtures/events/session.valid.json",
+		"conformance/fixtures/events/usage.forward.json",
+		"conformance/fixtures/events/usage.invalid.json",
+		"conformance/fixtures/events/usage.valid.json",
+		"openapi/fragments/control-plane/event-session-v1.yaml",
+		"schemas/events/event-envelope-v1.schema.json",
+		"schemas/events/event-session-v1.schema.json",
+		"schemas/events/lifecycle-events-v1.schema.json",
+		"schemas/events/output-events-v1.schema.json",
+		"schemas/events/progress-events-v1.schema.json",
+		"schemas/events/usage-events-v1.schema.json",
+		"sdk/go/generated/event/event.gen.go",
+		"sdk/python/src/arop/generated/event/event_gen.py",
+		"sdk/typescript/src/generated/event/event.gen.ts",
 		"reference/control-plane/migrations/sqlite/0040_run.sql",
 		"reference/control-plane/migrations/postgres/0040_run.sql",
 		"conformance/fixtures/run/cases.json",
@@ -534,7 +544,7 @@ func discoverAffectedArtifacts(root string, manifest blueprint.Manifest, sources
 		return nil, err
 	}
 	propagateAffectedArtifacts(found, manifest, byID)
-	if err := requireArtifactLowerBound(found, append(append([]string{}, requiredOwnedArtifacts...), "phase-report-p19")); err != nil {
+	if err := requireArtifactLowerBound(found, append(append([]string{}, requiredOwnedArtifacts...), "phase-report-p20")); err != nil {
 		return nil, err
 	}
 	result := make([]string, 0, len(found))
@@ -567,13 +577,13 @@ func mapSourceArtifacts(root string, manifest blueprint.Manifest, sources []stri
 				if phase == "" {
 					phase = artifact.ProducerPhase
 				}
-				if artifact.PathRole == "concrete" && artifact.AcceptanceTest == "make-test-dispatch-ticket" && phaseNumber(phase) <= 19 {
+				if artifact.PathRole == "concrete" && artifact.AcceptanceTest == "make-test-event-ledger" && phaseNumber(phase) <= 20 {
 					found[artifact.ID] = true
 					matched = true
 				}
 			}
 			if !matched {
-				return nil, errors.New("changed Makefile has no P19 acceptance artifact")
+				return nil, errors.New("changed Makefile has no P20 acceptance artifact")
 			}
 			continue
 		}
@@ -584,7 +594,7 @@ func mapSourceArtifacts(root string, manifest blueprint.Manifest, sources []stri
 			if phase == "" {
 				phase = artifact.ProducerPhase
 			}
-			if artifact.PathRole != "concrete" || artifact.Path == "" || phaseNumber(phase) > 19 {
+			if artifact.PathRole != "concrete" || artifact.Path == "" || phaseNumber(phase) > 20 {
 				continue
 			}
 			score := artifactPathScore(root, artifact.Path, source, compiled, read)
@@ -627,7 +637,7 @@ func propagateAffectedArtifacts(found map[string]bool, manifest blueprint.Manife
 			if phase == "" {
 				phase = candidate.ProducerPhase
 			}
-			if phaseNumber(phase) > 19 || candidate.PathRole != "concrete" {
+			if phaseNumber(phase) > 20 || candidate.PathRole != "concrete" {
 				continue
 			}
 			for id := range found {
@@ -673,8 +683,8 @@ func phaseNumber(phase string) int {
 }
 
 func validateTransitionCandidate(value transition, discovered discoveredTransition) error {
-	wantFrom := []string{"P01", "P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18"}
-	if value.SchemaVersion != 1 || value.WaiverID != "P19-DISPATCH-SECURITY-TRANSITION-001" || value.Status != "validated" || value.Baseline.Rule != "parent-of-unique-waiver-introduction-commit" || value.Baseline.Commit != baseline || value.Policy.OwnerPhaseSemantics != "first-introduction-and-accountability" || value.Policy.OwnershipTransferred || value.Transition.ToPhase != "P19" || strings.TrimSpace(value.Transition.Reason) == "" || !reflect.DeepEqual(value.Transition.FromPhases, wantFrom) {
+	wantFrom := []string{"P01", "P02", "P05", "P06", "P07", "P08", "P09", "P10", "P11", "P12", "P13", "P14", "P15", "P16", "P17", "P18", "P19"}
+	if value.SchemaVersion != 1 || value.WaiverID != "P20-EVENT-LEDGER-TRANSITION-001" || value.Status != "validated" || value.Baseline.Rule != "parent-of-unique-waiver-introduction-commit" || value.Baseline.Commit != baseline || value.Policy.OwnerPhaseSemantics != "first-introduction-and-accountability" || value.Policy.OwnershipTransferred || value.Transition.ToPhase != "P20" || strings.TrimSpace(value.Transition.Reason) == "" || !reflect.DeepEqual(value.Transition.FromPhases, wantFrom) {
 		return errors.New("transition identity, owner or baseline is invalid")
 	}
 	if !reflect.DeepEqual(value.SourceClosure, discovered.sources) || !reflect.DeepEqual(value.AffectedArtifacts, discovered.artifacts) {
@@ -704,25 +714,27 @@ func canonicalAcceptance() []struct{ Phase, Command, Report string } {
 		{"P16", "make test-registry-recovery", "build/reports/P16/report.json"},
 		{"P17", "make verify-registry", "build/reports/P17/report.json"},
 		{"P18", "make test-run-lifecycle", "build/reports/P18/report.json"},
-		{"P19", command, "build/reports/P19/report.json"},
+		{"P19", "make test-dispatch-ticket", "build/reports/P19/report.json"},
+		{"P20", command, "build/reports/P20/report.json"},
 	}
 }
 
 func canonicalConstraints() []string {
 	return []string{
-		"dispatch-attempt-run-transition-capacity-reservation-key-metadata-and-durable-audit-mutate-in-one-uow",
-		"candidate-session-generation-resource-version-binding-health-readiness-and-capacity-are-revalidated-inside-reservation",
-		"dispatch-idempotency-is-tenant-scoped-request-bound-and-race-safe",
-		"attempt-number-and-fencing-token-increase-monotonically-and-expired-attempts-never-consume-capacity",
-		"ticket-binds-run-attempt-agent-deployment-instance-generation-fencing-audience-endpoint-mode-scope-and-expiry",
-		"es256-private-key-material-is-accessible-only-through-signer-and-never-stored-or-exposed",
-		"jwks-has-one-active-key-retiring-overlap-and-public-only-metadata",
-		"authentication-authorization-capacity-dependency-and-idempotency-errors-fail-closed-and-are-durably-audited",
+		"event-session-is-runtime-authenticated-and-binds-tenant-run-attempt-deployment-instance-session-generation-fencing-and-expiry",
+		"event-capability-is-short-lived-write-only-token-digest-only-at-rest-and-revalidated-against-the-active-runtime-session",
+		"event-source-is-exactly-the-assigned-runtime-instance-and-producers-cannot-assign-run-sequence",
+		"event-append-inbox-deduplication-projections-terminal-result-capacity-release-and-durable-audit-mutate-in-one-uow",
+		"producer-sequence-is-attempt-local-contiguous-and-run-sequence-is-control-plane-assigned-monotonic",
+		"event-id-and-idempotency-replays-are-request-bound-race-safe-and-conflicting-reuse-fails-closed",
+		"first-terminal-is-irreversible-and-late-events-remain-immutable-audit-records-without-overwriting-projection",
+		"every-terminal-includes-final-usage-and-success-includes-exactly-one-final-snapshot-or-result-reference",
+		"authentication-authorization-fencing-capacity-dependency-sequence-and-idempotency-errors-are-typed-and-durably-audited",
 		"public-integers-never-exceed-the-js-safe-maximum",
-		"p09-p10-p12-p13-p14-and-p18-catalog-snapshots-remain-immutable",
-		"production-catalog-ends-at-0050-and-event-ingest-remains-absent",
+		"p09-p10-p12-p13-p14-p18-and-p19-catalog-snapshots-remain-immutable",
+		"production-catalog-ends-at-0060-and-sse-remains-absent",
 		"owner-phase-accountability-does-not-transfer",
-		"p19-report-runtime-inputs-remain-empty",
+		"p20-report-runtime-inputs-remain-empty",
 	}
 }
 
@@ -785,11 +797,11 @@ func cloneTransition(value transition) transition {
 
 func validateFixtures(root string) ([]byte, error) {
 	var cases fixtureCases
-	if err := structuredfile.Load(filepath.Join(root, "conformance/fixtures/dispatch/cases.json"), &cases); err != nil {
+	if err := structuredfile.Load(filepath.Join(root, "conformance/fixtures/events/cases.json"), &cases); err != nil {
 		return nil, err
 	}
-	if cases.SchemaVersion != 1 || len(cases.Valid) != 3 || len(cases.Invalid) != 3 {
-		return nil, errors.New("dispatch fixture inventory is incomplete")
+	if cases.SchemaVersion != 1 || len(cases.Valid) != 6 || len(cases.Invalid) != 6 {
+		return nil, errors.New("event fixture inventory is incomplete")
 	}
 	var evidence bytes.Buffer
 	for _, item := range cases.Valid {
@@ -801,7 +813,7 @@ func validateFixtures(root string) ([]byte, error) {
 	}
 	for _, item := range cases.Invalid {
 		if _, _, err := schema.ValidatePath(root, item.Schema, item.Document); err == nil {
-			return nil, fmt.Errorf("invalid dispatch fixture was accepted: %s", item.Document)
+			return nil, fmt.Errorf("invalid event fixture was accepted: %s", item.Document)
 		}
 		fmt.Fprintf(&evidence, "invalid:%s\n", item.Document)
 	}
@@ -860,7 +872,7 @@ func validateGeneratedContracts(root string) ([]byte, error) {
 	if rootErr != nil || baseErr != nil || realBase != filepath.Join(realRoot, "build", "codegen") {
 		return nil, errors.New("build/codegen escapes repository root")
 	}
-	output, err := os.MkdirTemp(base, "p19-")
+	output, err := os.MkdirTemp(base, "p20-")
 	if err != nil {
 		return nil, err
 	}
@@ -874,30 +886,30 @@ func validateGeneratedContracts(root string) ([]byte, error) {
 	if err != nil {
 		return nil, errors.New("resolve locked node_modules")
 	}
-	generated := run(root, map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "SOURCE_DATE_EPOCH": "0"}, "node", "--permission", "--allow-fs-read=.", "--allow-fs-read="+nodeModules, "--allow-fs-write=build/codegen", "--disable-proto=throw", "--no-addons", "scripts/generate.mjs", "--config", "conformance/fixtures/dispatch/pipeline.json", "--output", relative, "--result", relative+"/provenance.json")
+	generated := run(root, map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "SOURCE_DATE_EPOCH": "0"}, "node", "--permission", "--allow-fs-read=.", "--allow-fs-read="+nodeModules, "--allow-fs-write=build/codegen", "--disable-proto=throw", "--no-addons", "scripts/generate.mjs", "--config", "conformance/fixtures/events/pipeline.json", "--output", relative, "--result", relative+"/provenance.json")
 	if generated.err != nil {
 		return generated.output, generated.err
 	}
-	for _, path := range []string{"sdk/go/generated/dispatch/dispatch.gen.go", "sdk/python/src/arop/generated/dispatch/dispatch_gen.py", "sdk/typescript/src/generated/dispatch/dispatch.gen.ts"} {
+	for _, path := range []string{"sdk/go/generated/event/event.gen.go", "sdk/python/src/arop/generated/event/event_gen.py", "sdk/typescript/src/generated/event/event.gen.ts"} {
 		actual, readErr := os.ReadFile(filepath.Join(output, filepath.FromSlash(path)))
 		if readErr != nil {
 			return generated.output, readErr
 		}
 		tracked, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
 		if readErr != nil || !bytes.Equal(actual, tracked) {
-			return generated.output, fmt.Errorf("generated dispatch contract drift: %s", path)
+			return generated.output, fmt.Errorf("generated event contract drift: %s", path)
 		}
 	}
 	actual, err := os.ReadFile(filepath.Join(output, "provenance.json"))
 	if err != nil {
 		return generated.output, err
 	}
-	tracked, err := os.ReadFile(filepath.Join(root, "conformance/fixtures/dispatch/generated/provenance.json"))
+	tracked, err := os.ReadFile(filepath.Join(root, "conformance/fixtures/events/generated/provenance.json"))
 	if err != nil || !bytes.Equal(actual, tracked) {
-		return generated.output, errors.New("dispatch provenance drift")
+		return generated.output, errors.New("event provenance drift")
 	}
 	evidence := append(generated.output, actual...)
-	goCompile := run(root, map[string]string{"GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": "off", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0"}, "go", "test", "-count=1", "./sdk/go/generated/dispatch")
+	goCompile := run(root, map[string]string{"GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": "off", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0"}, "go", "test", "-count=1", "./sdk/go/generated/event")
 	evidence = append(evidence, goCompile.output...)
 	if goCompile.err != nil {
 		return evidence, goCompile.err
@@ -907,12 +919,12 @@ func validateGeneratedContracts(root string) ([]byte, error) {
 	// combination used to dirty the repository during the acceptance run and
 	// invalidated every report produced after this check.  Compiling the source
 	// bytes exercises the same syntax boundary without a filesystem side effect.
-	pythonCompile := run(root, map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "PYTHONNOUSERSITE": "1", "PYTHONSAFEPATH": "1"}, "python3", "-I", "-B", "-c", `import pathlib,sys; path=sys.argv[1]; compile(pathlib.Path(path).read_bytes(), path, "exec")`, "sdk/python/src/arop/generated/dispatch/dispatch_gen.py")
+	pythonCompile := run(root, map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "PYTHONNOUSERSITE": "1", "PYTHONSAFEPATH": "1"}, "python3", "-I", "-B", "-c", `import pathlib,sys; path=sys.argv[1]; compile(pathlib.Path(path).read_bytes(), path, "exec")`, "sdk/python/src/arop/generated/event/event_gen.py")
 	evidence = append(evidence, pythonCompile.output...)
 	if pythonCompile.err != nil {
 		return evidence, pythonCompile.err
 	}
-	typeScriptCompile := run(root, map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "NODE_PATH": ""}, "node", "--permission", "--allow-fs-read=.", "--allow-fs-read="+nodeModules, "--disable-proto=throw", "--no-addons", "node_modules/typescript/bin/tsc", "--noEmit", "--strict", "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--exactOptionalPropertyTypes", "--noUncheckedIndexedAccess", "sdk/typescript/src/generated/dispatch/dispatch.gen.ts")
+	typeScriptCompile := run(root, map[string]string{"LANG": "C", "LC_ALL": "C", "TZ": "UTC", "NODE_PATH": ""}, "node", "--permission", "--allow-fs-read=.", "--allow-fs-read="+nodeModules, "--disable-proto=throw", "--no-addons", "node_modules/typescript/bin/tsc", "--noEmit", "--strict", "--target", "ES2022", "--module", "NodeNext", "--moduleResolution", "NodeNext", "--exactOptionalPropertyTypes", "--noUncheckedIndexedAccess", "sdk/typescript/src/generated/event/event.gen.ts")
 	evidence = append(evidence, typeScriptCompile.output...)
 	if typeScriptCompile.err != nil {
 		return evidence, typeScriptCompile.err
@@ -922,7 +934,7 @@ func validateGeneratedContracts(root string) ([]byte, error) {
 
 func validateOpenAPI(root string) error {
 	var document map[string]any
-	if err := structuredfile.Load(filepath.Join(root, "openapi/fragments/control-plane/dispatch-jwks-v1.yaml"), &document); err != nil {
+	if err := structuredfile.Load(filepath.Join(root, "openapi/fragments/control-plane/event-session-v1.yaml"), &document); err != nil {
 		return err
 	}
 	encoded, err := json.Marshal(document)
@@ -930,22 +942,35 @@ func validateOpenAPI(root string) error {
 		return err
 	}
 	text := string(encoded)
-	for _, required := range []string{"/v1/agent-runs/{run_id}:dispatch", "/.well-known/arop-jwks.json", "run:dispatch", "dispatch-ticket-v1.schema.json", "jwks-metadata-v1.schema.json", "attempt-v1.schema.json", "x-arop-attempt-fencing"} {
+	for _, required := range []string{"/v1/agent-runs/{run_id}/event-session", "/v1/agent-runs/{run_id}/events:batch", "event:session", "RuntimeSessionBearer", "EventBearer", "event-session-v1.schema.json", "event-envelope-v1.schema.json", "x-arop-event-capability", "write-only", "no-store"} {
 		if !strings.Contains(text, required) {
-			return fmt.Errorf("dispatch OpenAPI missing %s", required)
+			return fmt.Errorf("event OpenAPI missing %s", required)
+		}
+	}
+	for _, forbidden := range []string{"text/event-stream", "Server-Sent", "/events:stream"} {
+		if strings.Contains(text, forbidden) {
+			return fmt.Errorf("P20 OpenAPI prematurely exposes SSE: %s", forbidden)
 		}
 	}
 	paths, ok := document["paths"].(map[string]any)
 	if !ok {
-		return errors.New("dispatch OpenAPI paths missing")
+		return errors.New("event OpenAPI paths missing")
 	}
-	jwksPath, ok := paths["/.well-known/arop-jwks.json"].(map[string]any)
+	sessionPath, ok := paths["/v1/agent-runs/{run_id}/event-session"].(map[string]any)
 	if !ok {
-		return errors.New("JWKS path missing")
+		return errors.New("Event Session path missing")
 	}
-	jwksGet, ok := jwksPath["get"].(map[string]any)
-	if !ok || !reflect.DeepEqual(jwksGet["security"], []any{}) {
-		return errors.New("JWKS route must be explicitly unauthenticated")
+	sessionPost, ok := sessionPath["post"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(sessionPost["security"]), "RuntimeSessionBearer") || !reflect.DeepEqual(sessionPost["x-arop-required-scopes"], []any{"event:session"}) {
+		return errors.New("Event Session route must require the exact runtime scope")
+	}
+	batchPath, ok := paths["/v1/agent-runs/{run_id}/events:batch"].(map[string]any)
+	if !ok {
+		return errors.New("Event batch path missing")
+	}
+	batchPost, ok := batchPath["post"].(map[string]any)
+	if !ok || !strings.Contains(fmt.Sprint(batchPost["security"]), "EventBearer") || batchPost["x-arop-event-capability"] != "write-only" {
+		return errors.New("Event batch route must require the write-only Event capability")
 	}
 	return nil
 }
@@ -956,17 +981,17 @@ func validateCatalog(root string) error {
 		return err
 	}
 	text := string(data)
-	for _, required := range []string{"func P09ProductionCatalog()", "func P10ProductionCatalog()", "func P12ProductionCatalog()", "func P13ProductionCatalog()", "func P14ProductionCatalog()", "func P18ProductionCatalog()", "func CurrentProductionCatalog()", `closure.ReportPhase = "P19"`, "0040_run.sql", "0050_dispatch.sql"} {
+	for _, required := range []string{"func P09ProductionCatalog()", "func P10ProductionCatalog()", "func P12ProductionCatalog()", "func P13ProductionCatalog()", "func P14ProductionCatalog()", "func P18ProductionCatalog()", "func P19ProductionCatalog()", "func CurrentProductionCatalog()", `closure.ReportPhase = "P20"`, "0050_dispatch.sql", "0060_event.sql"} {
 		if !strings.Contains(text, required) {
 			return fmt.Errorf("catalog missing %s", required)
 		}
 	}
-	start, end := strings.Index(text, "func P18ProductionCatalog()"), strings.Index(text, "func CurrentProductionCatalog()")
-	if start < 0 || end <= start || strings.Count(text[start:end], "0040_run.sql") != 2 || strings.Contains(text[start:end], "0050_dispatch.sql") {
-		return errors.New("P18 catalog snapshot is not exactly complete through 0040")
+	start, end := strings.Index(text, "func P19ProductionCatalog()"), strings.Index(text, "func CurrentProductionCatalog()")
+	if start < 0 || end <= start || strings.Count(text[start:end], "0050_dispatch.sql") != 2 || strings.Contains(text[start:end], "0060_event.sql") {
+		return errors.New("P19 catalog snapshot is not exactly complete through 0050")
 	}
-	if strings.Count(text[end:], "0050_dispatch.sql") != 2 || !strings.Contains(text[end:], `closure.ReportPhase = "P19"`) {
-		return errors.New("P19 production catalog is not exactly complete through 0050")
+	if strings.Count(text[end:], "0060_event.sql") != 2 || !strings.Contains(text[end:], `closure.ReportPhase = "P20"`) {
+		return errors.New("P20 production catalog is not exactly complete through 0060")
 	}
 	return nil
 }
@@ -983,11 +1008,11 @@ func runTests(root, scratch, dsn string) commandResult {
 	}
 	environment := map[string]string{
 		"GOWORK": work, "GOENV": "off", "GOFLAGS": "-mod=readonly", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "TMPDIR": realScratch,
-		"AROP_P19_SCRATCH": realScratch, "AROP_P19_MIGRATION_ROOT": filepath.Join(root, "reference/control-plane/migrations"), "AROP_P19_POSTGRES_URL": dsn,
+		"AROP_P20_SCRATCH": realScratch, "AROP_P20_MIGRATION_ROOT": filepath.Join(root, "reference/control-plane/migrations"), "AROP_P20_POSTGRES_URL": dsn,
 		"AROP_TEST_POSTGRES_DSN": dsn,
 	}
 	return run(filepath.Join(root, "reference/control-plane"), environment, "go", "test", "-count=1", "-race", "-json",
-		"./cmd/aropd", "./internal/app/platform/httpadapter", "./internal/domain/dispatch", "./internal/domain/dispatch/storage/internalstore", "./internal/domain/dispatch/testdata/acceptance", "./internal/domain/dispatch/testdata/harness", "./internal/storage/migrate")
+		"./cmd/aropd", "./internal/app/platform/httpadapter", "./internal/domain/event", "./internal/domain/event/storage/internalstore", "./internal/domain/event/testdata/acceptance", "./internal/domain/event/testdata/harness", "./internal/storage/migrate")
 }
 
 func rejectIncompleteTests(output []byte) error {
@@ -1024,7 +1049,7 @@ func startPostgres(scratch string) (*cluster, []byte, error) {
 		return nil, evidence.Bytes(), err
 	}
 	pgEnv := map[string]string{"PGPASSFILE": emptyPass}
-	if result := run(scratch, pgEnv, tools["initdb"], "-D", data, "--no-locale", "--encoding=UTF8", "--auth-local=trust", "--auth-host=reject", "--username=arop_p19", "--no-instructions"); result.err != nil {
+	if result := run(scratch, pgEnv, tools["initdb"], "-D", data, "--no-locale", "--encoding=UTF8", "--auth-local=trust", "--auth-host=reject", "--username=arop_p20", "--no-instructions"); result.err != nil {
 		return nil, evidence.Bytes(), errors.New("initdb failed")
 	}
 	instance := &cluster{socket: socket}
@@ -1037,7 +1062,7 @@ func startPostgres(scratch string) (*cluster, []byte, error) {
 	}
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
-		if run(scratch, pgEnv, tools["pg_isready"], "-h", socket, "-p", "5432", "-U", "arop_p19", "-d", "postgres", "-q").err == nil {
+		if run(scratch, pgEnv, tools["pg_isready"], "-h", socket, "-p", "5432", "-U", "arop_p20", "-d", "postgres", "-q").err == nil {
 			return instance, evidence.Bytes(), nil
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -1047,7 +1072,7 @@ func startPostgres(scratch string) (*cluster, []byte, error) {
 }
 
 func (instance *cluster) dsn() string {
-	return "postgresql://arop_p19@localhost/postgres?host=" + url.QueryEscape(instance.socket) + "&port=5432&sslmode=disable"
+	return "postgresql://arop_p20@localhost/postgres?host=" + url.QueryEscape(instance.socket) + "&port=5432&sslmode=disable"
 }
 
 func (instance *cluster) stop() error {

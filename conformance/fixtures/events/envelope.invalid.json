@@ -1,0 +1,1 @@
+{"specversion":"1.0","id":"evt_bad","source":"file:///secret","type":"com.example.agent.output.delta.v1","subject":"runs/wrong","time":"not-time","datacontenttype":"application/json","dataschema":"https://evil.invalid/schema.json","runid":"run_bad","attemptid":"att_bad","producersequence":9007199254740992,"traceparent":"secret","data":{}}

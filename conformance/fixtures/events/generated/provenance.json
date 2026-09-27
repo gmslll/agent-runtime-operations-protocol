@@ -1,0 +1,436 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "command": {
+    "entry": "scripts/generate.mjs",
+    "config": "conformance/fixtures/events/pipeline.json",
+    "output": "<output>",
+    "result": "<output>/provenance.json"
+  },
+  "generator": {
+    "path": "scripts/generate.mjs",
+    "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+    "files": [
+      {
+        "path": "scripts/generate.mjs",
+        "sha256": "93163e659c217aeff4d1930fb0ebefc1b786a7faeb39df3776e327391874ae2c",
+        "bytes": 142421,
+        "mode": "100644"
+      },
+      {
+        "path": "scripts/lib/repository.mjs",
+        "sha256": "4d87c901bbfeee969214d8620154acefb6b76d9a8084fa858db1917c726b2733",
+        "bytes": 44748,
+        "mode": "100644"
+      },
+      {
+        "path": "package.json",
+        "sha256": "a0480da8a20f9ba2c1355d58723295d22ca3a06235e3763aaf67742edc4e2661",
+        "bytes": 574,
+        "mode": "100644"
+      },
+      {
+        "path": "package-lock.json",
+        "sha256": "982e444493976055a5d34793bcdbc50751ec6f9d60148562a037f19a8d036b37",
+        "bytes": 5565,
+        "mode": "100644"
+      }
+    ]
+  },
+  "configuration": {
+    "path": "conformance/fixtures/events/pipeline.json",
+    "sha256": "0d8b8b8d8de758dcdec90ad6f66b605453aff4ab601965825e9d237c31307fef",
+    "bytes": 5562,
+    "mode": "100644"
+  },
+  "resources": [
+    {
+      "path": "schemas/common/identifiers.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/identifiers.schema.json",
+      "sha256": "87503f773550083f8cb7f0213b6fd336bc21bf5c54575af49a21f447de209269",
+      "bytes": 2818,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/common/trace.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/trace.schema.json",
+      "sha256": "9de00b47d1d56071c449111062f1f0cc2b29090a5720c3df90a29d04c3db5053",
+      "bytes": 744,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/common/error.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/error.schema.json",
+      "sha256": "26f53fa585547b4ed3d601b6d1773cc410d6ac8f78136df26e4fb98c2d5b7890",
+      "bytes": 1100,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/common/content-part.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/common/content-part.schema.json",
+      "sha256": "d90e09b9c933cc8024ed3016d067a3f79a861548dd9e20c682b77ad13d120fee",
+      "bytes": 1189,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/resources/asset-ref-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json",
+      "sha256": "3fcd98064f555252a27d80af1bf951619dff2ae3c68680d6fd6215e83ca18433",
+      "bytes": 1243,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/resources/data-ref-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/resources/data-ref-v1.schema.json",
+      "sha256": "85b13a3b8fd4a1d4c74cb4d437fe3eea61aac30ba8934a175aece768d525948f",
+      "bytes": 916,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/runtime/result-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/runtime/result-v1.schema.json",
+      "sha256": "32ebf8f8fddf2f78fd9fdb83fcfa34869859dcaeae0fe35925fecf832845bdb2",
+      "bytes": 2629,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/events/event-envelope-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/events/event-envelope-v1.schema.json",
+      "sha256": "1ef77e4a56d86a5d7ca16a520d5cb462736ab47becdd11f9198a0756f96dc2ca",
+      "bytes": 1749,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/events/lifecycle-events-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/events/lifecycle-events-v1.schema.json",
+      "sha256": "3643ef273067fa7d6d2655f902a8e9ae79b84193e437b2ad1e87e8f9f2b70017",
+      "bytes": 2380,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/events/output-events-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/events/output-events-v1.schema.json",
+      "sha256": "a1258e5d0b8707f313e8c97e79289364ec5610d340d881f896e1edf0eebf6138",
+      "bytes": 1462,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/events/progress-events-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/events/progress-events-v1.schema.json",
+      "sha256": "ed4e5058fd543a87f9df9082f677fd015b7ce409a6f9e459add4761c2bcb790d",
+      "bytes": 541,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/events/usage-events-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/events/usage-events-v1.schema.json",
+      "sha256": "4e3ec0e061dc2ca5e2c00a08a6729a92df0d072490d758a7cab80a795c9cfe51",
+      "bytes": 648,
+      "mode": "100644"
+    },
+    {
+      "path": "schemas/events/event-session-v1.schema.json",
+      "uri": "https://arop.invalid/schemas/v1/events/event-session-v1.schema.json",
+      "sha256": "aae2792c71958ac19c77ac4032d0e1bdd753b6c5971dbb45c6a98c7cda64a1a1",
+      "bytes": 2782,
+      "mode": "100644"
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "envelope",
+      "class": "valid",
+      "root": "EventEnvelope",
+      "path": "conformance/fixtures/events/envelope.valid.json",
+      "sha256": "10131c7c4bbbbccaef46562b660bfd9a918f6c032c27b91d4d08012d9b5e572c",
+      "bytes": 647,
+      "mode": "100644"
+    },
+    {
+      "id": "lifecycle",
+      "class": "valid",
+      "root": "LifecycleTerminalData",
+      "path": "conformance/fixtures/events/lifecycle.valid.json",
+      "sha256": "d538c0479d21511c6117bb4db0a8200057fd8eb757a1f0568eada320fed0ff27",
+      "bytes": 295,
+      "mode": "100644"
+    },
+    {
+      "id": "output",
+      "class": "valid",
+      "root": "OutputDeltaData",
+      "path": "conformance/fixtures/events/output.valid.json",
+      "sha256": "bb09638172d86fe9167d25c75f793d944dc88b8c276e84b577e1ce613f1f9fee",
+      "bytes": 51,
+      "mode": "100644"
+    },
+    {
+      "id": "progress",
+      "class": "valid",
+      "root": "ProgressEventData",
+      "path": "conformance/fixtures/events/progress.valid.json",
+      "sha256": "f2d1c001dc2dad66b0fa5687fec0743ed3993fe3078882f4739713303980d959",
+      "bytes": 74,
+      "mode": "100644"
+    },
+    {
+      "id": "usage",
+      "class": "valid",
+      "root": "UsageEventData",
+      "path": "conformance/fixtures/events/usage.valid.json",
+      "sha256": "116f0e27ca85e8b744638a1534f09473015c03d2375015cd7fe2eaa2abd811db",
+      "bytes": 74,
+      "mode": "100644"
+    },
+    {
+      "id": "session",
+      "class": "valid",
+      "root": "EventSession",
+      "path": "conformance/fixtures/events/session.valid.json",
+      "sha256": "2b75ec9efdb08694343d347ec404c1f3178b5848bc81a8742c92ce3c2625b28f",
+      "bytes": 273,
+      "mode": "100644"
+    },
+    {
+      "id": "envelope-future",
+      "class": "forward",
+      "root": "EventEnvelope",
+      "path": "conformance/fixtures/events/envelope.forward.json",
+      "sha256": "984bdf3e2cad6428fc847f8c7fed6ab74c1c77e82b64a88c04486b0693d5bcb7",
+      "bytes": 619,
+      "mode": "100644"
+    },
+    {
+      "id": "lifecycle-future",
+      "class": "forward",
+      "root": "LifecycleStateData",
+      "path": "conformance/fixtures/events/lifecycle.forward.json",
+      "sha256": "f2d352e80898aaee0f6896c208b0fb3cf7a1685db8d2cad0e0999b9f64455807",
+      "bytes": 40,
+      "mode": "100644"
+    },
+    {
+      "id": "output-future",
+      "class": "forward",
+      "root": "OutputStateData",
+      "path": "conformance/fixtures/events/output.forward.json",
+      "sha256": "e1d7ed8c185530f8f807f57c53bbf2759d90c0b67d6bed3c1866eb2c432d0313",
+      "bytes": 61,
+      "mode": "100644"
+    },
+    {
+      "id": "progress-future",
+      "class": "forward",
+      "root": "ProgressEventData",
+      "path": "conformance/fixtures/events/progress.forward.json",
+      "sha256": "1275c8b67b615bb4aaf49603add8607477d1e17361e9424b39562b195656504e",
+      "bytes": 36,
+      "mode": "100644"
+    },
+    {
+      "id": "usage-future",
+      "class": "forward",
+      "root": "UsageEventData",
+      "path": "conformance/fixtures/events/usage.forward.json",
+      "sha256": "64030d835a48ddca24ee3291bb312c69395bc91b449a876461fa38fd5666c3d0",
+      "bytes": 75,
+      "mode": "100644"
+    },
+    {
+      "id": "session-future",
+      "class": "forward",
+      "root": "EventSessionRequest",
+      "path": "conformance/fixtures/events/session.forward.json",
+      "sha256": "d9e694179263996f133fccb89042b51dc037e863d2ea43b08fc507ded627b3a2",
+      "bytes": 171,
+      "mode": "100644"
+    },
+    {
+      "id": "envelope-invalid",
+      "class": "invalid",
+      "root": "EventEnvelope",
+      "path": "conformance/fixtures/events/envelope.invalid.json",
+      "sha256": "aaaa72b73f6c3365e02fc5cd4889509daa08aac7778e6732aa258db34a8abd5d",
+      "bytes": 341,
+      "mode": "100644"
+    },
+    {
+      "id": "lifecycle-missing-final",
+      "class": "invalid",
+      "root": "LifecycleTerminalData",
+      "path": "conformance/fixtures/events/lifecycle.invalid.json",
+      "sha256": "abbbfa1de729aa455d641f3ad80e9f5caea0c84e6f7fff0f4748e8bdfedc9f5a",
+      "bytes": 121,
+      "mode": "100644"
+    },
+    {
+      "id": "output-negative-offset",
+      "class": "invalid",
+      "root": "OutputDeltaData",
+      "path": "conformance/fixtures/events/output.invalid.json",
+      "sha256": "7b5673153b8a9f1378bf2213fedb1e8d0cf7a5fbc03d6d927089acfa6f56fcf6",
+      "bytes": 49,
+      "mode": "100644"
+    },
+    {
+      "id": "progress-out-of-range",
+      "class": "invalid",
+      "root": "ProgressEventData",
+      "path": "conformance/fixtures/events/progress.invalid.json",
+      "sha256": "f8afc6b6dd40b50c2e59191f111e2a70d19c814178027906f5f2bf6723e70b8e",
+      "bytes": 17,
+      "mode": "100644"
+    },
+    {
+      "id": "usage-unsafe",
+      "class": "invalid",
+      "root": "UsageEventData",
+      "path": "conformance/fixtures/events/usage.invalid.json",
+      "sha256": "39cdc6be0703879831fdeb6f3f546e94a9d194476d74bd384c3b2d4b339d6d2b",
+      "bytes": 68,
+      "mode": "100644"
+    },
+    {
+      "id": "session-invalid",
+      "class": "invalid",
+      "root": "EventSession",
+      "path": "conformance/fixtures/events/session.invalid.json",
+      "sha256": "7edcd57e36a76416df2133116df343c320d07b5aec6044507ed205bb175e8428",
+      "bytes": 149,
+      "mode": "100644"
+    }
+  ],
+  "inputs_sha256": "03f3e3c2a8d10d5500885ea0449c25c9e85590fc2b72308d9b7646d264d5de8a",
+  "outputs": [
+    {
+      "language": "go",
+      "path": "sdk/go/generated/event/event.gen.go",
+      "sha256": "d25843d5135f88c14d01eb2a9fd7293bd9186e43d67d0d0a38fa5c9d61a1ce3a",
+      "bytes": 103874,
+      "mode": "100644"
+    },
+    {
+      "language": "python",
+      "path": "sdk/python/src/arop/generated/event/event_gen.py",
+      "sha256": "fd1bb225d76f8f9744345d8594a0ed6bbc7c69b000697ef40efa11911de837f6",
+      "bytes": 48664,
+      "mode": "100644"
+    },
+    {
+      "language": "typescript",
+      "path": "sdk/typescript/src/generated/event/event.gen.ts",
+      "sha256": "a09dead924d06a18c806dd1bfc3f1103a2a9f737b4d579deb6ea0eb47aad8f81",
+      "bytes": 44948,
+      "mode": "100644"
+    }
+  ],
+  "outputs_sha256": "e982c6c0755b780fa900ec77b220e8db3c271f566c1974e6c3c1b449e780a611",
+  "checks": [
+    {
+      "id": "schema-valid-envelope",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-lifecycle",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-output",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-progress",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-usage",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-valid-session",
+      "passed": true,
+      "detail": "accepted"
+    },
+    {
+      "id": "schema-forward-envelope-future",
+      "passed": true,
+      "detail": "data must NOT have additional properties"
+    },
+    {
+      "id": "schema-forward-lifecycle-future",
+      "passed": true,
+      "detail": "data must NOT have additional properties"
+    },
+    {
+      "id": "schema-forward-output-future",
+      "passed": true,
+      "detail": "data must NOT have additional properties"
+    },
+    {
+      "id": "schema-forward-progress-future",
+      "passed": true,
+      "detail": "data must NOT have additional properties"
+    },
+    {
+      "id": "schema-forward-usage-future",
+      "passed": true,
+      "detail": "data must NOT have additional properties"
+    },
+    {
+      "id": "schema-forward-session-future",
+      "passed": true,
+      "detail": "data must NOT have additional properties"
+    },
+    {
+      "id": "schema-invalid-envelope-invalid",
+      "passed": true,
+      "detail": "unsafe JSON number at /producersequence"
+    },
+    {
+      "id": "schema-invalid-lifecycle-missing-final",
+      "passed": true,
+      "detail": "data must have required property 'snapshot', data must have required property 'result_ref', data must match exactly one schema in oneOf, data must match \"then\" schema"
+    },
+    {
+      "id": "schema-invalid-output-negative-offset",
+      "passed": true,
+      "detail": "data/offset must be >= 0"
+    },
+    {
+      "id": "schema-invalid-progress-out-of-range",
+      "passed": true,
+      "detail": "data/progress must be <= 100"
+    },
+    {
+      "id": "schema-invalid-usage-unsafe",
+      "passed": true,
+      "detail": "unsafe JSON number at /input_tokens"
+    },
+    {
+      "id": "schema-invalid-session-invalid",
+      "passed": true,
+      "detail": "data/event_batch_url must match pattern \"^https://[^?#]+/v1/agent-runs/run_[0-9a-f-]+/events:batch$\", data/event_token must match pattern \"^evtcap_[A-Za-z0-9_-]{43,171}$\", data/expires_at must match format \"date-time\", data/max_batch_events must be equal to constant, data/max_batch_bytes must be equal to constant"
+    },
+    {
+      "id": "offline-resource-closure",
+      "passed": true,
+      "detail": "13 explicit resources"
+    },
+    {
+      "id": "mapping-profile",
+      "passed": true,
+      "detail": "35 named types"
+    },
+    {
+      "id": "deterministic-output-set",
+      "passed": true,
+      "detail": "3 outputs"
+    }
+  ]
+}
