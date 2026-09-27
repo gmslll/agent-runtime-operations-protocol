@@ -259,6 +259,14 @@ func discoverTransition(root string) (discovered, error) {
 			}
 		}
 		if len(matches) == 0 {
+			if source == "Makefile" {
+				contents, readErr := os.ReadFile(filepath.Join(root, source))
+				if readErr != nil || !bytes.Contains(contents, []byte("test-worker-service:")) || !bytes.Contains(contents, []byte(checker)) {
+					return discovered{}, errors.New("Makefile does not bind the exact P24 checker")
+				}
+				acceptance[command] = true
+				continue
+			}
 			return discovered{}, fmt.Errorf("changed source has no concrete manifest owner: %s", source)
 		}
 		for _, artifact := range matches {
