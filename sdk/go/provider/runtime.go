@@ -354,7 +354,11 @@ func (runtime *Runtime) start(record InboxRecord) {
 		runtime.cancelM.Unlock()
 		return
 	}
-	ctx, cancel := context.WithDeadline(context.Background(), record.DeadlineAt)
+	// Derive the execution budget from the injected clock. Using
+	// context.WithDeadline directly would silently mix the injected policy
+	// clock with the process wall clock, which can turn a valid durable attempt
+	// into an immediate timeout during deterministic recovery and testing.
+	ctx, cancel := context.WithTimeout(context.Background(), record.DeadlineAt.Sub(runtime.now()))
 	runtime.cancels[key] = cancel
 	runtime.cancelM.Unlock()
 	go func() {

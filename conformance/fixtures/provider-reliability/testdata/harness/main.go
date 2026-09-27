@@ -104,6 +104,16 @@ func main() {
 	contractEvidence, err := validateContracts(root)
 	add("p21-runtime-and-store-contracts", err, "Agent Runtime OpenAPI and durable store contract are strict and contain no SSE")
 
+	for _, prerequisite := range []struct {
+		name, target, success string
+	}{
+		{"p21-p01-prerequisite", "spec-index-check", "P01 report refreshed on the current head"},
+		{"p21-p02-prerequisite", "blueprint-check", "P02 report refreshed on the current head"},
+	} {
+		result := run(root, nil, "make", prerequisite.target)
+		add(prerequisite.name, result.err, prerequisite.success)
+	}
+
 	rootTests := run(root, nil, "go", "test", "-race", "-count=1", "./sdk/go/provider", "./sdk/go/consumer", "./reference/agents/go-http/...")
 	add("p21-root-provider-consumer-reference-tests", rootTests.err, "Provider, Consumer and reference Agent tests pass under race detection")
 	add("p21-root-test-terminals", rejectIncompleteTests(rootTests.output), "root test stream has no skip, cache or no-tests terminal")
@@ -249,7 +259,7 @@ func validateContracts(root string) ([]byte, error) {
 		combined = append(combined, 0)
 	}
 	openapi := string(combined)
-	for _, required := range []string{"/v1/runs:", "/v1/runs/{run_id}:", "/v1/runs/{run_id}/commands:", "RunBearer", "202", "DurableStore", "Inbox", "Outbox", "effect_id"} {
+	for _, required := range []string{"/v1/runs:", "/v1/runs/{run_id}:", "/v1/runs/{run_id}/commands:", "RunBearer", "202", "contract: arop-provider-durable-store-v1", "method: Within", "inbox:", "outbox:", "effect_id"} {
 		if !strings.Contains(openapi, required) {
 			return nil, fmt.Errorf("P21 contracts omit %q", required)
 		}
