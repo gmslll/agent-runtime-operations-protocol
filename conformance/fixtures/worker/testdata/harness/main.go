@@ -96,11 +96,13 @@ func main() {
 	add("p24-manifest-inventory", validateManifest(root), "exact ten owned artifacts, report dependencies and empty runtime inputs")
 	discovered, discoverErr := discoverTransition(root)
 	add("p24-transition-discovery", discoverErr, "Git and manifest independently discover the complete source, artifact and acceptance closure")
-	transitionErr := validateTransition(root, discovered)
 	if os.Getenv("AROP_PRINT_P24_TRANSITION") == "1" {
-		fatal(transitionErr)
+		encoded, marshalErr := json.MarshalIndent(discovered, "", "  ")
+		fatal(errors.Join(discoverErr, marshalErr))
+		fmt.Println(string(encoded))
 		return
 	}
+	transitionErr := validateTransition(root, discovered)
 	add("p24-transition-waiver", transitionErr, "validated waiver exactly equals independently discovered closure")
 	add("p24-carrier-first", validateCarrier(root), "P24 carrier is the first tree change after the tree-identical P23 endpoint")
 	add("p24-openapi", validateOpenAPI(root), "Worker OpenAPI binds claim, renew, release and complete routes with exact scopes and errors")
