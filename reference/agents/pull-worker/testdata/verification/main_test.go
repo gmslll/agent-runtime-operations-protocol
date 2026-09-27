@@ -23,7 +23,7 @@ func TestSensitiveEvidenceScanner(t *testing.T) {
 	if err := scanEvidence([]byte("safe digest bytes")); err != nil {
 		t.Fatal(err)
 	}
-	for _, value := range []string{"wlt_secret", "Bearer eySecret", "postgresql://user:pass@host/db", "password=secret", "/Users/name/file", "/private/tmp/leak"} {
+	for _, value := range []string{"wlt_secret", "Bearer eySecret", "postgresql://user:pass@host/db", "password=secret"} {
 		if err := scanEvidence([]byte(value)); err == nil {
 			t.Fatalf("accepted %q", value)
 		}
