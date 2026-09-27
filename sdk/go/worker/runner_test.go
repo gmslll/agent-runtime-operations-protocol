@@ -235,6 +235,18 @@ func TestEffectIDStableAcrossAttempts(t *testing.T) {
 	}
 }
 
+func TestNewRunnerRejectsInvalidWireConfiguration(t *testing.T) {
+	handler := HandlerFunc(func(context.Context, Task) (Outcome, error) { return Outcome{}, nil })
+	_, err := NewRunner(RunnerConfig{API: &fakePullAPI{}, Handler: handler, WorkerID: "worker-a", SessionID: "not-a-session", Generation: 1, SupportedBindings: []workerwire.AgentBinding{claimBinding()}, LeaseSeconds: 15})
+	if err == nil {
+		t.Fatal("invalid session accepted")
+	}
+	_, err = NewRunner(RunnerConfig{API: &fakePullAPI{}, Handler: handler, WorkerID: "worker-a", SessionID: "ses_018f0c00-0000-7000-8000-000000000002", Generation: 1, SupportedBindings: []workerwire.AgentBinding{{}}, LeaseSeconds: 15})
+	if err == nil {
+		t.Fatal("invalid binding accepted")
+	}
+}
+
 func testClaim(t *testing.T, index int) workerwire.WorkerClaim {
 	data, err := os.ReadFile("../../../conformance/fixtures/worker/claim.valid.json")
 	if err != nil {

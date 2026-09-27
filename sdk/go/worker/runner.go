@@ -118,6 +118,18 @@ func NewRunner(config RunnerConfig) (*Runner, error) {
 	if config.CompletionSource == nil {
 		config.CompletionSource = SecureCompletionSource{Clock: config.Clock}
 	}
+	leaseSeconds := workerwire.SafeInteger(config.LeaseSeconds)
+	if _, err := workerwire.EncodeWorkerClaimRequest(workerwire.WorkerClaimRequest{
+		SchemaVersion:     1,
+		SessionID:         workerwire.SessionId(config.SessionID),
+		Generation:        workerwire.PositiveSafeInteger(config.Generation),
+		AvailableSlots:    workerwire.PositiveSafeInteger(config.Concurrency),
+		SupportedBindings: append([]workerwire.AgentBinding(nil), config.SupportedBindings...),
+		WaitSeconds:       workerwire.SafeInteger(config.WaitSeconds),
+		LeaseSeconds:      &leaseSeconds,
+	}); err != nil {
+		return nil, errors.New("invalid worker claim configuration")
+	}
 	return &Runner{config: config, drain: make(chan struct{}), active: map[string]context.CancelFunc{}}, nil
 }
 

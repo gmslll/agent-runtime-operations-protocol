@@ -45,13 +45,23 @@ type EventMetadata struct {
 }
 
 func NewEventHelper(claim workerwire.WorkerClaim, clock func() time.Time) (*EventHelper, error) {
+	return NewEventHelperAt(claim, 0, clock)
+}
+
+// NewEventHelperAt resumes after the caller's durably recorded last producer
+// sequence. The SDK owns no persistence, so crash-safe callers must supply the
+// committed sequence instead of silently restarting at one.
+func NewEventHelperAt(claim workerwire.WorkerClaim, lastProducerSequence uint64, clock func() time.Time) (*EventHelper, error) {
 	if string(claim.RunID) == "" || string(claim.AttemptID) == "" || uint64(claim.FencingToken) == 0 {
 		return nil, errors.New("invalid event claim")
+	}
+	if lastProducerSequence > 9007199254740991 {
+		return nil, errors.New("invalid event producer sequence")
 	}
 	if clock == nil {
 		clock = func() time.Time { return time.Now().UTC() }
 	}
-	return &EventHelper{claim: claim, clock: clock}, nil
+	return &EventHelper{claim: claim, clock: clock, sequence: lastProducerSequence}, nil
 }
 
 func (helper *EventHelper) Next() (EventMetadata, error) {

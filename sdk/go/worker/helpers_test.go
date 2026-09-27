@@ -56,3 +56,17 @@ func TestSecureIdentifiersAreUUIDv7(t *testing.T) {
 		t.Fatalf("completion=%q key=%q err=%v", completion, key, err)
 	}
 }
+
+func TestEventHelperResumesDurableProducerSequence(t *testing.T) {
+	helper, err := NewEventHelperAt(testClaim(t, 1), 41, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata, err := helper.Next()
+	if err != nil || metadata.ProducerSequence != 42 {
+		t.Fatalf("metadata=%#v err=%v", metadata, err)
+	}
+	if _, err := NewEventHelperAt(testClaim(t, 1), 9007199254740992, nil); err == nil {
+		t.Fatal("unsafe producer sequence accepted")
+	}
+}
