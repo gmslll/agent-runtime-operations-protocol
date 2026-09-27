@@ -1,10 +1,43 @@
 {
   "schema_version": 1,
   "transition_id": "P25-BASELINE-TRANSITION-001",
-  "status": "draft",
+  "status": "validated",
   "baseline_commit": "7f968a6909cadd33e82f9f9389f23e4a998c3c15",
-  "affected_artifacts": [],
-  "source_closure": [],
-  "acceptance_closure": [],
-  "constraints": []
+  "carrier_commit": "13147594ab2258b4bf57553abe03f7543b4b7c51",
+  "affected_artifacts": [
+    "go-worker-sdk",
+    "reference-worker",
+    "worker-fixtures"
+  ],
+  "source_closure": [
+    "Makefile",
+    "conformance/fixtures/worker/testdata/harness/main.go",
+    "reference/agents/pull-worker/cmd/arop-pull-worker/main.go",
+    "reference/agents/pull-worker/cmd/arop-pull-worker/main_test.go",
+    "reference/agents/pull-worker/credential.go",
+    "reference/agents/pull-worker/credential_test.go",
+    "reference/agents/pull-worker/handler.go",
+    "reference/agents/pull-worker/handler_test.go",
+    "reference/agents/pull-worker/testdata/harness/main.go",
+    "reference/agents/pull-worker/testdata/harness/main_test.go",
+    "reference/agents/pull-worker/testdata/transition/p25-baseline-transition-waiver.json",
+    "sdk/go/worker/client.go",
+    "sdk/go/worker/client_test.go",
+    "sdk/go/worker/helpers.go",
+    "sdk/go/worker/helpers_test.go",
+    "sdk/go/worker/runner.go",
+    "sdk/go/worker/runner_test.go"
+  ],
+  "acceptance_closure": [
+    "make test-go-worker-sdk",
+    "make test-worker-service"
+  ],
+  "constraints": [
+    "at-least-once-completion-reuses-stable-idempotency",
+    "drain-stops-new-claims-before-waiting",
+    "effect-id-is-stable-across-attempts",
+    "no-new-persistence",
+    "public-sdk-does-not-import-reference-internal",
+    "runtime-inputs-remain-empty"
+  ]
 }
