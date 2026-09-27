@@ -295,6 +295,7 @@ func validateTestTerminals(output []byte) error {
 		"TestClientCancellationAndConfiguration":        false,
 		"TestRunnerRetriesIdenticalCompletionAndRenews": false,
 		"TestRunnerBackpressureAndDrainCancellation":    false,
+		"TestRunnerDrainCancelsBlockingClaim":           false,
 		"TestEffectIDStableAcrossAttempts":              false,
 		"TestEventHelperConcurrentSequenceAndFencing":   false,
 		"TestSecureIdentifiersAreUUIDv7":                false,

@@ -84,11 +84,9 @@ func run(arguments []string) error {
 	drainErr := runner.Drain(drainContext)
 	if drainErr != nil {
 		cancelRun()
-	}
-	workerErr := <-runErr
-	if drainErr != nil {
 		return errors.New("worker drain deadline exceeded")
 	}
+	workerErr := <-runErr
 	if workerErr != nil && !errors.Is(workerErr, context.Canceled) {
 		return workerErr
 	}

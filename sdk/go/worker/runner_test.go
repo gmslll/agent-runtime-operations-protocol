@@ -180,6 +180,47 @@ func TestRunnerBackpressureAndDrainCancellation(t *testing.T) {
 	}
 }
 
+type blockingClaimAPI struct{ entered chan struct{} }
+
+func (api blockingClaimAPI) Claim(ctx context.Context, _ string, _ workerwire.WorkerClaimRequest) (workerwire.WorkerClaim, bool, error) {
+	close(api.entered)
+	<-ctx.Done()
+	return workerwire.WorkerClaim{}, false, ctx.Err()
+}
+func (blockingClaimAPI) Renew(context.Context, string, string, workerwire.WorkerRenewRequest) (workerwire.WorkerClaim, error) {
+	return workerwire.WorkerClaim{}, errors.New("unexpected renew")
+}
+func (blockingClaimAPI) Complete(context.Context, string, string, string, workerwire.WorkerComplete) error {
+	return errors.New("unexpected complete")
+}
+func (blockingClaimAPI) Release(context.Context, string, string, workerwire.WorkerReleaseRequest) error {
+	return errors.New("unexpected release")
+}
+
+func TestRunnerDrainCancelsBlockingClaim(t *testing.T) {
+	api := blockingClaimAPI{entered: make(chan struct{})}
+	runner, err := NewRunner(RunnerConfig{API: api, Handler: HandlerFunc(func(context.Context, Task) (Outcome, error) { return Outcome{}, errors.New("unexpected handler") }), WorkerID: "worker-a", SessionID: "ses_018f0c00-0000-7000-8000-000000000002", Generation: 7, SupportedBindings: []workerwire.AgentBinding{claimBinding()}, LeaseSeconds: 15})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runErr := make(chan error, 1)
+	go func() { runErr <- runner.Run(context.Background()) }()
+	<-api.entered
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := runner.Drain(ctx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-runErr:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("blocking claim was not cancelled by drain")
+	}
+}
+
 func TestEffectIDStableAcrossAttempts(t *testing.T) {
 	first, err := EffectID("run_018f0c00-0000-7000-8000-000000000003", "send-email")
 	if err != nil {

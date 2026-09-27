@@ -76,8 +76,9 @@ type Runner struct {
 	activeMu  sync.Mutex
 	active    map[string]context.CancelFunc
 	activeWG  sync.WaitGroup
+	claimMu   sync.Mutex
+	claimStop context.CancelFunc
 	runOnce   sync.Once
-	stopped   chan struct{}
 }
 
 func NewRunner(config RunnerConfig) (*Runner, error) {
@@ -117,7 +118,7 @@ func NewRunner(config RunnerConfig) (*Runner, error) {
 	if config.CompletionSource == nil {
 		config.CompletionSource = SecureCompletionSource{Clock: config.Clock}
 	}
-	return &Runner{config: config, drain: make(chan struct{}), active: map[string]context.CancelFunc{}, stopped: make(chan struct{})}, nil
+	return &Runner{config: config, drain: make(chan struct{}), active: map[string]context.CancelFunc{}}, nil
 }
 
 func (runner *Runner) Run(ctx context.Context) error {
@@ -126,7 +127,6 @@ func (runner *Runner) Run(ctx context.Context) error {
 	if !started {
 		return errors.New("worker runner already started")
 	}
-	defer close(runner.stopped)
 	backoff := runner.config.BackoffMinimum
 	for {
 		if runner.draining.Load() {
@@ -147,7 +147,16 @@ func (runner *Runner) Run(ctx context.Context) error {
 			continue
 		}
 		leaseSeconds := workerwire.SafeInteger(runner.config.LeaseSeconds)
-		claim, found, err := runner.config.API.Claim(ctx, runner.config.WorkerID, workerwire.WorkerClaimRequest{
+		claimContext, cancelClaim := context.WithCancel(ctx)
+		runner.claimMu.Lock()
+		if runner.draining.Load() {
+			runner.claimMu.Unlock()
+			cancelClaim()
+			continue
+		}
+		runner.claimStop = cancelClaim
+		runner.claimMu.Unlock()
+		claim, found, err := runner.config.API.Claim(claimContext, runner.config.WorkerID, workerwire.WorkerClaimRequest{
 			SchemaVersion:     1,
 			SessionID:         workerwire.SessionId(runner.config.SessionID),
 			Generation:        workerwire.PositiveSafeInteger(runner.config.Generation),
@@ -156,6 +165,13 @@ func (runner *Runner) Run(ctx context.Context) error {
 			WaitSeconds:       workerwire.SafeInteger(runner.config.WaitSeconds),
 			LeaseSeconds:      &leaseSeconds,
 		})
+		runner.claimMu.Lock()
+		runner.claimStop = nil
+		runner.claimMu.Unlock()
+		cancelClaim()
+		if runner.draining.Load() {
+			continue
+		}
 		if err != nil {
 			if waitErr := runner.pause(ctx, backoffFor(err, backoff, runner.config.BackoffMaximum)); waitErr != nil {
 				continue
@@ -197,6 +213,11 @@ func (runner *Runner) beginDrain() {
 	runner.drainOnce.Do(func() {
 		runner.draining.Store(true)
 		close(runner.drain)
+		runner.claimMu.Lock()
+		if runner.claimStop != nil {
+			runner.claimStop()
+		}
+		runner.claimMu.Unlock()
 	})
 }
 
@@ -249,9 +270,11 @@ func (runner *Runner) handle(parent context.Context, claim workerwire.WorkerClai
 		defer close(renewStopped)
 		runner.renew(renewContext, cancel, claim)
 	}()
+	defer func() {
+		stopRenew()
+		<-renewStopped
+	}()
 	outcome, handleErr := runner.config.Handler.Handle(ctx, Task{Claim: claim})
-	stopRenew()
-	<-renewStopped
 	if handleErr != nil || ctx.Err() != nil {
 		reason := "retryable_failure"
 		if runner.draining.Load() {
