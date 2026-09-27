@@ -30,6 +30,9 @@ const (
 	waiver   = "conformance/fixtures/worker/testdata/transition/p24-baseline-transition-waiver.json"
 	baseline = "5bada508fa5e7035abd1d33817b4de7abf3ee49d"
 	carrier  = "9486c398c440a82941eb1da8101ff9fdbcb2829b"
+	// P25's carrier parent is the immutable final P24 implementation endpoint.
+	// Historical P24 transition discovery must never absorb later phases.
+	successorCarrier = "13147594ab2258b4bf57553abe03f7543b4b7c51"
 )
 
 var requiredOwned = []string{
@@ -222,7 +225,7 @@ func discoverTransition(root string) (discovered, error) {
 	if err != nil {
 		return discovered{}, err
 	}
-	result := run(root, nil, "git", "diff", "--name-status", "--no-renames", "-z", baseline+"..HEAD", "--")
+	result := run(root, nil, "git", "diff", "--name-status", "--no-renames", "-z", baseline+".."+successorCarrier+"^", "--")
 	if result.err != nil {
 		return discovered{}, result.err
 	}
@@ -325,12 +328,13 @@ func mapKeys(values map[string]bool) []string {
 }
 
 func validateTransition(root string, want discovered) error {
-	data, err := os.ReadFile(filepath.Join(root, waiver))
-	if err != nil {
-		return err
+	archived := run(root, nil, "git", "show", successorCarrier+"^:"+waiver)
+	if archived.err != nil {
+		return archived.err
 	}
+	data := archived.output
 	var value transition
-	if err = strictJSON(data, &value); err != nil {
+	if err := strictJSON(data, &value); err != nil {
 		return err
 	}
 	return compareTransition(value, want)
@@ -349,6 +353,13 @@ func compareTransition(value transition, want discovered) error {
 func validateCarrier(root string) error {
 	if result := run(root, nil, "git", "merge-base", "--is-ancestor", carrier, "HEAD"); result.err != nil {
 		return errors.New("P24 carrier is not an ancestor of HEAD")
+	}
+	if result := run(root, nil, "git", "merge-base", "--is-ancestor", successorCarrier, "HEAD"); result.err != nil {
+		return errors.New("P25 carrier is not an ancestor of HEAD")
+	}
+	successorChange := run(root, nil, "git", "diff-tree", "--no-commit-id", "--name-only", "-r", successorCarrier)
+	if successorChange.err != nil || strings.TrimSpace(string(successorChange.output)) != "reference/agents/pull-worker/testdata/transition/p25-baseline-transition-waiver.json" {
+		return fmt.Errorf("P25 carrier does not freeze a single P24 endpoint: %s", successorChange.output)
 	}
 	parent := run(root, nil, "git", "rev-parse", carrier+"^")
 	if parent.err != nil || strings.TrimSpace(string(parent.output)) != baseline {
