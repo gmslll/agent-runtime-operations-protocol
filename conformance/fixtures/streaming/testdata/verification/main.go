@@ -46,7 +46,7 @@ func main() {
 	evidence := []report.RuntimeEvidence{{Kind: "p22-black-box-rerun", SHA256: report.Hash(run.output), Bytes: int64(len(run.output))}}
 	for _, phase := range phases {
 		path := "build/reports/" + phase + "/report.json"
-		verified, mode, verifyErr := report.Verify(report.VerifyOptions{Root: root, ReportPath: path})
+		verified, mode, verifyErr := report.Verify(report.VerifyOptions{Root: root, ReportPath: path, AllowAncestor: true})
 		if verifyErr == nil && (mode != "ancestor-archive-only" || !verified.Success) {
 			verifyErr = fmt.Errorf("mode=%s success=%v", mode, verified.Success)
 		}
@@ -98,7 +98,12 @@ func executeAtCarrier(root string) (out result) {
 	if err = os.Symlink(sharedModules, filepath.Join(temporary, "node_modules")); err != nil {
 		return result{err: err}
 	}
+	validation := execute(temporary, "make", "validate")
+	if validation.err != nil {
+		return validation
+	}
 	out = execute(temporary, "make", "test-streaming-resume")
+	out.output = append(validation.output, out.output...)
 	if out.err != nil {
 		return out
 	}
