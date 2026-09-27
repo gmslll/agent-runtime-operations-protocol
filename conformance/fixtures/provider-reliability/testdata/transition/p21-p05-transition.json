@@ -20,7 +20,8 @@
   ],
   "affected_artifacts": [
     "nested-control-plane-go-module",
-    "root-go-module"
+    "root-go-module",
+    "root-go-sum"
   ],
   "history": [
     {

@@ -1766,7 +1766,7 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 	}
 	p21Result := "8ec5bc8c1e714f94b2684f1e74a973f4be7dcc73"
 	p21, err := expectedTransition(root, "P21-P05-MODULE-TRANSITION-001", "P21", "be3f4e1e3a0b7ec0dc59774eec0813c8ed2cc993", p21Result,
-		[]string{"go.mod", "go.sum", nestedDirectory + "/go.mod", nestedDirectory + "/go.sum"}, []string{"f2b02ae0ed58597990037b7e192acb87ba6b38b6", "33aff568c13c001ab4fe64f77fa0c4295f820013", p21Result}, []string{"nested-control-plane-go-module", "root-go-module"}, &pinTransition{p20Pin, activePin},
+		[]string{"go.mod", "go.sum", nestedDirectory + "/go.mod", nestedDirectory + "/go.sum"}, []string{"f2b02ae0ed58597990037b7e192acb87ba6b38b6", "33aff568c13c001ab4fe64f77fa0c4295f820013", p21Result}, []string{"nested-control-plane-go-module", "root-go-module", "root-go-sum"}, &pinTransition{p20Pin, activePin},
 		"P21 repins the nested Control Plane to the clean committed root snapshot containing the accepted Provider and Consumer SDK surface consumed by proxy delivery composition.", "make test-direct-proxy-provider", "build/reports/P21/report.json")
 	if err != nil {
 		return replay, err
@@ -1787,7 +1787,7 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 	expectedCarrierArtifacts := []string{"arop-cli-publication-command", "provider-reliability-fixtures", "conformance-harness-base", "control-plane-platform-foundation", "asset-broker-service", "dispatcher-ticket-service", "event-ledger-service", "run-lifecycle-service", "migration-engine-fixture-versions"}
 	expectedAffectedOwners := []map[string]string{
 		{"nested-control-plane-go-module": "P05"},
-		{"nested-control-plane-go-module": "P05", "root-go-module": "P05"},
+		{"nested-control-plane-go-module": "P05", "root-go-module": "P05", "root-go-sum": "P05"},
 		{"root-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05", "reference-control-plane-server": "P08"},
 		{"nested-control-plane-go-module": "P05"},
