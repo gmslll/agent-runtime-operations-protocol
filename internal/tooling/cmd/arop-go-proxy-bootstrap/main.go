@@ -1793,6 +1793,7 @@ func verifyReplayTransitions(root string, bootstrap bootstrapCommit, goListOutpu
 		{"nested-control-plane-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05"},
+		{"nested-control-plane-go-module": "P05"},
 		{"nested-control-plane-go-module": "P05", "reference-control-plane-server": "P08"},
 	}
 	for index, path := range transitionPaths {
