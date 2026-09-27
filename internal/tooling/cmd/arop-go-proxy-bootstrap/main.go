@@ -50,9 +50,9 @@ const (
 	p05GoModH1        = "h1:ov6WTouj8Qdfs+WL7KgViSYyf6mbrYLBDM8N2EvrxxY="
 	p08Commit         = "e92c2f5fc82ad7d1f0b2ac9c59d004db6419ec29"
 	p09Commit         = "fcfa827482a5379c17c13edaefedc8a54a6f850c"
-	currentPin        = "820fd4e4b8d247e0595fc4bce36a8791ea22b5f4"
-	currentVersion    = "v0.0.0-20260927054524-820fd4e4b8d2"
-	currentZipH1      = "h1:oqyhEFHg9Tn4/BZhKZ1J5SSYATMk5wwQ1g8iBMsAEEs="
+	currentPin        = "1371c86650f671262ac3e2a1a6cca38f310372dc"
+	currentVersion    = "v0.0.0-20260927083523-1371c86650f6"
+	currentZipH1      = "h1:HudcF4GVvikUjfC6E/Yrk/lh/7VWZtY4NKZZEdZGQcg="
 	currentGoModH1    = "h1:Rj7AtdAbBX/kEeEEhsMvohI9kM8P1ayuHHMNVvD/ong="
 )
 
