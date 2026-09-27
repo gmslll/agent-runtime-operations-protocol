@@ -1374,6 +1374,13 @@ func equalTouches(got, want []transitionTouch) bool {
 func validateP05TouchLedger(discovered, expected []transitionTouch, owned map[string]bool, checkerPath, head string, checkerDirty bool, parentOf func(string) (string, error)) (string, error) {
 	ledgerTouches := []transitionTouch{}
 	checkerTouches := []transitionTouch{}
+	expectedByCommit := map[string][]string{}
+	for _, touch := range expected {
+		if _, duplicate := expectedByCommit[touch.Commit]; duplicate {
+			return "", fmt.Errorf("duplicate expected P05 transition commit %s", touch.Commit)
+		}
+		expectedByCommit[touch.Commit] = touch.ChangedPaths
+	}
 	for _, touch := range discovered {
 		ownedPaths := []string{}
 		for _, path := range touch.ChangedPaths {
@@ -1391,10 +1398,25 @@ func validateP05TouchLedger(discovered, expected []transitionTouch, owned map[st
 		}
 		ownedTouch := transitionTouch{Commit: touch.Commit, ChangedPaths: ownedPaths}
 		if containsChecker {
-			if len(ownedPaths) != 1 {
-				return "", fmt.Errorf("checker correction commit %s also touched P05-owned paths %v", touch.Commit, ownedPaths)
+			transitionPaths := []string{}
+			for _, path := range ownedPaths {
+				if path != checkerPath {
+					transitionPaths = append(transitionPaths, path)
+				}
 			}
-			checkerTouches = append(checkerTouches, ownedTouch)
+			if len(transitionPaths) != 0 {
+				// A stage repin must update the checker's frozen active-pin
+				// constants in the same immutable commit as the nested module
+				// lock files. Admit that mixed touch only when the independently
+				// reconstructed transition ledger names this exact commit and
+				// exact non-checker path set. An unrecorded checker correction
+				// remains forbidden from changing any other P05-owned byte.
+				if !equalStrings(transitionPaths, expectedByCommit[touch.Commit]) {
+					return "", fmt.Errorf("checker correction commit %s also touched unrecorded P05-owned paths %v", touch.Commit, transitionPaths)
+				}
+				ledgerTouches = append(ledgerTouches, transitionTouch{Commit: touch.Commit, ChangedPaths: transitionPaths})
+			}
+			checkerTouches = append(checkerTouches, transitionTouch{Commit: touch.Commit, ChangedPaths: []string{checkerPath}})
 			continue
 		}
 		ledgerTouches = append(ledgerTouches, ownedTouch)
@@ -2450,6 +2472,13 @@ func negativeTransitionRecordProbe(root string) error {
 		owned, checkerPath, "correction-mixed", false, parentOfCorrection,
 	); err == nil {
 		return errors.New("checker correction mixed with another P05-owned path was accepted")
+	}
+	if _, err := validateP05TouchLedger(
+		[]transitionTouch{{"recorded-mixed", []string{checkerPath, "go.mod"}}},
+		[]transitionTouch{{"recorded-mixed", []string{"go.mod"}}},
+		owned, checkerPath, "recorded-mixed", false, parentOfCorrection,
+	); err != nil {
+		return fmt.Errorf("recorded repin mixed with its checker constant update was rejected: %w", err)
 	}
 	badDownload, _ := json.Marshal(downloadResult{Path: rootModulePath, Version: currentVersion, Sum: "h1:forged", GoModSum: currentGoModH1})
 	if err := validateDownload(badDownload, rootModulePath, currentVersion, nil, string(filepath.Separator)); err == nil || !strings.Contains(err.Error(), "h1 mismatch") {
