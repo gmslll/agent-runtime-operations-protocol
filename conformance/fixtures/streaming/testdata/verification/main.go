@@ -95,8 +95,9 @@ func executeAtCarrier(root string) (out result) {
 	if err != nil {
 		return result{err: errors.New("resolve locked node_modules")}
 	}
-	if err = os.Symlink(sharedModules, filepath.Join(temporary, "node_modules")); err != nil {
-		return result{err: err}
+	copiedModules := execute(root, "cp", "-cR", sharedModules, filepath.Join(temporary, "node_modules"))
+	if copiedModules.err != nil {
+		return copiedModules
 	}
 	validation := execute(temporary, "make", "validate")
 	if validation.err != nil {
