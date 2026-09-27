@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	command = "make verify-run-delivery"
-	checker = "conformance/fixtures/streaming/testdata/verification/main.go"
+	command    = "make verify-run-delivery"
+	checker    = "conformance/fixtures/streaming/testdata/verification/main.go"
+	p23Carrier = "5bada508fa5e7035abd1d33817b4de7abf3ee49d"
 )
 
 var phases = []string{"P18", "P19", "P20", "P21", "P22"}
@@ -98,11 +99,18 @@ func validateManifest(root string) error {
 }
 
 func treeIdenticalCarrier(root string) error {
-	parent := execute(root, "git", "rev-parse", "HEAD^")
+	carrier := execute(root, "git", "rev-parse", p23Carrier+"^{commit}")
+	if carrier.err != nil || strings.TrimSpace(string(carrier.output)) != p23Carrier {
+		return errors.New("P23 carrier is unavailable")
+	}
+	parent := execute(root, "git", "rev-parse", p23Carrier+"^")
 	if parent.err != nil || len(strings.TrimSpace(string(parent.output))) != 40 {
 		return errors.New("P23 carrier parent is unavailable")
 	}
-	return execute(root, "git", "diff", "--quiet", "HEAD^", "HEAD", "--").err
+	if err := execute(root, "git", "merge-base", "--is-ancestor", p23Carrier, "HEAD").err; err != nil {
+		return errors.New("P23 carrier is not an ancestor of HEAD")
+	}
+	return execute(root, "git", "diff", "--quiet", strings.TrimSpace(string(parent.output)), p23Carrier, "--").err
 }
 
 type result struct {

@@ -350,6 +350,57 @@ func TestCompositionRejectsInvalidConfiguration(t *testing.T) {
 		}
 	})
 
+	t.Run("p24-durable-sqlite-composes-worker-pull", func(t *testing.T) {
+		root, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		migrationRoot := filepath.Join(root, "migrations")
+		for _, relative := range []string{
+			"sqlite/0001_base.sql", "sqlite/0005_identity.sql", "sqlite/0010_publication.sql", "sqlite/0020_asset.sql", "sqlite/0030_registry.sql", "sqlite/0040_run.sql", "sqlite/0050_dispatch.sql", "sqlite/0060_event.sql", "sqlite/0070_worker.sql",
+			"postgres/0001_base.sql", "postgres/0005_identity.sql", "postgres/0010_publication.sql", "postgres/0020_asset.sql", "postgres/0030_registry.sql", "postgres/0040_run.sql", "postgres/0050_dispatch.sql", "postgres/0060_event.sql", "postgres/0070_worker.sql",
+		} {
+			contents, readErr := os.ReadFile(filepath.Join("..", "..", "migrations", filepath.FromSlash(relative)))
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			target := filepath.Join(migrationRoot, filepath.FromSlash(relative))
+			if err = os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err = os.WriteFile(target, contents, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		backup := filepath.Join(root, "backup")
+		if err = os.Mkdir(backup, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		keyPath := filepath.Join(root, "asset-token.key")
+		if err = os.WriteFile(keyPath, []byte("0123456789abcdef0123456789abcdef"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		application, server, cleanup, err := composeWithCatalog([]string{"--listen=127.0.0.1:0", "--mode=sqlite", "--database-dsn=" + filepath.Join(root, "p24.db"), "--migration-root=" + migrationRoot, "--backup-directory=" + backup, "--asset-token-key-file=" + keyPath, "--asset-token-key-id=atk_reference_test", "--dispatch-issuer=https://control-plane.example.invalid"}, nil, migrate.CurrentProductionCatalog())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer cleanup()
+		found := map[string]bool{}
+		for _, check := range application.Readiness(context.Background()).Checks {
+			found[check.Name] = check.Ready
+		}
+		if !found["worker-service"] || !found["event-ledger-service"] {
+			t.Fatalf("P24 durable readiness missing: %+v", found)
+		}
+		request := httptest.NewRequest(http.MethodPost, "/v1/workers/worker-a/claims:next", strings.NewReader(`{"schema_version":1}`))
+		request.Header.Set("Content-Type", "application/json")
+		response := httptest.NewRecorder()
+		server.Handler.ServeHTTP(response, request)
+		if response.Code != http.StatusUnauthorized || response.Header().Get("WWW-Authenticate") != "Bearer" || !strings.Contains(response.Body.String(), `"code":"AUTHENTICATION_REQUIRED"`) {
+			t.Fatalf("P24 worker authentication boundary missing: status=%d headers=%v body=%s", response.Code, response.Header(), response.Body.String())
+		}
+	})
+
 	t.Run("asset-token-key-loader-fails-closed", func(t *testing.T) {
 		root, err := filepath.EvalSymlinks(t.TempDir())
 		if err != nil {
