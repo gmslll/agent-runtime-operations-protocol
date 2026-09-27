@@ -1,0 +1,138 @@
+openapi: 3.1.0
+info:
+  title: AROP Worker Pull API v1
+  version: 1.0.0
+  description: Fenced claim, renew, complete and release operations for pull workers.
+servers:
+  - url: https://control-plane.example.invalid
+paths:
+  /v1/worker/claims:
+    post:
+      operationId: claimWorkerAttempt
+      security: [{WorkerBearer: []}]
+      x-arop-required-scopes: [worker:claim]
+      parameters: [{$ref: '#/components/parameters/IdempotencyKey'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '../schemas/runtime/worker-claim-v1.schema.json#/$defs/claimRequest'}
+      responses:
+        '200':
+          description: A newly claimed or idempotently replayed fenced Attempt lease.
+          headers:
+            Cache-Control: {required: true, schema: {const: no-store}}
+          content:
+            application/json:
+              schema: {$ref: '../schemas/runtime/worker-claim-v1.schema.json'}
+        '204': {description: No eligible work became available before wait_seconds elapsed.}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
+        '429': {$ref: '#/components/responses/Error429'}
+        '503': {$ref: '#/components/responses/Error503'}
+  /v1/worker/claims/{claim_id}:renew:
+    post:
+      operationId: renewWorkerClaim
+      security: [{WorkerBearer: []}]
+      x-arop-required-scopes: [worker:claim]
+      parameters: [{$ref: '#/components/parameters/ClaimId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '../schemas/runtime/worker-claim-v1.schema.json#/$defs/renewRequest'}
+      responses:
+        '200':
+          description: Renewed claim with the same fencing token and a later bounded lease.
+          headers:
+            Cache-Control: {required: true, schema: {const: no-store}}
+          content:
+            application/json:
+              schema: {$ref: '../schemas/runtime/worker-claim-v1.schema.json'}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '503': {$ref: '#/components/responses/Error503'}
+  /v1/worker/claims/{claim_id}:complete:
+    post:
+      operationId: completeWorkerAttempt
+      security: [{WorkerBearer: []}]
+      x-arop-required-scopes: [worker:complete]
+      parameters:
+        - {$ref: '#/components/parameters/ClaimId'}
+        - {$ref: '#/components/parameters/IdempotencyKey'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '../schemas/runtime/worker-complete-v1.schema.json'}
+      responses:
+        '204': {description: Completion and durable result/event/effect accounting committed atomically or replayed idempotently.}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '413': {$ref: '#/components/responses/Error413'}
+        '415': {$ref: '#/components/responses/Error415'}
+        '503': {$ref: '#/components/responses/Error503'}
+  /v1/worker/claims/{claim_id}:release:
+    post:
+      operationId: releaseWorkerClaim
+      security: [{WorkerBearer: []}]
+      x-arop-required-scopes: [worker:claim]
+      parameters: [{$ref: '#/components/parameters/ClaimId'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '../schemas/runtime/worker-claim-v1.schema.json#/$defs/releaseRequest'}
+      responses:
+        '204': {description: Claim released and Attempt requeued with a new future fencing token.}
+        '400': {$ref: '#/components/responses/Error400'}
+        '401': {$ref: '#/components/responses/Error401'}
+        '403': {$ref: '#/components/responses/Error403'}
+        '404': {$ref: '#/components/responses/Error404'}
+        '409': {$ref: '#/components/responses/Error409'}
+        '503': {$ref: '#/components/responses/Error503'}
+components:
+  securitySchemes:
+    WorkerBearer: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    ClaimId:
+      name: claim_id
+      in: path
+      required: true
+      schema: {$ref: '../schemas/runtime/worker-claim-v1.schema.json#/$defs/claimId'}
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 16, maxLength: 200, pattern: '^[A-Za-z0-9._~-]+$'}
+  schemas:
+    AROPError: {$ref: '../schemas/common/error.schema.json'}
+  responses:
+    Error400: {description: Invalid request., content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}}
+    Error401:
+      description: Missing or invalid worker credential.
+      headers: {WWW-Authenticate: {required: true, schema: {type: string, pattern: '^Bearer(?: [A-Za-z][A-Za-z0-9_-]*="[ -!#-~]*")*$'}}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Error403: {description: Worker credential lacks the route-specific scope., content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}}
+    Error404: {description: Claim does not exist in the caller tenant., content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}}
+    Error409: {description: Claim is expired, fenced, completed or conflicts with an idempotent request., content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}}
+    Error413: {description: Request exceeds the fixed worker API body limit., content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}}
+    Error415: {description: Only one application/json Content-Type is accepted., content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}}
+    Error429:
+      description: Claim capacity is temporarily exhausted.
+      headers: {Retry-After: {required: true, schema: {type: integer, minimum: 1, maximum: 30}}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}
+    Error503:
+      description: Durable worker dependency unavailable.
+      headers: {Retry-After: {required: true, schema: {type: integer, minimum: 1, maximum: 300}}}
+      content: {application/json: {schema: {$ref: '#/components/schemas/AROPError'}}}

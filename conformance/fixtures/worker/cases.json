@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id": "claim-valid", "class": "valid", "path": "conformance/fixtures/worker/claim.valid.json", "root": "WorkerClaim"},
+    {"id": "complete-valid", "class": "valid", "path": "conformance/fixtures/worker/complete.valid.json", "root": "WorkerComplete"},
+    {"id": "claim-zero-fence", "class": "invalid", "path": "conformance/fixtures/worker/claim.invalid.json", "root": "WorkerClaim"},
+    {"id": "complete-missing-snapshot", "class": "invalid", "path": "conformance/fixtures/worker/complete.invalid.json", "root": "WorkerComplete"}
+  ]
+}

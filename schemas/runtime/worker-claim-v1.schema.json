@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/schemas/v1/runtime/worker-claim-v1.schema.json",
+  "title": "AROP v1 Worker claim lease",
+  "$comment": "A fenced, time-bounded worker lease. All public integers remain within the JavaScript safe-integer range.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "claim_id", "worker_id", "run_id", "attempt_id", "attempt_number", "fencing_token", "lease_token", "lease_expires_at", "command", "traceparent", "claimed_at"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "claim_id": {"$ref": "#/$defs/claimId"},
+    "worker_id": {"$ref": "#/$defs/workerId"},
+    "run_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/runId"},
+    "attempt_id": {"$ref": "https://arop.invalid/schemas/v1/common/identifiers.schema.json#/$defs/attemptId"},
+    "attempt_number": {"$ref": "#/$defs/positiveSafeInteger"},
+    "fencing_token": {"$ref": "#/$defs/positiveSafeInteger"},
+    "lease_token": {"$ref": "#/$defs/leaseToken"},
+    "lease_expires_at": {"type": "string", "format": "date-time"},
+    "command": {"$ref": "https://arop.invalid/schemas/v1/runtime/command-v1.schema.json"},
+    "traceparent": {"$ref": "https://arop.invalid/schemas/v1/common/trace.schema.json#/properties/traceparent"},
+    "claimed_at": {"type": "string", "format": "date-time"}
+  },
+  "$defs": {
+    "positiveSafeInteger": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "claimId": {"type": "string", "pattern": "^clm_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "workerId": {"type": "string", "pattern": "^wrk_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},
+    "leaseToken": {"type": "string", "pattern": "^wlt_[A-Za-z0-9_-]{43}$"},
+    "claimRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "worker_id", "queue", "lease_seconds", "wait_seconds", "capabilities"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "worker_id": {"$ref": "#/$defs/workerId"},
+        "queue": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z][a-z0-9._-]*$"},
+        "lease_seconds": {"type": "integer", "minimum": 15, "maximum": 300},
+        "wait_seconds": {"type": "integer", "minimum": 0, "maximum": 30},
+        "capabilities": {"type": "array", "maxItems": 64, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z][a-z0-9._:-]*$"}}
+      }
+    },
+    "renewRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "lease_token", "fencing_token", "lease_seconds"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "lease_token": {"$ref": "#/$defs/leaseToken"},
+        "fencing_token": {"$ref": "#/$defs/positiveSafeInteger"},
+        "lease_seconds": {"type": "integer", "minimum": 15, "maximum": 300}
+      }
+    },
+    "releaseRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "lease_token", "fencing_token", "reason"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "lease_token": {"$ref": "#/$defs/leaseToken"},
+        "fencing_token": {"$ref": "#/$defs/positiveSafeInteger"},
+        "reason": {"enum": ["worker_draining", "worker_shutdown", "retryable_failure"]}
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "resources": [
+    {"path":"schemas/common/identifiers.schema.json","uri":"https://arop.invalid/schemas/v1/common/identifiers.schema.json"},
+    {"path":"schemas/common/trace.schema.json","uri":"https://arop.invalid/schemas/v1/common/trace.schema.json"},
+    {"path":"schemas/common/error.schema.json","uri":"https://arop.invalid/schemas/v1/common/error.schema.json"},
+    {"path":"schemas/common/content-part.schema.json","uri":"https://arop.invalid/schemas/v1/common/content-part.schema.json"},
+    {"path":"schemas/resources/asset-ref-v1.schema.json","uri":"https://arop.invalid/schemas/v1/resources/asset-ref-v1.schema.json"},
+    {"path":"schemas/resources/data-ref-v1.schema.json","uri":"https://arop.invalid/schemas/v1/resources/data-ref-v1.schema.json"},
+    {"path":"schemas/runtime/command-v1.schema.json","uri":"https://arop.invalid/schemas/v1/runtime/command-v1.schema.json"},
+    {"path":"schemas/runtime/result-v1.schema.json","uri":"https://arop.invalid/schemas/v1/runtime/result-v1.schema.json"},
+    {"path":"schemas/runtime/worker-claim-v1.schema.json","uri":"https://arop.invalid/schemas/v1/runtime/worker-claim-v1.schema.json"},
+    {"path":"schemas/runtime/worker-complete-v1.schema.json","uri":"https://arop.invalid/schemas/v1/runtime/worker-complete-v1.schema.json"}
+  ],
+  "roots": [
+    {"ref":"https://arop.invalid/schemas/v1/runtime/worker-claim-v1.schema.json","name":"WorkerClaim"},
+    {"ref":"https://arop.invalid/schemas/v1/runtime/worker-claim-v1.schema.json#/$defs/claimRequest","name":"WorkerClaimRequest"},
+    {"ref":"https://arop.invalid/schemas/v1/runtime/worker-claim-v1.schema.json#/$defs/renewRequest","name":"WorkerRenewRequest"},
+    {"ref":"https://arop.invalid/schemas/v1/runtime/worker-claim-v1.schema.json#/$defs/releaseRequest","name":"WorkerReleaseRequest"},
+    {"ref":"https://arop.invalid/schemas/v1/runtime/worker-complete-v1.schema.json","name":"WorkerComplete"}
+  ],
+  "fixtures": {
+    "valid": [
+      {"id":"worker-claim","path":"conformance/fixtures/worker/claim.valid.json","root":"WorkerClaim"},
+      {"id":"worker-complete","path":"conformance/fixtures/worker/complete.valid.json","root":"WorkerComplete"}
+    ],
+    "forward": [
+      {"id":"worker-claim-future-field","path":"conformance/fixtures/worker/claim.forward.json","root":"WorkerClaim"}
+    ],
+    "invalid": [
+      {"id":"worker-claim-zero-fence","path":"conformance/fixtures/worker/claim.invalid.json","root":"WorkerClaim"},
+      {"id":"worker-complete-missing-snapshot","path":"conformance/fixtures/worker/complete.invalid.json","root":"WorkerComplete"}
+    ]
+  },
+  "outputs": {
+    "go":{"model":"sdk/go/generated/worker/worker.gen.go"},
+    "python":{"model":"sdk/python/src/arop/generated/worker/worker_gen.py"},
+    "typescript":{"model":"sdk/typescript/src/generated/worker/worker.gen.ts"}
+  }
+}

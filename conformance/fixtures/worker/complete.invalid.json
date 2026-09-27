@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "completion_id": "cmp_018f0c00-0000-7000-8000-000000000006",
+  "claim_id": "clm_018f0c00-0000-7000-8000-000000000001",
+  "attempt_id": "att_018f0c00-0000-7000-8000-000000000004",
+  "fencing_token": 1,
+  "lease_token": "wlt_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "result": {"schema_version": 1, "run_id": "run_018f0c00-0000-7000-8000-000000000003", "state": "succeeded", "usage": {"input_tokens": 1, "output_tokens": 1, "duration_ms": 10}, "completed_at": "2026-09-27T10:00:30Z"},
+  "completed_at": "2026-09-27T10:00:30Z"
+}
