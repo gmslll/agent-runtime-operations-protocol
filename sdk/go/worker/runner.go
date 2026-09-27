@@ -382,7 +382,7 @@ func (runner *Runner) cancelActive() {
 
 func retryable(err error) bool {
 	var remote *RemoteError
-	return errors.As(err, &remote) && remote.Retryable
+	return errors.Is(err, ErrTransportUnavailable) || errors.Is(err, ErrCredentialUnavailable) || errors.As(err, &remote) && remote.Retryable
 }
 
 func backoffFor(err error, fallback, maximum time.Duration) time.Duration {

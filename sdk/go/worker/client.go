@@ -25,6 +25,10 @@ const maxWorkerResponseBytes = 8 << 20
 var (
 	workerIDPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$`)
 	claimIDPattern  = regexp.MustCompile(`^clm_[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`)
+	// ErrTransportUnavailable and ErrCredentialUnavailable are safe, stable
+	// retry classifications; neither includes remote or credential material.
+	ErrTransportUnavailable  = errors.New("worker transport unavailable")
+	ErrCredentialUnavailable = errors.New("worker credential unavailable")
 )
 
 // CredentialSource returns a short-lived worker credential. Implementations
@@ -205,7 +209,7 @@ func (client *Client) do(ctx context.Context, method, path string, body []byte, 
 	}
 	credential, err := client.credential.Credential(ctx)
 	if err != nil || !validBearer(credential) {
-		return nil, errors.New("worker credential unavailable")
+		return nil, ErrCredentialUnavailable
 	}
 	target := *client.base
 	target.Path = path
@@ -233,7 +237,7 @@ func (client *Client) do(ctx context.Context, method, path string, body []byte, 
 		if requestContext.Err() != nil {
 			return nil, requestContext.Err()
 		}
-		return nil, errors.New("worker transport unavailable")
+		return nil, ErrTransportUnavailable
 	}
 	if response == nil || response.Body == nil {
 		return nil, errors.New("invalid worker response")

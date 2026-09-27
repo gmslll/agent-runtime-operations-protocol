@@ -84,10 +84,9 @@ func (fixedCompletionSource) Completion(context.Context, workerwire.WorkerClaim)
 }
 
 func TestRunnerRetriesIdenticalCompletionAndRenews(t *testing.T) {
-	retry := uint64(0)
 	api := &fakePullAPI{
 		claims:      []workerwire.WorkerClaim{testClaim(t, 1)},
-		completeErr: &RemoteError{StatusCode: 503, Code: "DEPENDENCY_UNAVAILABLE", Retryable: true, RetryAfterSeconds: &retry},
+		completeErr: ErrTransportUnavailable,
 		completed:   make(chan struct{}),
 	}
 	runner, err := NewRunner(RunnerConfig{
