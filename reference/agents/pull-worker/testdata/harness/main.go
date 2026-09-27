@@ -78,7 +78,9 @@ func main() {
 	inputs, err := trackedInputs(root)
 	add("p25-static-input-closure", err, fmt.Sprintf("%d tracked inputs", len(inputs)))
 	add("p25-manifest-inventory", validateManifest(root), "exact two owned artifacts and empty runtime inputs")
-	want, discoverErr := discoverTransition(root)
+	successor, endpoint, endpointErr := immutableEndpoint(root)
+	want, discoverErr := discoverTransition(root, endpoint)
+	discoverErr = errors.Join(endpointErr, discoverErr)
 	add("p25-transition-discovery", discoverErr, "Git and manifest independently discover source, artifact and acceptance closure")
 	if os.Getenv("AROP_PRINT_P25_TRANSITION") == "1" {
 		encoded, marshalErr := json.MarshalIndent(want, "", "  ")
@@ -87,7 +89,7 @@ func main() {
 		return
 	}
 	add("p25-transition-waiver", validateTransition(root, want), "validated waiver exactly equals discovered closure")
-	add("p25-carrier-first", validateCarrier(root), "P25 carrier is the first and only tree change after P24")
+	add("p25-carrier-first", validateCarrier(root, successor, endpoint), "P25 carrier is first after P24 and the next tree-identical carrier freezes P25")
 	add("p25-no-new-persistence", validateNoPersistence(root), "P25 introduces no migration, schema or database adapter")
 
 	tests := run(root, nil, "go", "test", "-json", "-race", "-count=1", "./sdk/go/worker", "./reference/agents/pull-worker", "./reference/agents/pull-worker/cmd/arop-pull-worker")
@@ -153,12 +155,12 @@ func validateManifest(root string) error {
 	return nil
 }
 
-func discoverTransition(root string) (discovered, error) {
+func discoverTransition(root, endpoint string) (discovered, error) {
 	manifest, err := loadManifest(root)
 	if err != nil {
 		return discovered{}, err
 	}
-	diff := run(root, nil, "git", "diff", "--name-status", "--no-renames", "-z", baseline+"..HEAD", "--")
+	diff := run(root, nil, "git", "diff", "--name-status", "--no-renames", "-z", baseline+".."+endpoint, "--")
 	if diff.err != nil {
 		return discovered{}, diff.err
 	}
@@ -220,10 +222,15 @@ func longestOwners(manifest blueprint.Manifest, source string) []blueprint.Artif
 }
 
 func validateTransition(root string, want discovered) error {
-	data, err := os.ReadFile(filepath.Join(root, waiver))
+	_, endpoint, err := immutableEndpoint(root)
 	if err != nil {
 		return err
 	}
+	archived := run(root, nil, "git", "show", endpoint+":"+waiver)
+	if archived.err != nil {
+		return archived.err
+	}
+	data := archived.output
 	var value transition
 	if err := strictJSON(data, &value); err != nil {
 		return err
@@ -241,7 +248,7 @@ func compareTransition(value transition, want discovered) error {
 	return nil
 }
 
-func validateCarrier(root string) error {
+func validateCarrier(root, successor, endpoint string) error {
 	if run(root, nil, "git", "merge-base", "--is-ancestor", carrier, "HEAD").err != nil {
 		return errors.New("P25 carrier is not an ancestor")
 	}
@@ -253,7 +260,28 @@ func validateCarrier(root string) error {
 	if changed.err != nil || strings.TrimSpace(string(changed.output)) != waiver {
 		return fmt.Errorf("P25 carrier changed unexpected paths: %s", changed.output)
 	}
+	if successor == "" || endpoint == "" || run(root, nil, "git", "diff", "--quiet", endpoint, successor, "--").err != nil {
+		return errors.New("P26 carrier is not tree-identical to final P25")
+	}
 	return nil
+}
+
+func immutableEndpoint(root string) (string, string, error) {
+	commits := run(root, nil, "git", "rev-list", "--reverse", "--ancestry-path", carrier+"..HEAD")
+	if commits.err != nil {
+		return "", "", commits.err
+	}
+	for _, commit := range strings.Fields(string(commits.output)) {
+		parent := run(root, nil, "git", "rev-parse", commit+"^")
+		if parent.err != nil {
+			return "", "", parent.err
+		}
+		endpoint := strings.TrimSpace(string(parent.output))
+		if run(root, nil, "git", "diff", "--quiet", endpoint, commit, "--").err == nil {
+			return commit, endpoint, nil
+		}
+	}
+	return "", "", errors.New("P26 tree-identical carrier is unavailable")
 }
 
 func validateNoPersistence(root string) error {

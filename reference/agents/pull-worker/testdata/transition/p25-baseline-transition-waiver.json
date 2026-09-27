@@ -21,6 +21,8 @@
     "reference/agents/pull-worker/testdata/harness/main.go",
     "reference/agents/pull-worker/testdata/harness/main_test.go",
     "reference/agents/pull-worker/testdata/transition/p25-baseline-transition-waiver.json",
+    "reference/agents/pull-worker/testdata/verification/main.go",
+    "reference/agents/pull-worker/testdata/verification/main_test.go",
     "sdk/go/worker/client.go",
     "sdk/go/worker/client_test.go",
     "sdk/go/worker/helpers.go",

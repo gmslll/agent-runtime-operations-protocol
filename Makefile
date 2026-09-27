@@ -1,4 +1,4 @@
-.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier test-evidence-lineage planning-audit gate-check test-go test-go-workspace test-protocol-foundation test-codegen-pipeline test-control-plane-platform test-storage-migrations test-identity-secrets test-publication-contracts test-publication-service test-asset-broker test-registry-core test-registry-api test-registry-recovery verify-registry test-run-lifecycle test-dispatch-ticket test-event-ledger test-direct-proxy-provider test-streaming-resume verify-run-delivery test-worker-service test-go-worker-sdk manifest-digest
+.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier test-evidence-lineage planning-audit gate-check test-go test-go-workspace test-protocol-foundation test-codegen-pipeline test-control-plane-platform test-storage-migrations test-identity-secrets test-publication-contracts test-publication-service test-asset-broker test-registry-core test-registry-api test-registry-recovery verify-registry test-run-lifecycle test-dispatch-ticket test-event-ledger test-direct-proxy-provider test-streaming-resume verify-run-delivery test-worker-service test-go-worker-sdk verify-operations-security manifest-digest
 
 install:
 	npm ci
@@ -93,6 +93,9 @@ test-worker-service:
 
 test-go-worker-sdk:
 	AROP_CHECK_COMMAND="make test-go-worker-sdk" env -u GOFLAGS -u GOENV -u GOWORK -u GOCACHE -u GOCACHEPROG -u GOMODCACHE -u GOTMPDIR -u GOROOT -u GOTOOLCHAIN -u GOEXPERIMENT -u NODE_OPTIONS -u NODE_PATH -u NPM_CONFIG_NODE_OPTIONS -u PYTHONHOME -u PYTHONPATH -u PYTHONSTARTUP -u PYTHONINSPECT -u PYTHONWARNINGS -u PYTHONUSERBASE -u PGHOST -u PGHOSTADDR -u PGPORT -u PGDATABASE -u PGUSER -u PGPASSWORD -u PGSERVICE -u PGSERVICEFILE -u PGPASSFILE -u PGOPTIONS -u PGCONNECT_TIMEOUT -u PGAPPNAME -u PGTARGETSESSIONATTRS -u PGREQUIRESSL -u PGSSLMODE -u PGSSLCERT -u PGSSLKEY -u PGSSLROOTCERT -u PGSSLCRL -u PGSSLCRLDIR -u PGGSSENCMODE -u PGCHANNELBINDING -u PGKRBSRVNAME -u PGSYSCONFDIR -u PGLOCALEDIR -u PGCLIENTENCODING GOENV=off GOFLAGS=-mod=readonly GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go run ./reference/agents/pull-worker/testdata/harness
+
+verify-operations-security:
+	AROP_CHECK_COMMAND="make verify-operations-security" env -u GOFLAGS -u GOENV -u GOWORK -u GOCACHE -u GOCACHEPROG -u GOMODCACHE -u GOTMPDIR -u GOROOT -u GOTOOLCHAIN -u GOEXPERIMENT -u NODE_OPTIONS -u NODE_PATH -u NPM_CONFIG_NODE_OPTIONS -u PYTHONHOME -u PYTHONPATH -u PYTHONSTARTUP -u PYTHONINSPECT -u PYTHONWARNINGS -u PYTHONUSERBASE -u PGHOST -u PGHOSTADDR -u PGPORT -u PGDATABASE -u PGUSER -u PGPASSWORD -u PGSERVICE -u PGSERVICEFILE -u PGPASSFILE -u PGOPTIONS -u PGCONNECT_TIMEOUT -u PGAPPNAME -u PGTARGETSESSIONATTRS -u PGREQUIRESSL -u PGSSLMODE -u PGSSLCERT -u PGSSLKEY -u PGSSLROOTCERT -u PGSSLCRL -u PGSSLCRLDIR -u PGGSSENCMODE -u PGCHANNELBINDING -u PGKRBSRVNAME -u PGSYSCONFDIR -u PGLOCALEDIR -u PGCLIENTENCODING GOENV=off GOFLAGS=-mod=readonly GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go run ./reference/agents/pull-worker/testdata/verification
 
 manifest-digest: export AROP_MANIFEST_FILE := $(value FILE)
 manifest-digest:
