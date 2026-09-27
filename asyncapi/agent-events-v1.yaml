@@ -1,0 +1,123 @@
+asyncapi: 3.0.0
+id: https://arop.invalid/asyncapi/agent-events-v1.yaml
+info:
+  title: AROP Agent Event Streaming
+  version: 1.0.0
+  description: Structured relay and direct SSE delivery plus durable event batch ingestion.
+defaultContentType: application/json
+servers:
+  controlPlane:
+    host: control.example.invalid
+    protocol: https
+  agentRuntime:
+    host: runtime.example.invalid
+    protocol: https
+channels:
+  relayEvents:
+    address: /v1/agent-runs/{run_id}/events
+    parameters:
+      run_id:
+        description: AROP Run identifier.
+    messages:
+      runEvent:
+        $ref: '#/components/messages/RunEvent'
+    bindings:
+      http:
+        method: GET
+        x-arop-response-content-type: text/event-stream
+        x-arop-cursor-header: Last-Event-ID
+        x-arop-sequence-domain: runsequence
+  directEvents:
+    address: /v1/runs/{run_id}/events
+    parameters:
+      run_id:
+        description: AROP Run identifier.
+    messages:
+      runEvent:
+        $ref: '#/components/messages/RunEvent'
+    bindings:
+      http:
+        method: GET
+        x-arop-response-content-type: text/event-stream
+        x-arop-cursor-header: Last-Event-ID
+        x-arop-sequence-domain: producersequence
+  eventBatch:
+    address: /v1/agent-runs/{run_id}/events:batch
+    parameters:
+      run_id:
+        description: AROP Run identifier.
+    messages:
+      eventBatch:
+        $ref: '#/components/messages/EventBatch'
+      eventBatchAck:
+        $ref: '#/components/messages/EventBatchAck'
+    bindings:
+      http:
+        method: POST
+operations:
+  receiveRelayEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/relayEvents'
+    security:
+      - $ref: '#/components/securitySchemes/controlPlaneBearer'
+  receiveDirectEvents:
+    action: receive
+    channel:
+      $ref: '#/channels/directEvents'
+    security:
+      - $ref: '#/components/securitySchemes/runBearer'
+  sendEventBatch:
+    action: send
+    channel:
+      $ref: '#/channels/eventBatch'
+    security:
+      - $ref: '#/components/securitySchemes/eventBearer'
+components:
+  messages:
+    RunEvent:
+      name: RunEvent
+      title: Immutable run event with the sequence assigned by the selected stream domain.
+      payload:
+        $ref: ../schemas/events/event-envelope-v1.schema.json
+      x-arop-sse:
+        id: sequence
+        event: CloudEvents type
+        data: complete EventEnvelope JSON
+        heartbeat: comment
+    EventBatch:
+      name: EventBatch
+      payload:
+        $ref: ../schemas/events/event-session-v1.schema.json#/$defs/eventBatch
+    EventBatchAck:
+      name: EventBatchAck
+      payload:
+        $ref: ../schemas/events/event-session-v1.schema.json#/$defs/eventBatchAck
+  securitySchemes:
+    controlPlaneBearer:
+      type: httpApiKey
+      in: header
+      name: Authorization
+      scheme: bearer
+    runBearer:
+      type: httpApiKey
+      in: header
+      name: Authorization
+      scheme: bearer
+    eventBearer:
+      type: httpApiKey
+      in: header
+      name: Authorization
+      scheme: bearer
+x-arop-streaming:
+  relay_sequence: runsequence
+  direct_sequence: producersequence
+  offset_unit: utf-8-bytes
+  replay_order: replay-then-live
+  cursor_expired_status: 410
+  cursor_expired_code: STREAM_CURSOR_EXPIRED
+  disconnect_cancels_run: false
+  terminal_requires_snapshot_or_result_ref: true
+  partial_batch_rule: retry-only-unacknowledged-suffix-with-original-event-ids
+  bounded_connection_buffer_events: 256
+  heartbeat_seconds: 15

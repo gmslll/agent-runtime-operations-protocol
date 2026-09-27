@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "pipeline_id": "arop-codegen-v1",
+  "mapping_profile": "arop-wire-model-v1",
+  "resources": [
+    {"path":"schemas/common/identifiers.schema.json","uri":"https://arop.invalid/schemas/v1/common/identifiers.schema.json"},
+    {"path":"schemas/common/trace.schema.json","uri":"https://arop.invalid/schemas/v1/common/trace.schema.json"},
+    {"path":"schemas/events/event-envelope-v1.schema.json","uri":"https://arop.invalid/schemas/v1/events/event-envelope-v1.schema.json"}
+  ],
+  "roots": [
+    {"ref":"https://arop.invalid/schemas/v1/events/event-envelope-v1.schema.json","name":"StreamEvent"}
+  ],
+  "fixtures": {
+    "valid": [
+      {"id":"stream-event","path":"conformance/fixtures/events/envelope.valid.json"}
+    ],
+    "forward": [
+      {"id":"stream-event-future","path":"conformance/fixtures/events/envelope.forward.json"}
+    ],
+    "invalid": [
+      {"id":"stream-event-invalid","path":"conformance/fixtures/events/envelope.invalid.json"}
+    ]
+  },
+  "outputs": {
+    "go":{"model":"sdk/go/generated/streaming/streaming.gen.go","probe":"sdk/go/generated/streaming/streaming_contract_test.go"},
+    "python":{"model":"sdk/python/src/arop/generated/streaming/streaming_gen.py","probe":"sdk/python/src/arop/generated/streaming/probe.py"},
+    "typescript":{"model":"sdk/typescript/src/generated/streaming/streaming.gen.ts","probe":"sdk/typescript/src/generated/streaming/probe.ts"}
+  }
+}

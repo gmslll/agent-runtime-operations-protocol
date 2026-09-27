@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "relay": [
+    "initial-replay-then-live-with-no-gap",
+    "last-event-id-reconnect-replays-each-run-sequence-once",
+    "expired-cursor-returns-410-with-snapshot-and-latest-sequence",
+    "duplicate-ledger-notification-does-not-duplicate-delivery",
+    "slow-consumer-is-disconnected-without-blocking-ledger",
+    "terminal-event-remains-self-contained-after-retention"
+  ],
+  "direct": [
+    "producer-sequence-is-independent-from-run-sequence",
+    "last-event-id-resumes-provider-outbox",
+    "run-token-is-revalidated-on-every-connection",
+    "disconnect-never-cancels-run"
+  ],
+  "client": [
+    "go-client-rejects-gap-duplicate-conflict-and-malformed-sse",
+    "go-client-reconnects-with-last-event-id-and-bounded-backoff",
+    "typescript-client-reconnects-with-last-event-id",
+    "cursor-expired-requires-snapshot-recovery",
+    "partial-batch-retries-only-unacknowledged-suffix"
+  ],
+  "unicode": [
+    "ascii-offset",
+    "chinese-utf8-byte-offset",
+    "emoji-utf8-byte-offset",
+    "combining-mark-utf8-byte-offset",
+    "non-boundary-offset-is-rejected"
+  ]
+}
