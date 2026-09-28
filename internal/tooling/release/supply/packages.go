@@ -384,10 +384,16 @@ func (primitive localPrimitive) Build(ctx context.Context, versions versionpolic
 }
 
 type primitiveManifest struct {
-	Artifacts []struct {
+	SchemaVersion int    `json:"schema_version"`
+	Name          string `json:"name,omitempty"`
+	Version       string `json:"version"`
+	GOOS          string `json:"goos,omitempty"`
+	GOARCH        string `json:"goarch,omitempty"`
+	Artifacts     []struct {
 		Name, Path, SHA256 string
 		Bytes              int64
 	} `json:"artifacts"`
+	Files json.RawMessage `json:"files,omitempty"`
 }
 
 func buildGo(ctx context.Context, root, output string, versions versionpolicy.Versions) ([]Artifact, error) {
@@ -400,6 +406,9 @@ func buildGo(ctx context.Context, root, output string, versions versionpolicy.Ve
 	var manifest primitiveManifest
 	if err := decodeFile(filepath.Join(output, "checksums.json"), &manifest); err != nil {
 		return nil, err
+	}
+	if manifest.SchemaVersion != 1 || manifest.Version != versions.Logical || manifest.GOOS != "linux" || manifest.GOARCH != "amd64" {
+		return nil, errors.New("Go primitive manifest identity drifted")
 	}
 	artifacts := []Artifact{}
 	for _, item := range manifest.Artifacts {
@@ -471,6 +480,9 @@ func artifactsFromManifest(path, directory, ecosystem, version string) ([]Artifa
 	var manifest primitiveManifest
 	if err := decodeFile(path, &manifest); err != nil {
 		return nil, err
+	}
+	if manifest.SchemaVersion != 1 || manifest.Name == "" || manifest.Version == "" {
+		return nil, errors.New("language package primitive manifest identity is incomplete")
 	}
 	result := make([]Artifact, 0, len(manifest.Artifacts))
 	for _, item := range manifest.Artifacts {
