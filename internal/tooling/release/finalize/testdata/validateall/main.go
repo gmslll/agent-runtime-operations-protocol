@@ -468,9 +468,8 @@ func verifyAtClaimedCommit(root, reportPath string) (verified *report.Report, mo
 			return verified, "", err
 		}
 		if expected, ok := runtimeInputs[filepath.ToSlash(relative)]; ok && (report.Hash(content) != expected.SHA256 || int64(len(content)) != expected.Bytes) {
-			source = filepath.Join(root, "build", "replay-archives", claimed, filepath.FromSlash(relative))
-			content, err = os.ReadFile(source)
-			if err != nil || report.Hash(content) != expected.SHA256 || int64(len(content)) != expected.Bytes {
+			content, err = findCachedRuntimeInput(root, claimed, relative, expected)
+			if err != nil {
 				return verified, "", fmt.Errorf("historical runtime input %s is unavailable", relative)
 			}
 		}
@@ -488,6 +487,33 @@ func verifyAtClaimedCommit(root, reportPath string) (verified *report.Report, mo
 	}
 	defer restoreRuntime()
 	return report.Verify(report.VerifyOptions{Root: temp, ReportPath: reportPath})
+}
+
+func findCachedRuntimeInput(root, preferredCommit, relative string, expected report.InputFile) ([]byte, error) {
+	base := filepath.Join(root, "build", "replay-archives")
+	entries, err := os.ReadDir(base)
+	if err != nil {
+		return nil, err
+	}
+	names := []string{preferredCommit}
+	for _, entry := range entries {
+		if entry.IsDir() && entry.Name() != preferredCommit {
+			names = append(names, entry.Name())
+		}
+	}
+	sort.Strings(names[1:])
+	for _, name := range names {
+		candidate := filepath.Join(base, name, filepath.FromSlash(relative))
+		info, statErr := os.Lstat(candidate)
+		if statErr != nil || !info.Mode().IsRegular() {
+			continue
+		}
+		content, readErr := os.ReadFile(candidate)
+		if readErr == nil && report.Hash(content) == expected.SHA256 && int64(len(content)) == expected.Bytes {
+			return content, nil
+		}
+	}
+	return nil, os.ErrNotExist
 }
 
 func selectHistoricalNode(reported string) (func(), error) {
