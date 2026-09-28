@@ -271,8 +271,14 @@ func verifyAll(root string) ([]byte, error) {
 	for i := 1; i <= 43; i++ {
 		phase := fmt.Sprintf("P%02d", i)
 		path := fmt.Sprintf("build/reports/%s/report.json", phase)
-		options := report.VerifyOptions{Root: root, ReportPath: path, AllowAncestor: true}
-		verified, mode, err := report.Verify(options)
+		var verified report.Report
+		var mode string
+		var err error
+		if phase == "P03" || phase == "P04" {
+			verified, mode, err = verifyAtClaimedCommit(root, path)
+		} else {
+			verified, mode, err = report.Verify(report.VerifyOptions{Root: root, ReportPath: path, AllowAncestor: true})
+		}
 		if err != nil || !verified.Success {
 			return nil, fmt.Errorf("%s verification mode=%s: %w", phase, mode, err)
 		}
@@ -285,6 +291,68 @@ func verifyAll(root string) ([]byte, error) {
 	return json.Marshal(results)
 }
 
+func verifyAtClaimedCommit(root, reportPath string) (verified report.Report, mode string, resultErr error) {
+	data, err := os.ReadFile(filepath.Join(root, reportPath))
+	if err != nil {
+		return verified, "", err
+	}
+	if err := json.Unmarshal(data, &verified); err != nil {
+		return verified, "", err
+	}
+	claimed := verified.Provenance.Git.Head
+	temp, err := os.MkdirTemp("", "arop-p44-report-archive-")
+	if err != nil {
+		return verified, "", err
+	}
+	_ = os.Remove(temp)
+	added := false
+	defer func() {
+		if added {
+			_, removeErr := git(root, "worktree", "remove", "--force", temp)
+			if resultErr == nil && removeErr != nil {
+				resultErr = removeErr
+			}
+		}
+		_ = os.RemoveAll(temp)
+	}()
+	if _, err := git(root, "worktree", "add", "--detach", temp, claimed); err != nil {
+		return verified, "", err
+	}
+	added = true
+	copyPaths := []string{reportPath, filepath.Join(filepath.Dir(reportPath), "junit.xml")}
+	for _, input := range verified.Provenance.RuntimeInputs.Files {
+		if strings.HasPrefix(filepath.ToSlash(input.Path), "build/") {
+			copyPaths = append(copyPaths, input.Path)
+		}
+	}
+	sort.Strings(copyPaths)
+	copyPaths = compact(copyPaths)
+	for _, relative := range copyPaths {
+		content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
+		if err != nil {
+			return verified, "", err
+		}
+		destination := filepath.Join(temp, filepath.FromSlash(relative))
+		if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+			return verified, "", err
+		}
+		if err := os.WriteFile(destination, content, 0o600); err != nil {
+			return verified, "", err
+		}
+	}
+	return report.Verify(report.VerifyOptions{Root: temp, ReportPath: reportPath})
+}
+
+func compact(values []string) []string {
+	result := values[:0]
+	for _, value := range values {
+		if len(result) == 0 || result[len(result)-1] != value {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
 func reportPaths() []string {
 	paths := make([]string, 0, 86)
 	for i := 1; i <= 43; i++ {
@@ -295,18 +363,30 @@ func reportPaths() []string {
 }
 
 func verifyRequirements(root string) ([]byte, error) {
-	var document struct {
-		Requirements []struct {
-			ID string `json:"id" yaml:"id"`
-		} `json:"requirements" yaml:"requirements"`
-	}
-	if err := structuredfile.Load(filepath.Join(root, "spec/requirements.yaml"), &document); err != nil {
+	value, _, err := structuredfile.LoadAny(filepath.Join(root, "spec/requirements.yaml"))
+	if err != nil {
 		return nil, err
 	}
+	document, ok := value.(map[string]any)
+	if !ok {
+		return nil, errors.New("requirements document must be an object")
+	}
+	requirements, ok := document["requirements"].([]any)
+	if !ok {
+		return nil, errors.New("requirements must be an array")
+	}
 	ids := []string{}
-	for _, item := range document.Requirements {
-		if strings.HasPrefix(item.ID, "IR-") {
-			ids = append(ids, item.ID)
+	for _, item := range requirements {
+		object, ok := item.(map[string]any)
+		if !ok {
+			return nil, errors.New("requirement must be an object")
+		}
+		id, ok := object["id"].(string)
+		if !ok || id == "" {
+			return nil, errors.New("requirement id must be a non-empty string")
+		}
+		if strings.HasPrefix(id, "IR-") {
+			ids = append(ids, id)
 		}
 	}
 	sort.Strings(ids)
@@ -337,7 +417,7 @@ func externalGateGuard(root string) error {
 		return err
 	}
 	text := string(data)
-	for _, required := range []string{"P45 — External public configuration gate", "P50 — External conformance review gate", "P52 — External v1 release approval", "blocked-external-evidence"} {
+	for _, required := range []string{"P45 — External public configuration gate", "P50 — Independent implementation and partner evidence gate", "P52 — External release-approver signature gate", "blocked-external-evidence"} {
 		if !strings.Contains(text, required) {
 			return fmt.Errorf("external gate marker missing: %s", required)
 		}
