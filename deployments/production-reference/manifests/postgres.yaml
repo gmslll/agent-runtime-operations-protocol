@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: arop-postgres
+  namespace: arop-system
+spec:
+  serviceName: arop-postgres
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: arop-postgres}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: arop-postgres}
+    spec:
+      automountServiceAccountToken: false
+      securityContext: {runAsNonRoot: true, runAsUser: 999, runAsGroup: 999, fsGroup: 999, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: postgres
+          image: postgres@${POSTGRES_16_IMAGE_DIGEST}
+          imagePullPolicy: IfNotPresent
+          env:
+            - {name: POSTGRES_USER, value: arop}
+            - {name: POSTGRES_DB, value: arop}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: arop-runtime-secrets, key: postgres-password}}
+          ports: [{name: postgres, containerPort: 5432}]
+          readinessProbe: {exec: {command: [pg_isready, -U, arop, -d, arop]}, periodSeconds: 5, timeoutSeconds: 3, failureThreshold: 12}
+          livenessProbe: {exec: {command: [pg_isready, -U, arop, -d, arop]}, periodSeconds: 10, timeoutSeconds: 3, failureThreshold: 6}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 100m, memory: 256Mi}, limits: {cpu: "2", memory: 2Gi}}
+          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 20Gi}}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: arop-postgres, namespace: arop-system}
+spec:
+  clusterIP: None
+  selector: {app.kubernetes.io/name: arop-postgres}
+  ports: [{name: postgres, port: 5432, targetPort: postgres}]

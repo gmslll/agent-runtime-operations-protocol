@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arop-control-plane
+  namespace: arop-system
+spec:
+  replicas: 2
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  selector:
+    matchLabels: {app.kubernetes.io/name: arop-control-plane}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: arop-control-plane}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext: {runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: control-plane
+          image: registry.example.invalid/arop/control-plane@${AROP_CONTROL_PLANE_IMAGE_DIGEST}
+          imagePullPolicy: IfNotPresent
+          args: [--mode=postgres, --database-dsn=$(AROP_DATABASE_DSN), --migration-root=/opt/arop/migrations, --backup-directory=/var/lib/arop/backups, --asset-token-key-file=/run/secrets/asset-token-key, --asset-token-key-id=atk_production, --dispatch-issuer=https://arop.example.invalid, --listen=:8080, --storage-startup-timeout=90s, --migration-timeout=5m, --shutdown-timeout=20s]
+          env:
+            - name: AROP_DATABASE_DSN
+              valueFrom: {secretKeyRef: {name: arop-runtime-secrets, key: database-dsn}}
+          ports: [{name: http, containerPort: 8080}]
+          startupProbe: {httpGet: {path: /v1/health/live, port: http}, periodSeconds: 2, failureThreshold: 45}
+          readinessProbe: {httpGet: {path: /v1/health/ready, port: http}, periodSeconds: 5, failureThreshold: 3}
+          livenessProbe: {httpGet: {path: /v1/health/live, port: http}, periodSeconds: 10, failureThreshold: 3}
+          lifecycle: {preStop: {httpGet: {path: /v1/health/live, port: http}}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: "2", memory: 1Gi}}
+          volumeMounts:
+            - {name: runtime-secrets, mountPath: /run/secrets, readOnly: true}
+            - {name: backup, mountPath: /var/lib/arop/backups}
+      volumes:
+        - name: runtime-secrets
+          secret: {secretName: arop-runtime-secrets, defaultMode: 256, items: [{key: asset-token-key, path: asset-token-key}]}
+        - {name: backup, emptyDir: {sizeLimit: 2Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: arop-control-plane, namespace: arop-system}
+spec:
+  selector: {app.kubernetes.io/name: arop-control-plane}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: arop-control-plane, namespace: arop-system}
+spec:
+  minAvailable: 1
+  selector: {matchLabels: {app.kubernetes.io/name: arop-control-plane}}

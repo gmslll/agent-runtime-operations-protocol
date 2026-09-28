@@ -1,0 +1,12 @@
+schema_version: 1
+profiles:
+  - id: production
+    title: Production reference deployment
+    includes: [control-plane]
+    scenarios:
+      - {id: fault-ha.duplicate, required: true}
+      - {id: fault-ha.drop, required: true}
+      - {id: fault-ha.reorder, required: true}
+      - {id: fault-ha.delay, required: true}
+      - {id: fault-ha.crash, required: true}
+      - {id: fault-ha.partition, required: true}

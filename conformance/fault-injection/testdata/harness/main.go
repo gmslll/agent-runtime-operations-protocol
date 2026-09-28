@@ -362,7 +362,7 @@ func startPGNode(scratch, name string, tools map[string]string) (*pgNode, error)
 		return nil, err
 	}
 	user := "arop_p35"
-	init := runWithEnv(scratch, 90*time.Second, pgEnvironment(home), tools["initdb"], "-D", data, "--no-locale", "--encoding=UTF8", "--auth-local=trust", "--auth-host=reject", "--username="+user, "--no-instructions")
+	init := runWithEnv(scratch, 90*time.Second, pgEnvironment(home), tools["initdb"], "-D", data, "--no-locale", "--encoding=UTF8", "--auth-local=trust", "--auth-host=reject", "--username="+user, "--no-instructions", "-c", "shared_memory_type=mmap", "-c", "dynamic_shared_memory_type=mmap")
 	if init.err != nil {
 		return nil, init.err
 	}
@@ -370,7 +370,7 @@ func startPGNode(scratch, name string, tools map[string]string) (*pgNode, error)
 	if err != nil {
 		return nil, err
 	}
-	process, err := startProcessWithEnv(scratch, pgEnvironment(home), tools["postgres"], "-D", data, "-k", socket, "-p", strconv.Itoa(port), "-c", "listen_addresses=", "-c", "unix_socket_permissions=0700", "-c", "fsync=off")
+	process, err := startProcessWithEnv(scratch, pgEnvironment(home), tools["postgres"], "-D", data, "-k", socket, "-p", strconv.Itoa(port), "-c", "listen_addresses=", "-c", "unix_socket_permissions=0700", "-c", "fsync=off", "-c", "shared_memory_type=mmap", "-c", "dynamic_shared_memory_type=mmap")
 	if err != nil {
 		return nil, err
 	}
@@ -408,7 +408,10 @@ func (node *pgNode) crash() error {
 	if node == nil || node.process == nil || node.process.command.Process == nil {
 		return errors.New("primary is not running")
 	}
-	_ = syscall.Kill(-node.process.command.Process.Pid, syscall.SIGKILL)
+	// SIGQUIT is PostgreSQL's immediate/crash shutdown: active transactions are
+	// aborted and crash recovery is required, while the postmaster can still
+	// release its operating-system IPC resources deterministically.
+	_ = syscall.Kill(-node.process.command.Process.Pid, syscall.SIGQUIT)
 	select {
 	case <-node.process.done:
 		node.process = nil
