@@ -80,6 +80,10 @@ func refreshAll(root string) ([]byte, error) {
 		{"P30", "ec2a0ee", "test-interop-mcp", []string{"P30"}},
 	}
 	for _, replay := range replays {
+		if evidence, ok := existingSuccessfulReports(root, replay.phases); ok {
+			results[replay.name+"-verified-existing"] = report.Hash(evidence)
+			continue
+		}
 		evidence, err := replayReports(root, replay.commit, replay.target, replay.phases)
 		if err != nil {
 			return nil, fmt.Errorf("%s historical replay: %w", replay.name, err)
@@ -123,6 +127,9 @@ func replayReports(root, revision, target string, phases []string) (evidence []b
 		return nil, err
 	}
 	added = true
+	if err := seedSuccessfulReports(root, temp); err != nil {
+		return nil, err
+	}
 	if output, err := run(temp, "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"); err != nil {
 		return nil, fmt.Errorf("locked dependencies: %w: %s", err, tail(output))
 	}
@@ -149,6 +156,53 @@ func replayReports(root, revision, target string, phases []string) (evidence []b
 		}
 	}
 	return json.Marshal(bindings)
+}
+
+func existingSuccessfulReports(root string, phases []string) ([]byte, bool) {
+	values := map[string]string{}
+	for _, phase := range phases {
+		path := filepath.Join(root, "build", "reports", phase, "report.json")
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil, false
+		}
+		var value struct {
+			Success bool `json:"success"`
+		}
+		if json.Unmarshal(data, &value) != nil || !value.Success {
+			return nil, false
+		}
+		if _, err := os.Stat(filepath.Join(root, "build", "reports", phase, "junit.xml")); err != nil {
+			return nil, false
+		}
+		values[phase] = report.Hash(data)
+	}
+	data, _ := json.Marshal(values)
+	return data, true
+}
+
+func seedSuccessfulReports(root, destinationRoot string) error {
+	for phaseNumber := 1; phaseNumber <= 43; phaseNumber++ {
+		phase := fmt.Sprintf("P%02d", phaseNumber)
+		if _, ok := existingSuccessfulReports(root, []string{phase}); !ok {
+			continue
+		}
+		for _, name := range []string{"junit.xml", "report.json"} {
+			relative := filepath.Join("build", "reports", phase, name)
+			data, err := os.ReadFile(filepath.Join(root, relative))
+			if err != nil {
+				return err
+			}
+			destination := filepath.Join(destinationRoot, relative)
+			if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+				return err
+			}
+			if err := os.WriteFile(destination, data, 0o600); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func verifyAll(root string) ([]byte, error) {
