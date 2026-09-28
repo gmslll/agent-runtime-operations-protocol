@@ -1,0 +1,13 @@
+{
+  "@context": "https://agenticresourcediscovery.org/context/v1",
+  "identifier": "urn:air:example.com:arop:publication.example",
+  "displayName": "Publication Example",
+  "type": "application/a2a-agent-card+json",
+  "url": "https://agents.example.com/.well-known/agent-card.json",
+  "representativeQueries": ["Echo a message", "Repeat structured input"],
+  "capabilities": ["default"],
+  "description": "A minimal immutable publication fixture.",
+  "tags": ["a2a", "arop"],
+  "version": "1.0.0",
+  "metadata": {"aropProtocol": "arop/v1", "aropManifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+}

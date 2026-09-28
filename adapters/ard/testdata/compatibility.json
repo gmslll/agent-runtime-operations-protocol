@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "protocol": "Agentic Resource Discovery",
+    "spec_version": "0.91",
+    "schema_commit": "b76f235a8f461876ad4f1e77abd0eb0eb302b48d",
+    "ard_entry_schema_sha256": "011b86d55fd5d2883dffae3f0577d26f5efb56ca866eb079edbc78a628f95499"
+  },
+  "artifact_type": "application/a2a-agent-card+json",
+  "rules": {
+    "discovery_is_not_authorization": true,
+    "discovery_is_not_runtime_readiness": true,
+    "unknown_namespaced_terms_are_preserved": true,
+    "immutable_version_conflicts_are_rejected": true,
+    "runtime_topology_and_credentials_are_not_exported": true
+  }
+}
