@@ -972,7 +972,12 @@ func runP08Regression(root, scratch string) commandResult {
 	}
 	result := runCommandWithTimeout(root, map[string]string{
 		"AROP_CHECK_COMMAND": "", "HOME": home, "GOENV": "off", "GOFLAGS": "-mod=readonly", "GOWORK": "off", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0",
-	}, []string{"make", "test-control-plane-platform"}, 5*time.Minute)
+	// P08 deliberately runs with a fresh HOME and cold Go caches so host state is
+	// not an input.  A five-minute wall clock budget is too small for that
+	// isolated bootstrap on a loaded or cold machine even when every check
+	// passes; keep the timeout bounded while allowing the acceptance process to
+	// finish and clean up its private caches.
+	}, []string{"make", "test-control-plane-platform"}, 10*time.Minute)
 	if result.Err != nil {
 		return result
 	}
