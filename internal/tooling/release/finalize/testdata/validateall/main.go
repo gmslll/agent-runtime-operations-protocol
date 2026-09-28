@@ -271,7 +271,7 @@ func verifyAll(root string) ([]byte, error) {
 	for i := 1; i <= 43; i++ {
 		phase := fmt.Sprintf("P%02d", i)
 		path := fmt.Sprintf("build/reports/%s/report.json", phase)
-		var verified report.Report
+		var verified *report.Report
 		var mode string
 		var err error
 		if phase == "P03" || phase == "P04" {
@@ -279,7 +279,7 @@ func verifyAll(root string) ([]byte, error) {
 		} else {
 			verified, mode, err = report.Verify(report.VerifyOptions{Root: root, ReportPath: path, AllowAncestor: true})
 		}
-		if err != nil || !verified.Success {
+		if err != nil || verified == nil || !verified.Success {
 			return nil, fmt.Errorf("%s verification mode=%s: %w", phase, mode, err)
 		}
 		data, err := os.ReadFile(filepath.Join(root, path))
@@ -291,12 +291,13 @@ func verifyAll(root string) ([]byte, error) {
 	return json.Marshal(results)
 }
 
-func verifyAtClaimedCommit(root, reportPath string) (verified report.Report, mode string, resultErr error) {
+func verifyAtClaimedCommit(root, reportPath string) (verified *report.Report, mode string, resultErr error) {
 	data, err := os.ReadFile(filepath.Join(root, reportPath))
 	if err != nil {
 		return verified, "", err
 	}
-	if err := json.Unmarshal(data, &verified); err != nil {
+	verified = &report.Report{}
+	if err := json.Unmarshal(data, verified); err != nil {
 		return verified, "", err
 	}
 	claimed := verified.Provenance.Git.Head
