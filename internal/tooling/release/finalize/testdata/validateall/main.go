@@ -74,8 +74,7 @@ func refreshAll(root string) ([]byte, error) {
 		prerequisites        []string
 		phases               []string
 	}{
-		{"P10", "9c4da72a6043e265f75b5b7fb0f0c1a31d2d98d2", "test-identity-secrets", nil, []string{"P10"}},
-		{"P23", "5bada508fa5e7035abd1d33817b4de7abf3ee49d", "verify-run-delivery", nil, []string{"P18", "P19", "P20", "P21", "P22", "P23"}},
+		{"P08-P23", "5bada508fa5e7035abd1d33817b4de7abf3ee49d", "verify-run-delivery", nil, []string{"P08", "P10", "P12", "P13", "P18", "P19", "P20", "P21", "P22", "P23"}},
 		{"P24-P26", "6ba1651", "verify-operations-security", []string{"test-worker-service", "test-go-worker-sdk"}, []string{"P24", "P25", "P26"}},
 		{"P28", "4daf269", "test-typescript-consumer", nil, []string{"P28"}},
 		{"P29", "9a15353", "test-interop-a2a", nil, []string{"P29"}},
@@ -194,13 +193,19 @@ func failedReportDiagnostics(root string, phases []string) string {
 				Detail string `json:"detail"`
 			} `json:"checks"`
 		}
-		if json.Unmarshal(data, &value) != nil || value.Success {
+		if json.Unmarshal(data, &value) != nil {
 			continue
 		}
-		for _, check := range value.Checks {
-			if !check.Passed {
-				lines = append(lines, phase+"/"+check.Name+": "+check.Detail)
+		if !value.Success {
+			for _, check := range value.Checks {
+				if !check.Passed {
+					lines = append(lines, phase+"/"+check.Name+": "+check.Detail)
+				}
 			}
+		}
+		verified, mode, verifyErr := report.Verify(report.VerifyOptions{Root: root, ReportPath: filepath.Join("build", "reports", phase, "report.json")})
+		if verifyErr != nil || mode != "current-worktree" || !verified.Success {
+			lines = append(lines, fmt.Sprintf("%s/self-verify: mode=%s success=%v error=%v", phase, mode, verified.Success, verifyErr))
 		}
 	}
 	if len(lines) == 0 {
