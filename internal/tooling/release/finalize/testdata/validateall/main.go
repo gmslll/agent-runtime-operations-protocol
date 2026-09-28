@@ -136,6 +136,15 @@ func replayReports(root, revision, target string, prerequisites, phases []string
 	if err := seedSuccessfulReports(root, temp); err != nil {
 		return nil, err
 	}
+	// A replay must produce its own requested reports.  Seeding predecessor
+	// evidence is necessary for historical fan-in, but retaining a stale report
+	// for the phase under replay can make a target consume later evidence instead
+	// of exercising its historical writer.
+	for _, phase := range phases {
+		if err := os.RemoveAll(filepath.Join(temp, "build", "reports", phase)); err != nil {
+			return nil, err
+		}
+	}
 	if output, err := run(temp, "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"); err != nil {
 		return nil, fmt.Errorf("locked dependencies: %w: %s", err, tail(output))
 	}
@@ -147,7 +156,7 @@ func replayReports(root, revision, target string, prerequisites, phases []string
 	}
 	output, err := run(temp, "make", target)
 	if err != nil {
-		return nil, fmt.Errorf("make %s: %w: %s", target, err, tail(output))
+		return nil, fmt.Errorf("make %s: %w: %s%s", target, err, tail(output), failedReportDiagnostics(temp, phases))
 	}
 	bindings := map[string]string{"commit": commit, "target": target, "output_sha256": report.Hash(output)}
 	for _, phase := range phases {
@@ -168,6 +177,36 @@ func replayReports(root, revision, target string, prerequisites, phases []string
 		}
 	}
 	return json.Marshal(bindings)
+}
+
+func failedReportDiagnostics(root string, phases []string) string {
+	lines := []string{}
+	for _, phase := range phases {
+		data, err := os.ReadFile(filepath.Join(root, "build", "reports", phase, "report.json"))
+		if err != nil {
+			continue
+		}
+		var value struct {
+			Success bool `json:"success"`
+			Checks  []struct {
+				Name   string `json:"name"`
+				Passed bool   `json:"passed"`
+				Detail string `json:"detail"`
+			} `json:"checks"`
+		}
+		if json.Unmarshal(data, &value) != nil || value.Success {
+			continue
+		}
+		for _, check := range value.Checks {
+			if !check.Passed {
+				lines = append(lines, phase+"/"+check.Name+": "+check.Detail)
+			}
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "\nfailed report checks:\n" + strings.Join(lines, "\n")
 }
 
 func existingSuccessfulReports(root string, phases []string, expectedCommit string) ([]byte, bool) {
