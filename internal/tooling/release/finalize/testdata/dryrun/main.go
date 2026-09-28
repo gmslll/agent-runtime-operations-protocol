@@ -104,6 +104,9 @@ func cleanClone(root string) ([]byte, error) {
 		return nil, err
 	}
 	outputs := map[string]string{}
+	if output, installErr := run(clone, "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"); installErr != nil {
+		return nil, fmt.Errorf("locked Node dependency install: %w: %s", installErr, tail(output))
+	}
 	for _, target := range []string{"test-release-supply-chain", "test-release-finalization-tooling"} {
 		output, runErr := run(clone, "make", target)
 		if runErr != nil {
