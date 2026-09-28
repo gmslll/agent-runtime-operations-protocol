@@ -121,7 +121,7 @@ func validateDeploymentManifests(root string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	wantFiles := []string{"control-plane.yaml", "namespace.yaml", "network-policy.yaml", "postgres.yaml", "secret-template.yaml"}
+	wantFiles := []string{"control-plane-pdb.yaml", "control-plane-service.yaml", "control-plane.yaml", "namespace.yaml", "network-policy-control-plane.yaml", "network-policy.yaml", "postgres-service.yaml", "postgres.yaml", "secret-template.yaml"}
 	gotFiles, kinds, evidence := []string{}, []string{}, bytes.Buffer{}
 	for _, entry := range entries {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".yaml" {
@@ -166,12 +166,16 @@ func validateDeploymentManifests(root string) ([]byte, error) {
 		return nil, fmt.Errorf("manifest kinds=%v", kinds)
 	}
 	control, _ := os.ReadFile(filepath.Join(directory, "control-plane.yaml"))
+	pdb, _ := os.ReadFile(filepath.Join(directory, "control-plane-pdb.yaml"))
 	postgres, _ := os.ReadFile(filepath.Join(directory, "postgres.yaml"))
 	network, _ := os.ReadFile(filepath.Join(directory, "network-policy.yaml"))
-	for _, required := range []string{"@${AROP_CONTROL_PLANE_IMAGE_DIGEST}", "runAsNonRoot: true", "runAsUser: 65532", "readOnlyRootFilesystem: true", "allowPrivilegeEscalation: false", "drop: [ALL]", "startupProbe:", "readinessProbe:", "livenessProbe:", "maxUnavailable: 0", "maxSurge: 1", "minAvailable: 1"} {
+	for _, required := range []string{"@${AROP_CONTROL_PLANE_IMAGE_DIGEST}", "runAsNonRoot: true", "runAsUser: 65532", "readOnlyRootFilesystem: true", "allowPrivilegeEscalation: false", "drop: [ALL]", "startupProbe:", "readinessProbe:", "livenessProbe:", "maxUnavailable: 0", "maxSurge: 1"} {
 		if !bytes.Contains(control, []byte(required)) {
 			return nil, fmt.Errorf("control-plane manifest lacks %q", required)
 		}
+	}
+	if !bytes.Contains(pdb, []byte("minAvailable: 1")) {
+		return nil, errors.New("control-plane PDB does not preserve availability")
 	}
 	for _, required := range []string{"postgres@${POSTGRES_16_IMAGE_DIGEST}", "secretKeyRef:", "readinessProbe:", "livenessProbe:", "ReadWriteOnce"} {
 		if !bytes.Contains(postgres, []byte(required)) {

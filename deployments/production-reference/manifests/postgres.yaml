@@ -32,11 +32,3 @@ spec:
   volumeClaimTemplates:
     - metadata: {name: data}
       spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 20Gi}}}
----
-apiVersion: v1
-kind: Service
-metadata: {name: arop-postgres, namespace: arop-system}
-spec:
-  clusterIP: None
-  selector: {app.kubernetes.io/name: arop-postgres}
-  ports: [{name: postgres, port: 5432, targetPort: postgres}]

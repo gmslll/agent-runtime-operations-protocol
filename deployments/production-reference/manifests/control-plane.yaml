@@ -37,17 +37,3 @@ spec:
         - name: runtime-secrets
           secret: {secretName: arop-runtime-secrets, defaultMode: 256, items: [{key: asset-token-key, path: asset-token-key}]}
         - {name: backup, emptyDir: {sizeLimit: 2Gi}}
----
-apiVersion: v1
-kind: Service
-metadata: {name: arop-control-plane, namespace: arop-system}
-spec:
-  selector: {app.kubernetes.io/name: arop-control-plane}
-  ports: [{name: http, port: 80, targetPort: http}]
----
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata: {name: arop-control-plane, namespace: arop-system}
-spec:
-  minAvailable: 1
-  selector: {matchLabels: {app.kubernetes.io/name: arop-control-plane}}
