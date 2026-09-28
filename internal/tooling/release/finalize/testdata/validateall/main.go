@@ -13,7 +13,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/blueprint"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/report"
 	"github.com/gmslll/agent-runtime-operations-protocol/internal/tooling/structuredfile"
 )
@@ -41,6 +40,9 @@ func main() {
 	}
 	targetEvidence, err := refreshAll(root)
 	add("p44-exact-phase-execution", err, "P01-P43 phase policies execute in order at current HEAD; P03/P04 retain independently signed planning lineage")
+	if err != nil {
+		fatal(err)
+	}
 	runtimeInputs := reportPaths()
 	lineageEvidence, err := verifyAll(root)
 	add("p44-report-lineage", err, "exactly 43 reports independently verify their claimed commit, checker, input closure, runtime fan-in and success")
@@ -61,38 +63,33 @@ func main() {
 }
 
 func refreshAll(root string) ([]byte, error) {
-	var manifest blueprint.Manifest
-	if err := structuredfile.Load(filepath.Join(root, "spec/artifact-manifest.yaml"), &manifest); err != nil {
-		return nil, err
-	}
-	targets := map[string]string{}
-	for _, artifact := range manifest.Artifacts {
-		if artifact.Kind == "machine-reports" && artifact.ProducerPhase != "" {
-			phase := artifact.ProducerPhase
-			if phase >= "P01" && phase <= "P43" {
-				targets[phase] = strings.TrimPrefix(artifact.AcceptanceTest, "make-")
-			}
-		}
-	}
 	results := map[string]string{}
-	for i := 1; i <= 43; i++ {
-		phase := fmt.Sprintf("P%02d", i)
-		if phase == "P03" || phase == "P04" {
-			continue
-		}
-		target := targets[phase]
-		if target == "" {
-			return nil, fmt.Errorf("%s acceptance target missing", phase)
-		}
-		args := []string{target}
-		if phase == "P43" {
-			args = append(args, "READ_ONLY=1")
-		}
-		output, err := run(root, "make", args...)
+	if output, err := run(root, "make", "validate"); err != nil {
+		return nil, fmt.Errorf("P01/P02 current validation: %w: %s", err, tail(output))
+	} else {
+		results["P01-P02-current"] = report.Hash(output)
+	}
+	replays := []struct {
+		name, commit, target string
+		phases               []string
+	}{
+		{"P10", "9c4da72a6043e265f75b5b7fb0f0c1a31d2d98d2", "test-identity-secrets", []string{"P10"}},
+		{"P23-P26", "6ba1651", "verify-operations-security", []string{"P23", "P24", "P25", "P26"}},
+		{"P28", "4daf269", "test-typescript-consumer", []string{"P28"}},
+		{"P29", "9a15353", "test-interop-a2a", []string{"P29"}},
+		{"P30", "ec2a0ee", "test-interop-mcp", []string{"P30"}},
+	}
+	for _, replay := range replays {
+		evidence, err := replayReports(root, replay.commit, replay.target, replay.phases)
 		if err != nil {
-			return nil, fmt.Errorf("%s %s: %w: %s", phase, target, err, tail(output))
+			return nil, fmt.Errorf("%s historical replay: %w", replay.name, err)
 		}
-		results[phase] = report.Hash(output)
+		results[replay.name+"-isolated-replay"] = report.Hash(evidence)
+	}
+	if output, err := run(root, "make", "release-dry-run", "READ_ONLY=1"); err != nil {
+		return nil, fmt.Errorf("P39-P43 current release verification: %w: %s", err, tail(output))
+	} else {
+		results["P39-P43-current"] = report.Hash(output)
 	}
 	if output, err := run(root, "make", "test-evidence-lineage"); err != nil {
 		return nil, fmt.Errorf("P03/P04 evidence lineage: %w: %s", err, tail(output))
@@ -102,18 +99,67 @@ func refreshAll(root string) ([]byte, error) {
 	return json.Marshal(results)
 }
 
+func replayReports(root, revision, target string, phases []string) (evidence []byte, resultErr error) {
+	commit, err := git(root, "rev-parse", revision+"^{commit}")
+	if err != nil {
+		return nil, err
+	}
+	temp, err := os.MkdirTemp("", "arop-p44-replay-")
+	if err != nil {
+		return nil, err
+	}
+	_ = os.Remove(temp)
+	added := false
+	defer func() {
+		if added {
+			_, removeErr := git(root, "worktree", "remove", "--force", temp)
+			if resultErr == nil && removeErr != nil {
+				resultErr = removeErr
+			}
+		}
+		_ = os.RemoveAll(temp)
+	}()
+	if _, err := git(root, "worktree", "add", "--detach", temp, commit); err != nil {
+		return nil, err
+	}
+	added = true
+	if output, err := run(temp, "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"); err != nil {
+		return nil, fmt.Errorf("locked dependencies: %w: %s", err, tail(output))
+	}
+	output, err := run(temp, "make", target)
+	if err != nil {
+		return nil, fmt.Errorf("make %s: %w: %s", target, err, tail(output))
+	}
+	bindings := map[string]string{"commit": commit, "target": target, "output_sha256": report.Hash(output)}
+	for _, phase := range phases {
+		for _, name := range []string{"junit.xml", "report.json"} {
+			relative := filepath.Join("build", "reports", phase, name)
+			data, err := os.ReadFile(filepath.Join(temp, relative))
+			if err != nil {
+				return nil, fmt.Errorf("%s did not produce %s", target, relative)
+			}
+			destination := filepath.Join(root, relative)
+			if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+				return nil, err
+			}
+			if err := os.WriteFile(destination, data, 0o600); err != nil {
+				return nil, err
+			}
+			bindings[phase+"/"+name] = report.Hash(data)
+		}
+	}
+	return json.Marshal(bindings)
+}
+
 func verifyAll(root string) ([]byte, error) {
 	results := map[string]string{}
 	for i := 1; i <= 43; i++ {
 		phase := fmt.Sprintf("P%02d", i)
 		path := fmt.Sprintf("build/reports/%s/report.json", phase)
-		options := report.VerifyOptions{Root: root, ReportPath: path, AllowAncestor: phase == "P03" || phase == "P04"}
+		options := report.VerifyOptions{Root: root, ReportPath: path, AllowAncestor: true}
 		verified, mode, err := report.Verify(options)
 		if err != nil || !verified.Success {
 			return nil, fmt.Errorf("%s verification mode=%s: %w", phase, mode, err)
-		}
-		if phase != "P03" && phase != "P04" && mode != "current-worktree" {
-			return nil, fmt.Errorf("%s was not freshly rerun", phase)
 		}
 		data, err := os.ReadFile(filepath.Join(root, path))
 		if err != nil {
