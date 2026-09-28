@@ -117,7 +117,7 @@ func validateManifest(root string) error {
 			}
 			owned = append(owned, artifact.ID)
 		}
-		if artifact.ID == "phase-report-p39" {
+		if artifact.ID == "release-supply-chain-reports" {
 			dependencies = append(dependencies, artifact.DerivesFrom...)
 			runtime = append(runtime, artifact.RuntimeInputs...)
 		}
@@ -243,7 +243,7 @@ func workflowNegative(root string) error {
 }
 
 func exerciseJournal() ([]byte, error) {
-	root, err := os.MkdirTemp("", "arop-p39-journal-")
+	root, err := secureTempDir("arop-p39-journal-")
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +317,7 @@ func exerciseJournal() ([]byte, error) {
 
 func exerciseCoordinator(mapper versionpolicy.Mapper) ([]byte, error) {
 	request := supply.Request{LogicalVersion: "1.0.0-rc.1", SourceCommit: strings.Repeat("a", 40), SourceTree: strings.Repeat("b", 40), Destination: "registry://example/arop", WorkflowDigest: hex64("workflow"), WorkflowLockDigest: hex64("lock"), WorkflowIdentity: "workflow#release@digest"}
-	first, firstPublisher, firstEntries, err := runCoordinator(mapper, request, &onceFault{point: "after-remote:go"})
+	first, firstPublisher, firstEntries, err := runCoordinator(mapper, request, &onceFault{point: "after-remote:cli"})
 	if err == nil || first.ManifestDigest != "" || firstPublisher.puts != 1 {
 		return nil, errors.New("after-remote fault did not interrupt at the exact boundary")
 	}
@@ -351,7 +351,7 @@ func runCoordinator(mapper versionpolicy.Mapper, request supply.Request, faults 
 }
 
 func coordinatorWithPublisher(mapper versionpolicy.Mapper, request supply.Request, publisher *fakePublisher, faults supply.FaultHook) (supply.Result, *fakePublisher, []journal.Entry, error) {
-	directory, err := os.MkdirTemp("", "arop-p39-coordinator-")
+	directory, err := secureTempDir("arop-p39-coordinator-")
 	if err != nil {
 		return supply.Result{}, publisher, nil, err
 	}
@@ -368,7 +368,7 @@ func coordinatorWithPublisher(mapper versionpolicy.Mapper, request supply.Reques
 }
 
 func resumeCoordinator(mapper versionpolicy.Mapper, request supply.Request, publisher *fakePublisher, prefix []journal.Entry) (supply.Result, *fakePublisher, []journal.Entry, error) {
-	directory, err := os.MkdirTemp("", "arop-p39-resume-")
+	directory, err := secureTempDir("arop-p39-resume-")
 	if err != nil {
 		return supply.Result{}, publisher, nil, err
 	}
@@ -470,7 +470,7 @@ func (fault *onceFault) Hit(point string) error {
 }
 
 func exerciseRealPrimitives(root string) ([]byte, error) {
-	scratch, err := os.MkdirTemp("", "arop-p39-real-")
+	scratch, err := secureTempDir("arop-p39-real-")
 	if err != nil {
 		return nil, err
 	}
@@ -547,6 +547,19 @@ func strictJSONFile(path string, destination any) error {
 		return err
 	}
 	return nil
+}
+
+func secureTempDir(pattern string) (string, error) {
+	path, err := os.MkdirTemp("", pattern)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		_ = os.RemoveAll(path)
+		return "", err
+	}
+	return resolved, nil
 }
 
 func git(root string, arguments ...string) (string, error) {
