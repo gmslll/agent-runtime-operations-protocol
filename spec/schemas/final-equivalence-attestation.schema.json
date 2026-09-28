@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.dev/schemas/final-equivalence-attestation.schema.json",
+  "title": "AROP final equivalence attestation payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "source", "expected_final_tree", "logical_version", "overlay_sha256", "version_policy_sha256", "payload_policy_version", "normalizer_version", "phase_policy_sha256", "issued_at", "expires_at", "bridged_reports"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "source": {
+      "type": "object", "additionalProperties": false, "required": ["commit", "tree"],
+      "properties": {"commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}
+    },
+    "expected_final_tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "logical_version": {"type": "string", "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"},
+    "overlay_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "version_policy_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "payload_policy_version": {"const": 1},
+    "normalizer_version": {"const": 1},
+    "phase_policy_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "issued_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "bridged_reports": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["phase", "report_digest", "claimed_commit", "input_closure_digest"],
+        "properties": {
+          "phase": {"type": "string", "pattern": "^P(?:0[1-9]|[1-9][0-9])$"},
+          "report_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "claimed_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+          "input_closure_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    }
+  }
+}
