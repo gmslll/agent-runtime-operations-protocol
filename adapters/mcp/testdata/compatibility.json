@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "protocol": "Model Context Protocol",
+    "protocol_revision": "2026-07-28"
+  },
+  "trace_meta_keys": ["traceparent", "tracestate"],
+  "invocation_meta_key": "invalid.arop/invocation",
+  "effect_meta_key": "invalid.arop/effect",
+  "rules": {
+    "mcp_transport_state_is_not_arop_run_identity": true,
+    "authorization_is_local_and_mandatory": true,
+    "write_and_irreversible_require_stable_effect_id": true,
+    "tool_annotations_are_untrusted_hints": true,
+    "registry_and_runtime_discovery_are_out_of_scope": true
+  }
+}

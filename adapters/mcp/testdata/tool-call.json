@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "id": "mcp-request-1",
+  "method": "tools/call",
+  "params": {
+    "name": "create_order",
+    "arguments": {"sku": "A"},
+    "_meta": {
+      "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      "invalid.arop/invocation": {"runId": "run_fixture", "attemptId": "att_fixture", "authorizationSnapshotDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+      "invalid.arop/effect": {"level": "write", "effectId": "eff_order:fixture"}
+    }
+  }
+}

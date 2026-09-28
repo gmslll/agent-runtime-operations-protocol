@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "id": "mcp-request-2",
+  "method": "resources/read",
+  "params": {
+    "uri": "mcp://documents/guide",
+    "_meta": {
+      "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      "invalid.arop/invocation": {"runId": "run_fixture", "attemptId": "att_fixture", "authorizationSnapshotDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
+    }
+  }
+}
