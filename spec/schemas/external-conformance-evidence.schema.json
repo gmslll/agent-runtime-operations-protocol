@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.dev/schemas/external-conformance-evidence-v1.schema.json",
+  "title": "AROP external conformance evidence",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "runner_sha256", "suite_sha256", "profiles", "artifacts", "results"],
+  "properties": {
+    "schema_version": {"const": 1}, "runner_sha256": {"$ref": "#/$defs/digest"}, "suite_sha256": {"$ref": "#/$defs/digest"},
+    "profiles": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{0,127}$"}},
+    "artifacts": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["name", "sha256", "bytes"], "properties": {"name": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$"}, "sha256": {"$ref": "#/$defs/digest"}, "bytes": {"type": "integer", "minimum": 1}}}},
+    "results": {"type": "array", "minItems": 1, "items": {"type": "object", "additionalProperties": false, "required": ["scenario_id", "result"], "properties": {"scenario_id": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{0,127}$"}, "result": {"const": "PASS"}}}}
+  },
+  "$defs": {"digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}}
+}

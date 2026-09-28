@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.dev/schemas/trusted-release-roles-v1.schema.json",
+  "title": "AROP trusted release role registry bundle",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "root", "timestamp", "snapshot", "targets", "role_registry", "checkpoint"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "root": {"$ref": "#/$defs/root"},
+    "timestamp": {"$ref": "#/$defs/timestamp"},
+    "snapshot": {"$ref": "#/$defs/snapshot"},
+    "targets": {"$ref": "#/$defs/targets"},
+    "role_registry": {"$ref": "#/$defs/registry"},
+    "checkpoint": {"$ref": "#/$defs/checkpoint"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{0,127}$"},
+    "time": {"type": "string", "format": "date-time"},
+    "signature": {
+      "type": "object", "additionalProperties": false,
+      "required": ["key_id", "signature"],
+      "properties": {"key_id": {"$ref": "#/$defs/id"}, "signature": {"type": "string", "minLength": 88, "maxLength": 88}}
+    },
+    "key": {
+      "type": "object", "additionalProperties": false,
+      "required": ["key_id", "principal_id", "algorithm", "public_key"],
+      "properties": {
+        "key_id": {"$ref": "#/$defs/id"}, "principal_id": {"$ref": "#/$defs/id"},
+        "algorithm": {"const": "ed25519"}, "public_key": {"type": "string", "minLength": 44, "maxLength": 44}
+      }
+    },
+    "role": {
+      "type": "object", "additionalProperties": false,
+      "required": ["key_ids", "threshold"],
+      "properties": {
+        "key_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}},
+        "threshold": {"type": "integer", "minimum": 1, "maximum": 32}
+      }
+    },
+    "root": {
+      "type": "object", "additionalProperties": false,
+      "required": ["type", "version", "expires_at", "keys", "roles", "signatures"],
+      "properties": {
+        "type": {"const": "root"}, "version": {"type": "integer", "minimum": 1}, "expires_at": {"$ref": "#/$defs/time"},
+        "keys": {"type": "array", "minItems": 4, "uniqueItems": true, "items": {"$ref": "#/$defs/key"}},
+        "roles": {"type": "object", "additionalProperties": false, "required": ["root", "timestamp", "snapshot", "targets"], "properties": {"root": {"$ref": "#/$defs/role"}, "timestamp": {"$ref": "#/$defs/role"}, "snapshot": {"$ref": "#/$defs/role"}, "targets": {"$ref": "#/$defs/role"}}},
+        "signatures": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/signature"}}
+      }
+    },
+    "meta": {
+      "type": "object", "additionalProperties": false, "required": ["version", "sha256", "bytes"],
+      "properties": {"version": {"type": "integer", "minimum": 1}, "sha256": {"$ref": "#/$defs/digest"}, "bytes": {"type": "integer", "minimum": 1}}
+    },
+    "timestamp": {
+      "type": "object", "additionalProperties": false, "required": ["type", "version", "generated_at", "expires_at", "snapshot", "signatures"],
+      "properties": {"type": {"const": "timestamp"}, "version": {"type": "integer", "minimum": 1}, "generated_at": {"$ref": "#/$defs/time"}, "expires_at": {"$ref": "#/$defs/time"}, "snapshot": {"$ref": "#/$defs/meta"}, "signatures": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/signature"}}}
+    },
+    "snapshot": {
+      "type": "object", "additionalProperties": false, "required": ["type", "version", "expires_at", "targets", "signatures"],
+      "properties": {"type": {"const": "snapshot"}, "version": {"type": "integer", "minimum": 1}, "expires_at": {"$ref": "#/$defs/time"}, "targets": {"$ref": "#/$defs/meta"}, "signatures": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/signature"}}}
+    },
+    "targets": {
+      "type": "object", "additionalProperties": false, "required": ["type", "version", "expires_at", "role_registry", "fulcio_root_sha256", "rekor_key_ids", "signatures"],
+      "properties": {"type": {"const": "targets"}, "version": {"type": "integer", "minimum": 1}, "expires_at": {"$ref": "#/$defs/time"}, "role_registry": {"$ref": "#/$defs/meta"}, "fulcio_root_sha256": {"$ref": "#/$defs/digest"}, "rekor_key_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}}, "signatures": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/signature"}}}
+    },
+    "principal": {
+      "type": "object", "additionalProperties": false,
+      "required": ["principal_id", "key_ids", "roles", "not_before", "not_after", "revoked"],
+      "properties": {"principal_id": {"$ref": "#/$defs/id"}, "key_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}}, "roles": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/id"}}, "not_before": {"$ref": "#/$defs/time"}, "not_after": {"$ref": "#/$defs/time"}, "revoked": {"type": "boolean"}}
+    },
+    "sigstore_identity": {
+      "type": "object", "additionalProperties": false,
+      "required": ["principal_id", "issuer", "subject", "repository", "workflow_ref", "workflow_sha", "event", "role"],
+      "properties": {"principal_id": {"$ref": "#/$defs/id"}, "issuer": {"type": "string", "minLength": 1}, "subject": {"type": "string", "format": "uri"}, "repository": {"const": "InfiniteStatesInc/agent-runtime-operations-protocol"}, "workflow_ref": {"type": "string", "pattern": "^InfiniteStatesInc/agent-runtime-operations-protocol/\\.github/workflows/[A-Za-z0-9._-]+@refs/(heads|tags)/[A-Za-z0-9._/-]+$"}, "workflow_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "event": {"enum": ["workflow_dispatch", "push"]}, "role": {"$ref": "#/$defs/id"}}
+    },
+    "registry": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "version", "expires_at", "keys", "principals", "thresholds", "sigstore_identities"],
+      "properties": {"schema_version": {"const": 1}, "version": {"type": "integer", "minimum": 1}, "expires_at": {"$ref": "#/$defs/time"}, "keys": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/key"}}, "principals": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/principal"}}, "thresholds": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "integer", "minimum": 1, "maximum": 32}}, "sigstore_identities": {"type": "array", "items": {"$ref": "#/$defs/sigstore_identity"}}}
+    },
+    "checkpoint": {
+      "type": "object", "additionalProperties": false, "required": ["version", "registry_sha256", "signed_at", "signatures"],
+      "properties": {"version": {"type": "integer", "minimum": 1}, "registry_sha256": {"$ref": "#/$defs/digest"}, "signed_at": {"$ref": "#/$defs/time"}, "signatures": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/signature"}}}
+    }
+  }
+}
