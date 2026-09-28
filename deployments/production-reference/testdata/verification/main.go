@@ -67,22 +67,36 @@ func main() {
 	add("p38-manifest-inventory", validateManifest(root), "P38 owns no artifacts and consumes exactly fifteen phase reports")
 	add("p38-tree-identical-carrier", validateCarrier(root), "P38 starts at an explicit tree-identical carrier after the prebuilt verifier")
 
-	// P24 replays the complete Control Plane and Go Agent durability chain;
-	// P27 supplies the independent Python SQLite path; P37 reruns P34/P35 and
-	// the production PostgreSQL deployment path. The reports below, rather than
-	// these process logs, are the authoritative runtime inputs.
+	// Rerun every logical input at the current commit. Later-stage regression
+	// suites deliberately execute historical endpoints in isolated trees, so
+	// they cannot stand in for a current report from each producer phase. The
+	// reports below, rather than these process logs, are the authoritative
+	// runtime inputs.
 	runs := []struct {
-		name, target string
+		phase, target string
 	}{
-		{"p38-control-plane-and-go-agent-rerun", "test-worker-service"},
-		{"p38-python-agent-rerun", "test-python-provider"},
-		{"p38-production-and-ha-rerun", "production-reference-smoke"},
+		{"P09", "test-storage-migrations"},
+		{"P10", "test-identity-secrets"},
+		{"P12", "test-publication-service"},
+		{"P13", "test-asset-broker"},
+		{"P14", "test-registry-core"},
+		{"P16", "test-registry-recovery"},
+		{"P18", "test-run-lifecycle"},
+		{"P19", "test-dispatch-ticket"},
+		{"P20", "test-event-ledger"},
+		{"P21", "test-direct-proxy-provider"},
+		{"P24", "test-worker-service"},
+		{"P27", "test-python-provider"},
+		{"P34", "test-server-conformance"},
+		{"P35", "test-fault-ha-drivers"},
+		{"P37", "production-reference-smoke"},
 	}
 	evidence := []report.RuntimeEvidence{}
 	for _, item := range runs {
 		result := execute(root, 70*time.Minute, "make", item.target)
-		add(item.name, result.err, item.target+" completed without skip or fallback")
-		evidence = append(evidence, report.RuntimeEvidence{Kind: item.name, SHA256: report.Hash(result.output), Bytes: int64(len(result.output))})
+		name := "p38-" + strings.ToLower(item.phase) + "-rerun"
+		add(name, result.err, item.target+" completed at the current commit without skip or fallback")
+		evidence = append(evidence, report.RuntimeEvidence{Kind: name, SHA256: report.Hash(result.output), Bytes: int64(len(result.output))})
 	}
 
 	runtimeInputs := []string{}

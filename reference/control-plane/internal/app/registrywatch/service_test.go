@@ -69,8 +69,12 @@ func validEvent(revision uint64) registry.Event {
 }
 
 func newTestService(t *testing.T, reader Reader, hub *Hub) *Service {
+	return newTestServiceWithPoll(t, reader, hub, 5*time.Millisecond)
+}
+
+func newTestServiceWithPoll(t *testing.T, reader Reader, hub *Hub, pollInterval time.Duration) *Service {
 	t.Helper()
-	service, err := New(Dependencies{Reader: reader, Authorizer: allowAuthorizer{}, Notifier: hub, Coordinator: noopCoordinator{}, PollInterval: 5 * time.Millisecond, MaxEvents: 10000})
+	service, err := New(Dependencies{Reader: reader, Authorizer: allowAuthorizer{}, Notifier: hub, Coordinator: noopCoordinator{}, PollInterval: pollInterval, MaxEvents: 10000})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +109,11 @@ func TestWatchImmediateDoubleReadNotifyAndCompaction(t *testing.T) {
 func TestWatchNotificationPollingCancellationAndTenantIsolation(t *testing.T) {
 	reader := &sequenceReader{windows: []registry.EventWindow{{Revision: 1}, {Revision: 1}, {Revision: 2, Events: []registry.Event{validEvent(2)}}}}
 	hub := NewHub()
-	service := newTestService(t, reader, hub)
+	// Keep the polling fallback outside this assertion window. The test proves
+	// tenant-scoped notification isolation; scheduler delay must not let the
+	// independent polling path consume the third window and create a false
+	// notification failure.
+	service := newTestServiceWithPoll(t, reader, hub, 100*time.Millisecond)
 	done := make(chan error, 1)
 	go func() {
 		_, err := service.Watch(context.Background(), validCaller(), WatchInput{AfterRevision: 1, Wait: time.Second})
