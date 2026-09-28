@@ -1,0 +1,18 @@
+{
+  "headers": {
+    "Content-Type": ["application/json"],
+    "Ce-Specversion": ["1.0"],
+    "Ce-Id": ["evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef11"],
+    "Ce-Source": ["https://runtime.example.invalid/instances/instance-01"],
+    "Ce-Type": ["io.kinglucky.arop.output.delta.v1"],
+    "Ce-Subject": ["runs/run_01932f13-0cd2-7a82-8fa3-1cb5ce13ef10"],
+    "Ce-Time": ["2026-09-21T08:00:01.125Z"],
+    "Ce-Dataschema": ["https://arop.invalid/schemas/v1/events/output-events-v1.schema.json"],
+    "Ce-Runid": ["run_01932f13-0cd2-7a82-8fa3-1cb5ce13ef10"],
+    "Ce-Attemptid": ["att_01932f13-0cd2-7a82-8fa3-1cb5ce13ef12"],
+    "Ce-Producersequence": ["1"],
+    "Ce-Traceparent": ["00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"],
+    "Traceparent": ["00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"]
+  },
+  "body": {"output_id":"answer","offset":0,"delta":"商品"}
+}

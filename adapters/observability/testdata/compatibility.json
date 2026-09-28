@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "cloudevents": {
+    "version": "1.0.2",
+    "commit": "fc1f6f31f5f011a72183f1bcea20c987cb683ade",
+    "structured_content_type": "application/cloudevents+json",
+    "batch_content_type": "application/cloudevents-batch+json"
+  },
+  "opentelemetry_semantic_conventions": {
+    "version": "1.44.0",
+    "commit": "e10a930844c6951757a43b849d364f7d056ac32b",
+    "schema_url": "https://opentelemetry.io/schemas/1.44.0",
+    "cloudevents_conventions_stability": "development"
+  },
+  "rules": {
+    "arop_event_identity_and_sequence_remain_authoritative": true,
+    "trace_is_not_audit": true,
+    "payload_content_is_redacted_by_default": true,
+    "metric_dimensions_are_bounded": true,
+    "unsampled_trace_events_are_opt_in": true
+  }
+}
