@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "core.event-envelope.valid",
+  "title": "Validate an AROP CloudEvents-compatible Event envelope",
+  "depends_on": [],
+  "fixture": {
+    "path": "conformance/fixtures/events/envelope.valid.json",
+    "sha256": "sha256:10131c7c4bbbbccaef46562b660bfd9a918f6c032c27b91d4d08012d9b5e572c",
+    "media_type": "application/json"
+  },
+  "timeout_ms": 10000,
+  "request": {"operation": "event-envelope.validate"}
+}

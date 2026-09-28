@@ -1,4 +1,4 @@
-.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier test-evidence-lineage planning-audit gate-check test-go test-go-workspace test-protocol-foundation test-codegen-pipeline test-control-plane-platform test-storage-migrations test-identity-secrets test-publication-contracts test-publication-service test-asset-broker test-registry-core test-registry-api test-registry-recovery verify-registry test-run-lifecycle test-dispatch-ticket test-event-ledger test-direct-proxy-provider test-streaming-resume verify-run-delivery test-worker-service test-go-worker-sdk verify-operations-security test-python-provider test-typescript-consumer test-interop-a2a test-interop-mcp test-interop-ard test-interop-observability manifest-digest
+.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier test-evidence-lineage planning-audit gate-check test-go test-go-workspace test-protocol-foundation test-codegen-pipeline test-control-plane-platform test-storage-migrations test-identity-secrets test-publication-contracts test-publication-service test-asset-broker test-registry-core test-registry-api test-registry-recovery verify-registry test-run-lifecycle test-dispatch-ticket test-event-ledger test-direct-proxy-provider test-streaming-resume verify-run-delivery test-worker-service test-go-worker-sdk verify-operations-security test-python-provider test-typescript-consumer test-interop-a2a test-interop-mcp test-interop-ard test-interop-observability test-portable-conformance manifest-digest
 
 install:
 	npm ci
@@ -114,6 +114,9 @@ test-interop-ard:
 
 test-interop-observability:
 	AROP_CHECK_COMMAND="make test-interop-observability" env -u GOFLAGS -u GOENV -u GOWORK -u GOCACHE -u GOCACHEPROG -u GOMODCACHE -u GOTMPDIR -u GOROOT -u GOTOOLCHAIN -u GOEXPERIMENT -u NODE_OPTIONS -u NODE_PATH -u NPM_CONFIG_NODE_OPTIONS GOENV=off GOFLAGS=-mod=readonly GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go run ./adapters/observability/testdata/harness/main.go
+
+test-portable-conformance:
+	AROP_CHECK_COMMAND="make test-portable-conformance" env -u GOFLAGS -u GOENV -u GOWORK -u GOCACHE -u GOCACHEPROG -u GOMODCACHE -u GOTMPDIR -u GOROOT -u GOTOOLCHAIN -u GOEXPERIMENT -u NODE_OPTIONS -u NODE_PATH -u NPM_CONFIG_NODE_OPTIONS GOENV=off GOFLAGS=-mod=readonly GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go run ./cmd/arop-conformance/testdata/harness/main.go
 
 manifest-digest: export AROP_MANIFEST_FILE := $(value FILE)
 manifest-digest:

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "core.trace-context.vectors",
+  "title": "Validate signed W3C Trace Context vectors",
+  "depends_on": ["core.event-envelope.valid"],
+  "fixture": {
+    "path": "conformance/fixtures/state-machines/base/wire-vectors.json",
+    "sha256": "sha256:bedc1e71cfed16d7dbcd92b0760b0c422db15daf8efa439af0268a1c678a77ab",
+    "media_type": "application/json"
+  },
+  "timeout_ms": 10000,
+  "request": {"operation": "trace-context.validate"}
+}

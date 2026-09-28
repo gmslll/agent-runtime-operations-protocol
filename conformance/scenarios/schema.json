@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.invalid/conformance/scenarios/schema.json",
+  "title": "AROP portable conformance scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "title", "fixture", "timeout_ms", "request"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)+$", "maxLength": 128},
+    "title": {"type": "string", "minLength": 1, "maxLength": 256},
+    "description": {"type": "string", "maxLength": 2048},
+    "depends_on": {
+      "type": "array", "maxItems": 32, "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)+$", "maxLength": 128}
+    },
+    "fixture": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "media_type"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^[A-Za-z0-9._~/-]+$", "maxLength": 512},
+        "sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "media_type": {"enum": ["application/json", "application/yaml"]}
+      }
+    },
+    "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 60000},
+    "request": {
+      "type": "object", "minProperties": 1, "maxProperties": 32,
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_]{0,63}$"},
+      "additionalProperties": {"type": ["string", "number", "integer", "boolean", "null"]}
+    }
+  }
+}

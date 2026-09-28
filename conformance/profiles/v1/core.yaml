@@ -1,0 +1,25 @@
+schema_version: 1
+profiles:
+  - id: core-provider
+    title: AROP Core Provider
+    includes: []
+    scenarios:
+      - {id: core.manifest.valid, required: true}
+      - {id: core.event-envelope.valid, required: true}
+      - {id: core.trace-context.vectors, required: true}
+  - id: streaming
+    title: AROP Streaming
+    includes: [core-provider]
+    scenarios: []
+  - id: managed-runtime
+    title: AROP Managed Runtime
+    includes: [core-provider, streaming]
+    scenarios: []
+  - id: pull-worker
+    title: AROP Pull Worker
+    includes: [core-provider]
+    scenarios: []
+  - id: control-plane
+    title: AROP Control Plane
+    includes: [managed-runtime, pull-worker]
+    scenarios: []

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "core.manifest.valid",
+  "title": "Validate and digest a portable AROP Manifest package",
+  "description": "The target validates the public Manifest using the package boundary supplied by the portable fixture.",
+  "depends_on": [],
+  "fixture": {
+    "path": "examples/manifests/publication-v1.json",
+    "sha256": "sha256:3916965214807d760033887b9331742d7c4c893605298e70b102ca2282be8145",
+    "media_type": "application/json"
+  },
+  "timeout_ms": 10000,
+  "request": {"operation": "manifest.validate"}
+}

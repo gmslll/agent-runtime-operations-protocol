@@ -7,6 +7,21 @@ required_profiles:
   - managed-runtime
   - pull-worker
   - control-plane
+portable_conformance:
+  driver_protocol: arop-conformance-driver/v1
+  runner: cmd/arop-conformance
+  scenario_schema: conformance/scenarios/schema.json
+  profile_schema: conformance/profiles/schema.json
+  profile_catalog: conformance/profiles/v1/core.yaml
+  report_formats: [json, junit]
+  fixture_digest: sha256
+  offline: true
+  profiles:
+    - core-provider
+    - streaming
+    - managed-runtime
+    - pull-worker
+    - control-plane
 external_thresholds:
   independent_runtimes: 2
   independent_control_plane_or_validator: 1

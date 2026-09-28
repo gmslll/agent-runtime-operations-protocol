@@ -12,6 +12,7 @@ import (
 	exportard "github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/export-ard"
 	"github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/publish"
 	registercommand "github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/register"
+	testcommand "github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/test"
 	"github.com/gmslll/agent-runtime-operations-protocol/sdk/go/protocol/manifest"
 	registrysdk "github.com/gmslll/agent-runtime-operations-protocol/sdk/go/registry"
 )
@@ -24,6 +25,9 @@ func main() {
 }
 
 func run(arguments []string) error {
+	if len(arguments) >= 1 && arguments[0] == "test" {
+		return (testcommand.Command{Stdout: os.Stdout, Stderr: os.Stderr}).Execute(context.Background(), arguments[1:])
+	}
 	if len(arguments) == 5 && arguments[0] == "export" && arguments[1] == "ard" {
 		return (exportard.Command{Stdout: os.Stdout}).Execute(context.Background(), exportard.Options{PackageRoot: ".", ManifestPath: arguments[2], Publisher: arguments[3], AgentCardURL: arguments[4]})
 	}
@@ -71,7 +75,7 @@ func run(arguments []string) error {
 		return nil
 	}
 	if len(arguments) != 3 || arguments[0] != "manifest" || arguments[1] != "digest" {
-		return fmt.Errorf("usage: arop manifest digest <manifest.yaml|manifest.json> | arop publish <agent-id> <bundle.zip> | arop register <instance-id> <config.json> | arop export a2a <manifest> <https-interface-url> | arop export ard <manifest> <publisher-domain> <https-agent-card-url>")
+		return fmt.Errorf("usage: arop manifest digest <manifest.yaml|manifest.json> | arop publish <agent-id> <bundle.zip> | arop register <instance-id> <config.json> | arop export a2a <manifest> <https-interface-url> | arop export ard <manifest> <publisher-domain> <https-agent-card-url> | arop test --profile <id> --target <executable> [options]")
 	}
 
 	digest, err := manifest.DigestFile(arguments[2])
