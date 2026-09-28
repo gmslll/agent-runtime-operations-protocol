@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "fault-ha.drop",
+  "title": "Dropped notification recovers from durable state",
+  "description": "A deterministic dropped delivery is recovered by replay without losing committed state.",
+  "depends_on": ["fault-ha.duplicate"],
+  "fixture": {"path": "conformance/fault-injection/testdata/fault-plan.json", "sha256": "sha256:7c51b9e62ad98c603a5485457de45c5d99ec3db8699cb6316c0897f1cfaea0cb", "media_type": "application/json"},
+  "timeout_ms": 10000,
+  "request": {"operation": "fault.simulate", "fault": "drop", "seed": 350035}
+}

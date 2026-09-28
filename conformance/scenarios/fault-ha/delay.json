@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "fault-ha.delay",
+  "title": "Delay uses the deterministic clock",
+  "description": "Delay advances only the injected clock and remains reproducible for the same seed.",
+  "depends_on": ["fault-ha.reorder"],
+  "fixture": {"path": "conformance/fault-injection/testdata/fault-plan.json", "sha256": "sha256:7c51b9e62ad98c603a5485457de45c5d99ec3db8699cb6316c0897f1cfaea0cb", "media_type": "application/json"},
+  "timeout_ms": 10000,
+  "request": {"operation": "fault.simulate", "fault": "delay", "seed": 350035}
+}

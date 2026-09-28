@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "fault-ha.reorder",
+  "title": "Reordered delivery converges by sequence",
+  "description": "A deterministic reorder cannot change the canonical committed sequence.",
+  "depends_on": ["fault-ha.drop"],
+  "fixture": {"path": "conformance/fault-injection/testdata/fault-plan.json", "sha256": "sha256:7c51b9e62ad98c603a5485457de45c5d99ec3db8699cb6316c0897f1cfaea0cb", "media_type": "application/json"},
+  "timeout_ms": 10000,
+  "request": {"operation": "fault.simulate", "fault": "reorder", "seed": 350035}
+}

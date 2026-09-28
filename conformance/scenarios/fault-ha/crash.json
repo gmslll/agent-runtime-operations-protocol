@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "fault-ha.crash",
+  "title": "Crashed primary promotes a converged replica",
+  "description": "A deterministic primary crash promotes an available replica without duplicate committed operations.",
+  "depends_on": ["fault-ha.delay"],
+  "fixture": {"path": "conformance/fault-injection/testdata/fault-plan.json", "sha256": "sha256:7c51b9e62ad98c603a5485457de45c5d99ec3db8699cb6316c0897f1cfaea0cb", "media_type": "application/json"},
+  "timeout_ms": 10000,
+  "request": {"operation": "fault.simulate", "fault": "crash", "seed": 350035}
+}

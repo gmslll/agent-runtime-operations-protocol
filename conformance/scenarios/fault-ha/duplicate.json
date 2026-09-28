@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "fault-ha.duplicate",
+  "title": "Duplicate delivery remains idempotent",
+  "description": "A deterministic duplicate at an approved checkpoint must not apply an operation twice.",
+  "depends_on": [],
+  "fixture": {"path": "conformance/fault-injection/testdata/fault-plan.json", "sha256": "sha256:7c51b9e62ad98c603a5485457de45c5d99ec3db8699cb6316c0897f1cfaea0cb", "media_type": "application/json"},
+  "timeout_ms": 10000,
+  "request": {"operation": "fault.simulate", "fault": "duplicate", "seed": 350035}
+}

@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "seed": 350035,
+  "steps": [
+    {"action": "duplicate", "checkpoint": "platform.request.accepted", "occurrence": 1, "target": "primary"},
+    {"action": "drop", "checkpoint": "platform.before-use-case", "occurrence": 1, "target": "replica-a"},
+    {"action": "reorder", "checkpoint": "platform.after-use-case", "occurrence": 1, "target": "replica-b"},
+    {"action": "delay", "checkpoint": "platform.request.accepted", "occurrence": 2, "delay_ms": 250},
+    {"action": "partition", "checkpoint": "platform.before-use-case", "occurrence": 2, "target": "replica-a"},
+    {"action": "crash", "checkpoint": "platform.after-use-case", "occurrence": 2, "target": "primary"}
+  ]
+}
