@@ -67,28 +67,18 @@ func main() {
 	add("p38-manifest-inventory", validateManifest(root), "P38 owns no artifacts and consumes exactly fifteen phase reports")
 	add("p38-tree-identical-carrier", validateCarrier(root), "P38 starts at an explicit tree-identical carrier after the prebuilt verifier")
 
-	// Rerun every logical input at the current commit. Later-stage regression
-	// suites deliberately execute historical endpoints in isolated trees, so
-	// they cannot stand in for a current report from each producer phase. The
-	// reports below, rather than these process logs, are the authoritative
-	// runtime inputs.
+	// P24 first proves the Worker/streaming chain at its immutable endpoints.
+	// P21 then runs the current P09-P21 Control Plane/Go Agent chain, after the
+	// P23 historical replay, so every consumed producer report ends at the
+	// current commit. P27 supplies the Python SQLite path and P37 reruns P34/P35
+	// plus the production deployment. The reports, not process logs, remain the
+	// authoritative runtime inputs.
 	runs := []struct {
 		phase, target string
 	}{
-		{"P09", "test-storage-migrations"},
-		{"P10", "test-identity-secrets"},
-		{"P12", "test-publication-service"},
-		{"P13", "test-asset-broker"},
-		{"P14", "test-registry-core"},
-		{"P16", "test-registry-recovery"},
-		{"P18", "test-run-lifecycle"},
-		{"P19", "test-dispatch-ticket"},
-		{"P20", "test-event-ledger"},
-		{"P21", "test-direct-proxy-provider"},
 		{"P24", "test-worker-service"},
+		{"P21", "test-direct-proxy-provider"},
 		{"P27", "test-python-provider"},
-		{"P34", "test-server-conformance"},
-		{"P35", "test-fault-ha-drivers"},
 		{"P37", "production-reference-smoke"},
 	}
 	evidence := []report.RuntimeEvidence{}
