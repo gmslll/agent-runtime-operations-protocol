@@ -1,0 +1,45 @@
+name: private-release-supply-chain
+
+on:
+  workflow_dispatch:
+    inputs:
+      logical_version:
+        description: Canonical logical version without v prefix
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: arop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    environment: arop-release
+    if: github.repository == 'InfiniteStatesInc/agent-runtime-operations-protocol' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Validate private release plan
+        env:
+          AROP_LOGICAL_VERSION: ${{ inputs.logical_version }}
+          AROP_SOURCE_COMMIT: ${{ github.sha }}
+          AROP_JOB_WORKFLOW_REF: ${{ github.workflow_ref }}
+          AROP_JOB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: >-
+          go run ./internal/tooling/cmd/arop-release-supply
+          --root .
+          --logical-version "$AROP_LOGICAL_VERSION"
+          --source-commit "$AROP_SOURCE_COMMIT"
+          --output build/private-release
+          --journal build/private-release-journal
+          --dry-run

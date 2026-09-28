@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arop.dev/schemas/release-version-policy-v1.schema.json",
+  "title": "AROP release version policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "logical_pattern", "mappings", "immutable_order", "mutable_channel"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "logical_pattern": {"const": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-rc\\.([1-9][0-9]*))?$"},
+    "mappings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["go", "python", "npm", "oci", "cli", "schema_bundle"],
+      "properties": {
+        "go": {"$ref": "#/$defs/mapping"},
+        "python": {"$ref": "#/$defs/mapping"},
+        "npm": {"$ref": "#/$defs/mapping"},
+        "oci": {"$ref": "#/$defs/mapping"},
+        "cli": {"$ref": "#/$defs/mapping"},
+        "schema_bundle": {"$ref": "#/$defs/mapping"}
+      }
+    },
+    "immutable_order": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "uniqueItems": true,
+      "prefixItems": [
+        {"const": "go"}, {"const": "python"}, {"const": "npm"},
+        {"const": "oci"}, {"const": "cli"}, {"const": "schema_bundle"}
+      ],
+      "items": false
+    },
+    "mutable_channel": {"const": "stable"}
+  },
+  "$defs": {
+    "mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prefix", "rc_separator"],
+      "properties": {
+        "prefix": {"type": "string", "maxLength": 1},
+        "rc_separator": {"enum": ["-rc.", "rc"]}
+      }
+    }
+  }
+}

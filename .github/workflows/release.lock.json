@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "workflow_path": ".github/workflows/release.yml",
+  "workflow_sha256": "720c3e3c010731d2ce748f365547f8a63f6d1cfaca8a4ca955ef06d86c098a57",
+  "job": "release",
+  "environment": "arop-release",
+  "permissions": {
+    "contents": "read",
+    "id-token": "write"
+  },
+  "actions": [
+    "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683",
+    "actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32"
+  ],
+  "source_ref": "refs/heads/main",
+  "concurrency_group": "arop-release-${{ github.ref }}"
+}
