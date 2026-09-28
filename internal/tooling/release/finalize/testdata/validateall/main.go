@@ -73,13 +73,14 @@ func refreshAll(root string) ([]byte, error) {
 		name, commit, target string
 		prerequisites        []string
 		phases               []string
+		preserveInputs       bool
 	}{
-		{"P08-P22", "5bada508fa5e7035abd1d33817b4de7abf3ee49d", "verify-run-delivery", nil, []string{"P08", "P10", "P12", "P13", "P18", "P19", "P20", "P21", "P22"}},
-		{"P23-P26", "6ba1651", "verify-operations-security", []string{"test-worker-service", "test-go-worker-sdk"}, []string{"P23", "P24", "P25", "P26"}},
-		{"P28", "4daf269", "test-typescript-consumer", nil, []string{"P28"}},
-		{"P29", "9a15353", "test-interop-a2a", nil, []string{"P29"}},
-		{"P30", "ec2a0ee", "test-interop-mcp", nil, []string{"P30"}},
-		{"P38", "9c4da72a6043e265f75b5b7fb0f0c1a31d2d98d2", "verify-resilience", nil, []string{"P09", "P10", "P12", "P13", "P14", "P16", "P18", "P19", "P20", "P21", "P24", "P27", "P34", "P35", "P37", "P38"}},
+		{"P08-P22", "5bada508fa5e7035abd1d33817b4de7abf3ee49d", "verify-run-delivery", nil, []string{"P08", "P10", "P12", "P13", "P18", "P19", "P20", "P21", "P22"}, false},
+		{"P23-P26", "6ba1651", "verify-operations-security", []string{"test-worker-service", "test-go-worker-sdk"}, []string{"P23", "P24", "P25", "P26"}, false},
+		{"P28", "4daf269", "test-typescript-consumer", nil, []string{"P28"}, false},
+		{"P29", "9a15353", "test-interop-a2a", nil, []string{"P29"}, false},
+		{"P30", "ec2a0ee", "test-interop-mcp", nil, []string{"P30"}, false},
+		{"P38", "9c4da72a6043e265f75b5b7fb0f0c1a31d2d98d2", "verify-resilience", nil, []string{"P09", "P10", "P12", "P13", "P14", "P16", "P18", "P19", "P20", "P21", "P24", "P27", "P34", "P35", "P37", "P38"}, true},
 	}
 	for _, replay := range replays {
 		commit, err := git(root, "rev-parse", replay.commit+"^{commit}")
@@ -93,7 +94,7 @@ func refreshAll(root string) ([]byte, error) {
 			results[replay.name+"-verified-existing"] = report.Hash(evidence)
 			continue
 		}
-		evidence, err := replayReports(root, replay.commit, replay.target, replay.prerequisites, replay.phases)
+		evidence, err := replayReports(root, replay.commit, replay.target, replay.prerequisites, replay.phases, replay.preserveInputs)
 		if err != nil {
 			return nil, fmt.Errorf("%s historical replay: %w", replay.name, err)
 		}
@@ -112,7 +113,7 @@ func refreshAll(root string) ([]byte, error) {
 	return json.Marshal(results)
 }
 
-func replayReports(root, revision, target string, prerequisites, phases []string) (evidence []byte, resultErr error) {
+func replayReports(root, revision, target string, prerequisites, phases []string, preserveInputs bool) (evidence []byte, resultErr error) {
 	commit, err := git(root, "rev-parse", revision+"^{commit}")
 	if err != nil {
 		return nil, err
@@ -143,7 +144,11 @@ func replayReports(root, revision, target string, prerequisites, phases []string
 	// evidence is necessary for historical fan-in, but retaining a stale report
 	// for the phase under replay can make a target consume later evidence instead
 	// of exercising its historical writer.
-	for _, phase := range phases {
+	clearPhases := phases
+	if preserveInputs {
+		clearPhases = phases[len(phases)-1:]
+	}
+	for _, phase := range clearPhases {
 		if err := os.RemoveAll(filepath.Join(temp, "build", "reports", phase)); err != nil {
 			return nil, err
 		}
