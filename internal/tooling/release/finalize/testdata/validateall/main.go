@@ -158,6 +158,11 @@ func replayReports(root, revision, target string, prerequisites, phases []string
 			return nil, err
 		}
 	}
+	if resetReportChain {
+		if err := restoreCachedReports(root, temp, "5bada508fa5e7035abd1d33817b4de7abf3ee49d", []string{"P18", "P19", "P20", "P21", "P22"}); err != nil {
+			return nil, err
+		}
+	}
 	if output, err := run(temp, "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"); err != nil {
 		return nil, fmt.Errorf("locked dependencies: %w: %s", err, tail(output))
 	}
@@ -209,6 +214,27 @@ func cacheSuccessfulReports(sourceRoot, destinationRoot, commit string) error {
 				return err
 			}
 			destination := filepath.Join(archiveRoot, relative)
+			if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+				return err
+			}
+			if err := os.WriteFile(destination, content, 0o600); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func restoreCachedReports(root, destinationRoot, commit string, phases []string) error {
+	for _, phase := range phases {
+		for _, name := range []string{"junit.xml", "report.json"} {
+			relative := filepath.Join("build", "reports", phase, name)
+			source := filepath.Join(root, "build", "replay-archives", commit, relative)
+			content, err := os.ReadFile(source)
+			if err != nil {
+				return fmt.Errorf("cached %s evidence is unavailable: %w", phase, err)
+			}
+			destination := filepath.Join(destinationRoot, relative)
 			if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
 				return err
 			}
