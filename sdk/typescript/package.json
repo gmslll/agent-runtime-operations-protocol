@@ -1,0 +1,42 @@
+{
+  "name": "@arop/sdk",
+  "version": "0.1.0-dev.0",
+  "description": "AROP v1 TypeScript consumer SDK",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/consumer/index.js",
+  "module": "./dist/consumer/index.js",
+  "types": "./dist/consumer/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/consumer/index.d.ts",
+      "import": "./dist/consumer/index.js"
+    },
+    "./consumer": {
+      "types": "./dist/consumer/index.d.ts",
+      "import": "./dist/consumer/index.js"
+    },
+    "./streaming": {
+      "types": "./dist/streaming/client.d.ts",
+      "import": "./dist/streaming/client.js"
+    },
+    "./generated/run": {
+      "types": "./dist/generated/run/run.gen.d.ts",
+      "import": "./dist/generated/run/run.gen.js"
+    },
+    "./generated/streaming": {
+      "types": "./dist/generated/streaming/streaming.gen.d.ts",
+      "import": "./dist/generated/streaming/streaming.gen.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

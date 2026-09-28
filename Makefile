@@ -1,4 +1,4 @@
-.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier test-evidence-lineage planning-audit gate-check test-go test-go-workspace test-protocol-foundation test-codegen-pipeline test-control-plane-platform test-storage-migrations test-identity-secrets test-publication-contracts test-publication-service test-asset-broker test-registry-core test-registry-api test-registry-recovery verify-registry test-run-lifecycle test-dispatch-ticket test-event-ledger test-direct-proxy-provider test-streaming-resume verify-run-delivery test-worker-service test-go-worker-sdk verify-operations-security test-python-provider manifest-digest
+.PHONY: install validate spec-index-check blueprint-check verify-report test-report-verifier test-evidence-lineage planning-audit gate-check test-go test-go-workspace test-protocol-foundation test-codegen-pipeline test-control-plane-platform test-storage-migrations test-identity-secrets test-publication-contracts test-publication-service test-asset-broker test-registry-core test-registry-api test-registry-recovery verify-registry test-run-lifecycle test-dispatch-ticket test-event-ledger test-direct-proxy-provider test-streaming-resume verify-run-delivery test-worker-service test-go-worker-sdk verify-operations-security test-python-provider test-typescript-consumer manifest-digest
 
 install:
 	npm ci
@@ -99,6 +99,9 @@ verify-operations-security:
 
 test-python-provider:
 	AROP_CHECK_COMMAND="make test-python-provider" env -u GOFLAGS -u GOENV -u GOWORK -u GOCACHE -u GOCACHEPROG -u GOMODCACHE -u GOTMPDIR -u GOROOT -u GOTOOLCHAIN -u GOEXPERIMENT -u NODE_OPTIONS -u NODE_PATH -u NPM_CONFIG_NODE_OPTIONS -u PYTHONHOME -u PYTHONPATH -u PYTHONSTARTUP -u PYTHONINSPECT -u PYTHONWARNINGS -u PYTHONUSERBASE -u PIP_CONFIG_FILE -u PIP_INDEX_URL -u PIP_EXTRA_INDEX_URL -u PIP_TRUSTED_HOST GOENV=off GOFLAGS=-mod=readonly GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go run ./sdk/python/testdata/harness/main.go
+
+test-typescript-consumer:
+	AROP_CHECK_COMMAND="make test-typescript-consumer" env -u GOFLAGS -u GOENV -u GOWORK -u GOCACHE -u GOCACHEPROG -u GOMODCACHE -u GOTMPDIR -u GOROOT -u GOTOOLCHAIN -u GOEXPERIMENT -u NODE_OPTIONS -u NODE_PATH -u NPM_CONFIG_NODE_OPTIONS GOENV=off GOFLAGS=-mod=readonly GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go run ./sdk/typescript/testdata/harness/main.go
 
 manifest-digest: export AROP_MANIFEST_FILE := $(value FILE)
 manifest-digest:
