@@ -391,7 +391,7 @@ type primitiveManifest struct {
 }
 
 func buildGo(ctx context.Context, root, output string, versions versionpolicy.Versions) ([]Artifact, error) {
-	if err := prepareDirectory(output); err != nil {
+	if err := prepareAbsentDirectory(output); err != nil {
 		return nil, err
 	}
 	if err := run(ctx, root, nil, "go", "run", "./internal/tooling/cmd/arop-build-go-release", "--root", root, "--output", output, "--version", versions.Logical, "--goos", "linux", "--goarch", "amd64"); err != nil {
@@ -411,6 +411,18 @@ func buildGo(ctx context.Context, root, output string, versions versionpolicy.Ve
 		artifacts = append(artifacts, Artifact{Name: name, Ecosystem: ecosystem, Version: version, SHA256: normalizeDigest(item.SHA256), Bytes: item.Bytes, LocalPath: filepath.Join(output, name)})
 	}
 	return artifacts, nil
+}
+
+func prepareAbsentDirectory(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	if _, err := os.Lstat(path); err == nil {
+		return errors.New("release primitive output path must not exist")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 func buildPython(ctx context.Context, root, output string, versions versionpolicy.Versions) ([]Artifact, error) {
