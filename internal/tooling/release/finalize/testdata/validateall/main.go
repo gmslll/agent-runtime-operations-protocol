@@ -87,8 +87,19 @@ func refreshAll(root string) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%s historical commit: %w", replay.name, err)
 		}
-		if evidence, ok := existingSuccessfulReports(root, replay.phases, strings.TrimSpace(commit)); ok {
-			if err := cacheSuccessfulReports(root, root, strings.TrimSpace(commit), false); err != nil {
+		commit = strings.TrimSpace(commit)
+		archiveRoot := filepath.Join(root, "build", "replay-archives", commit)
+		if evidence, ok := existingSuccessfulReports(archiveRoot, replay.phases, commit); ok {
+			if replay.resetReportChain {
+				if err := restoreAvailableCachedReports(root, root, commit, 38); err != nil {
+					return nil, err
+				}
+			}
+			results[replay.name+"-verified-cached-replay"] = report.Hash(evidence)
+			continue
+		}
+		if evidence, ok := existingSuccessfulReports(root, replay.phases, commit); ok {
+			if err := cacheSuccessfulReports(root, root, commit, false); err != nil {
 				return nil, fmt.Errorf("%s archive cache: %w", replay.name, err)
 			}
 			if replay.resetReportChain {
@@ -99,7 +110,7 @@ func refreshAll(root string) ([]byte, error) {
 			results[replay.name+"-verified-existing"] = report.Hash(evidence)
 			continue
 		}
-		evidence, err := replayReports(root, replay.commit, replay.target, replay.prerequisites, replay.phases, replay.resetReportChain)
+		evidence, err := replayReports(root, commit, replay.target, replay.prerequisites, replay.phases, replay.resetReportChain)
 		if err != nil {
 			return nil, fmt.Errorf("%s historical replay: %w", replay.name, err)
 		}
