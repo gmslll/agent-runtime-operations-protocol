@@ -317,6 +317,10 @@ func exerciseJournal() ([]byte, error) {
 
 func exerciseCoordinator(mapper versionpolicy.Mapper) ([]byte, error) {
 	request := supply.Request{LogicalVersion: "1.0.0-rc.1", SourceCommit: strings.Repeat("a", 40), SourceTree: strings.Repeat("b", 40), Destination: "registry://example/arop", WorkflowDigest: hex64("workflow"), WorkflowLockDigest: hex64("lock"), WorkflowIdentity: "workflow#release@digest"}
+	before, beforePublisher, beforeEntries, err := runCoordinator(mapper, request, &onceFault{point: "before:cli"})
+	if err == nil || before.ManifestDigest != "" || beforePublisher.puts != 0 || len(beforeEntries) != 1 {
+		return nil, errors.New("before-publication fault did not preserve the prepared-only boundary")
+	}
 	first, firstPublisher, firstEntries, err := runCoordinator(mapper, request, &onceFault{point: "after-remote:cli"})
 	if err == nil || first.ManifestDigest != "" || firstPublisher.puts != 1 {
 		return nil, errors.New("after-remote fault did not interrupt at the exact boundary")
@@ -342,7 +346,15 @@ func exerciseCoordinator(mapper versionpolicy.Mapper) ([]byte, error) {
 	if _, _, _, err := coordinatorWithPublisher(mapper, request, channelConflict, nil); err == nil {
 		return nil, errors.New("mutable channel CAS conflict was accepted")
 	}
-	return []byte(fmt.Sprintf("artifacts=%d entries=%d manifest=%s operations=%d\n", len(result.Manifest.Artifacts), len(entries), result.ManifestDigest, len(publisher.operations))), nil
+	channelFault, channelPublisher, channelEntries, err := runCoordinator(mapper, request, &onceFault{point: "after-remote:channel"})
+	if err == nil || channelFault.ManifestDigest != "" || len(channelEntries) != 19 || len(channelPublisher.operations) != 7 || channelPublisher.operations[6] != "channel" {
+		return nil, errors.New("after-channel-remote fault did not preserve the recoverable boundary")
+	}
+	channelResume, channelPublisher, channelEntries, err := resumeCoordinator(mapper, request, channelPublisher, channelEntries)
+	if err != nil || channelResume.ManifestDigest != result.ManifestDigest || len(channelEntries) != 21 || len(channelPublisher.operations) != 7 {
+		return nil, errors.New("remote channel success/local crash was not reconciled without duplicate CAS")
+	}
+	return []byte(fmt.Sprintf("artifacts=%d entries=%d manifest=%s operations=%d fault_points=3\n", len(result.Manifest.Artifacts), len(entries), result.ManifestDigest, len(publisher.operations))), nil
 }
 
 func runCoordinator(mapper versionpolicy.Mapper, request supply.Request, faults supply.FaultHook) (supply.Result, *fakePublisher, []journal.Entry, error) {
