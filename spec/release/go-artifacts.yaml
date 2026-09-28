@@ -1,0 +1,26 @@
+schema_version: 1
+source_date_epoch: 315532800
+modules:
+  - id: root
+    module: github.com/gmslll/agent-runtime-operations-protocol
+    path: .
+  - id: control-plane
+    module: github.com/gmslll/agent-runtime-operations-protocol/reference/control-plane
+    path: reference/control-plane
+commands:
+  - name: arop
+    package: ./cmd/arop
+  - name: arop-conformance
+    package: ./cmd/arop-conformance
+targets:
+  - {goos: darwin, goarch: arm64, format: tar.gz}
+  - {goos: linux, goarch: amd64, format: tar.gz}
+  - {goos: linux, goarch: arm64, format: tar.gz}
+  - {goos: windows, goarch: amd64, format: zip}
+rules:
+  gowork: "off"
+  trimpath: true
+  cgo: false
+  stable_order: true
+  fixed_mtime: true
+  fixed_modes: true

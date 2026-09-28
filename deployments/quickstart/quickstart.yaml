@@ -1,0 +1,19 @@
+schema_version: 1
+name: arop-sqlite-quickstart
+durability: sqlite
+listen: 127.0.0.1:8080
+components:
+  control_plane: reference/control-plane/cmd/aropd
+  http_agent: reference/agents/go-http/cmd/arop-agent
+  pull_worker: reference/agents/pull-worker/cmd/arop-pull-worker
+  python_provider: sdk/python/src/arop/provider/runtime.py
+  web_consumer: sdk/typescript/examples/bff-web
+sample_manifest: agent-manifest.json
+commands:
+  initialize: arop init .
+  diagnose: arop doctor .
+  develop: arop dev .
+security:
+  listen_scope: loopback-only
+  persistent_credentials: forbidden
+  production_use: forbidden

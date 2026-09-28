@@ -6,8 +6,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
+	development "github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/development"
 	exporta2a "github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/export-a2a"
 	exportard "github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/export-ard"
 	"github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/publish"
@@ -18,13 +21,22 @@ import (
 )
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := runContext(ctx, os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
 func run(arguments []string) error {
+	return runContext(context.Background(), arguments)
+}
+
+func runContext(ctx context.Context, arguments []string) error {
+	if len(arguments) >= 1 && (arguments[0] == "init" || arguments[0] == "dev" || arguments[0] == "doctor") {
+		return (development.Command{Stdout: os.Stdout, Stderr: os.Stderr}).Execute(ctx, arguments)
+	}
 	if len(arguments) >= 1 && arguments[0] == "test" {
 		return (testcommand.Command{Stdout: os.Stdout, Stderr: os.Stderr}).Execute(context.Background(), arguments[1:])
 	}
@@ -75,7 +87,7 @@ func run(arguments []string) error {
 		return nil
 	}
 	if len(arguments) != 3 || arguments[0] != "manifest" || arguments[1] != "digest" {
-		return fmt.Errorf("usage: arop manifest digest <manifest.yaml|manifest.json> | arop publish <agent-id> <bundle.zip> | arop register <instance-id> <config.json> | arop export a2a <manifest> <https-interface-url> | arop export ard <manifest> <publisher-domain> <https-agent-card-url> | arop test --profile <id> --target <executable> [options]")
+		return fmt.Errorf("usage: arop manifest digest <manifest.yaml|manifest.json> | arop init|dev|doctor [workspace] | arop publish <agent-id> <bundle.zip> | arop register <instance-id> <config.json> | arop export a2a <manifest> <https-interface-url> | arop export ard <manifest> <publisher-domain> <https-agent-card-url> | arop test --profile <id> --target <executable> [options]")
 	}
 
 	digest, err := manifest.DigestFile(arguments[2])
