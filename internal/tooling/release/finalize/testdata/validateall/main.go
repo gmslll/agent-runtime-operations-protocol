@@ -88,8 +88,13 @@ func refreshAll(root string) ([]byte, error) {
 			return nil, fmt.Errorf("%s historical commit: %w", replay.name, err)
 		}
 		if evidence, ok := existingSuccessfulReports(root, replay.phases, strings.TrimSpace(commit)); ok {
-			if err := cacheSuccessfulReports(root, root, strings.TrimSpace(commit)); err != nil {
+			if err := cacheSuccessfulReports(root, root, strings.TrimSpace(commit), false); err != nil {
 				return nil, fmt.Errorf("%s archive cache: %w", replay.name, err)
+			}
+			if replay.resetReportChain {
+				if err := restoreAvailableCachedReports(root, root, strings.TrimSpace(commit), 38); err != nil {
+					return nil, err
+				}
 			}
 			results[replay.name+"-verified-existing"] = report.Hash(evidence)
 			continue
@@ -176,8 +181,13 @@ func replayReports(root, revision, target string, prerequisites, phases []string
 	if err != nil {
 		return nil, fmt.Errorf("make %s: %w: %s%s", target, err, tail(output), failedReportDiagnostics(temp, phases))
 	}
-	if err := cacheSuccessfulReports(temp, root, commit); err != nil {
+	if err := cacheSuccessfulReports(temp, root, commit, true); err != nil {
 		return nil, err
+	}
+	if resetReportChain {
+		if err := restoreAvailableCachedReports(root, root, commit, 38); err != nil {
+			return nil, err
+		}
 	}
 	bindings := map[string]string{"commit": commit, "target": target, "output_sha256": report.Hash(output)}
 	for _, phase := range phases {
@@ -200,7 +210,7 @@ func replayReports(root, revision, target string, prerequisites, phases []string
 	return json.Marshal(bindings)
 }
 
-func cacheSuccessfulReports(sourceRoot, destinationRoot, commit string) error {
+func cacheSuccessfulReports(sourceRoot, destinationRoot, commit string, overwrite bool) error {
 	archiveRoot := filepath.Join(destinationRoot, "build", "replay-archives", commit)
 	for phaseNumber := 1; phaseNumber <= 43; phaseNumber++ {
 		phase := fmt.Sprintf("P%02d", phaseNumber)
@@ -214,6 +224,41 @@ func cacheSuccessfulReports(sourceRoot, destinationRoot, commit string) error {
 				return err
 			}
 			destination := filepath.Join(archiveRoot, relative)
+			if !overwrite {
+				if _, err := os.Stat(destination); err == nil {
+					continue
+				} else if !errors.Is(err, os.ErrNotExist) {
+					return err
+				}
+			}
+			if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+				return err
+			}
+			if err := os.WriteFile(destination, content, 0o600); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func restoreAvailableCachedReports(root, destinationRoot, commit string, maximumPhase int) error {
+	for phaseNumber := 1; phaseNumber <= maximumPhase; phaseNumber++ {
+		phase := fmt.Sprintf("P%02d", phaseNumber)
+		reportRelative := filepath.Join("build", "reports", phase, "report.json")
+		archiveBase := filepath.Join(root, "build", "replay-archives", commit)
+		if _, err := os.Stat(filepath.Join(archiveBase, reportRelative)); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		for _, name := range []string{"junit.xml", "report.json"} {
+			relative := filepath.Join("build", "reports", phase, name)
+			content, err := os.ReadFile(filepath.Join(archiveBase, relative))
+			if err != nil {
+				return err
+			}
+			destination := filepath.Join(destinationRoot, relative)
 			if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
 				return err
 			}
