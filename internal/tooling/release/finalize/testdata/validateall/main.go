@@ -341,7 +341,37 @@ func verifyAtClaimedCommit(root, reportPath string) (verified *report.Report, mo
 			return verified, "", err
 		}
 	}
+	restoreRuntime, err := selectHistoricalNode(verified.Provenance.Runtime.Node)
+	if err != nil {
+		return verified, "", err
+	}
+	defer restoreRuntime()
 	return report.Verify(report.VerifyOptions{Root: temp, ReportPath: reportPath})
+}
+
+func selectHistoricalNode(reported string) (func(), error) {
+	current, err := exec.Command("node", "--version").Output()
+	if err == nil && strings.TrimSpace(string(current)) == reported {
+		return func() {}, nil
+	}
+	if !strings.HasPrefix(reported, "v") || strings.ContainsAny(reported, `/\\`) {
+		return nil, fmt.Errorf("historical Node version is invalid: %q", reported)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	bin := filepath.Join(home, ".nvm", "versions", "node", reported, "bin")
+	node := filepath.Join(bin, "node")
+	output, err := exec.Command(node, "--version").Output()
+	if err != nil || strings.TrimSpace(string(output)) != reported {
+		return nil, fmt.Errorf("historical Node runtime %s is unavailable", reported)
+	}
+	previous := os.Getenv("PATH")
+	if err := os.Setenv("PATH", bin+string(os.PathListSeparator)+previous); err != nil {
+		return nil, err
+	}
+	return func() { _ = os.Setenv("PATH", previous) }, nil
 }
 
 func compact(values []string) []string {
