@@ -74,8 +74,8 @@ func refreshAll(root string) ([]byte, error) {
 		prerequisites        []string
 		phases               []string
 	}{
-		{"P08-P23", "5bada508fa5e7035abd1d33817b4de7abf3ee49d", "verify-run-delivery", nil, []string{"P08", "P10", "P12", "P13", "P18", "P19", "P20", "P21", "P22", "P23"}},
-		{"P24-P26", "6ba1651", "verify-operations-security", []string{"test-worker-service", "test-go-worker-sdk"}, []string{"P24", "P25", "P26"}},
+		{"P08-P22", "5bada508fa5e7035abd1d33817b4de7abf3ee49d", "verify-run-delivery", nil, []string{"P08", "P10", "P12", "P13", "P18", "P19", "P20", "P21", "P22"}},
+		{"P23-P26", "6ba1651", "verify-operations-security", []string{"test-worker-service", "test-go-worker-sdk"}, []string{"P23", "P24", "P25", "P26"}},
 		{"P28", "4daf269", "test-typescript-consumer", nil, []string{"P28"}},
 		{"P29", "9a15353", "test-interop-a2a", nil, []string{"P29"}},
 		{"P30", "ec2a0ee", "test-interop-mcp", nil, []string{"P30"}},
