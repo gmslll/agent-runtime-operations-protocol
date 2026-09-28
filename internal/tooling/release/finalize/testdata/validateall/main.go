@@ -79,6 +79,7 @@ func refreshAll(root string) ([]byte, error) {
 		{"P28", "4daf269", "test-typescript-consumer", nil, []string{"P28"}},
 		{"P29", "9a15353", "test-interop-a2a", nil, []string{"P29"}},
 		{"P30", "ec2a0ee", "test-interop-mcp", nil, []string{"P30"}},
+		{"P38", "9c4da72a6043e265f75b5b7fb0f0c1a31d2d98d2", "verify-resilience", nil, []string{"P09", "P10", "P12", "P13", "P14", "P16", "P18", "P19", "P20", "P21", "P24", "P27", "P34", "P35", "P37", "P38"}},
 	}
 	for _, replay := range replays {
 		commit, err := git(root, "rev-parse", replay.commit+"^{commit}")
@@ -86,6 +87,9 @@ func refreshAll(root string) ([]byte, error) {
 			return nil, fmt.Errorf("%s historical commit: %w", replay.name, err)
 		}
 		if evidence, ok := existingSuccessfulReports(root, replay.phases, strings.TrimSpace(commit)); ok {
+			if err := cacheSuccessfulReports(root, root, strings.TrimSpace(commit)); err != nil {
+				return nil, fmt.Errorf("%s archive cache: %w", replay.name, err)
+			}
 			results[replay.name+"-verified-existing"] = report.Hash(evidence)
 			continue
 		}
@@ -157,6 +161,9 @@ func replayReports(root, revision, target string, prerequisites, phases []string
 	if err != nil {
 		return nil, fmt.Errorf("make %s: %w: %s%s", target, err, tail(output), failedReportDiagnostics(temp, phases))
 	}
+	if err := cacheSuccessfulReports(temp, root, commit); err != nil {
+		return nil, err
+	}
 	bindings := map[string]string{"commit": commit, "target": target, "output_sha256": report.Hash(output)}
 	for _, phase := range phases {
 		for _, name := range []string{"junit.xml", "report.json"} {
@@ -176,6 +183,31 @@ func replayReports(root, revision, target string, prerequisites, phases []string
 		}
 	}
 	return json.Marshal(bindings)
+}
+
+func cacheSuccessfulReports(sourceRoot, destinationRoot, commit string) error {
+	archiveRoot := filepath.Join(destinationRoot, "build", "replay-archives", commit)
+	for phaseNumber := 1; phaseNumber <= 43; phaseNumber++ {
+		phase := fmt.Sprintf("P%02d", phaseNumber)
+		if _, ok := existingSuccessfulReports(sourceRoot, []string{phase}, ""); !ok {
+			continue
+		}
+		for _, name := range []string{"junit.xml", "report.json"} {
+			relative := filepath.Join("build", "reports", phase, name)
+			content, err := os.ReadFile(filepath.Join(sourceRoot, relative))
+			if err != nil {
+				return err
+			}
+			destination := filepath.Join(archiveRoot, relative)
+			if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+				return err
+			}
+			if err := os.WriteFile(destination, content, 0o600); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func failedReportDiagnostics(root string, phases []string) string {
@@ -328,17 +360,27 @@ func verifyAtClaimedCommit(root, reportPath string) (verified *report.Report, mo
 	}
 	added = true
 	copyPaths := []string{reportPath, filepath.Join(filepath.Dir(reportPath), "junit.xml")}
+	runtimeInputs := map[string]report.InputFile{}
 	for _, input := range verified.Provenance.RuntimeInputs.Files {
 		if strings.HasPrefix(filepath.ToSlash(input.Path), "build/") {
 			copyPaths = append(copyPaths, input.Path)
+			runtimeInputs[filepath.ToSlash(input.Path)] = input
 		}
 	}
 	sort.Strings(copyPaths)
 	copyPaths = compact(copyPaths)
 	for _, relative := range copyPaths {
-		content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(relative)))
+		source := filepath.Join(root, filepath.FromSlash(relative))
+		content, err := os.ReadFile(source)
 		if err != nil {
 			return verified, "", err
+		}
+		if expected, ok := runtimeInputs[filepath.ToSlash(relative)]; ok && (report.Hash(content) != expected.SHA256 || int64(len(content)) != expected.Bytes) {
+			source = filepath.Join(root, "build", "replay-archives", claimed, filepath.FromSlash(relative))
+			content, err = os.ReadFile(source)
+			if err != nil || report.Hash(content) != expected.SHA256 || int64(len(content)) != expected.Bytes {
+				return verified, "", fmt.Errorf("historical runtime input %s is unavailable", relative)
+			}
 		}
 		destination := filepath.Join(temp, filepath.FromSlash(relative))
 		if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
