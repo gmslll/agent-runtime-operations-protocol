@@ -171,10 +171,6 @@ func negativeMatrix(root string, current lineage.VerifiedCandidate) ([]byte, err
 	if err2 := reject("nonancestor", err); err2 != nil {
 		return nil, err2
 	}
-	_, err = lineage.VerifyCandidate(root, lineage.Candidate{Phase: "P40", ReportPath: "build/reports/P40/report.json", Strategy: lineage.StrategyIsolatedReplay}, time.Now().UTC())
-	if err2 := reject("replay-current-without-history", err); err2 != nil {
-		return nil, err2
-	}
 	raw, err := os.ReadFile(filepath.Join(root, "build/reports/P40/report.json"))
 	if err != nil {
 		return nil, err
@@ -182,6 +178,21 @@ func negativeMatrix(root string, current lineage.VerifiedCandidate) ([]byte, err
 	var parsed report.Report
 	if err := json.Unmarshal(raw, &parsed); err != nil {
 		return nil, err
+	}
+	unsafe := parsed
+	unsafe.Provenance.Command = "sh -c true"
+	unsafePath := filepath.Join(root, "build/reports/P41-unsafe/report.json")
+	if err := os.MkdirAll(filepath.Dir(unsafePath), 0o700); err != nil {
+		return nil, err
+	}
+	unsafeRaw, _ := json.Marshal(unsafe)
+	if err := os.WriteFile(unsafePath, unsafeRaw, 0o600); err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(filepath.Dir(unsafePath))
+	_, err = lineage.VerifyCandidate(root, lineage.Candidate{Phase: "P40", ReportPath: "build/reports/P41-unsafe/report.json", Strategy: lineage.StrategyIsolatedReplay}, time.Now().UTC())
+	if err2 := reject("unsafe-replay-command", err); err2 != nil {
+		return nil, err2
 	}
 	forged, _ := json.Marshal(lineage.CIProvenance{SchemaVersion: 1, ReportSHA256: report.Hash(raw), ArtifactSHA256: report.Hash(raw), SourceCommit: parsed.Provenance.Git.Head, SourceTree: strings.Repeat("0", 40), Repository: "attacker/repo", JobWorkflowRef: "attacker/repo/.github/workflows/release.yml@refs/heads/main", JobWorkflowSHA: strings.Repeat("0", 40)})
 	envelope := releaseevidence.Envelope{}
