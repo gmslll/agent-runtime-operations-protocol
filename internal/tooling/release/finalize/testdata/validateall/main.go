@@ -268,23 +268,30 @@ func seedSuccessfulReports(root, destinationRoot string) error {
 
 func verifyAll(root string) ([]byte, error) {
 	results := map[string]string{}
+	current, err := git(root, "rev-parse", "HEAD^{commit}")
+	if err != nil {
+		return nil, err
+	}
 	for i := 1; i <= 43; i++ {
 		phase := fmt.Sprintf("P%02d", i)
 		path := fmt.Sprintf("build/reports/%s/report.json", phase)
-		var verified *report.Report
-		var mode string
-		var err error
-		if phase == "P03" || phase == "P04" {
-			verified, mode, err = verifyAtClaimedCommit(root, path)
-		} else {
-			verified, mode, err = report.Verify(report.VerifyOptions{Root: root, ReportPath: path, AllowAncestor: true})
-		}
-		if err != nil || verified == nil || !verified.Success {
-			return nil, fmt.Errorf("%s verification mode=%s: %w", phase, mode, err)
-		}
 		data, err := os.ReadFile(filepath.Join(root, path))
 		if err != nil {
 			return nil, err
+		}
+		var claimed report.Report
+		if err := json.Unmarshal(data, &claimed); err != nil {
+			return nil, err
+		}
+		var verified *report.Report
+		var mode string
+		if claimed.Provenance.Git.Head != current {
+			verified, mode, err = verifyAtClaimedCommit(root, path)
+		} else {
+			verified, mode, err = report.Verify(report.VerifyOptions{Root: root, ReportPath: path})
+		}
+		if err != nil || verified == nil || !verified.Success {
+			return nil, fmt.Errorf("%s verification mode=%s: %w", phase, mode, err)
 		}
 		results[phase] = report.Hash(data)
 	}
