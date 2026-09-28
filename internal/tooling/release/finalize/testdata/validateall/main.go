@@ -71,21 +71,22 @@ func refreshAll(root string) ([]byte, error) {
 	}
 	replays := []struct {
 		name, commit, target string
+		prerequisites        []string
 		phases               []string
 	}{
-		{"P10", "9c4da72a6043e265f75b5b7fb0f0c1a31d2d98d2", "test-identity-secrets", []string{"P10"}},
-		{"P23", "5bada508fa5e7035abd1d33817b4de7abf3ee49d", "verify-run-delivery", []string{"P23"}},
-		{"P24-P26", "6ba1651", "verify-operations-security", []string{"P24", "P25", "P26"}},
-		{"P28", "4daf269", "test-typescript-consumer", []string{"P28"}},
-		{"P29", "9a15353", "test-interop-a2a", []string{"P29"}},
-		{"P30", "ec2a0ee", "test-interop-mcp", []string{"P30"}},
+		{"P10", "9c4da72a6043e265f75b5b7fb0f0c1a31d2d98d2", "test-identity-secrets", nil, []string{"P10"}},
+		{"P23", "5bada508fa5e7035abd1d33817b4de7abf3ee49d", "verify-run-delivery", nil, []string{"P23"}},
+		{"P24-P26", "6ba1651", "verify-operations-security", []string{"test-worker-service", "test-go-worker-sdk"}, []string{"P24", "P25", "P26"}},
+		{"P28", "4daf269", "test-typescript-consumer", nil, []string{"P28"}},
+		{"P29", "9a15353", "test-interop-a2a", nil, []string{"P29"}},
+		{"P30", "ec2a0ee", "test-interop-mcp", nil, []string{"P30"}},
 	}
 	for _, replay := range replays {
 		if evidence, ok := existingSuccessfulReports(root, replay.phases); ok {
 			results[replay.name+"-verified-existing"] = report.Hash(evidence)
 			continue
 		}
-		evidence, err := replayReports(root, replay.commit, replay.target, replay.phases)
+		evidence, err := replayReports(root, replay.commit, replay.target, replay.prerequisites, replay.phases)
 		if err != nil {
 			return nil, fmt.Errorf("%s historical replay: %w", replay.name, err)
 		}
@@ -104,7 +105,7 @@ func refreshAll(root string) ([]byte, error) {
 	return json.Marshal(results)
 }
 
-func replayReports(root, revision, target string, phases []string) (evidence []byte, resultErr error) {
+func replayReports(root, revision, target string, prerequisites, phases []string) (evidence []byte, resultErr error) {
 	commit, err := git(root, "rev-parse", revision+"^{commit}")
 	if err != nil {
 		return nil, err
@@ -133,6 +134,12 @@ func replayReports(root, revision, target string, phases []string) (evidence []b
 	}
 	if output, err := run(temp, "npm", "ci", "--ignore-scripts", "--no-audit", "--no-fund"); err != nil {
 		return nil, fmt.Errorf("locked dependencies: %w: %s", err, tail(output))
+	}
+	for _, prerequisite := range prerequisites {
+		output, err := run(temp, "make", prerequisite)
+		if err != nil {
+			return nil, fmt.Errorf("make prerequisite %s: %w: %s", prerequisite, err, tail(output))
+		}
 	}
 	output, err := run(temp, "make", target)
 	if err != nil {
