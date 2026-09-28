@@ -8,6 +8,7 @@ import (
 	"os"
 	"time"
 
+	exporta2a "github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/export-a2a"
 	"github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/publish"
 	registercommand "github.com/gmslll/agent-runtime-operations-protocol/cmd/arop/internal/commands/register"
 	"github.com/gmslll/agent-runtime-operations-protocol/sdk/go/protocol/manifest"
@@ -22,6 +23,9 @@ func main() {
 }
 
 func run(arguments []string) error {
+	if len(arguments) == 4 && arguments[0] == "export" && arguments[1] == "a2a" {
+		return (exporta2a.Command{Stdout: os.Stdout}).Execute(context.Background(), exporta2a.Options{PackageRoot: ".", ManifestPath: arguments[2], InterfaceURL: arguments[3]})
+	}
 	if len(arguments) == 3 && arguments[0] == "register" {
 		baseURL, err := url.Parse(os.Getenv("AROP_CONTROL_PLANE_URL"))
 		if err != nil {
@@ -63,7 +67,7 @@ func run(arguments []string) error {
 		return nil
 	}
 	if len(arguments) != 3 || arguments[0] != "manifest" || arguments[1] != "digest" {
-		return fmt.Errorf("usage: arop manifest digest <manifest.yaml|manifest.json> | arop publish <agent-id> <bundle.zip> | arop register <instance-id> <config.json>")
+		return fmt.Errorf("usage: arop manifest digest <manifest.yaml|manifest.json> | arop publish <agent-id> <bundle.zip> | arop register <instance-id> <config.json> | arop export a2a <manifest> <https-interface-url>")
 	}
 
 	digest, err := manifest.DigestFile(arguments[2])

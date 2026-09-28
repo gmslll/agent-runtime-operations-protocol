@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "upstream": {
+    "protocol": "A2A",
+    "protocol_version": "1.0",
+    "fixture_release": "1.0.1",
+    "tag_commit": "3303592",
+    "normative_proto_sha256": "e195bf96ab630c69797851970203e1b2b6b19528f2e9803b7d904b91a5104016"
+  },
+  "state_mapping": {
+    "queued": "exact:submitted",
+    "dispatching": "extended:submitted",
+    "running": "exact:working",
+    "waiting_input": "exact:input_required",
+    "cancel_requested": "extended:working",
+    "succeeded": "exact:completed",
+    "failed": "exact:failed",
+    "cancelled": "exact:canceled",
+    "timed_out": "lossy:failed"
+  },
+  "security_not_exported": [
+    "authorization_snapshot",
+    "dispatch_ticket",
+    "run_token",
+    "runtime_lease",
+    "deployment_routing",
+    "effect_reservation"
+  ]
+}

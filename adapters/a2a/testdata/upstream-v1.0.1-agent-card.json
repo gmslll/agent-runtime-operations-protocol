@@ -1,0 +1,14 @@
+{
+  "name": "Fixture Agent",
+  "description": "A2A v1.0.1 fixture",
+  "supportedInterfaces": [
+    {"url": "https://agent.example.invalid/a2a", "protocolBinding": "HTTP+JSON", "protocolVersion": "1.0"}
+  ],
+  "version": "1.2.3",
+  "capabilities": {"streaming": true},
+  "defaultInputModes": ["text/plain"],
+  "defaultOutputModes": ["application/json"],
+  "skills": [
+    {"id": "answer", "name": "Answer", "description": "Answer a question", "tags": ["question"]}
+  ]
+}
