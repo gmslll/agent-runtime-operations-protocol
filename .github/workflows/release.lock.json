@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "workflow_path": ".github/workflows/release.yml",
-  "workflow_sha256": "720c3e3c010731d2ce748f365547f8a63f6d1cfaca8a4ca955ef06d86c098a57",
+  "workflow_sha256": "c36eae1c93772ee28c7cdf011fc1a68636fac7a64b9c5b2540a5c17890cff49f",
   "job": "release",
   "environment": "arop-release",
   "permissions": {

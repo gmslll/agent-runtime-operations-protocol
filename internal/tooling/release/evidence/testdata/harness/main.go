@@ -121,13 +121,13 @@ func buildFixture(root string) (fixture, error) {
 	} {
 		fx.keys[item.id] = newMaterial(item.id, item.principal)
 	}
-	caPEM, leafPEM, leafDER, leafPrivate, err := certificates(fx.now, "https://token.actions.githubusercontent.com", "https://github.com/InfiniteStatesInc/agent-runtime-operations-protocol/.github/workflows/release.yml@refs/heads/main")
+	caPEM, leafPEM, leafDER, leafPrivate, err := certificates(fx.now, "https://token.actions.githubusercontent.com", "https://github.com/gmslll/agent-runtime-operations-protocol/.github/workflows/release.yml@refs/heads/main")
 	if err != nil {
 		return fx, err
 	}
 	fx.caPEM, fx.leafPEM, fx.leafDER, fx.leafPrivate = caPEM, leafPEM, leafDER, leafPrivate
 	fx.rekorPrivate = fx.keys["rekor-log"].private
-	fx.identity = releaseevidence.SigstoreIdentity{PrincipalID: "reviewer-ci", Issuer: "https://token.actions.githubusercontent.com", Subject: "https://github.com/InfiniteStatesInc/agent-runtime-operations-protocol/.github/workflows/release.yml@refs/heads/main", Repository: "InfiniteStatesInc/agent-runtime-operations-protocol", WorkflowRef: "InfiniteStatesInc/agent-runtime-operations-protocol/.github/workflows/release.yml@refs/heads/main", WorkflowSHA: strings.Repeat("d", 40), Event: "workflow_dispatch", Role: "independent_reviewer"}
+	fx.identity = releaseevidence.SigstoreIdentity{PrincipalID: "reviewer-ci", Issuer: "https://token.actions.githubusercontent.com", Subject: "https://github.com/gmslll/agent-runtime-operations-protocol/.github/workflows/release.yml@refs/heads/main", Repository: "gmslll/agent-runtime-operations-protocol", WorkflowRef: "gmslll/agent-runtime-operations-protocol/.github/workflows/release.yml@refs/heads/main", WorkflowSHA: strings.Repeat("d", 40), Event: "workflow_dispatch", Role: "independent_reviewer"}
 	start, end := fx.now.Add(-time.Hour).Format(time.RFC3339), fx.now.Add(24*time.Hour).Format(time.RFC3339)
 	registryKeys := []releaseevidence.Key{fx.keys["owner-a-1"].key, fx.keys["owner-a-2"].key, fx.keys["owner-b"].key, fx.keys["reviewer"].key, fx.keys["approver"].key, fx.keys["revoked"].key}
 	registry := releaseevidence.RoleRegistry{SchemaVersion: 1, Version: 7, ExpiresAt: end, Keys: registryKeys, Principals: []releaseevidence.Principal{
@@ -349,7 +349,7 @@ func config(root string) ([]byte, releaseevidence.ExpectedBindings, error) {
 	if err != nil {
 		return nil, releaseevidence.ExpectedBindings{}, err
 	}
-	value := releaseevidence.ExternalConfig{SchemaVersion: 1, OIDCIssuer: "https://token.actions.githubusercontent.com", Repository: "InfiniteStatesInc/agent-runtime-operations-protocol", WorkflowPath: ".github/workflows/release.yml", Environment: "arop-release", WorkflowLockSHA256: workflowLock, PublicNamespace: "arop.dev", Registries: map[string]string{"go": "https://proxy.golang.org", "pypi": "https://pypi.org", "npm": "https://registry.npmjs.org", "oci": "https://ghcr.io"}}
+	value := releaseevidence.ExternalConfig{SchemaVersion: 1, OIDCIssuer: "https://token.actions.githubusercontent.com", Repository: "gmslll/agent-runtime-operations-protocol", WorkflowPath: ".github/workflows/release.yml", Environment: "arop-release", WorkflowLockSHA256: workflowLock, PublicNamespace: "arop.dev", Registries: map[string]string{"go": "https://proxy.golang.org", "pypi": "https://pypi.org", "npm": "https://registry.npmjs.org", "oci": "https://ghcr.io"}}
 	data, _ := json.Marshal(value)
 	expected, err := bindings(root, "external_config", "project_owner", releaseevidence.ExternalConfigSchema, "internal/tooling/release/evidence/config.go", ".github/workflows/release.lock.json")
 	return data, expected, err
@@ -377,7 +377,7 @@ func bindings(root, kind, role, schemaPath, validatorPath, policyPath string) (r
 func baseEnvelope(root string, fx fixture, kind, role, principal string, payload []byte, expected releaseevidence.ExpectedBindings) releaseevidence.Envelope {
 	head, _ := git(root, "rev-parse", "HEAD")
 	tree, _ := git(root, "rev-parse", head+"^{tree}")
-	return releaseevidence.Envelope{SchemaVersion: 1, RepositoryURI: "https://github.com/InfiniteStatesInc/agent-runtime-operations-protocol", ObjectFormat: "git-sha1", Subject: releaseevidence.Subject{Commit: head, Tree: tree}, Kind: kind, SchemaSHA256: expected.SchemaSHA256, PolicySHA256: expected.PolicySHA256, ValidatorSHA256: expected.ValidatorSHA256, IssuedAt: fx.now.Add(-20 * time.Second).Format(time.RFC3339), ExpiresAt: fx.now.Add(time.Hour).Format(time.RFC3339), PrincipalID: principal, Role: role, Trust: releaseevidence.TrustBinding{RootSHA256: fx.trust.RootSHA256, RegistrySHA256: fx.trust.RegistrySHA256, CheckpointVersion: fx.trust.CheckpointVersion, CheckpointSHA256: fx.trust.CheckpointSHA256}, Payload: releaseevidence.PayloadBinding{MediaType: "application/json", SHA256: releaseevidence.HashBytes(payload), Bytes: int64(len(payload))}}
+	return releaseevidence.Envelope{SchemaVersion: 1, RepositoryURI: "https://github.com/gmslll/agent-runtime-operations-protocol", ObjectFormat: "git-sha1", Subject: releaseevidence.Subject{Commit: head, Tree: tree}, Kind: kind, SchemaSHA256: expected.SchemaSHA256, PolicySHA256: expected.PolicySHA256, ValidatorSHA256: expected.ValidatorSHA256, IssuedAt: fx.now.Add(-20 * time.Second).Format(time.RFC3339), ExpiresAt: fx.now.Add(time.Hour).Format(time.RFC3339), PrincipalID: principal, Role: role, Trust: releaseevidence.TrustBinding{RootSHA256: fx.trust.RootSHA256, RegistrySHA256: fx.trust.RegistrySHA256, CheckpointVersion: fx.trust.CheckpointVersion, CheckpointSHA256: fx.trust.CheckpointSHA256}, Payload: releaseevidence.PayloadBinding{MediaType: "application/json", SHA256: releaseevidence.HashBytes(payload), Bytes: int64(len(payload))}}
 }
 
 func sigstoreVerification(fx fixture, statement []byte) (releaseevidence.RekorProof, string, error) {

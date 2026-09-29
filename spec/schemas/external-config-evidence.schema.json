@@ -6,7 +6,7 @@
   "required": ["schema_version", "oidc_issuer", "repository", "workflow_path", "environment", "workflow_lock_sha256", "public_namespace", "registries"],
   "properties": {
     "schema_version": {"const": 1}, "oidc_issuer": {"type": "string", "format": "uri", "pattern": "^https://"},
-    "repository": {"const": "InfiniteStatesInc/agent-runtime-operations-protocol"}, "workflow_path": {"const": ".github/workflows/release.yml"},
+    "repository": {"const": "gmslll/agent-runtime-operations-protocol"}, "workflow_path": {"const": ".github/workflows/release.yml"},
     "environment": {"const": "arop-release"}, "workflow_lock_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "public_namespace": {"type": "string", "pattern": "^[a-z][a-z0-9.-]{2,127}$"},
     "registries": {"type": "object", "additionalProperties": false, "required": ["go", "pypi", "npm", "oci"], "properties": {"go": {"$ref": "#/$defs/https"}, "pypi": {"$ref": "#/$defs/https"}, "npm": {"$ref": "#/$defs/https"}, "oci": {"$ref": "#/$defs/https"}}}

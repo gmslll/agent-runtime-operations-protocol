@@ -79,7 +79,7 @@ func Validate(root string) (Evidence, error) {
 	}
 	required := []string{
 		"workflow_dispatch:", "contents: read", "id-token: write", "environment: arop-release",
-		"github.ref == 'refs/heads/main'", "github.repository == 'InfiniteStatesInc/agent-runtime-operations-protocol'",
+		"github.ref == 'refs/heads/main'", "github.repository == 'gmslll/agent-runtime-operations-protocol'",
 		"persist-credentials: false", "AROP_JOB_WORKFLOW_REF", "AROP_JOB_WORKFLOW_SHA", "--dry-run",
 	}
 	for _, value := range required {

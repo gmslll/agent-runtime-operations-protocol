@@ -7,7 +7,7 @@
   "required": ["schema_version", "repository_uri", "object_format", "subject", "kind", "schema_sha256", "policy_sha256", "validator_sha256", "issued_at", "expires_at", "principal_id", "role", "trust", "payload", "verification"],
   "properties": {
     "schema_version": {"const": 1},
-    "repository_uri": {"const": "https://github.com/InfiniteStatesInc/agent-runtime-operations-protocol"},
+    "repository_uri": {"const": "https://github.com/gmslll/agent-runtime-operations-protocol"},
     "object_format": {"const": "git-sha1"},
     "subject": {"type": "object", "additionalProperties": false, "required": ["commit", "tree"], "properties": {"commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "tree": {"type": "string", "pattern": "^[0-9a-f]{40}$"}}},
     "kind": {"enum": ["external_config", "external_conformance", "final_equivalence", "final_delivery"]},
@@ -27,7 +27,7 @@
     "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "id": {"type": "string", "pattern": "^[a-z][a-z0-9._-]{0,127}$"},
     "signature": {"type": "object", "additionalProperties": false, "required": ["key_id", "signature"], "properties": {"key_id": {"$ref": "#/$defs/id"}, "signature": {"type": "string", "minLength": 88, "maxLength": 88}}},
-    "identity": {"type": "object", "additionalProperties": false, "required": ["principal_id", "role", "issuer", "subject", "repository", "workflow_ref", "workflow_sha", "event"], "properties": {"principal_id": {"$ref": "#/$defs/id"}, "role": {"$ref": "#/$defs/id"}, "issuer": {"type": "string", "minLength": 1}, "subject": {"type": "string", "format": "uri"}, "repository": {"const": "InfiniteStatesInc/agent-runtime-operations-protocol"}, "workflow_ref": {"type": "string", "minLength": 1}, "workflow_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "event": {"enum": ["workflow_dispatch", "push"]}}},
+    "identity": {"type": "object", "additionalProperties": false, "required": ["principal_id", "role", "issuer", "subject", "repository", "workflow_ref", "workflow_sha", "event"], "properties": {"principal_id": {"$ref": "#/$defs/id"}, "role": {"$ref": "#/$defs/id"}, "issuer": {"type": "string", "minLength": 1}, "subject": {"type": "string", "format": "uri"}, "repository": {"const": "gmslll/agent-runtime-operations-protocol"}, "workflow_ref": {"type": "string", "minLength": 1}, "workflow_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "event": {"enum": ["workflow_dispatch", "push"]}}},
     "rekor": {"type": "object", "additionalProperties": false, "required": ["log_id", "log_index", "integrated_time", "body_sha256", "tree_size", "root_hash", "hashes", "checkpoint_signature"], "properties": {"log_id": {"$ref": "#/$defs/id"}, "log_index": {"type": "integer", "minimum": 0}, "integrated_time": {"type": "integer", "minimum": 1}, "body_sha256": {"$ref": "#/$defs/digest"}, "tree_size": {"type": "integer", "minimum": 1}, "root_hash": {"$ref": "#/$defs/digest"}, "hashes": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/digest"}}, "checkpoint_signature": {"type": "string", "minLength": 88, "maxLength": 88}}}
   }
 }

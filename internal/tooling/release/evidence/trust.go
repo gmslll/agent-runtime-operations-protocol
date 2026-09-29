@@ -253,7 +253,7 @@ func LoadEnvelope(root, path string) (Envelope, []byte, error) {
 }
 
 func VerifyEnvelope(envelope Envelope, payload []byte, trust VerifiedTrust, expected ExpectedBindings, now time.Time) (VerifiedEnvelope, error) {
-	if envelope.SchemaVersion != 1 || envelope.RepositoryURI != "https://github.com/InfiniteStatesInc/agent-runtime-operations-protocol" || envelope.ObjectFormat != "git-sha1" || len(envelope.Subject.Commit) != 40 || len(envelope.Subject.Tree) != 40 {
+	if envelope.SchemaVersion != 1 || envelope.RepositoryURI != "https://github.com/gmslll/agent-runtime-operations-protocol" || envelope.ObjectFormat != "git-sha1" || len(envelope.Subject.Commit) != 40 || len(envelope.Subject.Tree) != 40 {
 		return VerifiedEnvelope{}, errors.New("detached evidence repository or subject identity is invalid")
 	}
 	if envelope.Kind != expected.Kind || envelope.Role != expected.Role || envelope.SchemaSHA256 != expected.SchemaSHA256 || envelope.PolicySHA256 != expected.PolicySHA256 || envelope.ValidatorSHA256 != expected.ValidatorSHA256 {
@@ -708,7 +708,7 @@ func validateRoleRegistry(value RoleRegistry, now time.Time) error {
 	}
 	for _, identity := range value.SigstoreIdentities {
 		principal, ok := principals[identity.PrincipalID]
-		if !ok || principal.Revoked || !stringSet(principal.Roles)[identity.Role] || identity.Repository != "InfiniteStatesInc/agent-runtime-operations-protocol" || identity.Issuer == "" || identity.Subject == "" {
+		if !ok || principal.Revoked || !stringSet(principal.Roles)[identity.Role] || identity.Repository != "gmslll/agent-runtime-operations-protocol" || identity.Issuer == "" || identity.Subject == "" {
 			return errors.New("Sigstore identity is not bound to an eligible principal and role")
 		}
 	}
