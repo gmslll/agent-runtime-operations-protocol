@@ -38,7 +38,7 @@ func ValidateExternalConfig(root string, data []byte, expectedWorkflowLockDigest
 	if err := strictDecode(data, &value); err != nil {
 		return value, err
 	}
-	if value.SchemaVersion != 1 || value.OIDCIssuer != "https://token.actions.githubusercontent.com" || value.Repository != "gmslll/agent-runtime-operations-protocol" || value.WorkflowPath != ".github/workflows/release.yml" || value.Environment != "arop-release" || value.WorkflowLockSHA256 != expectedWorkflowLockDigest || !isDigest(value.WorkflowLockSHA256) {
+	if value.SchemaVersion != 1 || value.OIDCIssuer != "https://token.actions.githubusercontent.com" || value.Repository != Repository || value.WorkflowPath != ".github/workflows/release.yml" || value.Environment != "arop-release" || value.WorkflowLockSHA256 != expectedWorkflowLockDigest || !isDigest(value.WorkflowLockSHA256) {
 		return value, errors.New("external release configuration identity is invalid")
 	}
 	want := []string{"go", "npm", "oci", "pypi"}
