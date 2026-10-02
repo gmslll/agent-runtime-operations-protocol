@@ -87,7 +87,7 @@ AROP 的权威顺序为：`DECISIONS` 约束 → 领域规范与状态机 Fixtur
 
 项目域名、包注册表所有权和初始维护者名单仍属 P45 真实外部 Gate。P44 及之前均为 private/dev snapshot；取消独立公共 v0.1，首个公开候选是 P49 从 clean source commit A 发布的 `v1.0.0-rc.N`。
 
-预发布源码暂存于私有仓库 [`gmslll/agent-runtime-operations-protocol`](https://github.com/gmslll/agent-runtime-operations-protocol)，完成公开发布配置和安全入口后再转为公开。
+源码公开托管于 canonical 仓库 [`gmslll/agent-runtime-operations-protocol`](https://github.com/gmslll/agent-runtime-operations-protocol)（2026-10-03 起转为公开）。发布证据的信任身份固定绑定该仓库；凡携带历史身份的仓库外信任制品（role registry bundle、external config、已签发 envelope）会被验证器拒绝，必须以 canonical 身份重新签发。
 
 ## 当前验证
 

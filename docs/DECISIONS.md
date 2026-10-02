@@ -45,7 +45,7 @@ updated: 2026-09-23
 | D-035 | SDK 与 CLI 命名 | Go Module 使用 `github.com/gmslll/agent-runtime-operations-protocol`；Python Distribution 使用 `arop-sdk`、Import 使用 `arop`；npm 使用 `@arop/sdk`；CLI 使用 `arop` |
 | D-036 | 开源许可证 | 协议文本、Schema、SDK、Conformance 和 Reference Implementation 统一采用 Apache-2.0 |
 | D-037 | 公共治理 | 规范性变更走公开 RFC 并需两名 Maintainer 审核；初期使用 DCO，不使用 CLA；安全漏洞走私密报告渠道 |
-| D-038 | 仓库归属 | 初期 GitHub 仓库为私有的 `gmslll/agent-runtime-operations-protocol`；取消独立公共 v0.1，C-002～C-004 完成后、首个公开 `v1.0.0-rc.N` 前转为公开；未来迁移组织应保留 GitHub Redirect 与 Go Module 兼容策略 |
+| D-038 | 仓库归属 | GitHub 仓库 `gmslll/agent-runtime-operations-protocol` 是 canonical 公共仓库，2026-10-03 经项目所有者决定提前转为公开；C-002～C-004 仍是首个公开 `v1.0.0-rc.N` 与正式公开贡献的 Gate，不再约束仓库可见性。发布证据信任身份以 Go 常量与 Schema const 双侧绑定该仓库，由 P40 identity-lockstep 检查强制一致；凡携带历史身份 `InfiniteStatesInc/...` 的仓库外信任制品（role registry bundle、external config、已签发 envelope）会被验证器拒绝，必须以 canonical 身份重新签发。生产 role registry 的 `workflow_sha` 必须 pin 真实 commit（占位值被验证器拒绝）以缓解个人命名空间改名-抢注风险；未来迁移组织应保留 GitHub Redirect 与 Go Module 兼容策略 |
 | D-039 | 发布安全 | GitHub 强制 2FA 和分支保护；正式包使用 OIDC Trusted Publishing；Release 使用签名 Tag；发布与恢复权限至少由两人持有 |
 | D-040 | 公共命名空间 | Schema `$id`、CloudEvents Type Prefix 和 Extension Namespace 使用项目控制域名；域名确定前保留占位符且不得发布稳定包 |
 | D-041 | 后端语言 | Reference Control Plane、Registry、Dispatcher、Run/Event Ledger 和服务端 Conformance Harness 使用 Go 实现；Python 主要用于 Agent Provider SDK，TypeScript 主要用于 Web/BFF Consumer |

@@ -73,7 +73,7 @@
     "sigstore_identity": {
       "type": "object", "additionalProperties": false,
       "required": ["principal_id", "issuer", "subject", "repository", "workflow_ref", "workflow_sha", "event", "role"],
-      "properties": {"principal_id": {"$ref": "#/$defs/id"}, "issuer": {"type": "string", "minLength": 1}, "subject": {"type": "string", "format": "uri"}, "repository": {"const": "gmslll/agent-runtime-operations-protocol"}, "workflow_ref": {"type": "string", "pattern": "^gmslll/agent-runtime-operations-protocol/\\.github/workflows/[A-Za-z0-9._-]+@refs/(heads|tags)/[A-Za-z0-9._/-]+$"}, "workflow_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "event": {"enum": ["workflow_dispatch", "push"]}, "role": {"$ref": "#/$defs/id"}}
+      "properties": {"principal_id": {"$ref": "#/$defs/id"}, "issuer": {"type": "string", "minLength": 1}, "subject": {"type": "string", "format": "uri"}, "repository": {"const": "gmslll/agent-runtime-operations-protocol"}, "workflow_ref": {"type": "string", "pattern": "^gmslll/agent-runtime-operations-protocol/\\.github/workflows/[A-Za-z0-9._-]+@refs/(heads|tags)/[A-Za-z0-9._/-]+$"}, "workflow_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"}, "event": {"const": "workflow_dispatch"}, "role": {"$ref": "#/$defs/id"}}
     },
     "registry": {
       "type": "object", "additionalProperties": false,

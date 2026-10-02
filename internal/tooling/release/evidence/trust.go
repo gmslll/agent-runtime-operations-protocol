@@ -253,7 +253,7 @@ func LoadEnvelope(root, path string) (Envelope, []byte, error) {
 }
 
 func VerifyEnvelope(envelope Envelope, payload []byte, trust VerifiedTrust, expected ExpectedBindings, now time.Time) (VerifiedEnvelope, error) {
-	if envelope.SchemaVersion != 1 || envelope.RepositoryURI != "https://github.com/gmslll/agent-runtime-operations-protocol" || envelope.ObjectFormat != "git-sha1" || len(envelope.Subject.Commit) != 40 || len(envelope.Subject.Tree) != 40 {
+	if envelope.SchemaVersion != 1 || envelope.RepositoryURI != RepositoryURI || envelope.ObjectFormat != "git-sha1" || len(envelope.Subject.Commit) != 40 || len(envelope.Subject.Tree) != 40 {
 		return VerifiedEnvelope{}, errors.New("detached evidence repository or subject identity is invalid")
 	}
 	if envelope.Kind != expected.Kind || envelope.Role != expected.Role || envelope.SchemaSHA256 != expected.SchemaSHA256 || envelope.PolicySHA256 != expected.PolicySHA256 || envelope.ValidatorSHA256 != expected.ValidatorSHA256 {
@@ -708,11 +708,35 @@ func validateRoleRegistry(value RoleRegistry, now time.Time) error {
 	}
 	for _, identity := range value.SigstoreIdentities {
 		principal, ok := principals[identity.PrincipalID]
-		if !ok || principal.Revoked || !stringSet(principal.Roles)[identity.Role] || identity.Repository != "gmslll/agent-runtime-operations-protocol" || identity.Issuer == "" || identity.Subject == "" {
+		if !ok || principal.Revoked || !stringSet(principal.Roles)[identity.Role] || identity.Repository != Repository || identity.Issuer == "" || identity.Subject == "" {
 			return errors.New("Sigstore identity is not bound to an eligible principal and role")
+		}
+		if identity.Event != ReleaseWorkflowEvent {
+			return errors.New("Sigstore identity event is not one the pinned release workflow can emit")
+		}
+		if placeholderCommit(identity.WorkflowSHA) {
+			return errors.New("Sigstore identity workflow_sha is not a real pinned commit")
 		}
 	}
 	return nil
+}
+
+// placeholderCommit rejects workflow_sha values that cannot be a genuinely
+// pinned commit: anything but 40 lowercase hex, or a degenerate single
+// repeated character sometimes used as a synthetic stand-in.
+func placeholderCommit(value string) bool {
+	if len(value) != 40 {
+		return true
+	}
+	distinct := map[byte]bool{}
+	for index := 0; index < len(value); index++ {
+		char := value[index]
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return true
+		}
+		distinct[char] = true
+	}
+	return len(distinct) < 2
 }
 
 func verifyThreshold(statement []byte, signatures []Signature, role Role, keys map[string]Key, principals map[string]Principal, at time.Time) error {

@@ -75,6 +75,7 @@ func main() {
 	inputs, inputErr := staticInputs(root)
 	add("p40-static-input-closure", inputErr, fmt.Sprintf("%d tracked release-evidence, schema, report, and governance inputs", len(inputs)))
 	add("p40-manifest-inventory", validateManifest(root), "exact eight P40-owned artifacts and empty runtime inputs")
+	add("p40-identity-lockstep", validateIdentityLockstep(root), "schema consts and patterns bind the one canonical repository identity and release event")
 
 	fx, fixtureErr := buildFixture(root)
 	add("p40-tuf-chain", fixtureErr, "protected root verifies exact root-to-timestamp-to-snapshot-to-targets registry chain and monotonic checkpoint")
@@ -121,13 +122,15 @@ func buildFixture(root string) (fixture, error) {
 	} {
 		fx.keys[item.id] = newMaterial(item.id, item.principal)
 	}
-	caPEM, leafPEM, leafDER, leafPrivate, err := certificates(fx.now, "https://token.actions.githubusercontent.com", "https://github.com/gmslll/agent-runtime-operations-protocol/.github/workflows/release.yml@refs/heads/main")
+	subject := releaseevidence.RepositoryURI + "/.github/workflows/release.yml@refs/heads/main"
+	caPEM, leafPEM, leafDER, leafPrivate, err := certificates(fx.now, "https://token.actions.githubusercontent.com", subject)
 	if err != nil {
 		return fx, err
 	}
 	fx.caPEM, fx.leafPEM, fx.leafDER, fx.leafPrivate = caPEM, leafPEM, leafDER, leafPrivate
 	fx.rekorPrivate = fx.keys["rekor-log"].private
-	fx.identity = releaseevidence.SigstoreIdentity{PrincipalID: "reviewer-ci", Issuer: "https://token.actions.githubusercontent.com", Subject: "https://github.com/gmslll/agent-runtime-operations-protocol/.github/workflows/release.yml@refs/heads/main", Repository: "gmslll/agent-runtime-operations-protocol", WorkflowRef: "gmslll/agent-runtime-operations-protocol/.github/workflows/release.yml@refs/heads/main", WorkflowSHA: strings.Repeat("d", 40), Event: "workflow_dispatch", Role: "independent_reviewer"}
+	workflowSHA := fmt.Sprintf("%x", sha256.Sum256([]byte("arop-p40-test-workflow-sha")))[:40]
+	fx.identity = releaseevidence.SigstoreIdentity{PrincipalID: "reviewer-ci", Issuer: "https://token.actions.githubusercontent.com", Subject: subject, Repository: releaseevidence.Repository, WorkflowRef: releaseevidence.Repository + "/.github/workflows/release.yml@refs/heads/main", WorkflowSHA: workflowSHA, Event: "workflow_dispatch", Role: "independent_reviewer"}
 	start, end := fx.now.Add(-time.Hour).Format(time.RFC3339), fx.now.Add(24*time.Hour).Format(time.RFC3339)
 	registryKeys := []releaseevidence.Key{fx.keys["owner-a-1"].key, fx.keys["owner-a-2"].key, fx.keys["owner-b"].key, fx.keys["reviewer"].key, fx.keys["approver"].key, fx.keys["revoked"].key}
 	registry := releaseevidence.RoleRegistry{SchemaVersion: 1, Version: 7, ExpiresAt: end, Keys: registryKeys, Principals: []releaseevidence.Principal{
@@ -235,6 +238,23 @@ func exerciseNegatives(root string, fx fixture) ([]byte, error) {
 		return nil, errors.New("frozen timestamp accepted")
 	}
 	rejected++
+	if _, err := releaseevidence.VerifyRegistry(rechain(fx, fx.bundle.RoleRegistry), fx.protected, fx.now); err != nil {
+		return nil, fmt.Errorf("re-signed registry baseline failed: %w", err)
+	}
+	pushIdentity := fx.bundle.RoleRegistry
+	pushIdentity.SigstoreIdentities = []releaseevidence.SigstoreIdentity{fx.identity}
+	pushIdentity.SigstoreIdentities[0].Event = "push"
+	if _, err := releaseevidence.VerifyRegistry(rechain(fx, pushIdentity), fx.protected, fx.now); err == nil {
+		return nil, errors.New("push-event Sigstore identity accepted")
+	}
+	rejected++
+	placeholderIdentity := fx.bundle.RoleRegistry
+	placeholderIdentity.SigstoreIdentities = []releaseevidence.SigstoreIdentity{fx.identity}
+	placeholderIdentity.SigstoreIdentities[0].WorkflowSHA = strings.Repeat("d", 40)
+	if _, err := releaseevidence.VerifyRegistry(rechain(fx, placeholderIdentity), fx.protected, fx.now); err == nil {
+		return nil, errors.New("placeholder workflow_sha Sigstore identity accepted")
+	}
+	rejected++
 	samePrincipal := base
 	samePrincipal.Verification.Signatures = []releaseevidence.Signature{signature("owner-a-1", fx.keys["owner-a-1"].private, statement), signature("owner-a-2", fx.keys["owner-a-2"].private, statement)}
 	if err := reject("same-principal-threshold", samePrincipal, configPayload, fx.trust, expected); err != nil {
@@ -300,7 +320,27 @@ func exerciseNegatives(root string, fx fixture) ([]byte, error) {
 		return nil, errors.New("secret sentinel accepted")
 	}
 	rejected++
-	return []byte(fmt.Sprintf("rejected=%d categories=root,rollback,freeze,threshold,expiry,revocation,digest,sigstore,secret\n", rejected)), nil
+	return []byte(fmt.Sprintf("rejected=%d categories=root,rollback,freeze,identity,threshold,expiry,revocation,digest,sigstore,secret\n", rejected)), nil
+}
+
+// rechain re-signs the TUF chain over a mutated role registry so a rejection
+// is attributable to registry content, not to a broken signature chain.
+func rechain(fx fixture, registry releaseevidence.RoleRegistry) releaseevidence.RegistryBundle {
+	bundle := fx.bundle
+	bundle.RoleRegistry = registry
+	bundle.Targets.RoleRegistry = meta(registry)
+	bundle.Targets.Signatures = sign(bundle.Targets, fx.keys, "targets")
+	bundle.Snapshot.Targets = meta(bundle.Targets)
+	bundle.Snapshot.Signatures = sign(bundle.Snapshot, fx.keys, "snapshot")
+	bundle.Timestamp.Snapshot = meta(bundle.Snapshot)
+	bundle.Timestamp.Signatures = sign(bundle.Timestamp, fx.keys, "timestamp")
+	registryDigest, _, err := releaseevidence.DigestValue(registry)
+	if err != nil {
+		panic(err)
+	}
+	bundle.Checkpoint = releaseevidence.Checkpoint{Version: fx.bundle.Checkpoint.Version + 1, RegistrySHA256: registryDigest, SignedAt: fx.now.Add(-20 * time.Second).Format(time.RFC3339)}
+	bundle.Checkpoint.Signatures = sign(bundle.Checkpoint, fx.keys, "root-a", "root-b")
+	return bundle
 }
 
 func exerciseCLI(root string, fx fixture) ([]byte, error) {
@@ -349,7 +389,7 @@ func config(root string) ([]byte, releaseevidence.ExpectedBindings, error) {
 	if err != nil {
 		return nil, releaseevidence.ExpectedBindings{}, err
 	}
-	value := releaseevidence.ExternalConfig{SchemaVersion: 1, OIDCIssuer: "https://token.actions.githubusercontent.com", Repository: "gmslll/agent-runtime-operations-protocol", WorkflowPath: ".github/workflows/release.yml", Environment: "arop-release", WorkflowLockSHA256: workflowLock, PublicNamespace: "arop.dev", Registries: map[string]string{"go": "https://proxy.golang.org", "pypi": "https://pypi.org", "npm": "https://registry.npmjs.org", "oci": "https://ghcr.io"}}
+	value := releaseevidence.ExternalConfig{SchemaVersion: 1, OIDCIssuer: "https://token.actions.githubusercontent.com", Repository: releaseevidence.Repository, WorkflowPath: ".github/workflows/release.yml", Environment: "arop-release", WorkflowLockSHA256: workflowLock, PublicNamespace: "arop.dev", Registries: map[string]string{"go": "https://proxy.golang.org", "pypi": "https://pypi.org", "npm": "https://registry.npmjs.org", "oci": "https://ghcr.io"}}
 	data, _ := json.Marshal(value)
 	expected, err := bindings(root, "external_config", "project_owner", releaseevidence.ExternalConfigSchema, "internal/tooling/release/evidence/config.go", ".github/workflows/release.lock.json")
 	return data, expected, err
@@ -377,7 +417,7 @@ func bindings(root, kind, role, schemaPath, validatorPath, policyPath string) (r
 func baseEnvelope(root string, fx fixture, kind, role, principal string, payload []byte, expected releaseevidence.ExpectedBindings) releaseevidence.Envelope {
 	head, _ := git(root, "rev-parse", "HEAD")
 	tree, _ := git(root, "rev-parse", head+"^{tree}")
-	return releaseevidence.Envelope{SchemaVersion: 1, RepositoryURI: "https://github.com/gmslll/agent-runtime-operations-protocol", ObjectFormat: "git-sha1", Subject: releaseevidence.Subject{Commit: head, Tree: tree}, Kind: kind, SchemaSHA256: expected.SchemaSHA256, PolicySHA256: expected.PolicySHA256, ValidatorSHA256: expected.ValidatorSHA256, IssuedAt: fx.now.Add(-20 * time.Second).Format(time.RFC3339), ExpiresAt: fx.now.Add(time.Hour).Format(time.RFC3339), PrincipalID: principal, Role: role, Trust: releaseevidence.TrustBinding{RootSHA256: fx.trust.RootSHA256, RegistrySHA256: fx.trust.RegistrySHA256, CheckpointVersion: fx.trust.CheckpointVersion, CheckpointSHA256: fx.trust.CheckpointSHA256}, Payload: releaseevidence.PayloadBinding{MediaType: "application/json", SHA256: releaseevidence.HashBytes(payload), Bytes: int64(len(payload))}}
+	return releaseevidence.Envelope{SchemaVersion: 1, RepositoryURI: releaseevidence.RepositoryURI, ObjectFormat: "git-sha1", Subject: releaseevidence.Subject{Commit: head, Tree: tree}, Kind: kind, SchemaSHA256: expected.SchemaSHA256, PolicySHA256: expected.PolicySHA256, ValidatorSHA256: expected.ValidatorSHA256, IssuedAt: fx.now.Add(-20 * time.Second).Format(time.RFC3339), ExpiresAt: fx.now.Add(time.Hour).Format(time.RFC3339), PrincipalID: principal, Role: role, Trust: releaseevidence.TrustBinding{RootSHA256: fx.trust.RootSHA256, RegistrySHA256: fx.trust.RegistrySHA256, CheckpointVersion: fx.trust.CheckpointVersion, CheckpointSHA256: fx.trust.CheckpointSHA256}, Payload: releaseevidence.PayloadBinding{MediaType: "application/json", SHA256: releaseevidence.HashBytes(payload), Bytes: int64(len(payload))}}
 }
 
 func sigstoreVerification(fx fixture, statement []byte) (releaseevidence.RekorProof, string, error) {
@@ -520,6 +560,91 @@ func staticInputs(root string) ([]string, error) {
 	}
 	sort.Strings(paths)
 	return paths, nil
+}
+
+// validateIdentityLockstep parses the trust schemas and asserts their identity
+// consts and patterns equal the canonical Go constants, so a partial
+// repository or event rename across Go and Schema surfaces fails this harness
+// instead of surfacing at release time.
+func validateIdentityLockstep(root string) error {
+	roles, err := jsonDocument(root, releaseevidence.RoleRegistrySchema)
+	if err != nil {
+		return err
+	}
+	identity, err := mapPath(roles, "$defs", "sigstore_identity", "properties")
+	if err != nil {
+		return err
+	}
+	if schemaConst(identity, "repository") != releaseevidence.Repository || schemaConst(identity, "event") != releaseevidence.ReleaseWorkflowEvent {
+		return errors.New("role registry schema identity consts drifted from canonical Go constants")
+	}
+	workflowRef, err := mapPath(identity, "workflow_ref")
+	if err != nil {
+		return err
+	}
+	if pattern, _ := workflowRef["pattern"].(string); !strings.HasPrefix(pattern, "^"+releaseevidence.Repository+"/") {
+		return errors.New("role registry schema workflow_ref pattern is not anchored to the canonical repository")
+	}
+	envelope, err := jsonDocument(root, releaseevidence.EnvelopeSchema)
+	if err != nil {
+		return err
+	}
+	properties, err := mapPath(envelope, "properties")
+	if err != nil {
+		return err
+	}
+	envelopeIdentity, err := mapPath(envelope, "$defs", "identity", "properties")
+	if err != nil {
+		return err
+	}
+	if schemaConst(properties, "repository_uri") != releaseevidence.RepositoryURI || schemaConst(envelopeIdentity, "repository") != releaseevidence.Repository || schemaConst(envelopeIdentity, "event") != releaseevidence.ReleaseWorkflowEvent {
+		return errors.New("envelope schema identity consts drifted from canonical Go constants")
+	}
+	config, err := jsonDocument(root, releaseevidence.ExternalConfigSchema)
+	if err != nil {
+		return err
+	}
+	configProperties, err := mapPath(config, "properties")
+	if err != nil {
+		return err
+	}
+	if schemaConst(configProperties, "repository") != releaseevidence.Repository {
+		return errors.New("external config schema repository const drifted from canonical Go constant")
+	}
+	return nil
+}
+
+func jsonDocument(root, path string) (map[string]any, error) {
+	value, _, err := structuredfile.LoadAny(filepath.Join(root, filepath.FromSlash(path)))
+	if err != nil {
+		return nil, err
+	}
+	document, ok := value.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%s is not a JSON object", path)
+	}
+	return document, nil
+}
+
+func mapPath(document map[string]any, keys ...string) (map[string]any, error) {
+	current := document
+	for _, key := range keys {
+		next, ok := current[key].(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("schema member %q is missing or not an object", key)
+		}
+		current = next
+	}
+	return current, nil
+}
+
+func schemaConst(properties map[string]any, field string) string {
+	value, err := mapPath(properties, field)
+	if err != nil {
+		return ""
+	}
+	text, _ := value["const"].(string)
+	return text
 }
 
 func validateNoApprovalGeneration(root string) error {

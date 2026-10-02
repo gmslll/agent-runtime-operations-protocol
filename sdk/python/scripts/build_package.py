@@ -3,6 +3,11 @@
 
 from __future__ import annotations
 
+import sys
+
+if sys.version_info < (3, 11):
+    raise SystemExit("build_package.py requires Python >= 3.11 (matching the package's requires-python)")
+
 import argparse
 import base64
 import csv
