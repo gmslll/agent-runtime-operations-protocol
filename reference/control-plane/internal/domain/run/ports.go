@@ -22,6 +22,7 @@ type Repository interface {
 	GetByIdempotency(context.Context, string, string) (Run, string, error)
 	Cancel(context.Context, string, string, Command, string, string, time.Time, OutboxFactory) (Run, error)
 	Expire(context.Context, string, string, uint64, time.Time, Outbox) (Run, error)
+	ListOverdue(context.Context, time.Time, int) ([]OverdueRun, error)
 	ReserveEffect(context.Context, EffectReservation) (bool, error)
 }
 type Dependencies struct {

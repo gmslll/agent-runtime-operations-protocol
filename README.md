@@ -163,7 +163,7 @@ Document markers used across the spec:
 
 ## Relationship to the Console
 
-This protocol repository owns the stable, implementation-agnostic contracts, SDKs, conformance suite, and reference implementation. A production console (identity, catalog review, dispatcher implementation, usage, audit, channel integrations, admin UI) is a *consumer* of this protocol. The protocol defines how any Control Plane talks to agents, workers, and trusted callers — it never implements a console's business rules or database, and the spec does not depend on any console. 协议仓不依赖 Console，金运 Console 只是其中一个实现，不是协议正确性的唯一来源。
+This protocol repository owns the stable, implementation-agnostic contracts, SDKs, conformance suite, and reference implementation. A production console (identity, catalog review, dispatcher implementation, usage, audit, channel integrations, admin UI) is a *consumer* of this protocol. The protocol defines how any Control Plane talks to agents, workers, and trusted callers — it never implements a console's business rules or database, and the spec does not depend on any console. 协议仓不依赖 Console，任何单一 Console 都只是其中一个实现，不是协议正确性的唯一来源。
 
 ## Contributing
 

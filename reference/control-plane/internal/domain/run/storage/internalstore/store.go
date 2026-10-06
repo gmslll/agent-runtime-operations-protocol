@@ -138,6 +138,28 @@ func (store *Store) Cancel(ctx context.Context, tenantID, runID string, command 
 	return store.load(ctx, tx, tenantID, runID)
 }
 
+// ListOverdue returns non-terminal runs across tenants whose deadline is at or
+// before now, oldest deadline first.
+func (store *Store) ListOverdue(ctx context.Context, now time.Time, limit int) ([]run.OverdueRun, error) {
+	rows, err := store.db.QueryContext(ctx, store.query(`SELECT tenant_id,run_id,state_version FROM arop_runs WHERE state NOT IN ('succeeded','failed','cancelled','timed_out') AND deadline_at<=? ORDER BY deadline_at,run_id LIMIT ?`), formatTime(now), limit)
+	if err != nil {
+		return nil, run.NewError(run.CategoryDependency, run.ReasonDependencyUnavailable)
+	}
+	defer rows.Close()
+	var overdue []run.OverdueRun
+	for rows.Next() {
+		var item run.OverdueRun
+		if rows.Scan(&item.TenantID, &item.RunID, &item.StateVersion) != nil {
+			return nil, run.NewError(run.CategoryDependency, run.ReasonDependencyUnavailable)
+		}
+		overdue = append(overdue, item)
+	}
+	if rows.Err() != nil {
+		return nil, run.NewError(run.CategoryDependency, run.ReasonDependencyUnavailable)
+	}
+	return overdue, nil
+}
+
 func (store *Store) Expire(ctx context.Context, tenantID, runID string, expected uint64, now time.Time, outbox run.Outbox) (run.Run, error) {
 	tx, err := store.writeTx(ctx)
 	if err != nil {

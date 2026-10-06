@@ -207,9 +207,9 @@ Reference Control Plane application and adapters
 - 第三个 Go module，或为 `conformance/` 单独建 module。
 - Console 数据库、Web UI、组织模型或内部权限实现。
 - 任何渠道、桌面执行器、Agent 框架或具体产品的厂商专属 Adapter；它们应通过通用 HTTP/Worker/A2A/MCP 边界接入。
-- 金运专属 wire namespace、真实 Credential 或客户数据。
+- 实现方专属 wire namespace、真实 Credential 或客户数据。
 - SDK 导入 Reference Control Plane `internal` 包，或将 Reference 内部模型当作公共协议类型。
-- 只有连接金运 Console 才能运行的 Quickstart 或 Conformance。
+- 只有连接特定 Console 才能运行的 Quickstart 或 Conformance。
 
 # 7. 渐进建立
 

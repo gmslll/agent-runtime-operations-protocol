@@ -171,18 +171,18 @@ func (runtime *Runtime) directEnvelope(inbox InboxRecord, record OutboxRecord) (
 }
 
 func canonicalEventType(value string) string {
-	if strings.HasPrefix(value, "io.kinglucky.arop.") {
+	if strings.HasPrefix(value, "io.arop.") {
 		return value
 	}
 	if strings.HasPrefix(value, "arop.run.") {
-		return "io.kinglucky.arop.run." + strings.TrimPrefix(value, "arop.run.") + ".v1"
+		return "io.arop.run." + strings.TrimPrefix(value, "arop.run.") + ".v1"
 	}
 	return ""
 }
 
 func eventSchema(eventType string) string {
 	for _, category := range []string{"run", "output", "progress", "usage"} {
-		if strings.HasPrefix(eventType, "io.kinglucky.arop."+category+".") {
+		if strings.HasPrefix(eventType, "io.arop."+category+".") {
 			name := category
 			if category == "run" {
 				name = "lifecycle"

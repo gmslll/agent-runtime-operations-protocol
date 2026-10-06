@@ -194,12 +194,10 @@ func (service *Service) Expire(ctx context.Context, caller Caller, runID string,
 		service.healthy()
 		return current, nil
 	}
-	outboxID, err := service.deps.IDs.NewOutboxID(ctx)
+	outbox, err := service.timedOutOutbox(ctx, caller.TenantID, runID, expectedVersion, now)
 	if err != nil {
 		return Run{}, service.fail(ctx, metadata, OperationExpire, now)
 	}
-	payload, _ := json.Marshal(map[string]any{"run_id": runID, "state": StateTimedOut})
-	outbox := Outbox{OutboxID: outboxID, TenantID: caller.TenantID, RunID: runID, Kind: "run-timed-out", StateVersion: expectedVersion + 1, Payload: payload, CreatedAt: now}
 	var result Run
 	err = service.deps.UoW.Within(ctx, func(txctx context.Context) error {
 		var inner error
@@ -217,6 +215,50 @@ func (service *Service) Expire(ctx context.Context, caller Caller, runID string,
 	}
 	service.healthy()
 	return result, nil
+}
+
+// ExpireOverdue is the control plane's deadline sweeper: it moves up to limit
+// non-terminal runs whose deadline has passed to timed_out. It acts as the
+// system itself, so no caller authorization applies. Runs that changed state
+// concurrently are skipped and picked up again by the next sweep.
+func (service *Service) ExpireOverdue(ctx context.Context, limit int) (int, error) {
+	now := service.now()
+	overdue, err := service.deps.Repository.ListOverdue(ctx, now, limit)
+	if err != nil {
+		return 0, err
+	}
+	expired := 0
+	for _, item := range overdue {
+		outbox, err := service.timedOutOutbox(ctx, item.TenantID, item.RunID, item.StateVersion, now)
+		if err != nil {
+			return expired, err
+		}
+		var result Run
+		err = service.deps.UoW.Within(ctx, func(txctx context.Context) error {
+			var inner error
+			result, inner = service.deps.Repository.Expire(txctx, item.TenantID, item.RunID, item.StateVersion, now, outbox)
+			return inner
+		})
+		if typed, ok := AsError(err); ok && typed.Category == CategoryConflict {
+			continue
+		}
+		if err != nil {
+			return expired, err
+		}
+		if result.State == StateTimedOut && result.StateVersion == item.StateVersion+1 {
+			expired++
+		}
+	}
+	return expired, nil
+}
+
+func (service *Service) timedOutOutbox(ctx context.Context, tenantID, runID string, expectedVersion uint64, now time.Time) (Outbox, error) {
+	outboxID, err := service.deps.IDs.NewOutboxID(ctx)
+	if err != nil {
+		return Outbox{}, err
+	}
+	payload, _ := json.Marshal(map[string]any{"run_id": runID, "state": StateTimedOut})
+	return Outbox{OutboxID: outboxID, TenantID: tenantID, RunID: runID, Kind: "run-timed-out", StateVersion: expectedVersion + 1, Payload: payload, CreatedAt: now}, nil
 }
 
 func (service *Service) ReserveEffect(ctx context.Context, caller Caller, runID, effectID, semanticDigest string, metadata platform.RequestMetadata) (bool, error) {

@@ -110,7 +110,7 @@ class Handler:
         self.assert_replay = replay
         await execution.emit(
             "evt_" + UUID.replace("-", ""),
-            "io.kinglucky.arop.progress.updated.v1",
+            "io.arop.progress.updated.v1",
             {"progress": 100},
         )
         return wire.RunResult(
@@ -477,10 +477,10 @@ class ASGITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             [str(event.type) for event in envelopes],
             [
-                "io.kinglucky.arop.run.accepted.v1",
-                "io.kinglucky.arop.run.started.v1",
-                "io.kinglucky.arop.progress.updated.v1",
-                "io.kinglucky.arop.run.succeeded.v1",
+                "io.arop.run.accepted.v1",
+                "io.arop.run.started.v1",
+                "io.arop.progress.updated.v1",
+                "io.arop.run.succeeded.v1",
             ],
         )
         self.assertEqual(envelopes[-1].data["state"], "succeeded")

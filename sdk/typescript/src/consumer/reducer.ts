@@ -2,10 +2,10 @@ import type { JsonValue, StreamEvent } from "../generated/streaming/streaming.ge
 import { appendUTF8 } from "../streaming/client.js";
 
 const TERMINAL = new Map<string, RunTerminalState>([
-  ["io.kinglucky.arop.run.succeeded.v1", "succeeded"],
-  ["io.kinglucky.arop.run.failed.v1", "failed"],
-  ["io.kinglucky.arop.run.cancelled.v1", "cancelled"],
-  ["io.kinglucky.arop.run.timed_out.v1", "timed_out"],
+  ["io.arop.run.succeeded.v1", "succeeded"],
+  ["io.arop.run.failed.v1", "failed"],
+  ["io.arop.run.cancelled.v1", "cancelled"],
+  ["io.arop.run.timed_out.v1", "timed_out"],
 ]);
 
 export type RunTerminalState = "succeeded" | "failed" | "cancelled" | "timed_out";
@@ -44,9 +44,9 @@ export function reduceRunEvent(view: RunView, event: StreamEvent): RunView {
   if (view.terminal !== undefined) throw new Error("event arrived after terminal state");
 
   let outputs = view.outputs;
-  if (event.type === "io.kinglucky.arop.output.delta.v1") outputs = reduceDelta(outputs, event.data);
-  else if (event.type === "io.kinglucky.arop.output.snapshot.v1") outputs = reduceSnapshot(outputs, event.data);
-  else if (event.type === "io.kinglucky.arop.output.state.v1") outputs = reduceOutputState(outputs, event.data);
+  if (event.type === "io.arop.output.delta.v1") outputs = reduceDelta(outputs, event.data);
+  else if (event.type === "io.arop.output.snapshot.v1") outputs = reduceSnapshot(outputs, event.data);
+  else if (event.type === "io.arop.output.state.v1") outputs = reduceOutputState(outputs, event.data);
 
   const terminal = TERMINAL.get(event.type);
   const next: RunView = {

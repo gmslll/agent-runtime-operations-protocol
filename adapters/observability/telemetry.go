@@ -179,7 +179,7 @@ func parseTraceparent(value string) (string, string, uint8, error) {
 }
 
 func eventFamily(value string) (string, error) {
-	const prefix = "io.kinglucky.arop."
+	const prefix = "io.arop."
 	if !strings.HasPrefix(value, prefix) {
 		return "", errors.New("event type is outside the AROP namespace")
 	}
@@ -193,7 +193,7 @@ func eventFamily(value string) (string, error) {
 }
 
 func terminalState(event eventwire.EventEnvelope) (bool, string, error) {
-	prefix := "io.kinglucky.arop.run."
+	prefix := "io.arop.run."
 	if !strings.HasPrefix(event.Type, prefix) {
 		return false, "", nil
 	}

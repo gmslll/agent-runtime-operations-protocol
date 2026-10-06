@@ -551,7 +551,7 @@ func (store *Store) terminal(command worker.CompleteCommand, attempt attemptView
 	if json.Unmarshal(raw["state"], &state) != nil {
 		return "", event.TerminalProjection{}, event.Envelope{}, worker.NewError(worker.CategoryValidation, worker.ReasonInvalidRequest)
 	}
-	envelope := event.Envelope{SpecVersion: "1.0", ID: command.EventID, Source: "https://control-plane.invalid/workers/" + command.Request.WorkerID, Type: "io.kinglucky.arop.run." + state + ".v1", Subject: "runs/" + attempt.RunID, Time: command.Request.CompletedAt, DataContentType: "application/json", DataSchema: "https://arop.invalid/schemas/v1/events/lifecycle-events-v1.schema.json", RunID: attempt.RunID, AttemptID: attempt.AttemptID, ProducerSequence: 1, Traceparent: attempt.Traceparent, Data: data}
+	envelope := event.Envelope{SpecVersion: "1.0", ID: command.EventID, Source: "https://control-plane.invalid/workers/" + command.Request.WorkerID, Type: "io.arop.run." + state + ".v1", Subject: "runs/" + attempt.RunID, Time: command.Request.CompletedAt, DataContentType: "application/json", DataSchema: "https://arop.invalid/schemas/v1/events/lifecycle-events-v1.schema.json", RunID: attempt.RunID, AttemptID: attempt.AttemptID, ProducerSequence: 1, Traceparent: attempt.Traceparent, Data: data}
 	terminal, ok, err := event.Terminal(envelope)
 	if err != nil || !ok {
 		return "", event.TerminalProjection{}, event.Envelope{}, worker.NewError(worker.CategoryValidation, worker.ReasonInvalidRequest)

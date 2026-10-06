@@ -365,7 +365,7 @@ Run 可以有多个 Attempt，但同一时刻只允许一个 Attempt 拥有有�
   "subject": "runs/run_01",
   "time": "2026-09-21T08:00:01.125Z",
   "datacontenttype": "application/json",
-  "dataschema": "https://schemas.example/jinyun/output-delta-v1.json",
+  "dataschema": "https://schemas.example/arop/output-delta-v1.json",
   "runid": "run_01...",
   "attemptid": "att_019...",
   "producersequence": 18,

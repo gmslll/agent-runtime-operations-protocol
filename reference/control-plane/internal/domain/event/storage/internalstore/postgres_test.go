@@ -69,7 +69,7 @@ func TestPostgresEventLedgerTerminalAndCapacityRelease(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("create postgres session: %v", err)
 	}
-	terminal := eventValue(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef41", "io.kinglucky.arop.run.succeeded.v1", `{"state":"succeeded","snapshot":{"revision":1,"content":[{"type":"text","text":"done"}],"digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"usage":{"input_tokens":1,"output_tokens":2,"duration_ms":3,"billable_units":4},"completed_at":"2026-09-21T08:00:01Z"}`, now.Add(time.Second))
+	terminal := eventValue(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef41", "io.arop.run.succeeded.v1", `{"state":"succeeded","snapshot":{"revision":1,"content":[{"type":"text","text":"done"}],"digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"usage":{"input_tokens":1,"output_tokens":2,"duration_ms":3,"billable_units":4},"completed_at":"2026-09-21T08:00:01Z"}`, now.Add(time.Second))
 	batch := event.BatchRequest{Token: session.Token, RunID: testRun, BatchID: "batch_01932f13-0cd2-7a82-8fa3-1cb5ce13ef42", AttemptID: testAttempt, FencingToken: 1, IdempotencyKey: "postgres-batch-key", Events: []event.Envelope{terminal}}
 	if err = uow.Within(context.Background(), func(ctx context.Context) error {
 		_, inner := store.Append(ctx, event.AppendCommand{Request: batch, TokenDigest: event.TokenDigest(session.Token), IdempotencyKeyDigest: strings.Repeat("e", 64), RequestDigest: event.BatchDigest(batch), Now: now.Add(2 * time.Second)})

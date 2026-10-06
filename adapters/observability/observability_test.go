@@ -165,7 +165,7 @@ func TestOpenTelemetryMappingPropagatesContextSamplesAndRedactsPayload(t *testin
 
 func TestTerminalMetricUsesOnlyBoundedStatusAndRejectsTypeStateMismatch(t *testing.T) {
 	event := fixtureEvent(t)
-	event.Type = "io.kinglucky.arop.run.failed.v1"
+	event.Type = "io.arop.run.failed.v1"
 	event.Dataschema = "https://arop.invalid/schemas/v1/events/lifecycle-events-v1.schema.json"
 	event.Data = map[string]json.RawMessage{"state": json.RawMessage(`"failed"`), "error": json.RawMessage(`{"code":"SECRET","message":"password=hidden"}`)}
 	telemetry, err := MapEvent(event, "", time.Time{}, ExportPolicy{})

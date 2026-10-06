@@ -6,7 +6,7 @@ updated: 2026-09-22
 
 # 1. 决策摘要
 
-本仓库不再只按金运内部协议设计，而是以可公开发布、供应商中立、可独立实现的 Agent Runtime Operations 协议为目标。
+本仓库不再只按内部协议设计，而是以可公开发布、供应商中立、可独立实现的 Agent Runtime Operations 协议为目标。
 
 公共项目名称确定为 **Agent Runtime Operations Protocol**，简称 **AROP**；仓库名为 `agent-runtime-operations-protocol`。GitHub/Go Module、Python、TypeScript 和 CLI 首选名称已经冻结；正式发布任何稳定包前，仍需核验包注册表所有权，并用项目控制域名冻结 Schema ID、事件类型和文档站点命名空间。
 
@@ -36,7 +36,7 @@ updated: 2026-09-22
 - 新的通用 Agent-to-Agent 协议。
 - MCP 替代品。
 - A2A 替代品。
-- 金运 Console 的私有 RPC。
+- 特定 Console 的私有 RPC。
 - 强制用户采用某一种 Agent 框架或数据库的运行时。
 
 # 3. 与生态标准的边界
@@ -114,7 +114,7 @@ updated: 2026-09-22
 
 # 6. 开源边界
 
-协议流行不要求金运公开完整 Console，但必须提供脱离 Console 可运行的公共基线：
+协议流行不要求任何实现公开完整 Console，但必须提供脱离 Console 可运行的公共基线：
 
 - Schema、OpenAPI、AsyncAPI 和黄金样例。
 - SDK 和 CLI。
@@ -127,7 +127,7 @@ updated: 2026-09-22
 - Docker Compose Quickstart。
 - Web Streaming Demo。
 
-Reference Control Plane 使用 Go 实现，只覆盖验证协议所需的开发身份、Manifest 发布、Registry/Lease、Run/Dispatch、Event Ingest/SSE、Run 查询/取消和 Conformance 接口，不承载金运组织、飞书、业务审批、完整计费或生产 Console UI。
+Reference Control Plane 使用 Go 实现，只覆盖验证协议所需的开发身份、Manifest 发布、Registry/Lease、Run/Dispatch、Event Ingest/SSE、Run 查询/取消和 Conformance 接口，不承载特定组织、飞书、业务审批、完整计费或生产 Console UI。
 
 本地 Quickstart 默认使用 SQLite，确保单进程即可启动；生产级、多节点和故障切换参考部署使用 PostgreSQL。两种存储必须运行同一套 Schema、状态机和 Conformance Fixture，不允许形成两套协议语义。Worker Pull 在首个公开 v1 RC 前完成；P44 及之前所有验证制品仅是 private/dev snapshot。
 
@@ -137,7 +137,7 @@ Reference Control Plane 使用 Go 实现，只覆盖验证协议所需的开发�
 
 - 新开发者十分钟内完成首次调用。
 - 现有 Python Agent 的核心改造不超过约三十行。
-- 不安装金运 Console 也能运行 Quickstart 和 Conformance。
+- 不安装特定 Console 也能运行 Quickstart 和 Conformance。
 - SDK 默认处理 Token 校验、幂等、Trace、Event Sequence 和重试。
 - Schema 是唯一类型源，新语言实现无需复制手写模型。
 - 一个 Agent 包可以在两个独立 Control Plane 实现上运行。
@@ -196,10 +196,10 @@ Adapter 只能翻译边界，不得把框架私有状态写入核心 Schema。
 
 v1.0 前至少需要：
 
-- 三个金运以外的真实接入团队。
+- 三个外部的真实接入团队。
 - 两个独立 Agent Runtime 实现。
 - 两种语言 Provider。
-- 至少一个非金运 Control Plane 或独立兼容性验证器。
+- 至少一个外部 Control Plane 或独立兼容性验证器。
 - 公开记录的互操作问题和修复过程。
 
 ## 8.5 外部证据 Gate
@@ -227,7 +227,7 @@ P49 的 RC subject manifest、P50 compatibility summary、P51 unsigned overlay c
 - 版本、兼容性和弃用策略。
 - 公开 Roadmap 和 Release Notes。
 
-协议核心字段不得由金运产品需求直接改动。金运专属能力必须使用扩展命名空间，并通过与第三方相同的扩展机制接入。
+协议核心字段不得由单一产品需求直接改动。实现方专属能力必须使用扩展命名空间，并通过与第三方相同的扩展机制接入。
 
 # 10. 命名与标识符原则
 
@@ -249,7 +249,7 @@ P49 的 RC subject manifest、P50 compatibility summary、P51 unsigned overlay c
 - 核验 PyPI/npm 包名和 Scope 的实际所有权。
 - 确定项目长期控制的域名，并据此冻结 Schema/Event Namespace。
 - 把示例中的占位 URI 和包名迁移为正式标识符。
-- 不发布仍带 KingLucky 或金运命名的公共软件包。
+- 不发布仍带 AROP 或内部实现方命名的公共软件包。
 
 # 11. 成功指标
 
@@ -261,6 +261,6 @@ P49 的 RC subject manifest、P50 compatibility summary、P51 unsigned overlay c
 - 外部 Provider、Control Plane 和 Adapter 数量。
 - 跨版本无需修改业务 Agent 的比例。
 - Issue 首次响应和 RFC 合并时间。
-- 非金运贡献者和 Maintainer 比例。
+- 外部贡献者和 Maintainer 比例。
 
 GitHub Star、下载量和文章阅读量是传播指标，不代替真实互操作数量。

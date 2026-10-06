@@ -190,6 +190,17 @@ func (repo *memoryRepo) Expire(ctx context.Context, tenant, runID string, versio
 	repo.outbox = append(repo.outbox, outbox)
 	return record, nil
 }
+func (repo *memoryRepo) ListOverdue(ctx context.Context, now time.Time, limit int) ([]OverdueRun, error) {
+	repo.mu.Lock()
+	defer repo.mu.Unlock()
+	var overdue []OverdueRun
+	for _, record := range repo.runs {
+		if !record.State.Terminal() && !record.DeadlineAt.After(now) && len(overdue) < limit {
+			overdue = append(overdue, OverdueRun{TenantID: record.TenantID, RunID: record.RunID, StateVersion: record.StateVersion})
+		}
+	}
+	return overdue, nil
+}
 func (repo *memoryRepo) ReserveEffect(ctx context.Context, reservation EffectReservation) (bool, error) {
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
@@ -337,4 +348,36 @@ func TestAuthorizationSnapshotIsDurableAndBound(t *testing.T) {
 func hasReason(err error, reason ErrorReason) bool {
 	typed, ok := AsError(err)
 	return ok && typed.Reason == reason
+}
+
+func TestExpireOverdueTimesOutOnlyPastDeadlineRuns(t *testing.T) {
+	service, clock, repo, _ := newTestService(t)
+	due, err := service.Create(context.Background(), request())
+	if err != nil {
+		t.Fatal(err)
+	}
+	later := request()
+	later.IdempotencyKey = "create-key-0002"
+	later.DeadlineAt = baseTime.Add(3 * time.Hour)
+	notDue, err := service.Create(context.Background(), later)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock.now = baseTime.Add(2 * time.Hour)
+	expired, err := service.ExpireOverdue(context.Background(), 10)
+	if err != nil || expired != 1 {
+		t.Fatalf("sweep: expired=%d err=%v", expired, err)
+	}
+	if record := repo.runs[key("acme", due.RunID)]; record.State != StateTimedOut || record.StateVersion != 2 {
+		t.Fatalf("due run not timed out: %#v", record)
+	}
+	if record := repo.runs[key("acme", notDue.RunID)]; record.State != StateQueued {
+		t.Fatalf("run before its deadline was touched: %#v", record)
+	}
+	if last := repo.outbox[len(repo.outbox)-1]; last.Kind != "run-timed-out" || last.RunID != due.RunID || last.StateVersion != 2 {
+		t.Fatalf("timed-out outbox missing: %#v", last)
+	}
+	if expired, err = service.ExpireOverdue(context.Background(), 10); err != nil || expired != 0 {
+		t.Fatalf("second sweep must be a no-op: expired=%d err=%v", expired, err)
+	}
 }

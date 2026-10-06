@@ -318,16 +318,16 @@ def direct_envelope(record, event) -> tuple[str, bytes]:
 
 
 def canonical_event_type(value: str) -> str:
-    if value.startswith("io.kinglucky.arop."):
+    if value.startswith("io.arop."):
         return value
     if value.startswith("arop.run."):
-        return "io.kinglucky.arop.run." + value.removeprefix("arop.run.") + ".v1"
+        return "io.arop.run." + value.removeprefix("arop.run.") + ".v1"
     return ""
 
 
 def event_schema(event_type: str) -> str:
     for category in ("run", "output", "progress", "usage"):
-        if event_type.startswith(f"io.kinglucky.arop.{category}."):
+        if event_type.startswith(f"io.arop.{category}."):
             name = "lifecycle" if category == "run" else category
             return f"https://arop.invalid/schemas/v1/events/{name}-events-v1.schema.json"
     return ""

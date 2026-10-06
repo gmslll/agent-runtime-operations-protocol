@@ -22,4 +22,4 @@ make verify-report REPORT=build/reports/P08/report.json
 
 Health requests do not accept bodies. `/v1/health/live` proves only that the process and HTTP stack respond. `/v1/health/ready` additionally checks initialization, draining state, the ephemeral Audit/Trace store, and all injected platform probes; any failed or timed-out required check returns `503` without exposing internal error text. P09 replaces the ephemeral bootstrap with migration-aware durable readiness.
 
-This service must not import KingLucky Console packages or implement organization, Feishu, approval, billing, or product UI rules.
+This service must not import downstream console packages or implement organization, Feishu, approval, billing, or product UI rules.

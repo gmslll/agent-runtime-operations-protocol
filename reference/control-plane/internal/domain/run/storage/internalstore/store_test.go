@@ -89,6 +89,25 @@ func TestSQLiteAtomicLifecycleAndEffectReservation(t *testing.T) {
 	if err != nil || !replay {
 		t.Fatalf("replay: %v %v", replay, err)
 	}
+	if overdue, err := store.ListOverdue(context.Background(), now, 10); err != nil || len(overdue) != 0 {
+		t.Fatalf("run before its deadline listed as overdue: %#v %v", overdue, err)
+	}
+	late := now.Add(2 * time.Hour)
+	overdue, err := store.ListOverdue(context.Background(), late, 10)
+	if err != nil || len(overdue) != 1 || overdue[0] != (run.OverdueRun{TenantID: "acme", RunID: record.RunID, StateVersion: 2}) {
+		t.Fatalf("overdue listing: %#v %v", overdue, err)
+	}
+	err = uow.Within(context.Background(), func(ctx context.Context) error {
+		var inner error
+		loaded, inner = store.Expire(ctx, "acme", record.RunID, 2, late, run.Outbox{OutboxID: "out_018f6b6e-8a2e-7c3a-8b2a-6d1e2f3a4b5e", TenantID: "acme", RunID: record.RunID, Kind: "run-timed-out", StateVersion: 3, Payload: json.RawMessage(`{"state":"timed_out"}`), CreatedAt: late})
+		return inner
+	})
+	if err != nil || loaded.State != run.StateTimedOut {
+		t.Fatalf("expire: %#v %v", loaded, err)
+	}
+	if overdue, err = store.ListOverdue(context.Background(), late, 10); err != nil || len(overdue) != 0 {
+		t.Fatalf("terminal run still listed as overdue: %#v %v", overdue, err)
+	}
 	if _, err = db.Exec(`CREATE INDEX arop_run_unexpected_idx ON arop_runs(run_id)`); err != nil {
 		t.Fatal(err)
 	}

@@ -187,7 +187,59 @@ func composeWithCatalog(args, environment []string, catalogClosure migrate.Catal
 			return nil, nil, nil, errors.New("assemble registry recovery HTTP server")
 		}
 	}
+	if runService := runServiceFromChecks(checks); runService != nil {
+		cleanup = startDeadlineSweeper(runService, deadlineSweepInterval, cleanup)
+	}
 	return application, httpServer, cleanup, nil
+}
+
+const (
+	deadlineSweepInterval = 5 * time.Second
+	deadlineSweepBatch    = 100
+)
+
+type overdueExpirer interface {
+	ExpireOverdue(context.Context, int) (int, error)
+}
+
+// startDeadlineSweeper periodically times out runs past their deadline, which
+// otherwise stay queued/running forever when no worker reports a result. The
+// returned cleanup stops the sweeper before running the original cleanup.
+func startDeadlineSweeper(expirer overdueExpirer, interval time.Duration, cleanup func() error) func() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			for {
+				expired, err := expirer.ExpireOverdue(ctx, deadlineSweepBatch)
+				if err != nil {
+					if ctx.Err() == nil {
+						slog.Warn("deadline sweep failed", "error", err)
+					}
+					break
+				}
+				if expired > 0 {
+					slog.Info("deadline sweep expired runs", "count", expired)
+				}
+				if expired < deadlineSweepBatch {
+					break
+				}
+			}
+		}
+	}()
+	return func() error {
+		cancel()
+		<-done
+		return cleanup()
+	}
 }
 
 func run(args, environment []string) error {

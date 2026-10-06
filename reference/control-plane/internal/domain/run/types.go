@@ -271,6 +271,12 @@ type EffectReservation struct {
 	CreatedAt                                 time.Time
 }
 
+// OverdueRun identifies a non-terminal run whose deadline has passed.
+type OverdueRun struct {
+	TenantID, RunID string
+	StateVersion    uint64
+}
+
 type Outbox struct {
 	OutboxID, TenantID, RunID, Kind string
 	StateVersion                    uint64

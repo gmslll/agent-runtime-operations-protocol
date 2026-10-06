@@ -35,7 +35,7 @@ _UUID7 = re.compile(
 _SCOPE = re.compile(r"^[a-z][a-z0-9]*(?:[.:_-][a-z0-9]+)*$")
 _EFFECT = re.compile(r"^eff_[A-Za-z0-9._:-]{4,196}$")
 _EVENT_TYPE = re.compile(
-    r"^io\.kinglucky\.arop\.(?:run|output|progress|usage)\.[a-z_]+\.v1$"
+    r"^io.arop\.(?:run|output|progress|usage)\.[a-z_]+\.v1$"
 )
 
 
@@ -562,7 +562,7 @@ def parse_time(value: str) -> datetime:
 
 def lifecycle(record: InboxRecord, state: str, now: datetime) -> OutboxRecord:
     wire_state = "started" if state == "running" else state
-    event_type = f"io.kinglucky.arop.run.{wire_state}.v1"
+    event_type = f"io.arop.run.{wire_state}.v1"
     seed = f"{record.run_id}\0{record.attempt_id}\0{record.state_version}\0{state}".encode()
     data: dict[str, object] = {"state": wire_state}
     if record.state.terminal:

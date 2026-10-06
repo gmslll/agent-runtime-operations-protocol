@@ -37,7 +37,7 @@ AROP 就是这个缺失的 **Agent 运行与运维互操作层**。它不替代 
 - Protocol v1 原生支持结构化流式事件、断线恢复、幂等、租约、重试和全链路追踪。
 - 注册发现借鉴 etcd/Nacos 的 Lease、Revision、Watch、CAS 和健康视图思想，但独立实现，不依赖 etcd 或 Nacos。
 - 协议仓不依赖 Console、飞书、cc-connect、Teable 或具体 Agent 框架。
-- 任意第三方可以独立实现兼容 Control Plane 或 Runtime，不需要安装金运 Console。
+- 任意第三方可以独立实现兼容 Control Plane 或 Runtime，不需要安装特定 Console。
 - A2A 用于 Agent 间互操作，MCP 用于工具与资源接入，ARD/AI Catalog 用于跨域公开发现。
 - 协议按 Core、Runtime Management、Delivery、Streaming 和 Governance 分层，接入方不必实现全部能力。
 
@@ -92,7 +92,7 @@ AROP 的权威顺序为：`DECISIONS` 约束 → 领域规范与状态机 Fixtur
 
 本协议项目负责稳定、实现无关的契约、SDK、Conformance 和 Reference Implementation。
 
-`kinglucky-agent-console` 负责：
+`agent-console` 负责：
 
 - 身份、组织和权限。
 - Agent Catalog 与发布审核。
@@ -100,7 +100,7 @@ AROP 的权威顺序为：`DECISIONS` 约束 → 领域规范与状态机 Fixtur
 - 用量、审计和渠道接入。
 - Web 用户工作台和管理后台。
 
-协议仓定义任意 Control Plane 与 Agent、Worker、可信调用方之间如何通信，但不实现 Console 的业务规则和数据库。金运 Console 是一个实现，不是协议正确性的唯一来源。
+协议仓定义任意 Control Plane 与 Agent、Worker、可信调用方之间如何通信，但不实现 Console 的业务规则和数据库。任何单一 Console 都只是一个实现，不是协议正确性的唯一来源。
 
 公共 Reference Control Plane 和服务端组件使用 Go 实现。仓库中的 Node.js 依赖只用于 JSON Schema、Fixture 和文档校验，不属于后端运行时；Python 用于 Agent Provider SDK 和参考 Agent。
 

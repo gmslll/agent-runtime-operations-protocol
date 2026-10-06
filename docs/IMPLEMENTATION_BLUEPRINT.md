@@ -256,7 +256,7 @@ P51 的 overlay 白名单精确到 `VERSION`、Python `pyproject`/lock、npm met
 
 # 13. Console 与下游隔离
 
-`kinglucky-agent-console` 不在本实施范围内，本计划不修改它。Console 未来只通过发布的 Schema/SDK/HTTP 契约消费 AROP，不会被 Reference Control Plane 导入，也不成为 Quickstart/Conformance 前置。Console 专属身份、组织、飞书、审批、UI 和数据库映射留在下游；公共协议不复制这些模型。
+`agent-console` 不在本实施范围内，本计划不修改它。Console 未来只通过发布的 Schema/SDK/HTTP 契约消费 AROP，不会被 Reference Control Plane 导入，也不成为 Quickstart/Conformance 前置。Console 专属身份、组织、飞书、审批、UI 和数据库映射留在下游；公共协议不复制这些模型。
 
 # 14. 实施入口与停机点
 

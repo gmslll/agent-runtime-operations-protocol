@@ -8,7 +8,7 @@ const session: ValidatedBrowserSession = { tenantId: "tenant-a", principalId: "u
 const status = { run_id: RUN, state: "queued", state_version: 1, updated_at: "2026-09-21T08:00:00Z" } as RunStatus;
 const fake: ConsumerOperations = {
   async createRun() { return status; }, async getRun() { return status; }, async submitCommand() { return status; },
-  async stream(_run, handle) { await handle({ runid: RUN, runsequence: 1, type: "io.kinglucky.arop.run.succeeded.v1", data: { state: "succeeded" } } as unknown as StreamEvent); },
+  async stream(_run, handle) { await handle({ runid: RUN, runsequence: 1, type: "io.arop.run.succeeded.v1", data: { state: "succeeded" } } as unknown as StreamEvent); },
 };
 const bff = new BFFApplication(fake, { async authenticate(value) { if (value.includes(secret)) throw new Error("leaked token"); return session; } }, { authorize(value, operation) { return value.tenantId === "tenant-a" && value.scopes.has(operation as never); } });
 const request = { labels: {} } as unknown as RunRequest;

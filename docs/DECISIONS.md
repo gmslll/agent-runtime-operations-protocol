@@ -10,7 +10,7 @@ updated: 2026-09-23
 | --- | --- | --- |
 | D-001 | 仓库职责 | Protocol 保存稳定契约、Schema、样例、SDK 和契约测试 |
 | D-002 | 框架关系 | 协议与编程语言、Agent 框架、桌面执行器和具体产品实现无关 |
-| D-003 | 注册中心 | 借鉴 etcd/Nacos 语义，由金运自行实现，不依赖 etcd/Nacos |
+| D-003 | 注册中心 | 借鉴 etcd/Nacos 语义，由参考实现自行实现，不依赖 etcd/Nacos |
 | D-004 | 控制面 | 所有新调用必须经过 Control Plane 授权和创建 Run |
 | D-005 | 数据面 | 获得 Dispatch Ticket 后，可信调用方可直接请求 Agent |
 | D-006 | 交付模式 | 支持 Direct、Proxy 和 Worker Pull |
@@ -21,11 +21,11 @@ updated: 2026-09-23
 | D-011 | 追踪 | 所有调用和事件传播 W3C Trace Context |
 | D-012 | Web/Bot | Web 与飞书 Bot 是同一 Agent 的渠道，不重复注册 Agent |
 | D-013 | SDK 位置 | 协议 SDK 位于 Protocol 仓，不放入 Console |
-| D-014 | 公共定位 | 项目按供应商中立的开放 Agent Runtime Operations 协议设计，金运只是首个实现方 |
+| D-014 | 公共定位 | 项目按供应商中立的开放 Agent Runtime Operations 协议设计，参考实现只是首个实现方 |
 | D-015 | 项目名称 | 公共名称为 Agent Runtime Operations Protocol，简称 AROP；仓库名为 `agent-runtime-operations-protocol` |
 | D-016 | 生态关系 | 补充而不替代 MCP、A2A、ARD/AI Catalog、CloudEvents 和 OpenTelemetry |
 | D-017 | 协议分层 | 采用 Core、Runtime Management、Delivery Profile、Streaming 和 Governance Extension |
-| D-018 | 独立实现 | 第三方不安装金运 Console 也必须能够运行 Quickstart、SDK 和 Conformance |
+| D-018 | 独立实现 | 第三方不安装特定 Console 也必须能够运行 Quickstart、SDK 和 Conformance |
 | D-019 | 发现边界 | Runtime Registry 管理域内实例；跨域资源发现通过 ARD/AI Catalog 和 A2A 互操作 |
 | D-020 | ID 规范 | 人类可读的 `agent_id`/`skill_id` 使用稳定 slug；系统资源 ID 使用资源前缀加 UUIDv7；`instance_id` 稳定持久化，`session_id` 每次启动重建 |
 | D-021 | Delta Offset | 文本 Delta 的 `offset` 固定表示当前完整文本的 UTF-8 字节偏移；修改历史输出必须使用 Snapshot 或 Reset |
@@ -108,7 +108,7 @@ D-056 中 ControlledInputManifest 的“拒绝 symlink”覆盖每个 tracked fi
 
 在 C-002～C-004 填写完成前可以开发和运行本地 Fixture，但不得发布稳定包或宣称公共命名空间已经永久冻结。
 
-这些配置和 v1 所需的独立实现、外部设计伙伴、非金运评审记录都是 **Gate**，不是可由代码库内部 Fixture 替代的交付物。只有存在可核验的外部链接、报告或签字记录时才能标记为完成；否则必须保持 `blocked` 或 `pending-external-evidence`。
+这些配置和 v1 所需的独立实现、外部设计伙伴、外部评审记录都是 **Gate**，不是可由代码库内部 Fixture 替代的交付物。只有存在可核验的外部链接、报告或签字记录时才能标记为完成；否则必须保持 `blocked` 或 `pending-external-evidence`。
 
 # 4. 规范权威与冲突处理
 
@@ -136,7 +136,7 @@ D-056 中 ControlledInputManifest 的“拒绝 symlink”覆盖每个 tracked fi
 - Protocol v1 包含流式事件。
 - “必须经过 Control Plane”指必须经过授权和 Run 创建；获得 Ticket 后可以 Direct。
 
-在开始跨仓实现前，应同步更新工作区 `AI中台/ARCHITECTURE.md`，避免两个仓库持有冲突描述。
+在开始跨仓实现前，应同步更新工作区内部架构文档，避免两个仓库持有冲突描述。
 
 # 6. 公共化后的文档边界
 

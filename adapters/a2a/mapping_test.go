@@ -133,7 +133,7 @@ func TestStrictA2ADecodeRejectsUnknownDuplicateTrailingAndState(t *testing.T) {
 
 func TestExportEventPreservesDeltaSnapshotAndLifecycleSemantics(t *testing.T) {
 	t.Parallel()
-	delta := fixtureEvent(t, "io.kinglucky.arop.output.delta.v1", `{"output_id":"answer","offset":6,"delta":"world"}`)
+	delta := fixtureEvent(t, "io.arop.output.delta.v1", `{"output_id":"answer","offset":6,"delta":"world"}`)
 	response, report, err := ExportEvent(delta)
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +145,7 @@ func TestExportEventPreservesDeltaSnapshotAndLifecycleSemantics(t *testing.T) {
 	if aropMetadata["utf8Offset"] != int64(6) || aropMetadata["attemptId"] == "" {
 		t.Fatalf("delta metadata=%+v", aropMetadata)
 	}
-	snapshot := fixtureEvent(t, "io.kinglucky.arop.output.snapshot.v1", `{"output_id":"answer","revision":2,"content":[{"type":"text","text":"complete"}],"digest":"sha256:`+strings.Repeat("2", 64)+`"}`)
+	snapshot := fixtureEvent(t, "io.arop.output.snapshot.v1", `{"output_id":"answer","revision":2,"content":[{"type":"text","text":"complete"}],"digest":"sha256:`+strings.Repeat("2", 64)+`"}`)
 	response, report, err = ExportEvent(snapshot)
 	if err != nil {
 		t.Fatal(err)
@@ -153,13 +153,13 @@ func TestExportEventPreservesDeltaSnapshotAndLifecycleSemantics(t *testing.T) {
 	if response.ArtifactUpdate == nil || response.ArtifactUpdate.Append || len(response.ArtifactUpdate.Artifact.Parts) != 1 || report.Overall != Extended {
 		t.Fatalf("snapshot response=%+v report=%+v", response, report)
 	}
-	terminal := fixtureEvent(t, "io.kinglucky.arop.run.cancelled.v1", `{"state":"cancelled","completed_at":"2026-09-28T00:01:00Z","usage":{"duration_ms":1,"input_tokens":0,"output_tokens":0}}`)
+	terminal := fixtureEvent(t, "io.arop.run.cancelled.v1", `{"state":"cancelled","completed_at":"2026-09-28T00:01:00Z","usage":{"duration_ms":1,"input_tokens":0,"output_tokens":0}}`)
 	response, _, err = ExportEvent(terminal)
 	if err != nil || response.Task == nil || response.Task.Status.State != "TASK_STATE_CANCELED" {
 		t.Fatalf("terminal response=%+v err=%v", response, err)
 	}
 	unsupported := delta
-	unsupported.Type = "io.kinglucky.arop.output.future.v1"
+	unsupported.Type = "io.arop.output.future.v1"
 	if _, _, err := ExportEvent(unsupported); err == nil {
 		t.Fatal("unsupported event was accepted")
 	}

@@ -26,13 +26,13 @@ func TestRelayStreamReconnectsWithRunSequence(t *testing.T) {
 		response.Header().Set("Content-Type", "text/event-stream")
 		response.Header().Set("Cache-Control", "no-store")
 		if call == 1 {
-			writeSSE(t, response, 1, relayEvent(t, 1, "io.kinglucky.arop.output.delta.v1"))
+			writeSSE(t, response, 1, relayEvent(t, 1, "io.arop.output.delta.v1"))
 			return
 		}
 		if request.Header.Get("Last-Event-ID") != "1" {
 			t.Fatalf("cursor=%q", request.Header.Get("Last-Event-ID"))
 		}
-		writeSSE(t, response, 2, relayEvent(t, 2, "io.kinglucky.arop.run.succeeded.v1"))
+		writeSSE(t, response, 2, relayEvent(t, 2, "io.arop.run.succeeded.v1"))
 	}))
 	defer server.Close()
 	client := testClient(t, server, &countingResolver{}, allowAll{}, "relay")
@@ -53,7 +53,7 @@ func TestDirectStreamUsesTicketCapabilityAndRejectsSequenceConfusion(t *testing.
 		}
 		response.Header().Set("Content-Type", "text/event-stream")
 		response.Header().Set("Cache-Control", "no-store")
-		writeSSE(t, response, 1, directEvent(t, 1, "io.kinglucky.arop.run.succeeded.v1"))
+		writeSSE(t, response, 1, directEvent(t, 1, "io.arop.run.succeeded.v1"))
 	}))
 	defer server.Close()
 	client := testClient(t, server, &countingResolver{}, allowAll{}, "direct")
@@ -63,7 +63,7 @@ func TestDirectStreamUsesTicketCapabilityAndRejectsSequenceConfusion(t *testing.
 		t.Fatalf("called=%d err=%v", called, err)
 	}
 
-	bad := relayEvent(t, 1, "io.kinglucky.arop.run.succeeded.v1")
+	bad := relayEvent(t, 1, "io.arop.run.succeeded.v1")
 	badServer := httptest.NewTLSServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) {
 		response.Header().Set("Content-Type", "text/event-stream")
 		response.Header().Set("Cache-Control", "no-store")

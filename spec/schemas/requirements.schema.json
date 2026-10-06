@@ -17,7 +17,7 @@
       "maxItems": 14,
       "prefixItems": [
         {"allOf": [{"$ref": "#/$defs/requirement"}, {"type": "object", "properties": {"id": {"const": "IR-01"}, "statement_original_zh": {"const": "先把全量实现规划落到仓库权威文档；之后实现必须按核心文档推进。"}}}]},
-        {"allOf": [{"$ref": "#/$defs/requirement"}, {"type": "object", "properties": {"id": {"const": "IR-02"}, "statement_original_zh": {"const": "协议仓保持厂商中立，不依赖 Console、飞书、cc-connect 或具体 Agent 框架；不得修改 `kinglucky-agent-console`。"}}}]},
+        {"allOf": [{"$ref": "#/$defs/requirement"}, {"type": "object", "properties": {"id": {"const": "IR-02"}, "statement_original_zh": {"const": "协议仓保持厂商中立，不依赖 Console、飞书、cc-connect 或具体 Agent 框架；不得修改 `agent-console`。"}}}]},
         {"allOf": [{"$ref": "#/$defs/requirement"}, {"type": "object", "properties": {"id": {"const": "IR-03"}, "statement_original_zh": {"const": "后端采用 Go：Reference Control Plane、Registry、Dispatcher、Run/Event Ledger、服务端 Conformance/故障驱动；Node 仅用于 Schema/TS 工具，Python 做 Provider SDK，TypeScript 做 Consumer SDK。"}}}]},
         {"allOf": [{"$ref": "#/$defs/requirement"}, {"type": "object", "properties": {"id": {"const": "IR-04"}, "statement_original_zh": {"const": "覆盖发布、注册、发现、鉴权、Run/Attempt、Direct/Proxy/Worker Pull、结构化流式、结果、usage、审计、trace、drain/升级全生命周期。"}}}]},
         {"allOf": [{"$ref": "#/$defs/requirement"}, {"type": "object", "properties": {"id": {"const": "IR-05"}, "statement_original_zh": {"const": "所有新调用先经 Control Plane 鉴权并创建 Run；可信服务拿 Dispatch Ticket 后可 Direct；浏览器 v1 走 BFF/Proxy。"}}}]},

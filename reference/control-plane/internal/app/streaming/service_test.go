@@ -122,12 +122,12 @@ func binding() run.AgentBinding {
 func record(sequence uint64) Record {
 	payload := map[string]any{
 		"specversion": "1.0", "id": "evt_01999999-9999-7999-8999-999999999996", "source": "https://runtime.example.invalid/instances/runtime-a",
-		"type": "io.kinglucky.arop.output.delta.v1", "subject": "runs/" + testRunID, "time": "2026-09-27T00:00:00Z", "datacontenttype": "application/json",
+		"type": "io.arop.output.delta.v1", "subject": "runs/" + testRunID, "time": "2026-09-27T00:00:00Z", "datacontenttype": "application/json",
 		"dataschema": "https://arop.invalid/schemas/v1/events/output-events-v1.schema.json", "runid": testRunID, "attemptid": "att_01999999-9999-7999-8999-999999999995",
 		"producersequence": sequence, "runsequence": sequence, "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", "data": map[string]any{"output_id": "answer", "offset": sequence - 1, "delta": "x"},
 	}
 	encoded, _ := json.Marshal(payload)
-	return Record{Sequence: sequence, EventType: "io.kinglucky.arop.output.delta.v1", Envelope: encoded}
+	return Record{Sequence: sequence, EventType: "io.arop.output.delta.v1", Envelope: encoded}
 }
 
 func makeBytes(value byte, count int) []byte {

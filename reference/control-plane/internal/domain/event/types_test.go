@@ -13,8 +13,8 @@ const (
 )
 
 func TestBatchDigestBindsWireOrder(t *testing.T) {
-	first := testEnvelope(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef21", "io.kinglucky.arop.run.started.v1", "lifecycle-events-v1.schema.json", `{"state":"started"}`)
-	second := testEnvelope(2, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef22", "io.kinglucky.arop.progress.updated.v1", "progress-events-v1.schema.json", `{"step_id":"prepare","progress":25,"state":"running"}`)
+	first := testEnvelope(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef21", "io.arop.run.started.v1", "lifecycle-events-v1.schema.json", `{"state":"started"}`)
+	second := testEnvelope(2, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef22", "io.arop.progress.updated.v1", "progress-events-v1.schema.json", `{"step_id":"prepare","progress":25,"state":"running"}`)
 	request := BatchRequest{RunID: testRunID, AttemptID: testAttemptID, BatchID: "batch_01932f13-0cd2-7a82-8fa3-1cb5ce13ef30", FencingToken: 1, Events: []Envelope{first, second}}
 	reordered := request
 	reordered.Events = []Envelope{second, first}
@@ -27,12 +27,12 @@ func TestBatchDigestBindsWireOrder(t *testing.T) {
 }
 
 func TestEnvelopeRejectsNonCanonicalSourceAndTerminalWithoutFinalResult(t *testing.T) {
-	value := testEnvelope(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef23", "io.kinglucky.arop.run.started.v1", "lifecycle-events-v1.schema.json", `{"state":"started"}`)
+	value := testEnvelope(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef23", "io.arop.run.started.v1", "lifecycle-events-v1.schema.json", `{"state":"started"}`)
 	value.Source = "https://runtime.example.invalid/instances/instance-a?secret=1"
 	if value.Validate() == nil {
 		t.Fatal("event source with query was accepted")
 	}
-	terminal := testEnvelope(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef24", "io.kinglucky.arop.run.succeeded.v1", "lifecycle-events-v1.schema.json", `{"state":"succeeded","usage":{"input_tokens":1,"output_tokens":1,"duration_ms":1},"completed_at":"2026-09-21T08:00:01Z"}`)
+	terminal := testEnvelope(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef24", "io.arop.run.succeeded.v1", "lifecycle-events-v1.schema.json", `{"state":"succeeded","usage":{"input_tokens":1,"output_tokens":1,"duration_ms":1},"completed_at":"2026-09-21T08:00:01Z"}`)
 	if terminal.Validate() == nil {
 		t.Fatal("terminal event without snapshot or result_ref was accepted")
 	}

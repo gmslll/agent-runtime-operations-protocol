@@ -50,22 +50,22 @@ function throws(run: () => unknown, pattern: RegExp): void { try { run(); } catc
 
 test("reducer_utf8_replay_and_unknown_forward_event", () => {
   let view = initialRunView(RUN);
-  const first = event(1, "io.kinglucky.arop.output.delta.v1", { output_id: "answer", offset: 0, delta: "商品" });
+  const first = event(1, "io.arop.output.delta.v1", { output_id: "answer", offset: 0, delta: "商品" });
   view = reduceRunEvent(view, first);
   assert(view.outputs.answer?.bytes === 6);
   assert(reduceRunEvent(view, first) === view);
-  view = reduceRunEvent(view, event(2, "io.kinglucky.arop.progress.future.v1", { future: true }));
-  view = reduceRunEvent(view, event(3, "io.kinglucky.arop.output.delta.v1", { output_id: "answer", offset: 6, delta: "😀" }));
+  view = reduceRunEvent(view, event(2, "io.arop.progress.future.v1", { future: true }));
+  view = reduceRunEvent(view, event(3, "io.arop.output.delta.v1", { output_id: "answer", offset: 6, delta: "😀" }));
   assert(view.outputs.answer?.text === "商品😀" && view.outputs.answer.bytes === 10);
 });
 
 test("reducer_rejects_gap_conflict_and_post_terminal", () => {
   const initial = initialRunView(RUN);
-  throws(() => reduceRunEvent(initial, event(2, "io.kinglucky.arop.progress.update.v1", {})), /gap/u);
-  const one = reduceRunEvent(initial, event(1, "io.kinglucky.arop.progress.update.v1", {}));
-  throws(() => reduceRunEvent(one, event(1, "io.kinglucky.arop.progress.update.v1", { changed: true })), /conflicting/u);
-  const terminal = reduceRunEvent(one, event(2, "io.kinglucky.arop.run.succeeded.v1", { state: "succeeded" }));
-  throws(() => reduceRunEvent(terminal, event(3, "io.kinglucky.arop.progress.update.v1", {})), /terminal/u);
+  throws(() => reduceRunEvent(initial, event(2, "io.arop.progress.update.v1", {})), /gap/u);
+  const one = reduceRunEvent(initial, event(1, "io.arop.progress.update.v1", {}));
+  throws(() => reduceRunEvent(one, event(1, "io.arop.progress.update.v1", { changed: true })), /conflicting/u);
+  const terminal = reduceRunEvent(one, event(2, "io.arop.run.succeeded.v1", { state: "succeeded" }));
+  throws(() => reduceRunEvent(terminal, event(3, "io.arop.progress.update.v1", {})), /terminal/u);
 });
 
 test("consumer_create_get_command_shields_server_token", async () => {
@@ -94,8 +94,8 @@ test("consumer_typed_retry_error_is_redacted", async () => {
 
 test("relay_reconnect_reauthenticates_and_resumes", async () => {
   const tokens = new Tokens(); const http = new HTTP(); const streams = new Streams();
-  const one = event(1, "io.kinglucky.arop.progress.update.v1", { percent: 10 });
-  const two = event(2, "io.kinglucky.arop.run.succeeded.v1", { state: "succeeded" });
+  const one = event(1, "io.arop.progress.update.v1", { percent: 10 });
+  const two = event(2, "io.arop.run.succeeded.v1", { state: "succeeded" });
   streams.responses.push(streamResponse(sse(one)), streamResponse(sse(one) + sse(two)));
   const client = new ConsumerClient("https://control.example.invalid", tokens, http, streams);
   const seen: number[] = [];

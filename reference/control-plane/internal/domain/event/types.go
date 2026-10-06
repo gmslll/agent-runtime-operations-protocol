@@ -175,10 +175,10 @@ func (projection TerminalProjection) Validate() error {
 }
 
 func Terminal(event Envelope) (TerminalProjection, bool, error) {
-	if !strings.HasPrefix(event.Type, "io.kinglucky.arop.run.") {
+	if !strings.HasPrefix(event.Type, "io.arop.run.") {
 		return TerminalProjection{}, false, nil
 	}
-	stateName := strings.TrimSuffix(strings.TrimPrefix(event.Type, "io.kinglucky.arop.run."), ".v1")
+	stateName := strings.TrimSuffix(strings.TrimPrefix(event.Type, "io.arop.run."), ".v1")
 	state := run.State(stateName)
 	if !state.Terminal() {
 		return TerminalProjection{}, false, nil
@@ -234,11 +234,11 @@ func Terminal(event Envelope) (TerminalProjection, bool, error) {
 
 func NonTerminalState(event Envelope) (run.State, bool) {
 	switch event.Type {
-	case "io.kinglucky.arop.run.accepted.v1", "io.kinglucky.arop.run.started.v1":
+	case "io.arop.run.accepted.v1", "io.arop.run.started.v1":
 		return run.StateRunning, true
-	case "io.kinglucky.arop.run.waiting_input.v1":
+	case "io.arop.run.waiting_input.v1":
 		return run.StateWaitingInput, true
-	case "io.kinglucky.arop.run.cancel_requested.v1":
+	case "io.arop.run.cancel_requested.v1":
 		return run.StateCancelRequested, true
 	default:
 		return "", false
@@ -246,7 +246,7 @@ func NonTerminalState(event Envelope) (run.State, bool) {
 }
 
 func Usage(event Envelope) (run.Usage, bool, error) {
-	if event.Type != "io.kinglucky.arop.usage.updated.v1" {
+	if event.Type != "io.arop.usage.updated.v1" {
 		return run.Usage{}, false, nil
 	}
 	var payload struct {
@@ -269,14 +269,14 @@ func validatePayload(kind, schema string, data json.RawMessage) error {
 	base := "https://arop.invalid/schemas/v1/events/"
 	schemaName := ""
 	switch {
-	case strings.HasPrefix(kind, "io.kinglucky.arop.run."):
+	case strings.HasPrefix(kind, "io.arop.run."):
 		schemaName = "lifecycle-events-v1.schema.json"
 		var raw map[string]json.RawMessage
 		var stateValue string
 		if strictDecode(data, &raw) != nil || strictDecode(raw["state"], &stateValue) != nil {
 			return NewError(CategoryValidation, ReasonInvalidRequest)
 		}
-		want := strings.TrimSuffix(strings.TrimPrefix(kind, "io.kinglucky.arop.run."), ".v1")
+		want := strings.TrimSuffix(strings.TrimPrefix(kind, "io.arop.run."), ".v1")
 		if stateValue != want {
 			return NewError(CategoryValidation, ReasonInvalidRequest)
 		}
@@ -293,12 +293,12 @@ func validatePayload(kind, schema string, data json.RawMessage) error {
 		} else if _, err := eventwire.DecodeLifecycleStateData(data); err != nil {
 			return NewError(CategoryValidation, ReasonInvalidRequest)
 		}
-	case strings.HasPrefix(kind, "io.kinglucky.arop.output."):
+	case strings.HasPrefix(kind, "io.arop.output."):
 		schemaName = "output-events-v1.schema.json"
 		if err := validateOutput(kind, data); err != nil {
 			return err
 		}
-	case kind == "io.kinglucky.arop.progress.updated.v1":
+	case kind == "io.arop.progress.updated.v1":
 		schemaName = "progress-events-v1.schema.json"
 		var payload struct {
 			StepID   string `json:"step_id"`
@@ -312,7 +312,7 @@ func validatePayload(kind, schema string, data json.RawMessage) error {
 		if _, err := eventwire.DecodeProgressEventData(data); err != nil {
 			return NewError(CategoryValidation, ReasonInvalidRequest)
 		}
-	case kind == "io.kinglucky.arop.usage.updated.v1":
+	case kind == "io.arop.usage.updated.v1":
 		schemaName = "usage-events-v1.schema.json"
 		if _, _, err := Usage(Envelope{Type: kind, Data: data}); err != nil {
 			return err
@@ -330,7 +330,7 @@ func validatePayload(kind, schema string, data json.RawMessage) error {
 }
 
 func validateOutput(kind string, data json.RawMessage) error {
-	name := strings.TrimSuffix(strings.TrimPrefix(kind, "io.kinglucky.arop.output."), ".v1")
+	name := strings.TrimSuffix(strings.TrimPrefix(kind, "io.arop.output."), ".v1")
 	var common struct {
 		OutputID string `json:"output_id"`
 	}

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -586,5 +587,33 @@ func assertLifecycle(t *testing.T, events []string, wantShutdown, wantClose bool
 	}
 	if wantClose && positions["shutdown"] > positions["close"] {
 		t.Fatalf("close preceded shutdown: %v", events)
+	}
+}
+
+type countingExpirer struct{ calls atomic.Int32 }
+
+func (expirer *countingExpirer) ExpireOverdue(context.Context, int) (int, error) {
+	expirer.calls.Add(1)
+	return 0, nil
+}
+
+func TestDeadlineSweeperRunsUntilCleanup(t *testing.T) {
+	expirer := &countingExpirer{}
+	cleaned := false
+	cleanup := startDeadlineSweeper(expirer, 10*time.Millisecond, func() error { cleaned = true; return nil })
+	deadline := time.Now().Add(2 * time.Second)
+	for expirer.calls.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if err := cleanup(); err != nil || !cleaned {
+		t.Fatalf("cleanup: cleaned=%v err=%v", cleaned, err)
+	}
+	if expirer.calls.Load() < 2 {
+		t.Fatalf("sweeper ran %d times, want periodic sweeps", expirer.calls.Load())
+	}
+	after := expirer.calls.Load()
+	time.Sleep(50 * time.Millisecond)
+	if expirer.calls.Load() != after {
+		t.Fatal("sweeper kept running after cleanup")
 	}
 }

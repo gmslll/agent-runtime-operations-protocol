@@ -28,7 +28,7 @@ func ExportEvent(source eventwire.EventEnvelope) (StreamResponse, MappingReport,
 		return StreamResponse{}, MappingReport{}, err
 	}
 	switch source.Type {
-	case "io.kinglucky.arop.output.delta.v1":
+	case "io.arop.output.delta.v1":
 		value, decodeErr := eventwire.DecodeOutputDeltaData(data)
 		if decodeErr != nil {
 			return StreamResponse{}, MappingReport{}, decodeErr
@@ -38,7 +38,7 @@ func ExportEvent(source eventwire.EventEnvelope) (StreamResponse, MappingReport,
 		aropMetadata["utf8Offset"] = int64(value.Offset)
 		response.ArtifactUpdate = &TaskArtifactUpdateEvent{TaskID: string(source.Runid), ContextID: string(source.Runid), Artifact: Artifact{ArtifactID: value.OutputID, Parts: []Part{{Text: &text, MediaType: "text/plain"}}}, Append: true, Metadata: metadata}
 		items = append(items, MappingItem{Source: "output.delta", Target: "artifactUpdate(append=true)", Level: Extended, Reason: "AROP UTF-8 offset is retained in metadata"})
-	case "io.kinglucky.arop.output.snapshot.v1":
+	case "io.arop.output.snapshot.v1":
 		value, decodeErr := eventwire.DecodeOutputSnapshotData(data)
 		if decodeErr != nil {
 			return StreamResponse{}, MappingReport{}, decodeErr
@@ -52,7 +52,7 @@ func ExportEvent(source eventwire.EventEnvelope) (StreamResponse, MappingReport,
 		response.ArtifactUpdate = &TaskArtifactUpdateEvent{TaskID: string(source.Runid), ContextID: string(source.Runid), Artifact: Artifact{ArtifactID: value.OutputID, Parts: parts}, Append: false, Metadata: metadata}
 		items = append(items, mapped...)
 		items = append(items, MappingItem{Source: "output.snapshot", Target: "artifactUpdate(append=false)", Level: Extended, Reason: "AROP digest and revision are retained in metadata"})
-	case "io.kinglucky.arop.progress.updated.v1":
+	case "io.arop.progress.updated.v1":
 		value, decodeErr := eventwire.DecodeProgressEventData(data)
 		if decodeErr != nil {
 			return StreamResponse{}, MappingReport{}, decodeErr
@@ -71,7 +71,7 @@ func ExportEvent(source eventwire.EventEnvelope) (StreamResponse, MappingReport,
 		}
 		response.StatusUpdate = &TaskStatusUpdateEvent{TaskID: string(source.Runid), ContextID: string(source.Runid), Status: status, Metadata: metadata}
 		items = append(items, MappingItem{Source: "progress.updated", Target: "statusUpdate(WORKING)", Level: Extended, Reason: "numeric progress and step identity are retained in metadata"})
-	case "io.kinglucky.arop.run.started.v1", "io.kinglucky.arop.run.waiting_input.v1", "io.kinglucky.arop.run.cancel_requested.v1":
+	case "io.arop.run.started.v1", "io.arop.run.waiting_input.v1", "io.arop.run.cancel_requested.v1":
 		value, decodeErr := eventwire.DecodeLifecycleStateData(data)
 		if decodeErr != nil {
 			return StreamResponse{}, MappingReport{}, decodeErr
@@ -82,7 +82,7 @@ func ExportEvent(source eventwire.EventEnvelope) (StreamResponse, MappingReport,
 		}
 		response.StatusUpdate = &TaskStatusUpdateEvent{TaskID: string(source.Runid), ContextID: string(source.Runid), Status: TaskStatus{State: state, Timestamp: string(source.Time)}, Metadata: metadata}
 		items = append(items, MappingItem{Source: "run." + value.State, Target: "statusUpdate." + state, Level: level, Reason: reason})
-	case "io.kinglucky.arop.run.succeeded.v1", "io.kinglucky.arop.run.failed.v1", "io.kinglucky.arop.run.cancelled.v1", "io.kinglucky.arop.run.timed_out.v1":
+	case "io.arop.run.succeeded.v1", "io.arop.run.failed.v1", "io.arop.run.cancelled.v1", "io.arop.run.timed_out.v1":
 		value, decodeErr := eventwire.DecodeLifecycleTerminalData(data)
 		if decodeErr != nil {
 			return StreamResponse{}, MappingReport{}, decodeErr
@@ -113,7 +113,7 @@ func ExportEvent(source eventwire.EventEnvelope) (StreamResponse, MappingReport,
 		}
 		response.Task = &task
 		items = append(items, MappingItem{Source: "run." + value.State, Target: "Task.status." + state, Level: level, Reason: reason})
-	case "io.kinglucky.arop.usage.updated.v1":
+	case "io.arop.usage.updated.v1":
 		value, decodeErr := eventwire.DecodeUsageEventData(data)
 		if decodeErr != nil {
 			return StreamResponse{}, MappingReport{}, decodeErr

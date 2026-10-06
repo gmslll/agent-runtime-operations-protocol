@@ -26,9 +26,9 @@ func TestSQLiteReaderBindsRunSequenceAndScopesTenant(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	envelope := map[string]any{"specversion": "1.0", "id": "evt_01999999-9999-7999-8999-999999999996", "source": "https://runtime.example.invalid/instances/runtime-a", "type": "io.kinglucky.arop.output.delta.v1", "subject": "runs/run_01999999-9999-7999-8999-999999999999", "time": "2026-09-27T00:00:00Z", "datacontenttype": "application/json", "dataschema": "https://arop.invalid/schemas/v1/events/output-events-v1.schema.json", "runid": "run_01999999-9999-7999-8999-999999999999", "attemptid": "att_01999999-9999-7999-8999-999999999995", "producersequence": 1, "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", "data": map[string]any{"output_id": "answer", "offset": 0, "delta": "x"}}
+	envelope := map[string]any{"specversion": "1.0", "id": "evt_01999999-9999-7999-8999-999999999996", "source": "https://runtime.example.invalid/instances/runtime-a", "type": "io.arop.output.delta.v1", "subject": "runs/run_01999999-9999-7999-8999-999999999999", "time": "2026-09-27T00:00:00Z", "datacontenttype": "application/json", "dataschema": "https://arop.invalid/schemas/v1/events/output-events-v1.schema.json", "runid": "run_01999999-9999-7999-8999-999999999999", "attemptid": "att_01999999-9999-7999-8999-999999999995", "producersequence": 1, "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01", "data": map[string]any{"output_id": "answer", "offset": 0, "delta": "x"}}
 	encoded, _ := json.Marshal(envelope)
-	if _, err = db.Exec(`INSERT INTO arop_event_ledger VALUES(?,?,?,?,?)`, "tenant-a", "run_01999999-9999-7999-8999-999999999999", 1, "io.kinglucky.arop.output.delta.v1", string(encoded)); err != nil {
+	if _, err = db.Exec(`INSERT INTO arop_event_ledger VALUES(?,?,?,?,?)`, "tenant-a", "run_01999999-9999-7999-8999-999999999999", 1, "io.arop.output.delta.v1", string(encoded)); err != nil {
 		t.Fatal(err)
 	}
 	reader, err := New(db, SQLite)

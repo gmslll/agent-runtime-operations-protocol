@@ -232,6 +232,6 @@ conflicts:
     resolution: >-
       Core wire 不得出现 Console 数据库、飞书、cc-connect、Codex 或具体 Agent 框架的专属字段。
       它们只能作为消费方、Adapter 或带自有命名空间的扩展。独立 Quickstart 和 Conformance
-      不得连接金运 Console 才能运行。
+      不得连接特定 Console 才能运行。
     repair_locations: [architecture, protocol-specification, sdk-dx-specification, conformance-fixtures]
     verification: [neutral-boundary-lint, standalone-quickstart-test, standalone-conformance-test]

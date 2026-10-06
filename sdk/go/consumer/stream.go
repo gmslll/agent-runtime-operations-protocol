@@ -180,7 +180,7 @@ func (client *Client) streamTarget(ctx context.Context, ticket dispatchwire.Disp
 
 func terminalEvent(eventType string) bool {
 	switch eventType {
-	case "io.kinglucky.arop.run.succeeded.v1", "io.kinglucky.arop.run.failed.v1", "io.kinglucky.arop.run.cancelled.v1", "io.kinglucky.arop.run.timed_out.v1":
+	case "io.arop.run.succeeded.v1", "io.arop.run.failed.v1", "io.arop.run.cancelled.v1", "io.arop.run.timed_out.v1":
 		return true
 	default:
 		return false

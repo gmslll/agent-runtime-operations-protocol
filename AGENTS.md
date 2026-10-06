@@ -1,19 +1,19 @@
 # agent-runtime-operations-protocol 开发规则
 
-本仓库是供应商中立 Agent Runtime Operations 协议和 SDK 的权威来源；金运 AI 中台是首个使用方，不是唯一允许的实现。
+本仓库是供应商中立 Agent Runtime Operations 协议和 SDK 的权威来源；参考 AI 中台是首个使用方，不是唯一允许的实现。
 
 ## 开始工作前
 
 1. 实现前按顺序完整阅读 `README.md` → `docs/DECISIONS.md` → `docs/IMPLEMENTATION_BLUEPRINT.md` → `docs/DEVELOPMENT_PLAN.md` →任务所属领域规范；目录与制品状态另核对 `spec/artifact-manifest.yaml`。
-2. 仅当仓库位于金运内部工作区且上层文件存在时，再阅读上层 `AGENTS.md`、`CLAUDE.md`、`BOT_DEPLOYMENT.md` 和 `AI中台/` 文档；公共独立克隆不得依赖这些内部文件。
-3. 涉及历史结论或“为什么这样设计”时，按工作区 `jinyun-memory-brain` 规则检索本工作区会话。
+2. 仅当仓库位于内部工作区且上层文件存在时，再阅读上层 `AGENTS.md`、`CLAUDE.md`、`BOT_DEPLOYMENT.md` 和内部架构文档；公共独立克隆不得依赖这些内部文件。
+3. 涉及历史结论或“为什么这样设计”时，按工作区历史记录规则检索相关会话。
 4. 开始实现前检查 [docs/DECISIONS.md](docs/DECISIONS.md) 中的已确认决策和发布配置待填写项。
 5. P04 用户 Gate 通过前不得进行 P05 物理重构或新协议行为实现；实施时不得跳过 `docs/DEVELOPMENT_PLAN.md` 的阶段依赖。
 6. P03/P04/P45/P50/P52 原始外部证据不入 Git；只允许提交脱敏的 canonical 内容摘要、可选验签 attestation 和机器报告。未验签的 SHA-256 不得称为“签名摘要”，工具不得自动生成“已批准”或“独立”证据。
 
 ## 固定边界
 
-1. 本仓库不得依赖 `kinglucky-agent-console`、飞书、cc-connect、Teable 或具体 Agent 框架。
+1. 本仓库不得依赖 `agent-console`、飞书、cc-connect、Teable 或具体 Agent 框架。
 2. Console 可以生成或引用本仓库类型，不得在 Console 仓复制维护第二份 Runtime Schema。
 3. AgentDefinition、AgentVersion、RuntimeService、RuntimeInstance、Run 和 Attempt 必须保持独立概念。
 4. 所有新调用必须经过 Control Plane 授权和创建 Run；获得短期 Dispatch Ticket 后，可信调用方可以按交付模式直接请求 Agent。
@@ -25,8 +25,8 @@
 10. 第一阶段跨进程使用 HTTP/JSON、SSE 和 HTTP Event Batch，不主动引入 gRPC。
 11. 协议不得重定义 MCP、A2A、ARD/AI Catalog、CloudEvents 或 OpenTelemetry 已负责的语义。
 12. Runtime Registry 负责管理域内实例路由；跨域公开发现通过 ARD/AI Catalog 和 A2A Agent Card 互操作。
-13. 核心协议不得出现飞书、金运 Console、cc-connect 或具体框架的专属字段；专属能力只能作为带命名空间的扩展。
-14. 第三方必须能够在不安装金运 Console 的情况下运行 Schema 校验、Quickstart 和 Conformance。
+13. 核心协议不得出现飞书、特定 Console、cc-connect 或具体框架的专属字段；专属能力只能作为带命名空间的扩展。
+14. 第三方必须能够在不安装特定 Console 的情况下运行 Schema 校验、Quickstart 和 Conformance。
 
 ## 公共项目规则
 
@@ -35,7 +35,7 @@
 - 不得使用已经存在并可能混淆的 `Agent Runtime Protocol` / `ARP` 名称。
 - 规范按 Core、Runtime Management、Delivery Profile、Streaming Extension 和 Governance Extension 分层。
 - “兼容”必须附带 Conformance 等级和测试报告，不得只做宣传性声明。
-- 金运专属扩展与第三方扩展遵守同一注册、Schema、版本和安全规则。
+- 实现方专属扩展与第三方扩展遵守同一注册、Schema、版本和安全规则。
 
 ## Schema 规则
 

@@ -454,7 +454,7 @@ func Run(root string) ([]report.Check, map[string]any, []string) {
 		record(check.Name, check.Passed, check.Detail)
 	}
 	record("architecture-runtime-policy", strings.Contains(architecture, "Node") && strings.Contains(decisions, "D-061") && strings.Contains(blue, "implementation_runtime"), "IR-03 runtime boundary is explicit in architecture, decisions and blueprint")
-	record("console-isolation", !strings.Contains(strings.ToLower(plan+layout), "kinglucky-agent-console/") && !strings.Contains(strings.ToLower(plan+layout), "../kinglucky-agent-console"), "protocol plan does not modify Console")
+	record("console-isolation", !strings.Contains(strings.ToLower(plan+layout), "agent-console/") && !strings.Contains(strings.ToLower(plan+layout), "../agent-console"), "protocol plan does not modify Console")
 	linkProblems := localLinks(root)
 	record("markdown-local-link-closure", len(linkProblems) == 0, strings.Join(linkProblems, ", "))
 	reqProblems := []string{}
@@ -654,7 +654,7 @@ func parityChecks(root, plan, layout, blueprint, architecture, decisions, makefi
 		}
 	}
 	add("requirement-traceability-bidirectional", len(requirements.Requirements) == 14 && len(requirementProblems) == 0, strings.Join(requirementProblems, "; "))
-	consoleOK := strings.Contains(blueprint, "kinglucky-agent-console") && strings.Contains(blueprint, "不在本实施范围内") && strings.Contains(blueprint, "P01–P53") && strings.Contains(architecture, "P01–P53") && strings.Contains(plan, "本仓库 P01–P53 不修改 `kinglucky-agent-console`") && strings.Contains(readme, "不依赖 Console") && strings.Contains(agents, "kinglucky-agent-console") && !strings.Contains(layout, "kinglucky-agent-console/")
+	consoleOK := strings.Contains(blueprint, "agent-console") && strings.Contains(blueprint, "不在本实施范围内") && strings.Contains(blueprint, "P01–P53") && strings.Contains(architecture, "P01–P53") && strings.Contains(plan, "本仓库 P01–P53 不修改 `agent-console`") && strings.Contains(readme, "不依赖 Console") && strings.Contains(agents, "agent-console") && !strings.Contains(layout, "agent-console/")
 	add("console-isolation-full", consoleOK, "Console remains downstream and outside P01-P53")
 	semanticProblems := []string{}
 	for _, needle := range []string{"Authoring strict", "Consumer forward compatible", "Offline closure", "原始事件是不可变 append-only", "语义一致”而非“SQL 一致", "P16 明确复用 P14 ledger/watermark", "P07 交付可复用的三语言 pipeline", "预期子报告 ID/数量", "release_approver", "Sigstore identity"} {

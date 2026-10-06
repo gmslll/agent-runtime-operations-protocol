@@ -134,7 +134,7 @@ function strictSequence(value: string): number {
 }
 
 function validBearer(value: string): boolean { return value.length >= 16 && value.length <= 8192 && !/[\s]/u.test(value); }
-function terminalEvent(type: string): boolean { return new Set(["io.kinglucky.arop.run.succeeded.v1", "io.kinglucky.arop.run.failed.v1", "io.kinglucky.arop.run.cancelled.v1", "io.kinglucky.arop.run.timed_out.v1"]).has(type); }
+function terminalEvent(type: string): boolean { return new Set(["io.arop.run.succeeded.v1", "io.arop.run.failed.v1", "io.arop.run.cancelled.v1", "io.arop.run.timed_out.v1"]).has(type); }
 
 export function appendUTF8(current: Uint8Array, offset: number, delta: string): Uint8Array {
   if (!Number.isSafeInteger(offset) || offset !== current.byteLength) throw new Error("invalid UTF-8 byte offset");

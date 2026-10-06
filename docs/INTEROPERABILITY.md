@@ -120,7 +120,7 @@ Event Envelope 使用 CloudEvents 兼容属性，并为本项目的 Run/Attempt/
 - HTTP Binary Mode 映射必须有单独 Fixture。
 - 扩展属性的 wire name 只能使用一种规范拼法。
 - SDK 属性名与 wire name 的转换必须由生成代码或公共映射完成。
-- 事件类型使用公共项目的稳定命名空间；金运专属事件使用独立扩展前缀。
+- 事件类型使用公共项目的稳定命名空间；实现方专属事件使用独立扩展前缀。
 
 # 6. OpenTelemetry
 

@@ -1,6 +1,6 @@
 # Contributing to AROP
 
-AROP is a vendor-neutral interoperability protocol. Contributions must preserve that boundary and must not make KingLucky Console, Feishu, cc-connect, a particular framework, or a particular database a protocol dependency.
+AROP is a vendor-neutral interoperability protocol. Contributions must preserve that boundary and must not make a downstream console, Feishu, cc-connect, a particular framework, or a particular database a protocol dependency.
 
 ## Before opening a change
 

@@ -60,7 +60,7 @@ func TestSQLiteEventLedgerTerminalIsAtomicAndImmutable(t *testing.T) {
 	if session.Token == "" || session.ExpiresAt.After(now.Add(3*time.Minute)) {
 		t.Fatalf("invalid session: %+v", session)
 	}
-	wrongSource := eventValue(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef20", "io.kinglucky.arop.run.started.v1", `{"state":"started"}`, now)
+	wrongSource := eventValue(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef20", "io.arop.run.started.v1", `{"state":"started"}`, now)
 	wrongSource.Source = "https://other-runtime.example.invalid/instances/instance-a"
 	wrongBatch := event.BatchRequest{Token: session.Token, RunID: testRun, BatchID: "batch_01932f13-0cd2-7a82-8fa3-1cb5ce13ef29", AttemptID: testAttempt, FencingToken: 1, IdempotencyKey: "wrong-source", Events: []event.Envelope{wrongSource}}
 	err := uow.Within(context.Background(), func(ctx context.Context) error {
@@ -72,9 +72,9 @@ func TestSQLiteEventLedgerTerminalIsAtomicAndImmutable(t *testing.T) {
 	}
 	assertCount(t, db, "SELECT count(*) FROM arop_event_ledger", 0)
 	events := []event.Envelope{
-		eventValue(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef21", "io.kinglucky.arop.run.started.v1", `{"state":"started"}`, now),
-		eventValue(2, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef22", "io.kinglucky.arop.usage.updated.v1", `{"input_tokens":3,"output_tokens":2,"duration_ms":100,"billable_units":1}`, now.Add(time.Second)),
-		eventValue(3, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef23", "io.kinglucky.arop.run.succeeded.v1", `{"state":"succeeded","snapshot":{"revision":1,"content":[{"type":"text","text":"done"}],"digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"usage":{"input_tokens":3,"output_tokens":2,"duration_ms":100,"billable_units":1},"completed_at":"2026-09-21T08:00:03Z"}`, now.Add(2*time.Second)),
+		eventValue(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef21", "io.arop.run.started.v1", `{"state":"started"}`, now),
+		eventValue(2, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef22", "io.arop.usage.updated.v1", `{"input_tokens":3,"output_tokens":2,"duration_ms":100,"billable_units":1}`, now.Add(time.Second)),
+		eventValue(3, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef23", "io.arop.run.succeeded.v1", `{"state":"succeeded","snapshot":{"revision":1,"content":[{"type":"text","text":"done"}],"digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"usage":{"input_tokens":3,"output_tokens":2,"duration_ms":100,"billable_units":1},"completed_at":"2026-09-21T08:00:03Z"}`, now.Add(2*time.Second)),
 	}
 	requestBatch := event.BatchRequest{Token: session.Token, RunID: testRun, BatchID: "batch_01932f13-0cd2-7a82-8fa3-1cb5ce13ef30", AttemptID: testAttempt, FencingToken: 1, IdempotencyKey: "batch-key-0001", Events: events}
 	var ack event.Ack
@@ -115,7 +115,7 @@ func TestSQLiteEventLedgerTerminalIsAtomicAndImmutable(t *testing.T) {
 	}
 
 	// A legal late terminal event is retained for audit but cannot overwrite the first terminal.
-	late := eventValue(4, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef24", "io.kinglucky.arop.run.failed.v1", `{"state":"failed","error":{"code":"LATE","category":"internal","message":"late","retryable":false},"usage":{"input_tokens":9,"output_tokens":9,"duration_ms":999,"billable_units":9},"completed_at":"2026-09-21T08:00:04Z"}`, now.Add(4*time.Second))
+	late := eventValue(4, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef24", "io.arop.run.failed.v1", `{"state":"failed","error":{"code":"LATE","category":"internal","message":"late","retryable":false},"usage":{"input_tokens":9,"output_tokens":9,"duration_ms":999,"billable_units":9},"completed_at":"2026-09-21T08:00:04Z"}`, now.Add(4*time.Second))
 	lateBatch := event.BatchRequest{Token: session.Token, RunID: testRun, BatchID: "batch_01932f13-0cd2-7a82-8fa3-1cb5ce13ef32", AttemptID: testAttempt, FencingToken: 1, IdempotencyKey: "batch-key-0003", Events: []event.Envelope{late}}
 	if err := uow.Within(context.Background(), func(ctx context.Context) error {
 		_, err := store.Append(ctx, event.AppendCommand{Request: lateBatch, TokenDigest: event.TokenDigest(session.Token), IdempotencyKeyDigest: strings.Repeat("d", 64), RequestDigest: event.BatchDigest(lateBatch), Now: now.Add(5 * time.Second)})
@@ -140,7 +140,7 @@ func TestSQLiteEventLedgerTerminalIsAtomicAndImmutable(t *testing.T) {
 	if failure, ok := event.AsError(err); !ok || failure.Reason != event.ReasonEventIDConflict {
 		t.Fatalf("event ID conflict accepted: %v", err)
 	}
-	outOfOrder := eventValue(6, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef26", "io.kinglucky.arop.run.started.v1", `{"state":"started"}`, now.Add(6*time.Second))
+	outOfOrder := eventValue(6, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef26", "io.arop.run.started.v1", `{"state":"started"}`, now.Add(6*time.Second))
 	sequenceBatch := event.BatchRequest{Token: session.Token, RunID: testRun, BatchID: "batch_01932f13-0cd2-7a82-8fa3-1cb5ce13ef34", AttemptID: testAttempt, FencingToken: 1, IdempotencyKey: "batch-key-0005", Events: []event.Envelope{outOfOrder}}
 	err = uow.Within(context.Background(), func(ctx context.Context) error {
 		_, inner := store.Append(ctx, event.AppendCommand{Request: sequenceBatch, TokenDigest: event.TokenDigest(session.Token), IdempotencyKeyDigest: strings.Repeat("1", 64), RequestDigest: event.BatchDigest(sequenceBatch), Now: now.Add(7 * time.Second)})
@@ -153,7 +153,7 @@ func TestSQLiteEventLedgerTerminalIsAtomicAndImmutable(t *testing.T) {
 	if _, err = db.Exec(`UPDATE arop_registry_instances SET generation=8 WHERE tenant_id=? AND instance_id=?`, testTenant, "instance-a"); err != nil {
 		t.Fatal(err)
 	}
-	fenced := eventValue(5, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef25", "io.kinglucky.arop.run.started.v1", `{"state":"started"}`, now.Add(7*time.Second))
+	fenced := eventValue(5, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef25", "io.arop.run.started.v1", `{"state":"started"}`, now.Add(7*time.Second))
 	fencedBatch := event.BatchRequest{Token: session.Token, RunID: testRun, BatchID: "batch_01932f13-0cd2-7a82-8fa3-1cb5ce13ef35", AttemptID: testAttempt, FencingToken: 1, IdempotencyKey: "fenced-runtime", Events: []event.Envelope{fenced}}
 	err = uow.Within(context.Background(), func(ctx context.Context) error {
 		_, inner := store.Append(ctx, event.AppendCommand{Request: fencedBatch, TokenDigest: event.TokenDigest(session.Token), IdempotencyKeyDigest: strings.Repeat("2", 64), RequestDigest: event.BatchDigest(fencedBatch), Now: now.Add(8 * time.Second)})
@@ -179,7 +179,7 @@ func TestSQLiteTerminalAndCapacityReleaseRollBackTogether(t *testing.T) {
 	if _, err := db.Exec(`CREATE TRIGGER reject_event_release BEFORE INSERT ON arop_event_capacity_releases BEGIN SELECT RAISE(ABORT,'injected release failure'); END`); err != nil {
 		t.Fatal(err)
 	}
-	terminal := eventValue(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef51", "io.kinglucky.arop.run.succeeded.v1", `{"state":"succeeded","snapshot":{"revision":1,"content":[{"type":"text","text":"done"}],"digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"usage":{"input_tokens":1,"output_tokens":1,"duration_ms":1},"completed_at":"2026-09-21T08:00:01Z"}`, now.Add(time.Second))
+	terminal := eventValue(1, "evt_01932f13-0cd2-7a82-8fa3-1cb5ce13ef51", "io.arop.run.succeeded.v1", `{"state":"succeeded","snapshot":{"revision":1,"content":[{"type":"text","text":"done"}],"digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"usage":{"input_tokens":1,"output_tokens":1,"duration_ms":1},"completed_at":"2026-09-21T08:00:01Z"}`, now.Add(time.Second))
 	batch := event.BatchRequest{Token: session.Token, RunID: testRun, BatchID: "batch_01932f13-0cd2-7a82-8fa3-1cb5ce13ef52", AttemptID: testAttempt, FencingToken: 1, IdempotencyKey: "rollback-batch", Events: []event.Envelope{terminal}}
 	err := uow.Within(context.Background(), func(ctx context.Context) error {
 		_, inner := store.Append(ctx, event.AppendCommand{Request: batch, TokenDigest: event.TokenDigest(session.Token), IdempotencyKeyDigest: strings.Repeat("2", 64), RequestDigest: event.BatchDigest(batch), Now: now.Add(2 * time.Second)})

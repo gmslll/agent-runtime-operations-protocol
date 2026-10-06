@@ -12,7 +12,7 @@ Agent Runtime Operations Protocol（AROP）是企业 Agent 能力接入任意兼
 
 协议不负责实现 Agent 的推理、工作流和业务逻辑，也不替代 MCP、A2A、ARD、Agent 框架或模型 API。它负责定义这些实现如何进入一个可注册、可调度、可恢复、可追踪和可治理的运行平面。
 
-金运 AI 中台是首个实现和验证环境，不是协议的唯一合法实现。第三方 Runtime 和 Control Plane 必须能够只依赖公开契约互操作。
+参考 AI 中台是首个实现和验证环境，不是协议的唯一合法实现。第三方 Runtime 和 Control Plane 必须能够只依赖公开契约互操作。
 
 # 2. 核心原则
 
@@ -290,7 +290,7 @@ Protocol v1 不承担：
 
 # 10. 公共实现边界
 
-为了证明协议不依赖金运 Console，公共项目至少提供：
+为了证明协议不依赖特定 Console，公共项目至少提供：
 
 - 可单独运行的 Reference Control Plane。
 - 两个独立语言的 Reference Agent。
@@ -298,7 +298,7 @@ Protocol v1 不承担：
 - A2A Adapter、MCP Integration Example 和 ARD Exporter。
 - Docker Compose Quickstart 和 Web Streaming Demo。
 
-Reference Control Plane 只验证协议，不复制金运 Console 的组织、飞书、业务审批和运营后台。公共项目定位、治理和采用要求见 [PUBLIC_PROJECT_AND_ADOPTION.md](PUBLIC_PROJECT_AND_ADOPTION.md)。
+Reference Control Plane 只验证协议，不复制特定 Console 的组织、飞书、业务审批和运营后台。公共项目定位、治理和采用要求见 [PUBLIC_PROJECT_AND_ADOPTION.md](PUBLIC_PROJECT_AND_ADOPTION.md)。
 
 Reference Control Plane、Registry、Dispatcher、Run/Event Ledger 和服务端 Conformance Harness 统一使用 Go 实现。通用 report/evidence/planning/Gate/blueprint、Go proxy、Go/Container build 以及 P39–P42 release/lineage/finalization 工具也统一使用根 module 的 `internal/tooling/` Go 包与私有命令。Node.js 只可用于 Schema/spec/manifest validation、Schema-driven codegen、TypeScript SDK 和 npm packaging；Python 主要用于 Agent Provider SDK，并用原生 Python/PEP 517 完成 Python package primitive。Node/Python 均不是参考后端或通用发布治理运行依赖。机器制品以 `implementation_runtime + tool_scope` 显式声明边界，Checker 同时扫描当前/规划路径、依赖、package scripts、Make/workflow 与生产镜像入口。
 
@@ -310,4 +310,4 @@ Node 边界由 Go JavaScript AST 检查器强制：每个 entry/helper 都必须
 
 参考实现采用根公共 Go module 与唯一 `reference/control-plane` 嵌套 Go module；语言中立 Conformance Fixture 留在顶层，portable runner 留在根 module。详细组件边界、数据库语义、事务、codegen、测试和发布 DAG 见 [IMPLEMENTATION_BLUEPRINT.md](IMPLEMENTATION_BLUEPRINT.md)；最终物理布局见 [DIRECTORY_STRUCTURE.md](DIRECTORY_STRUCTURE.md)；唯一执行顺序见 [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)。
 
-`kinglucky-agent-console` 是未来下游实现，不在本仓库 P01–P53 实施范围。Reference Control Plane、Quickstart 和 Conformance 必须独立运行；任何特定 Worker 产品都通过通用 Worker Pull/HTTP/A2A/MCP 边界接入，本仓库不提供厂商专属 Adapter。
+`agent-console` 是未来下游实现，不在本仓库 P01–P53 实施范围。Reference Control Plane、Quickstart 和 Conformance 必须独立运行；任何特定 Worker 产品都通过通用 Worker Pull/HTTP/A2A/MCP 边界接入，本仓库不提供厂商专属 Adapter。

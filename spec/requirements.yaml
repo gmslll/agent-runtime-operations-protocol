@@ -25,8 +25,8 @@ requirements:
       - make-planning-audit
       - make-gate-check
   - id: IR-02
-    statement_original_zh: 协议仓保持厂商中立，不依赖 Console、飞书、cc-connect 或具体 Agent 框架；不得修改 `kinglucky-agent-console`。
-    translation_en: Keep the protocol repository vendor-neutral and independent of Console, Feishu, cc-connect, or a specific Agent framework; do not modify `kinglucky-agent-console`.
+    statement_original_zh: 协议仓保持厂商中立，不依赖 Console、飞书、cc-connect 或具体 Agent 框架；不得修改 `agent-console`。
+    translation_en: Keep the protocol repository vendor-neutral and independent of Console, Feishu, cc-connect, or a specific Agent framework; do not modify `agent-console`.
     artifacts:
       - architecture
       - protocol-specification

@@ -771,7 +771,7 @@ updated: 2026-09-23
 - **Components:** governance, conformance
 - **Artifacts owned:** none
 - **Goal:** 使用 P40 validator 验证独立 Runtime/Control Plane/Validator 和伙伴对 P49 commit A v1 RC 的真实证据。
-- **Scope:** 至少两个独立 Runtime、一个非金运 Control Plane/Validator、三个外部伙伴；原始 signed compatibility bundle 由外部 principals 产生并留在仓库外，P50 只验证它并发布/记录 verified detached summary 作为绑定 A/RC 的 release asset，绝不替伙伴代签或修改 A。
+- **Scope:** 至少两个独立 Runtime、一个外部 Control Plane/Validator、三个外部伙伴；原始 signed compatibility bundle 由外部 principals 产生并留在仓库外，P50 只验证它并发布/记录 verified detached summary 作为绑定 A/RC 的 release asset，绝不替伙伴代签或修改 A。
 - **Dependencies:** P49
 - **First-path invariants:** compatibility bundle 引用 P49 RC subject manifest，绑定 exact A commit/tree/object format、RC version/tag-object、Schema Bundle/OpenAPI/AsyncAPI/Fixture/Runner 与被测 Artifact digests/provenance digests；逐条含 external principal、实现来源、runtime/profile/report/result/time；内部 fork/模拟不算，数量按 distinct `principal_id`；信任链从 P40 pinned root 建立，不接受调用者自带 root；`compatibility/implementation-matrix.yaml` 仅是 A 内策略声明，不在 P50 后改写。
 - **Machine acceptance:** `make external-evidence-gate RELEASE_VERSION=1.0.0-rc.N SOURCE_COMMIT=A EVIDENCE_BUNDLE=<outside-repo-signed-bundle> TRUST_ROOT=<protected-pinned-root>` → `build/reports/P50/report.json`、`junit.xml` 与 `build/evidence/P50/verified-compatibility-summary.json`。
@@ -825,4 +825,4 @@ updated: 2026-09-23
 
 # 4. 明确延后
 
-gRPC、WebSocket、Portable Session Checkpoint、Hedged Execution、多区域调度、公共 Agent 市场、多租户 SaaS 和通用工作流引擎不阻塞 v1。Console 集成是下游独立计划，本仓库 P01–P53 不修改 `kinglucky-agent-console`。
+gRPC、WebSocket、Portable Session Checkpoint、Hedged Execution、多区域调度、公共 Agent 市场、多租户 SaaS 和通用工作流引擎不阻塞 v1。Console 集成是下游独立计划，本仓库 P01–P53 不修改 `agent-console`。

@@ -19,7 +19,7 @@ updated: 2026-09-22
 
 高可用、Token 校验、幂等、Trace、事件批量、Outbox、健康检查和优雅下线尽量由 SDK 处理。
 
-Quickstart、SDK 和 Conformance 必须可以连接 Reference Control Plane 独立运行，不得要求开发者安装金运 Console。
+Quickstart、SDK 和 Conformance 必须可以连接 Reference Control Plane 独立运行，不得要求开发者安装特定 Console。
 
 # 2. SDK 分层
 
